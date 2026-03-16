@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState, useMemo } from 'react'
@@ -28,11 +27,9 @@ import {
   Plus, 
   AlertTriangle,
   Clock,
-  ChevronRight,
   Camera,
   Loader2,
   Sparkles,
-  Search,
   Trash2,
   Calendar,
   LayoutDashboard,
@@ -42,9 +39,10 @@ import Image from 'next/image'
 import { useToast } from '@/hooks/use-toast'
 import { identifyPlant } from '@/ai/flows/identify-plant-flow'
 import { useUser, useFirestore, useCollection } from '@/firebase'
-import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, where, orderBy, Timestamp } from 'firebase/firestore'
+import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, where, Timestamp } from 'firebase/firestore'
 import { format, addDays, isBefore, isToday, differenceInDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
+import { cn } from '@/lib/utils'
 
 // Task Templates
 const TASK_TEMPLATES = [
@@ -67,6 +65,10 @@ export default function HomeManagementPage() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false)
 
+  // Form states for Selects
+  const [room, setRoom] = useState("Cuisine")
+  const [priority, setPriority] = useState("medium")
+
   // Firestore Tasks
   const tasksPath = user ? `users/${user.uid}/tasks` : null
   const tasksQuery = useMemo(() => {
@@ -74,7 +76,7 @@ export default function HomeManagementPage() {
     return query(collection(db, tasksPath), where("isActive", "==", true))
   }, [db, tasksPath])
   
-  const { data: tasks, loading: tasksLoading } = useCollection(tasksQuery)
+  const { data: tasks } = useCollection(tasksQuery)
 
   // Logic & Sorting
   const sortedTasks = useMemo(() => {
@@ -103,73 +105,70 @@ export default function HomeManagementPage() {
     return groups
   }, [sortedTasks])
 
-  const handleMarkDone = async (task: any) => {
+  const handleMarkDone = (task: any) => {
     if (!user || !db) return
     
     const now = new Date()
-    const nextDue = addDays(now, task.recurrenceDays)
+    const nextDue = addDays(now, task.recurrenceDays || 7)
     
-    try {
-      const taskRef = doc(db, `users/${user.uid}/tasks`, task.id)
-      await setDoc(taskRef, {
-        lastCompleted: serverTimestamp(),
-        nextDueDate: Timestamp.fromDate(nextDue)
-      }, { merge: true })
-      
-      toast({
-        title: "Tâche terminée !",
-        description: `${task.name} est maintenant prévu pour le ${format(nextDue, 'dd MMMM', { locale: fr })}.`
-      })
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erreur", description: "Impossible de mettre à jour la tâche." })
-    }
+    const taskRef = doc(db, `users/${user.uid}/tasks`, task.id)
+    setDoc(taskRef, {
+      lastCompleted: serverTimestamp(),
+      nextDueDate: Timestamp.fromDate(nextDue)
+    }, { merge: true })
+    
+    toast({
+      title: "Tâche terminée !",
+      description: `${task.name} est maintenant prévu pour le ${format(nextDue, 'dd MMMM', { locale: fr })}.`
+    })
   }
 
-  const handleDeleteTask = async (taskId: string) => {
+  const handleDeleteTask = (taskId: string) => {
     if (!user || !db) return
-    try {
-      await deleteDoc(doc(db, `users/${user.uid}/tasks`, taskId))
-      toast({ title: "Tâche supprimée" })
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erreur" })
-    }
+    deleteDoc(doc(db, `users/${user.uid}/tasks`, taskId))
+    toast({ title: "Tâche supprimée" })
   }
 
-  const handleAddTask = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddTask = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!user || !db) return
     
     const formData = new FormData(e.currentTarget)
-    const recurrenceDays = Number(formData.get('recurrenceDays'))
+    const name = formData.get('taskName')?.toString()
+    const recurrenceDays = Number(formData.get('recurrenceDays')) || 7
+    const duration = Number(formData.get('duration')) || 15
+    
+    if (!name) return
+
     const nextDue = addDays(new Date(), recurrenceDays)
 
     const newTask = {
-      name: formData.get('name'),
-      room: formData.get('room'),
-      description: formData.get('description') || "",
-      estimatedMinutes: Number(formData.get('duration')),
+      name,
+      room,
+      description: formData.get('description')?.toString() || "",
+      estimatedMinutes: duration,
       recurrenceDays: recurrenceDays,
-      priority: formData.get('priority'),
+      priority,
       nextDueDate: Timestamp.fromDate(nextDue),
       isActive: true,
       createdAt: serverTimestamp()
     }
 
-    try {
-      const newDocRef = doc(collection(db, `users/${user.uid}/tasks`))
-      await setDoc(newDocRef, newTask)
-      setIsAddTaskOpen(false)
-      toast({ title: "Tâche ajoutée", description: "Votre nouveau rappel est enregistré." })
-    } catch (e) {
-      toast({ variant: "destructive", title: "Erreur lors de l'ajout" })
-    }
+    const newDocRef = doc(collection(db, `users/${user.uid}/tasks`))
+    setDoc(newDocRef, newTask)
+    
+    setIsAddTaskOpen(false)
+    toast({ 
+      title: "Tâche ajoutée", 
+      description: "Votre nouveau rappel est enregistré." 
+    })
   }
 
   const getUrgencyColor = (dueDate: any) => {
     if (!dueDate) return "bg-muted"
     const date = new Date(dueDate.seconds * 1000)
     const diff = differenceInDays(date, new Date())
-    if (isBefore(date, new Date()) && !isToday(date)) return "bg-red-500"
+    if (isBefore(date, new Date()) && !isToday(date)) return "bg-destructive"
     if (isToday(date) || diff <= 1) return "bg-orange-500"
     if (diff <= 3) return "bg-yellow-500"
     return "bg-green-500"
@@ -199,13 +198,13 @@ export default function HomeManagementPage() {
                 </DialogHeader>
                 <form onSubmit={handleAddTask} className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <Label>Nom de la tâche</Label>
-                    <Input name="name" placeholder="ex: Nettoyer le four" required />
+                    <Label htmlFor="taskName">Nom de la tâche</Label>
+                    <Input id="taskName" name="taskName" placeholder="ex: Nettoyer le four" required />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label>Pièce / Zone</Label>
-                      <Select name="room" defaultValue="Cuisine">
+                      <Select value={room} onValueChange={setRoom}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           {["Cuisine", "Salon", "Chambre", "SdB", "Extérieur", "Général"].map(r => (
@@ -216,7 +215,7 @@ export default function HomeManagementPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Priorité</Label>
-                      <Select name="priority" defaultValue="medium">
+                      <Select value={priority} onValueChange={setPriority}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="low">Basse</SelectItem>
@@ -228,12 +227,12 @@ export default function HomeManagementPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Durée estimée (min)</Label>
-                      <Input name="duration" type="number" defaultValue={15} />
+                      <Label htmlFor="duration">Durée estimée (min)</Label>
+                      <Input id="duration" name="duration" type="number" defaultValue={15} />
                     </div>
                     <div className="space-y-2">
-                      <Label>Fréquence (jours)</Label>
-                      <Input name="recurrenceDays" type="number" defaultValue={7} />
+                      <Label htmlFor="recurrenceDays">Fréquence (jours)</Label>
+                      <Input id="recurrenceDays" name="recurrenceDays" type="number" defaultValue={7} />
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -247,9 +246,14 @@ export default function HomeManagementPage() {
                           onClick={() => {
                             const form = document.querySelector('form')
                             if (form) {
-                              (form.elements.namedItem('name') as HTMLInputElement).value = tmpl.name;
-                              (form.elements.namedItem('duration') as HTMLInputElement).value = tmpl.duration.toString();
-                              (form.elements.namedItem('recurrenceDays') as HTMLInputElement).value = tmpl.freq.toString();
+                              const nameInput = form.elements.namedItem('taskName') as HTMLInputElement
+                              const durationInput = form.elements.namedItem('duration') as HTMLInputElement
+                              const freqInput = form.elements.namedItem('recurrenceDays') as HTMLInputElement
+                              if (nameInput) nameInput.value = tmpl.name
+                              if (durationInput) durationInput.value = tmpl.duration.toString()
+                              if (freqInput) freqInput.value = tmpl.freq.toString()
+                              setRoom(tmpl.room)
+                              setPriority(tmpl.priority)
                             }
                           }}
                         >
@@ -323,9 +327,9 @@ export default function HomeManagementPage() {
             <section className="space-y-6">
               <h3 className="text-lg font-bold">Par pièce</h3>
               <div className="space-y-8">
-                {Object.entries(tasksByRoom).map(([room, roomTasks]) => (
-                  <div key={room} className="space-y-3">
-                    <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-widest">{room}</h4>
+                {Object.entries(tasksByRoom).map(([roomName, roomTasks]) => (
+                  <div key={roomName} className="space-y-3">
+                    <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-widest">{roomName}</h4>
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                       {roomTasks.map(task => (
                         <div key={task.id} className="flex items-center justify-between p-4 bg-card/40 border border-border rounded-xl group hover:border-primary/50 transition-all">
