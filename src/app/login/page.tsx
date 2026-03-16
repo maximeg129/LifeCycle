@@ -34,7 +34,6 @@ export default function LoginPage() {
       toast({ title: "Bon retour !", description: "Connexion réussie." })
       router.push('/home-management')
     } catch (error: any) {
-      console.error("Login error:", error)
       toast({
         variant: "destructive",
         title: "Échec de la connexion",
@@ -48,7 +47,6 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true)
     const provider = new GoogleAuthProvider()
-    // Force la sélection du compte pour éviter les erreurs de session
     provider.setCustomParameters({ prompt: 'select_account' })
     
     try {
@@ -56,21 +54,10 @@ export default function LoginPage() {
       toast({ title: "Succès", description: "Connexion Google réussie." })
       router.push('/home-management')
     } catch (error: any) {
-      console.error("Google Auth Error:", error)
-      let message = "Impossible de se connecter avec Google."
-      
-      if (error.code === 'auth/api-key-not-valid') {
-        message = "La clé API Firebase n'est pas valide. Vérifiez votre configuration."
-      } else if (error.code === 'auth/unauthorized-domain') {
-        message = "Ce domaine n'est pas autorisé dans la console Firebase."
-      } else if (error.code === 'auth/popup-closed-by-user') {
-        message = "La fenêtre de connexion a été fermée."
-      }
-      
       toast({
         variant: "destructive",
         title: "Erreur d'authentification",
-        description: message
+        description: "Impossible de se connecter avec Google."
       })
     } finally {
       setIsGoogleLoading(false)
@@ -78,44 +65,44 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#FBFBFD] flex flex-col items-center justify-center p-6 font-body">
-      <Link href="/" className="mb-10 flex flex-col items-center gap-2 group">
-        <div className="w-12 h-12 bg-foreground rounded-[14px] flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
-          <CheckCircle2 className="w-7 h-7 text-background" />
+    <div className="min-h-screen bg-[#FBFBFD] flex flex-col items-center justify-center p-6">
+      <Link href="/" className="mb-12 flex flex-col items-center gap-3 group">
+        <div className="w-14 h-14 bg-foreground rounded-[16px] flex items-center justify-center shadow-xl transition-transform group-hover:scale-105">
+          <CheckCircle2 className="w-8 h-8 text-background" />
         </div>
-        <span className="text-2xl font-bold tracking-tighter">LifeCycle <span className="font-light opacity-50">Pro</span></span>
+        <span className="text-2xl font-bold tracking-tight">Homly</span>
       </Link>
 
-      <div className="w-full max-w-[420px] bg-white rounded-[32px] p-10 shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-gray-100">
-        <div className="flex bg-gray-50/80 p-1.5 rounded-[16px] mb-10">
-          <Link href="/login" className="flex-1 text-center py-2.5 text-sm font-semibold rounded-[12px] bg-white shadow-sm ring-1 ring-black/5">Connexion</Link>
-          <Link href="/register" className="flex-1 text-center py-2.5 text-sm font-semibold text-gray-400 hover:text-gray-600">Inscription</Link>
+      <div className="w-full max-w-[420px] bg-white rounded-[32px] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.06)] border border-gray-100">
+        <div className="flex bg-gray-50/80 p-1 rounded-[14px] mb-10">
+          <Link href="/login" className="flex-1 text-center py-2.5 text-sm font-bold rounded-[12px] bg-white shadow-sm ring-1 ring-black/5">Connexion</Link>
+          <Link href="/register" className="flex-1 text-center py-2.5 text-sm font-bold text-gray-400 hover:text-gray-600">Inscription</Link>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             <Label htmlFor="email" className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground ml-1">Email</Label>
             <Input 
               id="email" 
               type="email" 
               placeholder="votre@email.com" 
-              className="rounded-2xl border-none bg-gray-50 h-14 px-5 focus-visible:ring-1 focus-visible:ring-primary/20"
+              className="rounded-2xl border-none bg-gray-50 h-14 px-6 focus-visible:ring-1 focus-visible:ring-primary/20"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             <div className="flex justify-between items-center ml-1">
               <Label htmlFor="password" className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Mot de passe</Label>
-              <Link href="#" className="text-[11px] text-[#0066CC] hover:underline font-semibold">Oublié ?</Link>
+              <Link href="#" className="text-[11px] text-primary hover:underline font-bold uppercase tracking-widest">Oublié ?</Link>
             </div>
             <div className="relative">
               <Input 
                 id="password" 
                 type={showPassword ? "text" : "password"} 
                 placeholder="••••••••" 
-                className="rounded-2xl border-none bg-gray-50 h-14 px-5 pr-14 focus-visible:ring-1 focus-visible:ring-primary/20"
+                className="rounded-2xl border-none bg-gray-50 h-14 px-6 pr-14 focus-visible:ring-1 focus-visible:ring-primary/20"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -123,28 +110,27 @@ export default function LoginPage() {
               <button 
                 type="button" 
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-600 transition-colors"
               >
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
           </div>
 
-          <Button type="submit" className="w-full bg-foreground text-background hover:bg-gray-800 rounded-2xl h-14 text-base font-bold shadow-xl shadow-black/10 transition-all hover:-translate-y-0.5" disabled={isLoading}>
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-            Se connecter
+          <Button type="submit" className="w-full bg-foreground text-background hover:bg-black/90 rounded-2xl h-14 text-base font-bold shadow-xl shadow-black/5 transition-all active:scale-[0.98]" disabled={isLoading}>
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Se connecter"}
           </Button>
         </form>
 
-        <div className="relative my-10">
+        <div className="relative my-10 text-center">
           <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-gray-100"></span></div>
-          <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-[0.2em]"><span className="bg-white px-4 text-gray-300">ou</span></div>
+          <span className="relative bg-white px-4 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-300">ou</span>
         </div>
 
         <Button 
           type="button" 
           variant="outline" 
-          className="w-full rounded-2xl h-14 border-gray-100 text-foreground hover:bg-gray-50 font-semibold transition-all"
+          className="w-full rounded-2xl h-14 border-gray-100 font-bold hover:bg-gray-50"
           onClick={handleGoogleLogin}
           disabled={isGoogleLoading}
         >
@@ -158,10 +144,6 @@ export default function LoginPage() {
           )}
           Continuer avec Google
         </Button>
-
-        <p className="mt-10 text-center text-sm text-gray-400">
-          Pas encore de compte ? <Link href="/register" className="text-[#0066CC] font-bold hover:underline ml-1">S'inscrire gratuitement</Link>
-        </p>
       </div>
     </div>
   )

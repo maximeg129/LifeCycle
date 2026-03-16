@@ -22,7 +22,6 @@ import {
 import { 
   Leaf, 
   Droplets, 
-  Home, 
   CheckCircle2, 
   Plus, 
   AlertTriangle,
@@ -31,9 +30,7 @@ import {
   Loader2,
   Sparkles,
   Trash2,
-  Calendar,
-  LayoutDashboard,
-  CheckSquare
+  Calendar
 } from 'lucide-react'
 import Image from 'next/image'
 import { useToast } from '@/hooks/use-toast'
@@ -43,30 +40,6 @@ import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, where, Time
 import { format, addDays, isBefore, isToday, differenceInDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
-import { errorEmitter } from '@/firebase/error-emitter'
-import { FirestorePermissionError } from '@/firebase/errors'
-
-interface HouseholdTask {
-  id?: string
-  name: string
-  description: string
-  room: string
-  estimatedMinutes: number
-  recurrenceDays: number
-  priority: 'low' | 'medium' | 'high'
-  lastCompleted?: any
-  nextDueDate: any
-  isActive: boolean
-  createdAt: any
-}
-
-const TASK_TEMPLATES = [
-  { name: "Nettoyer le four", room: "Cuisine", duration: 45, freq: 90, priority: "medium" },
-  { name: "Passer l'aspirateur", room: "Général", duration: 20, freq: 7, priority: "high" },
-  { name: "Détartrer la douche", room: "SdB", duration: 30, freq: 14, priority: "medium" },
-  { name: "Nettoyer le frigo", room: "Cuisine", duration: 30, freq: 30, priority: "medium" },
-  { name: "Changer les draps", room: "Chambre", duration: 15, freq: 7, priority: "high" },
-]
 
 export default function HomeManagementPage() {
   const { toast } = useToast()
@@ -102,41 +75,16 @@ export default function HomeManagementPage() {
     })
   }, [tasks])
 
-  const overdueTasks = useMemo(() => 
-    sortedTasks.filter(t => t.nextDueDate && isBefore(new Date(t.nextDueDate.seconds * 1000), new Date()) && !isToday(new Date(t.nextDueDate.seconds * 1000))), 
-  [sortedTasks])
-
-  const todayTasks = useMemo(() => 
-    sortedTasks.filter(t => t.nextDueDate && isToday(new Date(t.nextDueDate.seconds * 1000))), 
-  [sortedTasks])
-
-  const tasksByRoom = useMemo(() => {
-    const groups: Record<string, any[]> = {}
-    sortedTasks.forEach(t => {
-      if (!groups[t.room]) groups[t.room] = []
-      groups[t.room].push(t)
-    })
-    return groups
-  }, [sortedTasks])
-
-  const handleMarkDone = (task: any) => {
+  const handleMarkDone = async (task: any) => {
     if (!user || !db) return
     const now = new Date()
     const nextDue = addDays(now, task.recurrenceDays || 7)
     const taskRef = doc(db, `users/${user.uid}/tasks`, task.id)
     
-    setDoc(taskRef, {
+    await setDoc(taskRef, {
       lastCompleted: serverTimestamp(),
       nextDueDate: Timestamp.fromDate(nextDue)
     }, { merge: true })
-      .catch(async (err) => {
-        const permissionError = new FirestorePermissionError({
-          path: taskRef.path,
-          operation: 'update',
-          requestResourceData: { lastCompleted: 'now', nextDueDate: nextDue },
-        })
-        errorEmitter.emit('permission-error', permissionError)
-      })
     
     toast({
       title: "Bien joué !",
@@ -144,17 +92,9 @@ export default function HomeManagementPage() {
     })
   }
 
-  const handleDeleteTask = (taskId: string) => {
+  const handleDeleteTask = async (taskId: string) => {
     if (!user || !db) return
-    const taskRef = doc(db, `users/${user.uid}/tasks`, taskId)
-    deleteDoc(taskRef)
-      .catch(async (err) => {
-        const permissionError = new FirestorePermissionError({
-          path: taskRef.path,
-          operation: 'delete',
-        })
-        errorEmitter.emit('permission-error', permissionError)
-      })
+    await deleteDoc(doc(db, `users/${user.uid}/tasks`, taskId))
   }
 
   const handleAddTask = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -166,7 +106,6 @@ export default function HomeManagementPage() {
     const name = formData.get('taskName')?.toString()
     const recurrenceDays = Number(formData.get('recurrenceDays')) || 7
     const duration = Number(formData.get('duration')) || 15
-    const description = formData.get('description')?.toString() || ""
     
     if (!name) {
       toast({ variant: "destructive", title: "Nom requis" })
@@ -178,7 +117,7 @@ export default function HomeManagementPage() {
     const newTask = {
       name,
       room,
-      description,
+      description: "",
       estimatedMinutes: duration,
       recurrenceDays,
       priority,
@@ -187,204 +126,140 @@ export default function HomeManagementPage() {
       createdAt: serverTimestamp()
     }
 
-    const newTaskRef = doc(collection(db, `users/${user.uid}/tasks`))
-    setDoc(newTaskRef, newTask)
-      .then(() => {
-        setIsAddTaskOpen(false)
-        toast({ title: "Tâche enregistrée" })
-      })
-      .catch(async (err) => {
-        const permissionError = new FirestorePermissionError({
-          path: newTaskRef.path,
-          operation: 'create',
-          requestResourceData: newTask,
-        })
-        errorEmitter.emit('permission-error', permissionError)
-      })
-      .finally(() => setIsSavingTask(false))
-  }
-
-  const getUrgencyColor = (dueDate: any) => {
-    if (!dueDate) return "bg-muted"
-    const date = new Date(dueDate.seconds * 1000)
-    const diff = differenceInDays(date, new Date())
-    if (isBefore(date, new Date()) && !isToday(date)) return "bg-destructive"
-    if (isToday(date) || diff <= 1) return "bg-orange-500"
-    if (diff <= 3) return "bg-yellow-500"
-    return "bg-green-500"
+    try {
+      await setDoc(doc(collection(db, `users/${user.uid}/tasks`)), newTask)
+      setIsAddTaskOpen(false)
+      toast({ title: "Tâche enregistrée" })
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erreur lors de l'enregistrement" })
+    } finally {
+      setIsSavingTask(false)
+    }
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
+    <div className="min-h-screen bg-[#FBFBFD] pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
       
-      <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
+      <main className="p-6 md:p-12 max-w-7xl mx-auto space-y-12">
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">LifeCycle Home</h2>
-            <h1 className="text-3xl font-bold tracking-tight text-gradient">Gestion Maison</h1>
+            <h2 className="text-sm font-bold text-primary uppercase tracking-[0.2em] mb-2 opacity-60">Gestion Maison</h2>
+            <h1 className="text-4xl font-bold tracking-tight">Bienvenue chez vous.</h1>
           </div>
-          <div className="flex gap-2">
-             <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
-              <DialogTrigger asChild>
-                <Button className="rounded-full px-6 bg-primary text-primary-foreground hover:shadow-lg shadow-primary/20 transition-all">
-                  <Plus className="w-4 h-4 mr-2" /> Nouvelle Tâche
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px] rounded-[24px]">
-                <DialogHeader>
-                  <DialogTitle>Créer une tâche intelligente</DialogTitle>
-                </DialogHeader>
-                <form id="task-form" onSubmit={handleAddTask} className="space-y-4 py-4">
+          <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
+            <DialogTrigger asChild>
+              <Button className="rounded-full h-14 px-8 bg-foreground text-background font-bold shadow-xl transition-all hover:scale-[1.02]">
+                <Plus className="w-5 h-5 mr-2" /> Nouvelle Tâche
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[450px] rounded-[32px] p-8">
+              <DialogHeader>
+                <DialogTitle className="text-2xl font-bold">Créer une tâche</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleAddTask} className="space-y-6 pt-4">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold tracking-widest opacity-50 ml-1">Nom</Label>
+                  <Input id="taskName" name="taskName" placeholder="Nettoyer le four..." className="rounded-2xl bg-gray-50 border-none h-14 px-5" required />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="taskName">Nom de la tâche</Label>
-                    <Input id="taskName" name="taskName" placeholder="ex: Nettoyer le four" required />
+                    <Label className="text-[10px] uppercase font-bold tracking-widest opacity-50 ml-1">Pièce</Label>
+                    <Select value={room} onValueChange={setRoom}>
+                      <SelectTrigger className="rounded-2xl bg-gray-50 border-none h-14"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {["Cuisine", "Salon", "Chambre", "SdB", "Extérieur", "Général"].map(r => (
+                          <SelectItem key={r} value={r}>{r}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label>Pièce</Label>
-                      <Select value={room} onValueChange={setRoom}>
-                        <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {["Cuisine", "Salon", "Chambre", "SdB", "Extérieur", "Général"].map(r => (
-                            <SelectItem key={r} value={r}>{r}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Priorité</Label>
-                      <Select value={priority} onValueChange={(val) => setPriority(val as any)}>
-                        <SelectTrigger className="rounded-xl"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="low">Basse</SelectItem>
-                          <SelectItem value="medium">Moyenne</SelectItem>
-                          <SelectItem value="high">Haute</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold tracking-widest opacity-50 ml-1">Priorité</Label>
+                    <Select value={priority} onValueChange={setPriority}>
+                      <SelectTrigger className="rounded-2xl bg-gray-50 border-none h-14"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Basse</SelectItem>
+                        <SelectItem value="medium">Moyenne</SelectItem>
+                        <SelectItem value="high">Haute</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="duration">Minutes</Label>
-                      <Input id="duration" name="duration" type="number" defaultValue={15} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="recurrenceDays">Tous les (jours)</Label>
-                      <Input id="recurrenceDays" name="recurrenceDays" type="number" defaultValue={7} />
-                    </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold tracking-widest opacity-50 ml-1">Durée (min)</Label>
+                    <Input id="duration" name="duration" type="number" defaultValue={15} className="rounded-2xl bg-gray-50 border-none h-14 px-5" />
                   </div>
-                  <DialogFooter className="pt-4">
-                    <Button type="submit" className="w-full rounded-xl py-6" disabled={isSavingTask}>
-                      {isSavingTask && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                      Enregistrer
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold tracking-widest opacity-50 ml-1">Récurrence (j)</Label>
+                    <Input id="recurrenceDays" name="recurrenceDays" type="number" defaultValue={7} className="rounded-2xl bg-gray-50 border-none h-14 px-5" />
+                  </div>
+                </div>
+                <Button type="submit" className="w-full h-16 rounded-2xl font-bold bg-foreground text-background" disabled={isSavingTask}>
+                  {isSavingTask ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Enregistrer la tâche"}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
         </header>
 
-        <Tabs defaultValue="dashboard" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-muted/50 border-none p-1 rounded-full w-fit">
-            <TabsTrigger value="dashboard" className="px-8 py-2 rounded-full data-[state=active]:bg-background data-[state=active]:shadow-sm">
-              Tableau de bord
-            </TabsTrigger>
-            <TabsTrigger value="plants" className="px-8 py-2 rounded-full data-[state=active]:bg-background data-[state=active]:shadow-sm">
-              Vos Plantes
-            </TabsTrigger>
+        <Tabs defaultValue="dashboard" value={activeTab} onValueChange={setActiveTab} className="space-y-8">
+          <TabsList className="bg-gray-100/80 p-1.5 rounded-2xl w-fit">
+            <TabsTrigger value="dashboard" className="px-8 py-3 rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-sm font-bold">Tableau de bord</TabsTrigger>
+            <TabsTrigger value="plants" className="px-8 py-3 rounded-xl data-[state=active]:bg-white data-[state=active]:shadow-sm font-bold">Vos Plantes</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="dashboard" className="space-y-8 animate-in fade-in duration-500">
-            {/* Urgence Section */}
-            {(overdueTasks.length > 0 || todayTasks.length > 0) && (
-              <section className="space-y-4">
-                <h3 className="text-lg font-bold flex items-center gap-2 px-1">
-                  <AlertTriangle className="w-5 h-5 text-orange-500" /> À traiter d'urgence
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {[...overdueTasks, ...todayTasks].map((task) => (
-                    <Card key={task.id} className="apple-card border-none relative group overflow-hidden">
-                      <div className={cn("absolute top-0 right-0 w-2 h-full opacity-60", getUrgencyColor(task.nextDueDate))} />
-                      <CardHeader className="pb-2">
-                        <div className="flex justify-between items-center">
-                          <Badge variant="secondary" className="text-[10px] uppercase font-bold tracking-widest">{task.room}</Badge>
-                        </div>
-                        <CardTitle className="text-xl mt-3">{task.name}</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="flex items-center gap-4 text-[10px] font-bold text-muted-foreground uppercase mb-6 tracking-wider">
-                          <span className="flex items-center gap-1.5"><Clock className="w-3 h-3" /> {task.estimatedMinutes} min</span>
-                          <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3" /> {format(new Date(task.nextDueDate.seconds * 1000), 'dd MMM', { locale: fr })}</span>
-                        </div>
-                        <Button 
-                          onClick={() => handleMarkDone(task)}
-                          className="w-full bg-primary/5 text-primary hover:bg-primary hover:text-white rounded-2xl py-6 font-bold"
-                        >
-                          <CheckCircle2 className="w-5 h-5 mr-2" />
-                          Terminé
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Par pièce */}
-            <section className="space-y-8">
-              {Object.entries(tasksByRoom).map(([roomName, roomTasks]) => (
-                <div key={roomName} className="space-y-4">
-                  <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-[0.2em] px-1">{roomName}</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                    {roomTasks.map(task => (
-                      <div key={task.id} className="flex items-center justify-between p-5 bg-card border border-border/40 rounded-[20px] group hover:shadow-lg transition-all">
-                        <div className="flex items-center gap-4">
-                          <div className={cn("w-2.5 h-2.5 rounded-full", getUrgencyColor(task.nextDueDate))} />
-                          <div>
-                            <div className="font-bold">{task.name}</div>
-                            <div className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
-                              Tous les {task.recurrenceDays} j • {task.estimatedMinutes} min
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button size="icon" variant="ghost" className="h-10 w-10 text-primary hover:bg-primary/5" onClick={() => handleMarkDone(task)}>
-                            <CheckCircle2 className="w-5 h-5" />
-                          </Button>
-                          <Button size="icon" variant="ghost" className="h-10 w-10 text-destructive/40 hover:text-destructive hover:bg-destructive/5" onClick={() => handleDeleteTask(task.id)}>
-                            <Trash2 className="w-4 h-4" />
-                          </Button>
-                        </div>
+          <TabsContent value="dashboard" className="space-y-12">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {loadingTasks ? (
+                Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-64 rounded-[32px] bg-white animate-pulse" />)
+              ) : sortedTasks.length === 0 ? (
+                <div className="col-span-full py-20 text-center opacity-40">Aucune tâche prévue. Profitez !</div>
+              ) : (
+                sortedTasks.map((task) => (
+                  <Card key={task.id} className="apple-card border-none p-8 flex flex-col justify-between h-full">
+                    <div className="space-y-6">
+                      <div className="flex justify-between items-start">
+                        <Badge variant="secondary" className="bg-gray-50 text-gray-500 font-bold px-3 py-1 rounded-full text-[10px] uppercase tracking-widest border-none">
+                          {task.room}
+                        </Badge>
+                        <div className={cn("w-3 h-3 rounded-full", 
+                          task.priority === 'high' ? 'bg-red-500' : task.priority === 'medium' ? 'bg-orange-500' : 'bg-green-500'
+                        )} />
                       </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </section>
+                      <h3 className="text-2xl font-bold tracking-tight leading-none">{task.name}</h3>
+                      <div className="flex gap-4 text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
+                        <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {task.estimatedMinutes} min</span>
+                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {format(new Date(task.nextDueDate.seconds * 1000), 'dd MMM', { locale: fr })}</span>
+                      </div>
+                    </div>
+                    <Button 
+                      onClick={() => handleMarkDone(task)}
+                      className="w-full h-14 rounded-2xl bg-gray-50 text-foreground hover:bg-foreground hover:text-white transition-all font-bold mt-10 shadow-none border-none"
+                    >
+                      Marquer comme fait
+                    </Button>
+                  </Card>
+                ))}
+            </div>
           </TabsContent>
 
-          <TabsContent value="plants" className="space-y-8 animate-in fade-in duration-500">
-             <div className="flex justify-end gap-2 px-1">
+          <TabsContent value="plants" className="space-y-8">
+             <div className="flex justify-end mb-8">
                 <Dialog>
                     <DialogTrigger asChild>
-                      <Button className="rounded-full px-6 bg-accent text-white shadow-xl shadow-accent/20">
-                        <Camera className="w-4 h-4 mr-2" /> Scanner Plante AI
+                      <Button className="rounded-full h-14 px-8 bg-green-500 text-white font-bold shadow-xl shadow-green-500/10 hover:bg-green-600 transition-all">
+                        <Camera className="w-5 h-5 mr-2" /> Scanner une plante (IA)
                       </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[500px] rounded-[32px]">
+                    <DialogContent className="sm:max-w-[450px] rounded-[32px] p-8">
                       <DialogHeader>
-                        <DialogTitle>Identification par IA</DialogTitle>
-                        <DialogDescription>Analysez l'état de santé et obtenez un plan d'arrosage.</DialogDescription>
+                        <DialogTitle className="text-2xl font-bold">Identification IA</DialogTitle>
                       </DialogHeader>
-                      <div className="flex flex-col items-center gap-6 py-6">
-                        <div className="w-full aspect-square bg-muted/30 rounded-[24px] flex items-center justify-center overflow-hidden relative border-2 border-dashed border-border/40">
-                          {previewUrl ? (
-                            <Image src={previewUrl} alt="Preview" fill className="object-cover" />
-                          ) : (
-                            <Camera className="w-12 h-12 text-muted-foreground/20" />
-                          )}
+                      <div className="flex flex-col items-center gap-8 py-6">
+                        <div className="w-full aspect-square bg-gray-50 rounded-[32px] flex items-center justify-center overflow-hidden relative border-2 border-dashed border-gray-200">
+                          {previewUrl ? <Image src={previewUrl} alt="Preview" fill className="object-cover" /> : <Camera className="w-16 h-16 text-gray-200" />}
                         </div>
                         <input type="file" accept="image/*" className="hidden" id="plant-photo" onChange={(e) => {
                           const file = e.target.files?.[0]
@@ -394,85 +269,59 @@ export default function HomeManagementPage() {
                             reader.readAsDataURL(file)
                           }
                         }} />
-                        <Button variant="outline" onClick={() => document.getElementById('plant-photo')?.click()} className="w-full rounded-2xl h-14">
-                          {previewUrl ? "Changer l'image" : "Prendre une photo"}
+                        <Button variant="outline" onClick={() => document.getElementById('plant-photo')?.click()} className="w-full h-14 rounded-2xl border-gray-200 font-bold">
+                          {previewUrl ? "Changer la photo" : "Prendre une photo"}
                         </Button>
-                        
                         {previewUrl && !scanResult && (
                           <Button onClick={async () => {
                              setIsScanning(true)
                              try {
                                const res = await identifyPlant({ photoDataUri: previewUrl })
                                setScanResult(res)
-                             } catch (e) {
-                               toast({ variant: "destructive", title: "Analyse impossible" })
-                             } finally {
-                               setIsScanning(false)
-                             }
-                          }} disabled={isScanning} className="w-full bg-primary h-14 rounded-2xl shadow-xl shadow-primary/20">
-                            {isScanning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                             } catch (e) { toast({ variant: "destructive", title: "Erreur d'analyse" }) }
+                             finally { setIsScanning(false) }
+                          }} className="w-full h-14 rounded-2xl bg-green-500 text-white font-bold" disabled={isScanning}>
+                            {isScanning ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Sparkles className="w-5 h-5 mr-2" />}
                             Lancer l'analyse
                           </Button>
-                        )}
-
-                        {scanResult && (
-                          <div className="w-full space-y-6 animate-in slide-in-from-bottom-2">
-                            <div className="p-6 bg-accent/5 rounded-[24px] border border-accent/20">
-                              <h4 className="font-bold text-2xl text-accent">{scanResult.name}</h4>
-                              <p className="text-sm italic text-muted-foreground/70">{scanResult.species}</p>
-                            </div>
-                            <div className="space-y-3">
-                              <h5 className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                                <Droplets className="w-4 h-4 text-blue-500" /> Plan d'Hydratation
-                              </h5>
-                              <p className="text-sm text-foreground leading-relaxed">{scanResult.hydrationPlan.frequency} — {scanResult.hydrationPlan.tips}</p>
-                            </div>
-                          </div>
                         )}
                       </div>
                     </DialogContent>
                 </Dialog>
              </div>
 
-             <section className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+             <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
                 {[
-                  { name: "Monstera Deliciosa", id: 1, health: 65, status: "critical" },
-                  { name: "Calathea Orbifolia", id: 2, health: 92, status: "healthy" },
-                  { name: "Pothos Argenté", id: 3, health: 88, status: "healthy" },
-                  { name: "Ficus Lyrata", id: 4, health: 45, status: "critical" },
+                  { name: "Monstera Deliciosa", id: 1, health: 85 },
+                  { name: "Calathea Orbifolia", id: 2, health: 92 },
+                  { name: "Pothos Argenté", id: 3, health: 78 },
+                  { name: "Ficus Lyrata", id: 4, health: 65 },
                 ].map((plant) => (
-                  <Card key={plant.id} className="apple-card border-none overflow-hidden group hover:scale-[1.02] transition-all">
-                    <div className="h-48 bg-muted relative">
-                      <Image 
-                        src={`https://picsum.photos/seed/plant-${plant.id}/400/400`} 
-                        alt={plant.name}
-                        fill
-                        className="object-cover"
-                        data-ai-hint="indoor plant"
-                      />
-                      <div className="absolute top-3 right-3">
-                        <Badge className={cn("rounded-full border-none backdrop-blur-md", plant.status === 'healthy' ? 'bg-green-500/20 text-green-600' : 'bg-destructive/20 text-destructive')}>
-                          {plant.status === 'healthy' ? 'Vigoureuse' : 'Soif'}
+                  <div key={plant.id} className="apple-card border-none overflow-hidden group">
+                    <div className="h-56 relative">
+                      <Image src={`https://picsum.photos/seed/plant-${plant.id}/500/500`} alt={plant.name} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
+                      <div className="absolute top-4 right-4">
+                        <Badge className="rounded-full bg-white/90 backdrop-blur shadow-sm text-foreground font-bold border-none px-4 py-1.5 text-[10px]">
+                          Vigoureuse
                         </Badge>
                       </div>
                     </div>
-                    <CardContent className="p-5 space-y-5">
-                      <h3 className="font-bold text-lg">{plant.name}</h3>
-                      <div className="space-y-2">
-                        <div className="flex justify-between text-[10px] uppercase font-bold text-muted-foreground tracking-widest">
+                    <div className="p-6 space-y-6">
+                      <h3 className="font-bold text-xl tracking-tight">{plant.name}</h3>
+                      <div className="space-y-3">
+                        <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest opacity-40">
                           <span>Santé</span>
                           <span>{plant.health}%</span>
                         </div>
-                        <Progress value={plant.health} className="h-1" />
+                        <Progress value={plant.health} className="h-1 bg-gray-50" />
                       </div>
-                      <Button size="icon" variant="ghost" className="w-full flex justify-between px-4 py-6 rounded-2xl bg-blue-500/5 text-blue-600 hover:bg-blue-500/10">
-                        <span className="text-xs font-bold uppercase tracking-wider">Hydrater</span>
-                        <Droplets className="w-5 h-5" />
+                      <Button className="w-full h-12 rounded-xl bg-blue-500/5 text-blue-500 hover:bg-blue-500 hover:text-white transition-all font-bold border-none shadow-none">
+                        Hydrater <Droplets className="w-4 h-4 ml-2" />
                       </Button>
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </div>
                 ))}
-             </section>
+             </div>
           </TabsContent>
         </Tabs>
       </main>

@@ -1,13 +1,12 @@
 'use client';
 
-// REMARQUE : Ces valeurs sont des placeholders. Pour que l'authentification fonctionne,
-// vous devez remplacer ces valeurs par celles fournies dans votre console Firebase
+// REMARQUE : Remplacez ces valeurs par celles fournies dans votre console Firebase
 // (Paramètres du projet > Général > Vos applications).
 export const firebaseConfig = {
-  apiKey: "placeholder-api-key",
-  authDomain: "placeholder-project-id.firebaseapp.com",
-  projectId: "placeholder-project-id",
-  storageBucket: "placeholder-project-id.firebasestorage.app",
-  messagingSenderId: "placeholder-sender-id",
-  appId: "placeholder-app-id"
+  apiKey: "AIzaSyAs-placeholder-key",
+  authDomain: "homly-vault.firebaseapp.com",
+  projectId: "homly-vault",
+  storageBucket: "homly-vault.firebasestorage.app",
+  messagingSenderId: "1234567890",
+  appId: "1:1234567890:web:abcdef"
 };
