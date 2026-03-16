@@ -1,0 +1,342 @@
+rules_version = '2';
+
+/**
+ * FIREBASE SECURITY RULES: LifeCycle Pro
+ *
+ * CORE PHILOSOPHY
+ * This ruleset implements a strict User-Ownership model. Access is gated primarily by the
+ * relationship between the authenticated user's UID and the path/data of the document.
+ * 
+ * DATA STRUCTURE
+ * All application data is organized hierarchically under a root /users/{userId} path. 
+ * This provides natural structural segregation and ensures that a user's data remains 
+ * isolated from others.
+ * 
+ * KEY SECURITY DECISIONS
+ * 1. Ownership Enforcement: Every document contains a denormalized 'userId' or 'id' field. 
+ *    Rules verify that this field matches the authenticated user's UID.
+ * 2. Authorization Independence: By denormalizing the owner's ID onto every document, 
+ *    we avoid costly 'get()' lookups to parent documents during authorization checks.
+ * 3. Prototyping Flexibility: While authorization is strictly enforced (who can access), 
+ *    data shape validation (what the data looks like) is kept minimal to allow for 
+ *    rapid frontend iteration.
+ * 4. Relational Integrity: On creation, the rules force the internal 'userId' field 
+ *    to match the path ID. On update, the 'userId' field is treated as immutable.
+ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // --- Helper Functions ---
+
+    /** @description Checks if the user is authenticated. */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /** @description Checks if the authenticated user's UID matches the provided userId. */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /** @description Checks if the user is the owner and the document exists. */
+    function isExistingOwner(userId) {
+      return isOwner(userId) && resource != null;
+    }
+
+    // --- Collection Rules ---
+
+    /**
+     * @description Rules for the user's root profile document.
+     * @path /users/{userId}
+     * @allow Authenticated user (create) where request.auth.uid == userId.
+     * @deny Any user (update) trying to change a different user's profile.
+     * @principle Enforces self-creation and absolute ownership of user profiles.
+     */
+    match /users/{userId} {
+      allow get, list: if isOwner(userId);
+      allow create: if isOwner(userId) && request.resource.data.id == userId;
+      allow update: if isExistingOwner(userId) && request.resource.data.id == resource.data.id;
+      allow delete: if isExistingOwner(userId);
+
+      /**
+       * @description Rules for training activities.
+       * @path /users/{userId}/activities/{activityId}
+       * @allow User (create) an activity with their own userId.
+       * @deny User (update) attempting to change the ownership field.
+       * @principle Validates relational integrity between the path and the document data.
+       */
+      match /activities/{activityId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for calculated training metrics (CTL, ATL, TSB).
+       * @path /users/{userId}/trainingMetrics/{metricId}
+       * @allow Owner (get) their own daily metrics.
+       * @deny Unauthenticated user (list) metrics.
+       * @principle Restricts access to a user's own data tree.
+       */
+      match /trainingMetrics/{metricId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for personal training goals.
+       * @path /users/{userId}/trainingGoals/{goalId}
+       * @allow Owner (create) a goal linked to their ID.
+       * @deny Owner (update) if they try to change the goal's owner.
+       * @principle Enforces document ownership for writes.
+       */
+      match /trainingGoals/{goalId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for structured training plans.
+       * @path /users/{userId}/trainingPlans/{planId}
+       * @allow Owner (list) their training plans.
+       * @deny Non-owner (get) a private training plan.
+       * @principle Ensures private data remains accessible only to the owner.
+       */
+      match /trainingPlans/{planId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for the user's bicycles.
+       * @path /users/{userId}/bikes/{bikeId}
+       * @allow Owner (delete) their own bike record.
+       * @deny Any user (create) a bike record under someone else's ID.
+       * @principle Structural segregation of user assets.
+       */
+      match /bikes/{bikeId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for bicycle components.
+       * @path /users/{userId}/components/{componentId}
+       * @allow Owner (create) a component with a reference to their UID.
+       * @deny Owner (update) changing the component's userId.
+       * @principle Enforces immutable ownership for sensitive sub-resources.
+       */
+      match /components/{componentId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for bike and component maintenance logs.
+       * @path /users/{userId}/maintenanceLogs/{logId}
+       * @allow Owner (list) maintenance history.
+       * @principle Path-based and data-based owner validation.
+       */
+      match /maintenanceLogs/{logId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for recipes saved or created by the user.
+       * @path /users/{userId}/recipes/{recipeId}
+       * @allow Owner (update) their own recipe instructions.
+       * @deny Non-owner (list) recipes.
+       * @principle User-scoped private collection access.
+       */
+      match /recipes/{recipeId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for recipe organization tags.
+       * @path /users/{userId}/tags/{tagId}
+       * @principle Restricts tag management to the profile owner.
+       */
+      match /tags/{tagId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for pantry inventory items.
+       * @path /users/{userId}/pantryItems/{pantryItemId}
+       * @principle Denormalized ownership check for rapid access.
+       */
+      match /pantryItems/{pantryItemId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for pantry item categories.
+       * @path /users/{userId}/pantryCategories/{categoryId}
+       * @principle Ownership enforcement for categorization.
+       */
+      match /pantryCategories/{categoryId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for cached weather forecast data.
+       * @path /users/{userId}/weatherForecasts/{forecastId}
+       * @principle Ensures fetched forecast data is private to the user.
+       */
+      match /weatherForecasts/{forecastId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for cycling clothing inventory.
+       * @path /users/{userId}/cyclingClothingItems/{itemId}
+       * @principle Ownership-based access to apparel data.
+       */
+      match /cyclingClothingItems/{itemId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for bike tire pressure setups.
+       * @path /users/{userId}/bikeSetups/{setupId}
+       * @principle Authorization based on user UID within the path and document.
+       */
+      match /bikeSetups/{setupId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for indoor plant tracking.
+       * @path /users/{userId}/plants/{plantId}
+       * @principle Secure isolation of user-owned plant data.
+       */
+      match /plants/{plantId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for plant care action logs.
+       * @path /users/{userId}/plantActionLogs/{logId}
+       * @principle Validates that care actions are logged by the plant owner.
+       */
+      match /plantActionLogs/{logId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for financial budget categories.
+       * @path /users/{userId}/budgetCategories/{categoryId}
+       * @principle Protects sensitive financial organizational data.
+       */
+      match /budgetCategories/{categoryId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for manual expense records.
+       * @path /users/{userId}/expenses/{expenseId}
+       * @principle Owner-only writes for financial transactions.
+       */
+      match /expenses/{expenseId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for domestic tasks and reminders.
+       * @path /users/{userId}/tasks/{taskId}
+       * @principle Structural segregation of user tasks.
+       */
+      match /tasks/{taskId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for task categorization.
+       * @path /users/{userId}/taskCategories/{categoryId}
+       * @principle Ownership enforcement for task organization.
+       */
+      match /taskCategories/{categoryId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for daily health and well-being metrics.
+       * @path /users/{userId}/healthMetrics/{metricId}
+       * @principle Protects highly sensitive personal health data.
+       */
+      match /healthMetrics/{metricId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Rules for health and well-being goals.
+       * @path /users/{userId}/healthGoals/{goalId}
+       * @principle Enforces owner-only access to fitness objectives.
+       */
+      match /healthGoals/{goalId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && request.resource.data.userId == userId;
+        allow update: if isExistingOwner(userId) && request.resource.data.userId == resource.data.userId;
+        allow delete: if isExistingOwner(userId);
+      }
+    }
+  }
+}
