@@ -1,12 +1,21 @@
 "use client"
 
-import React from 'react'
+import React, { useState, useRef } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogTrigger,
+  DialogFooter,
+  DialogDescription
+} from '@/components/ui/dialog'
 import { 
   Leaf, 
   Droplets, 
@@ -19,9 +28,14 @@ import {
   ChevronRight,
   Wind,
   Sun,
-  Thermometer
+  Thermometer,
+  Camera,
+  Loader2,
+  Sparkles
 } from 'lucide-react'
 import Image from 'next/image'
+import { useToast } from '@/hooks/use-toast'
+import { identifyPlant, type IdentifyPlantOutput } from '@/ai/flows/identify-plant-flow'
 
 const PLANTS = [
   { id: 1, name: "Monstera Deliciosa", lastWatered: "Il y a 8 jours", health: 65, status: "needs-water", location: "Salon" },
@@ -38,6 +52,37 @@ const MAINTENANCE_TASKS = [
 ]
 
 export default function HomeManagementPage() {
+  const { toast } = useToast()
+  const [isScanning, setIsScanning] = useState(false)
+  const [scanResult, setScanResult] = useState<IdentifyPlantOutput | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onloadend = () => {
+        setPreviewUrl(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleScan = async () => {
+    if (!previewUrl) return
+    setIsScanning(true)
+    try {
+      const result = await identifyPlant({ photoDataUri: previewUrl })
+      setScanResult(result)
+      toast({ title: "Analyse terminée", description: `${result.name} identifiée !` })
+    } catch (error) {
+      toast({ variant: "destructive", title: "Erreur", description: "Impossible d'analyser la plante." })
+    } finally {
+      setIsScanning(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
@@ -49,11 +94,58 @@ export default function HomeManagementPage() {
             <h1 className="text-3xl font-bold">Gestion Maison & Plantes</h1>
           </div>
           <div className="flex gap-2">
+            <Dialog>
+              <DialogTrigger asChild>
+                <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
+                  <Camera className="w-4 h-4 mr-2" /> Scanner Plante AI
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>Scanner une Plante</DialogTitle>
+                  <DialogDescription>Prenez une photo pour identifier votre plante et obtenir un plan d'arrosage.</DialogDescription>
+                </DialogHeader>
+                <div className="flex flex-col items-center gap-4 py-4">
+                  <div className="w-full aspect-video bg-muted rounded-xl flex items-center justify-center overflow-hidden relative border-2 border-dashed border-border">
+                    {previewUrl ? (
+                      <Image src={previewUrl} alt="Preview" fill className="object-cover" />
+                    ) : (
+                      <Camera className="w-12 h-12 text-muted-foreground opacity-20" />
+                    )}
+                  </div>
+                  <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
+                  <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="w-full">
+                    {previewUrl ? "Changer de photo" : "Prendre / Choisir une photo"}
+                  </Button>
+                  
+                  {previewUrl && !scanResult && (
+                    <Button onClick={handleScan} disabled={isScanning} className="w-full bg-primary">
+                      {isScanning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                      Analyser avec l'IA
+                    </Button>
+                  )}
+
+                  {scanResult && (
+                    <div className="w-full space-y-4 animate-in fade-in duration-500">
+                      <div className="p-4 bg-accent/10 border border-accent/20 rounded-lg">
+                        <h4 className="font-bold text-lg text-accent">{scanResult.name}</h4>
+                        <p className="text-xs italic text-muted-foreground">{scanResult.species}</p>
+                      </div>
+                      <div className="space-y-2">
+                        <h5 className="text-sm font-bold flex items-center gap-2"><Droplets className="w-4 h-4 text-blue-500" /> Plan d'Hydratation</h5>
+                        <p className="text-xs text-muted-foreground">Fréquence : {scanResult.hydrationPlan.frequency}</p>
+                        <p className="text-xs text-muted-foreground">{scanResult.hydrationPlan.tips}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => { setPreviewUrl(null); setScanResult(null); }}>Réinitialiser</Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-              <Plus className="w-4 h-4 mr-2" /> Ajouter
-            </Button>
-            <Button variant="outline" className="border-border hover:bg-muted">
-              Historique
+              <Plus className="w-4 h-4 mr-2" /> Ajouter Plante
             </Button>
           </div>
         </header>
@@ -100,7 +192,6 @@ export default function HomeManagementPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold">Optimale</div>
-                  <p className="text-[10px] text-muted-foreground mt-2 italic">Basé sur capteurs (sim.)</p>
                 </CardContent>
               </Card>
               <Card className="bg-card/40 border-border">
@@ -111,7 +202,6 @@ export default function HomeManagementPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold text-red-500">24.5°C</div>
-                  <p className="text-[10px] text-muted-foreground mt-2">Un peu chaud pour Calathea</p>
                 </CardContent>
               </Card>
             </section>
@@ -134,11 +224,7 @@ export default function HomeManagementPage() {
                     </div>
                   </div>
                   <CardContent className="pt-4 space-y-4">
-                    <div>
-                      <h3 className="font-bold text-lg">{plant.name}</h3>
-                      <p className="text-xs text-muted-foreground">{plant.location}</p>
-                    </div>
-                    
+                    <h3 className="font-bold text-lg">{plant.name}</h3>
                     <div className="space-y-1">
                       <div className="flex justify-between text-[10px] uppercase font-bold text-muted-foreground">
                         <span>Santé</span>
@@ -146,12 +232,8 @@ export default function HomeManagementPage() {
                       </div>
                       <Progress value={plant.health} className="h-1.5" />
                     </div>
-
                     <div className="flex items-center justify-between pt-2">
-                      <div className="flex flex-col">
-                        <span className="text-[10px] text-muted-foreground uppercase">Dernier arrosage</span>
-                        <span className="text-xs font-medium">{plant.lastWatered}</span>
-                      </div>
+                      <span className="text-xs font-medium">{plant.lastWatered}</span>
                       <Button size="icon" variant="ghost" className="rounded-full text-blue-500 hover:bg-blue-500/10">
                         <Droplets className="w-5 h-5" />
                       </Button>
@@ -163,98 +245,34 @@ export default function HomeManagementPage() {
           </TabsContent>
 
           <TabsContent value="maintenance" className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <Card className="lg:col-span-2 bg-card/40 border-border">
-                <CardHeader className="flex flex-row items-center justify-between">
-                  <div>
-                    <CardTitle>Calendrier d'Entretien</CardTitle>
-                    <CardDescription>Tâches récurrentes et ponctuelles</CardDescription>
-                  </div>
-                  <Wrench className="w-6 h-6 text-primary" />
-                </CardHeader>
-                <CardContent className="p-0">
-                  <div className="divide-y divide-border">
-                    {MAINTENANCE_TASKS.map((task) => (
-                      <div key={task.id} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors group">
-                        <div className="flex items-center gap-4">
-                          <div className={cn(
-                            "p-2 rounded-lg",
-                            task.priority === 'urgent' ? "bg-red-500/10 text-red-500" : "bg-primary/10 text-primary"
-                          )}>
-                            <CheckSquare className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <div className="font-semibold">{task.task}</div>
-                            <div className="text-xs text-muted-foreground">{task.category} • {task.due}</div>
-                          </div>
+            <Card className="bg-card/40 border-border">
+              <CardHeader>
+                <CardTitle>Tâches d'Entretien</CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-border">
+                  {MAINTENANCE_TASKS.map((task) => (
+                    <div key={task.id} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors group">
+                      <div className="flex items-center gap-4">
+                        <div className={task.priority === 'urgent' ? "text-red-500" : "text-primary"}>
+                          <CheckSquare className="w-5 h-5" />
                         </div>
-                        <div className="flex items-center gap-4">
-                          <Badge variant={task.priority === 'urgent' ? 'destructive' : 'outline'}>
-                            {task.priority.toUpperCase()}
-                          </Badge>
-                          <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors cursor-pointer" />
+                        <div>
+                          <div className="font-semibold">{task.task}</div>
+                          <div className="text-xs text-muted-foreground">{task.category} • {task.due}</div>
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="space-y-6">
-                <Card className="bg-card border-border shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Wind className="w-5 h-5 text-accent" /> Qualité de l'Air
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="text-center p-4 bg-accent/5 border border-accent/20 rounded-xl">
-                      <div className="text-4xl font-bold text-accent">Excellente</div>
-                      <p className="text-xs text-muted-foreground mt-1">Dernière mesure : il y a 5 min</p>
+                      <Badge variant={task.priority === 'urgent' ? 'destructive' : 'outline'}>
+                        {task.priority.toUpperCase()}
+                      </Badge>
                     </div>
-                    <div className="space-y-4">
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span>Humidité</span>
-                          <span>45%</span>
-                        </div>
-                        <Progress value={45} className="h-1.5" />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span>CO2</span>
-                          <span>420 ppm</span>
-                        </div>
-                        <Progress value={42} className="h-1.5" />
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-card border-border shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <Calendar className="w-5 h-5 text-primary" /> Rappels IA
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
-                      <p className="text-xs italic text-muted-foreground">
-                        "La météo annonce de fortes pluies demain. Pensez à vérifier l'évacuation de la terrasse."
-                      </p>
-                      <Button variant="link" className="text-primary p-0 h-auto text-[10px] mt-2">Marquer comme fait</Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </main>
     </div>
   )
-}
-
-function cn(...inputs: any[]) {
-  return inputs.filter(Boolean).join(' ')
 }
