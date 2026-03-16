@@ -1,3 +1,28 @@
 {
-  "placeholderImages": []
+  "placeholderImages": [
+    {
+      "id": "cycling-bg",
+      "description": "Professional cyclist on a mountain road",
+      "imageUrl": "https://picsum.photos/seed/cycling1/1200/600",
+      "imageHint": "cycling mountain"
+    },
+    {
+      "id": "recipe-bg",
+      "description": "Healthy meal preparation",
+      "imageUrl": "https://picsum.photos/seed/recipe1/800/600",
+      "imageHint": "healthy food"
+    },
+    {
+      "id": "plant-bg",
+      "description": "Lush indoor houseplant",
+      "imageUrl": "https://picsum.photos/seed/plant1/800/600",
+      "imageHint": "indoor plants"
+    },
+    {
+      "id": "finance-bg",
+      "description": "Modern financial dashboard concept",
+      "imageUrl": "https://picsum.photos/seed/finance1/800/600",
+      "imageHint": "finance analysis"
+    }
+  ]
 }
