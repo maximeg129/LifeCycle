@@ -1,0 +1,32 @@
+
+{
+  "entities": {
+    "UserSettings": {
+      "title": "User Settings",
+      "description": "User specific configuration for external integrations.",
+      "type": "object",
+      "properties": {
+        "intervalsAthleteId": {
+          "type": "string",
+          "description": "The Intervals.icu athlete ID found in settings."
+        },
+        "intervalsApiKey": {
+          "type": "string",
+          "description": "The Intervals.icu API key generated in settings."
+        }
+      },
+      "required": ["intervalsAthleteId", "intervalsApiKey"]
+    }
+  },
+  "auth": {
+    "providers": [
+      "google.com"
+    ]
+  },
+  "firestore": {
+    "/users/{userId}/settings/intervals": {
+      "schema": "UserSettings",
+      "description": "Stored Intervals.icu credentials for a user."
+    }
+  }
+}

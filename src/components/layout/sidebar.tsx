@@ -1,3 +1,4 @@
+
 "use client"
 
 import React from 'react'
@@ -62,10 +63,15 @@ export function AppNavigation() {
           })}
         </nav>
         <div className="p-4 border-t border-border mt-auto">
-          <Button variant="ghost" className="w-full justify-start gap-3 text-muted-foreground">
-            <Settings className="w-5 h-5" />
-            Paramètres
-          </Button>
+          <Link href="/settings">
+            <Button variant="ghost" className={cn(
+              "w-full justify-start gap-3",
+              pathname === '/settings' ? "text-primary" : "text-muted-foreground"
+            )}>
+              <Settings className="w-5 h-5" />
+              Paramètres
+            </Button>
+          </Link>
         </div>
       </aside>
 
@@ -98,13 +104,22 @@ export function AppNavigation() {
                     </Link>
                   )
                 })}
+                <Link href="/settings">
+                  <div className={cn(
+                    "flex items-center gap-3 px-4 py-3 rounded-lg",
+                    pathname === '/settings' ? "bg-primary text-primary-foreground" : "text-muted-foreground"
+                  )}>
+                    <Settings className="w-5 h-5" />
+                    <span>Paramètres</span>
+                  </div>
+                </Link>
               </nav>
             </SheetContent>
           </Sheet>
         </header>
 
         <nav className="fixed bottom-0 left-0 right-0 h-16 bg-card/95 backdrop-blur-lg border-t border-border z-40 flex items-center justify-around px-2">
-          {navItems.slice(0, 5).map((item) => {
+          {navItems.slice(0, 4).concat([{ name: 'Settings', href: '/settings', icon: Settings }]).map((item) => {
             const isActive = pathname === item.href
             return (
               <Link key={item.href} href={item.href} className="flex flex-col items-center gap-1 min-w-[64px]">
