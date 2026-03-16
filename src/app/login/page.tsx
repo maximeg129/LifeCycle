@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState } from 'react'
@@ -6,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
 import { 
   signInWithEmailAndPassword, 
   signInWithPopup, 
@@ -14,6 +15,7 @@ import {
 } from 'firebase/auth'
 import { useAuth } from '@/firebase'
 import { useToast } from '@/hooks/use-toast'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -25,21 +27,19 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setAuthError(null)
     try {
       await signInWithEmailAndPassword(auth, email, password)
       toast({ title: "Bon retour !", description: "Connexion réussie." })
       router.push('/home-management')
     } catch (error: any) {
       console.error("Login error:", error)
-      toast({
-        variant: "destructive",
-        title: "Échec de la connexion",
-        description: "Email ou mot de passe incorrect."
-      })
+      setAuthError("Email ou mot de passe incorrect.")
     } finally {
       setIsLoading(false)
     }
@@ -47,8 +47,8 @@ export default function LoginPage() {
 
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true)
+    setAuthError(null)
     const provider = new GoogleAuthProvider()
-    // Force l'affichage de la sélection de compte pour éviter les connexions automatiques silencieuses
     provider.setCustomParameters({ prompt: 'select_account' })
     
     try {
@@ -61,21 +61,18 @@ export default function LoginPage() {
       console.error("Google Auth Error:", error)
       let message = "Impossible de se connecter avec Google."
       
-      if (error.code === 'auth/operation-not-allowed') {
-        message = "La connexion Google n'est pas activée dans votre console Firebase (Authentication > Sign-in method)."
+      if (error.code === 'auth/popup-blocked') {
+        message = "La fenêtre de connexion a été bloquée par votre navigateur. Veuillez autoriser les pop-ups."
+      } else if (error.code === 'auth/operation-not-allowed') {
+        message = "La méthode Google n'est pas activée dans votre console Firebase."
       } else if (error.code === 'auth/unauthorized-domain') {
-        message = "Ce domaine n'est pas autorisé dans votre console Firebase (Authentication > Settings > Authorized domains)."
+        const domain = typeof window !== 'undefined' ? window.location.hostname : 'ce domaine'
+        message = `Le domaine ${domain} n'est pas autorisé dans votre console Firebase (Authentication > Paramètres).`
       } else if (error.code === 'auth/popup-closed-by-user') {
-        message = "La fenêtre de connexion a été fermée avant la fin de l'opération."
-      } else if (error.code === 'auth/internal-error') {
-        message = "Erreur interne Firebase. Vérifiez votre configuration src/firebase/config.ts."
+        message = "La fenêtre de connexion a été fermée."
       }
       
-      toast({
-        variant: "destructive",
-        title: "Erreur d'authentification",
-        description: message
-      })
+      setAuthError(message)
     } finally {
       setIsGoogleLoading(false)
     }
@@ -95,6 +92,14 @@ export default function LoginPage() {
           <Link href="/login" className="flex-1 text-center py-2.5 text-sm font-bold rounded-[12px] bg-white shadow-sm ring-1 ring-black/5">Connexion</Link>
           <Link href="/register" className="flex-1 text-center py-2.5 text-sm font-bold text-gray-400 hover:text-gray-600">Inscription</Link>
         </div>
+
+        {authError && (
+          <Alert variant="destructive" className="mb-6 rounded-2xl border-none bg-red-50 text-red-600">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Erreur</AlertTitle>
+            <AlertDescription className="text-xs">{authError}</AlertDescription>
+          </Alert>
+        )}
 
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="space-y-2">
