@@ -11,6 +11,7 @@ import { ai } from '@/ai/genkit';
 import { z } from 'genkit';
 
 const CyclingOutfitRecommendationInputSchema = z.object({
+  location: z.string().optional().describe('The name of the location (city, region).'),
   currentWeather: z.object({
     temperatureCelsius: z.number().describe('Current or forecast temperature in Celsius.'),
     windSpeedKmh: z.number().describe('Current or forecast wind speed in kilometers per hour.'),
@@ -44,9 +45,11 @@ const prompt = ai.definePrompt({
   name: 'cyclingOutfitRecommendationPrompt',
   input: { schema: CyclingOutfitRecommendationInputSchema },
   output: { schema: CyclingOutfitRecommendationOutputSchema },
-  prompt: `You are an expert cycling coach and clothing specialist. Your goal is to provide a personalized cycling outfit recommendation based on the current weather conditions and the cyclist's clothing inventory.
+  prompt: `You are an expert cycling coach and clothing specialist. Your goal is to provide a personalized cycling outfit recommendation based on the current weather conditions, the location, and the cyclist's clothing inventory.
 
 Analyze the provided weather conditions and the cyclist's available clothing items. Select the most appropriate items from the inventory to ensure the cyclist is comfortable and well-protected for their ride.
+
+Location context: {{#if location}}{{{location}}}{{else}}Unknown{{/if}}
 
 Pay close attention to:
 - Temperature: Select items with suitable temperature ranges.
