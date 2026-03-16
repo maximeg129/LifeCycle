@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from 'react';
@@ -8,13 +7,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { useAuth, useFirestore, useDoc } from '@/firebase';
+import { useUser, useFirestore, useDoc } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { ShieldCheck, ExternalLink, Save, Loader2, Key, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user } = useUser();
   const db = useFirestore();
   const { toast } = useToast();
   
@@ -33,7 +32,14 @@ export default function SettingsPage() {
   }, [settings]);
 
   const handleSave = async () => {
-    if (!user || !db) return;
+    if (!user || !db) {
+      toast({
+        variant: "destructive",
+        title: "Authentification requise",
+        description: "Vous devez être connecté pour enregistrer vos paramètres.",
+      });
+      return;
+    }
 
     setSaving(true);
     try {
@@ -46,6 +52,7 @@ export default function SettingsPage() {
         description: "Vos identifiants Intervals.icu ont été mis à jour.",
       });
     } catch (error) {
+      console.error("Save error:", error);
       toast({
         variant: "destructive",
         title: "Erreur",
@@ -65,6 +72,12 @@ export default function SettingsPage() {
           <h1 className="text-3xl font-bold">Paramètres</h1>
           <p className="text-muted-foreground">Gérez vos intégrations et configurations.</p>
         </header>
+
+        {!user && !loadingSettings && (
+          <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-600 dark:text-yellow-500 text-sm mb-6">
+            Vous n'êtes pas connecté. Les paramètres ne pourront pas être sauvegardés.
+          </div>
+        )}
 
         <Card className="bg-card/40 border-border">
           <CardHeader>
@@ -132,7 +145,7 @@ export default function SettingsPage() {
           <CardFooter className="bg-muted/30 border-t border-border mt-4 px-6 py-4">
             <Button 
               onClick={handleSave} 
-              disabled={saving || loadingSettings}
+              disabled={saving || loadingSettings || !user}
               className="bg-primary text-primary-foreground hover:bg-primary/90 ml-auto"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
