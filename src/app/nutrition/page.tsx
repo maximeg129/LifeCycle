@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState } from 'react'
@@ -17,7 +16,8 @@ import {
   DialogHeader, 
   DialogTitle, 
   DialogTrigger,
-  DialogFooter
+  DialogFooter,
+  DialogDescription
 } from '@/components/ui/dialog'
 import { 
   CookingPot, 
@@ -33,20 +33,81 @@ import {
   Search,
   BookOpen,
   Info,
-  CheckCircle2
+  CheckCircle2,
+  Clock,
+  ChevronLeft
 } from 'lucide-react'
 import Image from 'next/image'
 import { useToast } from '@/hooks/use-toast'
+import { ScrollArea } from '@/components/ui/scroll-area'
+
+const MOCK_RECIPES = [
+  { 
+    id: 1, 
+    title: "Pâtes au Pesto de Kale", 
+    cal: 520, 
+    protein: 18,
+    carbs: 65,
+    time: "15 min", 
+    type: "Performance", 
+    image: "https://picsum.photos/seed/recipe1/600/400",
+    ingredients: ["200g Pâtes complètes", "100g Kale frais", "30g Pignons de pin", "1 gousse d'Ail", "Huile d'olive", "Parmesan"],
+    instructions: "1. Cuire les pâtes al dente.\n2. Blanchir le kale 2 min.\n3. Mixer le kale, l'ail, les pignons et l'huile.\n4. Mélanger le pesto aux pâtes avec un peu d'eau de cuisson."
+  },
+  { 
+    id: 2, 
+    title: "Bol de Poké Saumon", 
+    cal: 480, 
+    protein: 32,
+    carbs: 45,
+    time: "20 min", 
+    type: "Récupération", 
+    image: "https://picsum.photos/seed/recipe2/600/400",
+    ingredients: ["150g Saumon frais", "100g Riz sushi", "1/2 Avocat", "Edamames", "Algues Nori", "Sauce soja", "Graines de sésame"],
+    instructions: "1. Cuire le riz et le laisser refroidir.\n2. Couper le saumon en dés.\n3. Disposer le riz dans un bol.\n4. Ajouter les garnitures et assaisonner."
+  },
+  { 
+    id: 3, 
+    title: "Oatmeal Protéiné", 
+    cal: 410, 
+    protein: 25,
+    carbs: 55,
+    time: "10 min", 
+    type: "Énergie", 
+    image: "https://picsum.photos/seed/recipe3/600/400",
+    ingredients: ["60g Flocons d'avoine", "1 scoop Protéine vanille", "150ml Lait d'avoine", "Myrtilles", "Graines de chia", "Beurre d'amande"],
+    instructions: "1. Chauffer l'avoine et le lait à feu doux.\n2. Retirer du feu et mélanger la protéine.\n3. Ajouter les toppings frais."
+  },
+  { 
+    id: 4, 
+    title: "Salade de Lentilles & Feta", 
+    cal: 390, 
+    protein: 20,
+    carbs: 40,
+    time: "15 min", 
+    type: "Santé", 
+    image: "https://picsum.photos/seed/recipe4/600/400",
+    ingredients: ["200g Lentilles cuites", "50g Feta", "Concombre", "Tomates cerises", "Oignon rouge", "Persil", "Citron"],
+    instructions: "1. Rincer les lentilles.\n2. Couper les légumes en dés.\n3. Mélanger le tout avec la feta émiettée.\n4. Assaisonner de citron et huile d'olive."
+  },
+]
 
 export default function NutritionPage() {
   const { toast } = useToast()
   const [activeTab, setActiveTab] = useState('plan')
+  const [selectedRecipe, setSelectedRecipe] = useState<typeof MOCK_RECIPES[0] | null>(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
 
   const handleAction = (title: string) => {
     toast({
       title: title,
       description: "Cette fonctionnalité sera bientôt connectée à votre base de données réelle.",
     })
+  }
+
+  const openRecipeDetails = (recipe: typeof MOCK_RECIPES[0]) => {
+    setSelectedRecipe(recipe)
+    setIsDetailOpen(true)
   }
 
   return (
@@ -69,6 +130,7 @@ export default function NutritionPage() {
               <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>
                   <DialogTitle>Enregistrer un repas</DialogTitle>
+                  <DialogDescription>Ajoutez les détails de votre repas pour suivre vos macros.</DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
@@ -280,6 +342,7 @@ export default function NutritionPage() {
                 <DialogContent className="sm:max-w-[600px]">
                   <DialogHeader>
                     <DialogTitle>Ajouter au Livre de Cuisine</DialogTitle>
+                    <DialogDescription>Créez votre propre fiche recette pour vos futurs plans nutritionnels.</DialogDescription>
                   </DialogHeader>
                   <div className="grid gap-4 py-4">
                     <div className="grid gap-2">
@@ -303,13 +366,12 @@ export default function NutritionPage() {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {[
-                { id: 1, title: "Pâtes au Pesto de Kale", cal: 520, time: "15 min", type: "Performance", image: "https://picsum.photos/seed/recipe1/400/300" },
-                { id: 2, title: "Bol de Poké Saumon", cal: 480, time: "20 min", type: "Récupération", image: "https://picsum.photos/seed/recipe2/400/300" },
-                { id: 3, title: "Oatmeal Protéiné", cal: 410, time: "10 min", type: "Énergie", image: "https://picsum.photos/seed/recipe3/400/300" },
-                { id: 4, title: "Salade de Lentilles & Feta", cal: 390, time: "15 min", type: "Santé", image: "https://picsum.photos/seed/recipe4/400/300" },
-              ].map((recipe) => (
-                <Card key={recipe.id} className="bg-card/40 border-border overflow-hidden group hover:border-primary transition-all cursor-pointer">
+              {MOCK_RECIPES.map((recipe) => (
+                <Card 
+                  key={recipe.id} 
+                  className="bg-card/40 border-border overflow-hidden group hover:border-primary transition-all cursor-pointer"
+                  onClick={() => openRecipeDetails(recipe)}
+                >
                   <div className="h-48 bg-muted relative">
                     <Image 
                       src={recipe.image} 
@@ -326,12 +388,12 @@ export default function NutritionPage() {
                   <CardContent className="pt-4 space-y-3">
                     <h3 className="font-bold text-lg group-hover:text-primary transition-colors">{recipe.title}</h3>
                     <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><Flame className="w-3 h-3" /> {recipe.cal} kcal</span>
-                      <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {recipe.time}</span>
+                      <span className="flex items-center gap-1"><Flame className="w-3 h-3 text-orange-500" /> {recipe.cal} kcal</span>
+                      <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {recipe.time}</span>
                     </div>
                     <div className="pt-2 flex items-center justify-between border-t border-border">
                       <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Voir Détails</span>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground" />
+                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:translate-x-1 transition-transform" />
                     </div>
                   </CardContent>
                 </Card>
@@ -340,6 +402,76 @@ export default function NutritionPage() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* Recette Detail Modal */}
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <DialogContent className="sm:max-w-[700px] h-[90vh] flex flex-col p-0 overflow-hidden">
+          {selectedRecipe && (
+            <>
+              <div className="h-64 relative shrink-0">
+                <Image 
+                  src={selectedRecipe.image} 
+                  alt={selectedRecipe.title} 
+                  fill 
+                  className="object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
+                <div className="absolute bottom-4 left-6">
+                  <Badge className="bg-primary text-primary-foreground mb-2">{selectedRecipe.type}</Badge>
+                  <h2 className="text-3xl font-bold">{selectedRecipe.title}</h2>
+                </div>
+              </div>
+
+              <ScrollArea className="flex-1 p-6">
+                <div className="grid grid-cols-3 gap-4 mb-8">
+                  <div className="p-3 bg-card border border-border rounded-xl text-center">
+                    <div className="text-xs text-muted-foreground uppercase font-bold mb-1">Calories</div>
+                    <div className="text-xl font-bold">{selectedRecipe.cal}</div>
+                  </div>
+                  <div className="p-3 bg-card border border-border rounded-xl text-center">
+                    <div className="text-xs text-muted-foreground uppercase font-bold mb-1">Protéines</div>
+                    <div className="text-xl font-bold text-red-500">{selectedRecipe.protein}g</div>
+                  </div>
+                  <div className="p-3 bg-card border border-border rounded-xl text-center">
+                    <div className="text-xs text-muted-foreground uppercase font-bold mb-1">Glucides</div>
+                    <div className="text-xl font-bold text-yellow-500">{selectedRecipe.carbs}g</div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
+                    <h3 className="font-bold flex items-center gap-2">
+                      <Utensils className="w-4 h-4 text-primary" /> Ingrédients
+                    </h3>
+                    <ul className="space-y-2">
+                      {selectedRecipe.ingredients.map((ing, i) => (
+                        <li key={i} className="text-sm flex items-center gap-2">
+                          <div className="w-1.5 h-1.5 rounded-full bg-accent" />
+                          {ing}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="space-y-4">
+                    <h3 className="font-bold flex items-center gap-2">
+                      <CookingPot className="w-4 h-4 text-primary" /> Instructions
+                    </h3>
+                    <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                      {selectedRecipe.instructions}
+                    </div>
+                  </div>
+                </div>
+              </ScrollArea>
+
+              <DialogFooter className="p-4 border-t border-border bg-muted/30">
+                <Button variant="outline" onClick={() => setIsDetailOpen(false)}>Fermer</Button>
+                <Button onClick={() => handleAction("Ajouté au plan")}>Ajouter au plan du jour</Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
