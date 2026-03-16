@@ -125,7 +125,7 @@ export default function WeatherAssistant() {
       <main className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">
         <header className="mt-16 md:mt-0 space-y-2">
           <Badge variant="outline" className="text-accent border-accent/30 gap-1 bg-accent/5 px-3">
-            <Sparkles className="w-3 h-3" /> Assistant Predictif
+            <Sparkles className="w-3 h-3" /> Assistant Prédictif
           </Badge>
           <h1 className="text-3xl font-bold flex items-center gap-3">
             <CloudSun className="w-10 h-10 text-primary" /> Assistant Météo & Tenue
@@ -253,7 +253,7 @@ export default function WeatherAssistant() {
                    <Card className="bg-card/40 border-border">
                     <CardHeader className="pb-2">
                       <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
-                        <Thermometer className="w-3 h-3 text-accent" /> Temp. Estimeé
+                        <Thermometer className="w-3 h-3 text-accent" /> Temp. Estimée
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
@@ -332,7 +332,7 @@ export default function WeatherAssistant() {
                       </p>
                     </div>
                   </CardContent>
-                </section>
+                </Card>
               </div>
             )}
           </div>
