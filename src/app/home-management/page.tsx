@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo } from 'react'
@@ -44,6 +45,21 @@ import { format, addDays, isBefore, isToday, differenceInDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 
+// Types for Task
+interface HouseholdTask {
+  id?: string
+  name: string
+  description: string
+  room: string
+  estimatedMinutes: number
+  recurrenceDays: number
+  priority: 'low' | 'medium' | 'high'
+  lastCompleted?: any
+  nextDueDate: any
+  isActive: boolean
+  createdAt: any
+}
+
 // Task Templates
 const TASK_TEMPLATES = [
   { name: "Nettoyer le four", room: "Cuisine", duration: 45, freq: 90, priority: "medium" },
@@ -64,10 +80,11 @@ export default function HomeManagementPage() {
   const [scanResult, setScanResult] = useState<any>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false)
+  const [isSavingTask, setIsSavingTask] = useState(false)
 
   // Form states for Selects
   const [room, setRoom] = useState("Cuisine")
-  const [priority, setPriority] = useState("medium")
+  const [priority, setPriority] = useState<any>("medium")
 
   // Firestore Tasks
   const tasksPath = user ? `users/${user.uid}/tasks` : null
@@ -129,23 +146,41 @@ export default function HomeManagementPage() {
     toast({ title: "Tâche supprimée" })
   }
 
-  const handleAddTask = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleAddTask = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    if (!user || !db) return
     
+    if (!user || !db) {
+      toast({
+        variant: "destructive",
+        title: "Connexion requise",
+        description: "Vous devez être connecté pour enregistrer une tâche."
+      })
+      return
+    }
+    
+    setIsSavingTask(true)
     const formData = new FormData(e.currentTarget)
     const name = formData.get('taskName')?.toString()
     const recurrenceDays = Number(formData.get('recurrenceDays')) || 7
     const duration = Number(formData.get('duration')) || 15
+    const description = formData.get('description')?.toString() || ""
     
-    if (!name) return
+    if (!name || name.trim() === "") {
+      toast({
+        variant: "destructive",
+        title: "Champ requis",
+        description: "Veuillez donner un nom à la tâche."
+      })
+      setIsSavingTask(false)
+      return
+    }
 
     const nextDue = addDays(new Date(), recurrenceDays)
 
-    const newTask = {
+    const newTask: Omit<HouseholdTask, 'id'> = {
       name,
       room,
-      description: formData.get('description')?.toString() || "",
+      description,
       estimatedMinutes: duration,
       recurrenceDays: recurrenceDays,
       priority,
@@ -154,14 +189,24 @@ export default function HomeManagementPage() {
       createdAt: serverTimestamp()
     }
 
-    const newDocRef = doc(collection(db, `users/${user.uid}/tasks`))
-    setDoc(newDocRef, newTask)
-    
-    setIsAddTaskOpen(false)
-    toast({ 
-      title: "Tâche ajoutée", 
-      description: "Votre nouveau rappel est enregistré." 
-    })
+    try {
+      const newDocRef = doc(collection(db, `users/${user.uid}/tasks`))
+      setDoc(newDocRef, newTask)
+      
+      setIsAddTaskOpen(false)
+      toast({ 
+        title: "Tâche ajoutée", 
+        description: "Votre nouveau rappel est enregistré." 
+      })
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Erreur",
+        description: "Impossible d'enregistrer la tâche. Vérifiez vos permissions."
+      })
+    } finally {
+      setIsSavingTask(false)
+    }
   }
 
   const getUrgencyColor = (dueDate: any) => {
@@ -196,7 +241,7 @@ export default function HomeManagementPage() {
                   <DialogTitle>Créer une tâche ménagère</DialogTitle>
                   <DialogDescription>Ajoutez une tâche récurrente intelligente.</DialogDescription>
                 </DialogHeader>
-                <form onSubmit={handleAddTask} className="space-y-4 py-4">
+                <form id="task-form" onSubmit={handleAddTask} className="space-y-4 py-4">
                   <div className="space-y-2">
                     <Label htmlFor="taskName">Nom de la tâche</Label>
                     <Input id="taskName" name="taskName" placeholder="ex: Nettoyer le four" required />
@@ -215,7 +260,7 @@ export default function HomeManagementPage() {
                     </div>
                     <div className="space-y-2">
                       <Label>Priorité</Label>
-                      <Select value={priority} onValueChange={setPriority}>
+                      <Select value={priority} onValueChange={(val) => setPriority(val as any)}>
                         <SelectTrigger><SelectValue /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="low">Basse</SelectItem>
@@ -228,11 +273,11 @@ export default function HomeManagementPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="duration">Durée estimée (min)</Label>
-                      <Input id="duration" name="duration" type="number" defaultValue={15} />
+                      <Input id="duration" name="duration" type="number" defaultValue={15} min={1} />
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="recurrenceDays">Fréquence (jours)</Label>
-                      <Input id="recurrenceDays" name="recurrenceDays" type="number" defaultValue={7} />
+                      <Input id="recurrenceDays" name="recurrenceDays" type="number" defaultValue={7} min={1} />
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -244,7 +289,7 @@ export default function HomeManagementPage() {
                           variant="secondary" 
                           className="cursor-pointer hover:bg-primary hover:text-primary-foreground"
                           onClick={() => {
-                            const form = document.querySelector('form')
+                            const form = document.getElementById('task-form') as HTMLFormElement
                             if (form) {
                               const nameInput = form.elements.namedItem('taskName') as HTMLInputElement
                               const durationInput = form.elements.namedItem('duration') as HTMLInputElement
@@ -263,7 +308,10 @@ export default function HomeManagementPage() {
                     </div>
                   </div>
                   <DialogFooter className="pt-4">
-                    <Button type="submit" className="w-full">Enregistrer</Button>
+                    <Button type="submit" className="w-full" disabled={isSavingTask}>
+                      {isSavingTask ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                      Enregistrer
+                    </Button>
                   </DialogFooter>
                 </form>
               </DialogContent>
@@ -473,7 +521,7 @@ export default function HomeManagementPage() {
                   { name: "Pothos Argenté", id: 3, health: 88, status: "healthy" },
                   { name: "Ficus Lyrata", id: 4, health: 45, status: "critical" },
                 ].map((plant) => (
-                  <Card key={plant.id} className="bg-card/40 border-border overflow-hidden hover:border-primary/50 transition-all group">
+                  <Card key={plant.id} className="bg-card/40 border-border overflow-hidden group hover:border-primary/50 transition-all group">
                     <div className="h-40 bg-muted relative">
                       <Image 
                         src={`https://picsum.photos/seed/plant-${plant.id}/400/300`} 
