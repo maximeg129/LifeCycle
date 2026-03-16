@@ -16,6 +16,22 @@
         }
       },
       "required": ["intervalsAthleteId", "intervalsApiKey"]
+    },
+    "Recipe": {
+      "title": "Recipe",
+      "description": "A personal recipe stored in the user's cookbook.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "ingredients": { "type": "array", "items": { "type": "string" } },
+        "instructions": { "type": "string" },
+        "calories": { "type": "number" },
+        "protein": { "type": "number" },
+        "carbs": { "type": "number" },
+        "imageHint": { "type": "string" }
+      },
+      "required": ["title", "ingredients", "instructions"]
     }
   },
   "auth": {
@@ -27,6 +43,10 @@
     "/users/{userId}/settings/intervals": {
       "schema": "UserSettings",
       "description": "Stored Intervals.icu credentials for a user."
+    },
+    "/users/{userId}/recipes": {
+      "schema": "Recipe",
+      "description": "User's personal cookbook collection."
     }
   }
 }
