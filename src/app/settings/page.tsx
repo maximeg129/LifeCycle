@@ -11,6 +11,8 @@ import { useUser, useFirestore, useDoc } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { ShieldCheck, ExternalLink, Save, Loader2, Key, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { errorEmitter } from '@/firebase/error-emitter';
+import { FirestorePermissionError } from '@/firebase/errors';
 
 export default function SettingsPage() {
   const { user } = useUser();
@@ -32,35 +34,32 @@ export default function SettingsPage() {
   }, [settings]);
 
   const handleSave = async () => {
-    if (!user || !db) {
-      toast({
-        variant: "destructive",
-        title: "Authentification requise",
-        description: "Vous devez être connecté pour enregistrer vos paramètres.",
-      });
-      return;
-    }
+    if (!user || !db) return;
 
     setSaving(true);
-    try {
-      await setDoc(doc(db, `users/${user.uid}/settings/intervals`), {
-        intervalsAthleteId: athleteId,
-        intervalsApiKey: apiKey,
-      });
-      toast({
-        title: "Paramètres enregistrés",
-        description: "Vos identifiants Intervals.icu ont été mis à jour.",
-      });
-    } catch (error) {
-      console.error("Save error:", error);
-      toast({
-        variant: "destructive",
-        title: "Erreur",
-        description: "Impossible d'enregistrer les paramètres.",
-      });
-    } finally {
-      setSaving(false);
-    }
+    const settingsData = {
+      intervalsAthleteId: athleteId,
+      intervalsApiKey: apiKey,
+    };
+
+    const settingsRef = doc(db, `users/${user.uid}/settings/intervals`);
+    
+    setDoc(settingsRef, settingsData)
+      .then(() => {
+        toast({
+          title: "Paramètres enregistrés",
+          description: "Vos identifiants Intervals.icu sont à jour.",
+        });
+      })
+      .catch(async (err) => {
+        const permissionError = new FirestorePermissionError({
+          path: settingsRef.path,
+          operation: 'update',
+          requestResourceData: settingsData,
+        });
+        errorEmitter.emit('permission-error', permissionError);
+      })
+      .finally(() => setSaving(false));
   };
 
   return (
@@ -69,87 +68,81 @@ export default function SettingsPage() {
       
       <main className="p-4 md:p-8 max-w-3xl mx-auto space-y-8">
         <header className="mt-16 md:mt-0">
-          <h1 className="text-3xl font-bold">Paramètres</h1>
-          <p className="text-muted-foreground">Gérez vos intégrations et configurations.</p>
+          <h1 className="text-4xl font-bold tracking-tighter text-gradient">Réglages</h1>
+          <p className="text-muted-foreground">Personnalisez votre expérience LifeCycle Pro.</p>
         </header>
 
-        {!user && !loadingSettings && (
-          <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-lg text-yellow-600 dark:text-yellow-500 text-sm mb-6">
-            Vous n'êtes pas connecté. Les paramètres ne pourront pas être sauvegardés.
-          </div>
-        )}
-
-        <Card className="bg-card/40 border-border">
-          <CardHeader>
+        <Card className="apple-card border-none shadow-2xl">
+          <CardHeader className="pb-8">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-accent/20 rounded-lg text-accent">
-                  <ShieldCheck className="w-5 h-5" />
+              <div className="flex items-center gap-4">
+                <div className="p-3 bg-primary/5 rounded-[18px] text-primary">
+                  <ShieldCheck className="w-6 h-6" />
                 </div>
-                <CardTitle>Intégration Intervals.icu</CardTitle>
+                <div>
+                  <CardTitle className="text-xl">Intégration Intervals.icu</CardTitle>
+                  <CardDescription>Synchronisation des données de performance.</CardDescription>
+                </div>
               </div>
               {settings?.intervalsAthleteId && (
-                <Badge variant="outline" className="text-accent border-accent/30 bg-accent/5">Connecté</Badge>
+                <Badge className="rounded-full bg-green-500/10 text-green-600 border-none px-4">Connecté</Badge>
               )}
             </div>
-            <CardDescription>
-              Liez votre compte pour synchroniser vos données de performance et de santé.
-            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="p-4 bg-muted/50 rounded-lg border border-border flex items-start gap-4">
-              <div className="text-sm space-y-2">
-                <p className="font-medium">Où trouver ces informations ?</p>
+          <CardContent className="space-y-8">
+            <div className="p-6 bg-muted/30 rounded-[24px] border border-border/40 flex items-start gap-4">
+              <div className="text-sm space-y-3">
+                <p className="font-bold text-foreground">Besoin d'aide ?</p>
                 <p className="text-muted-foreground leading-relaxed">
-                  Connectez-vous à Intervals.icu, allez dans <strong>Settings</strong>, puis descendez jusqu'à la section <strong>API Key</strong>.
+                  L'ID Athlète et la Clé API se trouvent dans vos paramètres Intervals.icu, tout en bas de la page.
                 </p>
                 <a 
                   href="https://intervals.icu/settings" 
                   target="_blank" 
                   rel="noopener noreferrer"
-                  className="inline-flex items-center text-accent hover:underline gap-1 text-xs"
+                  className="inline-flex items-center text-primary font-bold hover:underline gap-1 text-xs"
                 >
-                  Ouvrir Intervals.icu <ExternalLink className="w-3 h-3" />
+                  Aller sur Intervals.icu <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
             </div>
 
-            <div className="grid gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="athleteId" className="flex items-center gap-2">
-                  <User className="w-4 h-4 text-muted-foreground" /> ID Athlète
+            <div className="grid gap-6">
+              <div className="space-y-3">
+                <Label htmlFor="athleteId" className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground flex items-center gap-2">
+                  <User className="w-3 h-3" /> ID Athlète
                 </Label>
                 <Input 
                   id="athleteId"
                   placeholder="ex: i12345" 
                   value={athleteId}
                   onChange={(e) => setAthleteId(e.target.value)}
-                  className="bg-background"
+                  className="rounded-2xl h-14 bg-background border-border/40 focus:ring-primary"
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="apiKey" className="flex items-center gap-2">
-                  <Key className="w-4 h-4 text-muted-foreground" /> Clé API
+              <div className="space-y-3">
+                <Label htmlFor="apiKey" className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground flex items-center gap-2">
+                  <Key className="w-3 h-3" /> Clé API
                 </Label>
                 <Input 
                   id="apiKey"
                   type="password"
-                  placeholder="Votre clé secrète" 
+                  placeholder="Clé secrète" 
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
-                  className="bg-background"
+                  className="rounded-2xl h-14 bg-background border-border/40 focus:ring-primary"
                 />
               </div>
             </div>
           </CardContent>
-          <CardFooter className="bg-muted/30 border-t border-border mt-4 px-6 py-4">
+          <CardFooter className="px-8 py-6 bg-muted/10 border-t border-border/40 flex justify-end">
             <Button 
               onClick={handleSave} 
               disabled={saving || loadingSettings || !user}
-              className="bg-primary text-primary-foreground hover:bg-primary/90 ml-auto"
+              className="rounded-full px-10 h-12 bg-primary text-white font-bold hover:shadow-xl shadow-primary/20 transition-all"
             >
               {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Save className="w-4 h-4 mr-2" />}
-              Enregistrer les identifiants
+              Enregistrer
             </Button>
           </CardFooter>
         </Card>
