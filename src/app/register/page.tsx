@@ -36,7 +36,7 @@ export default function RegisterPage() {
       if (userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name })
       }
-      toast({ title: "Compte créé !", description: "Bienvenue sur LifeCycle Pro." })
+      toast({ title: "Compte créé !", description: "Bienvenue sur Homly." })
       router.push('/home-management')
     } catch (error: any) {
       console.error("Registration error:", error)
@@ -56,17 +56,21 @@ export default function RegisterPage() {
     provider.setCustomParameters({ prompt: 'select_account' })
     
     try {
-      await signInWithPopup(auth, provider)
-      toast({ title: "Succès", description: "Bienvenue !" })
-      router.push('/home-management')
+      const result = await signInWithPopup(auth, provider)
+      if (result.user) {
+        toast({ title: "Succès", description: "Bienvenue sur Homly !" })
+        router.push('/home-management')
+      }
     } catch (error: any) {
       console.error("Google Auth Error:", error)
       let message = "Impossible de s'inscrire avec Google."
       
-      if (error.code === 'auth/api-key-not-valid') {
-        message = "Configuration Firebase invalide."
+      if (error.code === 'auth/operation-not-allowed') {
+        message = "La connexion Google n'est pas activée dans votre console Firebase (Authentication > Sign-in method)."
       } else if (error.code === 'auth/unauthorized-domain') {
-        message = "Domaine non autorisé dans Firebase."
+        message = "Ce domaine n'est pas autorisé dans votre console Firebase (Authentication > Settings > Authorized domains)."
+      } else if (error.code === 'auth/internal-error') {
+        message = "Configuration Firebase invalide. Vérifiez vos clés dans src/firebase/config.ts."
       }
       
       toast({
@@ -85,7 +89,7 @@ export default function RegisterPage() {
         <div className="w-12 h-12 bg-foreground rounded-[14px] flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
           <CheckCircle2 className="w-7 h-7 text-background" />
         </div>
-        <span className="text-2xl font-bold tracking-tighter">LifeCycle <span className="font-light opacity-50">Pro</span></span>
+        <span className="text-2xl font-bold tracking-tighter">Homly <span className="font-light opacity-50">Pro</span></span>
       </Link>
 
       <div className="w-full max-w-[420px] bg-white rounded-[32px] p-10 shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-gray-100">

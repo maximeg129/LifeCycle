@@ -34,6 +34,7 @@ export default function LoginPage() {
       toast({ title: "Bon retour !", description: "Connexion réussie." })
       router.push('/home-management')
     } catch (error: any) {
+      console.error("Login error:", error)
       toast({
         variant: "destructive",
         title: "Échec de la connexion",
@@ -47,17 +48,33 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true)
     const provider = new GoogleAuthProvider()
+    // Force l'affichage de la sélection de compte pour éviter les connexions automatiques silencieuses
     provider.setCustomParameters({ prompt: 'select_account' })
     
     try {
-      await signInWithPopup(auth, provider)
-      toast({ title: "Succès", description: "Connexion Google réussie." })
-      router.push('/home-management')
+      const result = await signInWithPopup(auth, provider)
+      if (result.user) {
+        toast({ title: "Succès", description: "Connexion Google réussie." })
+        router.push('/home-management')
+      }
     } catch (error: any) {
+      console.error("Google Auth Error:", error)
+      let message = "Impossible de se connecter avec Google."
+      
+      if (error.code === 'auth/operation-not-allowed') {
+        message = "La connexion Google n'est pas activée dans votre console Firebase (Authentication > Sign-in method)."
+      } else if (error.code === 'auth/unauthorized-domain') {
+        message = "Ce domaine n'est pas autorisé dans votre console Firebase (Authentication > Settings > Authorized domains)."
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        message = "La fenêtre de connexion a été fermée avant la fin de l'opération."
+      } else if (error.code === 'auth/internal-error') {
+        message = "Erreur interne Firebase. Vérifiez votre configuration src/firebase/config.ts."
+      }
+      
       toast({
         variant: "destructive",
         title: "Erreur d'authentification",
-        description: "Impossible de se connecter avec Google."
+        description: message
       })
     } finally {
       setIsGoogleLoading(false)
