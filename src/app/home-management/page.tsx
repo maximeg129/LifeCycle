@@ -1,7 +1,7 @@
 
 "use client"
 
-import React, { useState, useRef } from 'react'
+import React, { useState, useMemo } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -24,87 +24,155 @@ import {
   Leaf, 
   Droplets, 
   Home, 
-  Wrench, 
-  CheckSquare, 
+  CheckCircle2, 
   Plus, 
   AlertTriangle,
-  Calendar,
+  Clock,
   ChevronRight,
-  Wind,
-  Sun,
-  Thermometer,
   Camera,
   Loader2,
   Sparkles,
-  Search
+  Search,
+  Trash2,
+  Calendar,
+  LayoutDashboard,
+  CheckSquare
 } from 'lucide-react'
 import Image from 'next/image'
 import { useToast } from '@/hooks/use-toast'
-import { identifyPlant, type IdentifyPlantOutput } from '@/ai/flows/identify-plant-flow'
+import { identifyPlant } from '@/ai/flows/identify-plant-flow'
+import { useUser, useFirestore, useCollection } from '@/firebase'
+import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, where, orderBy, Timestamp } from 'firebase/firestore'
+import { format, addDays, isBefore, isToday, differenceInDays } from 'date-fns'
+import { fr } from 'date-fns/locale'
 
-const INITIAL_PLANTS = [
-  { id: 1, name: "Monstera Deliciosa", lastWatered: "Il y a 8 jours", health: 65, status: "needs-water", location: "Salon" },
-  { id: 2, name: "Calathea Orbifolia", lastWatered: "Hier", health: 92, status: "healthy", location: "Chambre" },
-  { id: 3, name: "Pothos Argenté", lastWatered: "Il y a 3 jours", health: 88, status: "healthy", location: "Bureau" },
-  { id: 4, name: "Ficus Lyrata", lastWatered: "Il y a 12 jours", health: 45, status: "critical", location: "Entrée" },
-]
-
-const INITIAL_TASKS = [
-  { id: 1, task: "Nettoyer filtre VMC", due: "Dans 2 jours", category: "Technique", priority: "high" },
-  { id: 2, task: "Payer loyer / charges", due: "Le 1er du mois", category: "Admin", priority: "medium" },
-  { id: 3, task: "Détartrage cafetière", due: "Passé de 5 jours", category: "Cuisine", priority: "urgent" },
-  { id: 4, task: "Vérifier détecteur fumée", due: "Dans 15 jours", category: "Sécurité", priority: "low" },
+// Task Templates
+const TASK_TEMPLATES = [
+  { name: "Nettoyer le four", room: "Cuisine", duration: 45, freq: 90, priority: "medium" },
+  { name: "Passer l'aspirateur", room: "Général", duration: 20, freq: 7, priority: "high" },
+  { name: "Détartrer la douche", room: "SdB", duration: 30, freq: 14, priority: "medium" },
+  { name: "Nettoyer le frigo", room: "Cuisine", duration: 30, freq: 30, priority: "medium" },
+  { name: "Laver les vitres", room: "Général", duration: 60, freq: 60, priority: "low" },
+  { name: "Changer les draps", room: "Chambre", duration: 15, freq: 7, priority: "high" },
 ]
 
 export default function HomeManagementPage() {
   const { toast } = useToast()
-  const [activeTab, setActiveTab] = useState('plants')
+  const { user } = useUser()
+  const db = useFirestore()
+  
+  const [activeTab, setActiveTab] = useState('dashboard')
   const [isScanning, setIsScanning] = useState(false)
-  const [scanResult, setScanResult] = useState<IdentifyPlantOutput | null>(null)
+  const [scanResult, setScanResult] = useState<any>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isAddTaskOpen, setIsAddTaskOpen] = useState(false)
 
-  // Demo States
-  const [plants, setPlants] = useState(INITIAL_PLANTS)
-  const [tasks, setTasks] = useState(INITIAL_TASKS)
+  // Firestore Tasks
+  const tasksPath = user ? `users/${user.uid}/tasks` : null
+  const tasksQuery = useMemo(() => {
+    if (!tasksPath || !db) return null
+    return query(collection(db, tasksPath), where("isActive", "==", true))
+  }, [db, tasksPath])
+  
+  const { data: tasks, loading: tasksLoading } = useCollection(tasksQuery)
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onloadend = () => {
-        setPreviewUrl(reader.result as string)
-      }
-      reader.readAsDataURL(file)
-    }
-  }
+  // Logic & Sorting
+  const sortedTasks = useMemo(() => {
+    if (!tasks) return []
+    return [...tasks].sort((a, b) => {
+      const dateA = a.nextDueDate?.seconds ? a.nextDueDate.seconds : 0
+      const dateB = b.nextDueDate?.seconds ? b.nextDueDate.seconds : 0
+      return dateA - dateB
+    })
+  }, [tasks])
 
-  const handleScan = async () => {
-    if (!previewUrl) return
-    setIsScanning(true)
+  const overdueTasks = useMemo(() => 
+    sortedTasks.filter(t => t.nextDueDate && isBefore(new Date(t.nextDueDate.seconds * 1000), new Date()) && !isToday(new Date(t.nextDueDate.seconds * 1000))), 
+  [sortedTasks])
+
+  const todayTasks = useMemo(() => 
+    sortedTasks.filter(t => t.nextDueDate && isToday(new Date(t.nextDueDate.seconds * 1000))), 
+  [sortedTasks])
+
+  const tasksByRoom = useMemo(() => {
+    const groups: Record<string, any[]> = {}
+    sortedTasks.forEach(t => {
+      if (!groups[t.room]) groups[t.room] = []
+      groups[t.room].push(t)
+    })
+    return groups
+  }, [sortedTasks])
+
+  const handleMarkDone = async (task: any) => {
+    if (!user || !db) return
+    
+    const now = new Date()
+    const nextDue = addDays(now, task.recurrenceDays)
+    
     try {
-      const result = await identifyPlant({ photoDataUri: previewUrl })
-      setScanResult(result)
-      toast({ title: "Analyse terminée", description: `${result.name} identifiée !` })
-    } catch (error) {
-      toast({ variant: "destructive", title: "Erreur", description: "Impossible d'analyser la plante." })
-    } finally {
-      setIsScanning(false)
+      const taskRef = doc(db, `users/${user.uid}/tasks`, task.id)
+      await setDoc(taskRef, {
+        lastCompleted: serverTimestamp(),
+        nextDueDate: Timestamp.fromDate(nextDue)
+      }, { merge: true })
+      
+      toast({
+        title: "Tâche terminée !",
+        description: `${task.name} est maintenant prévu pour le ${format(nextDue, 'dd MMMM', { locale: fr })}.`
+      })
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erreur", description: "Impossible de mettre à jour la tâche." })
     }
   }
 
-  const handleAddTask = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
-    const newTask = {
-      id: Date.now(),
-      task: formData.get('task') as string,
-      due: formData.get('due') as string,
-      category: formData.get('category') as string,
-      priority: formData.get('priority') as string,
+  const handleDeleteTask = async (taskId: string) => {
+    if (!user || !db) return
+    try {
+      await deleteDoc(doc(db, `users/${user.uid}/tasks`, taskId))
+      toast({ title: "Tâche supprimée" })
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erreur" })
     }
-    setTasks([newTask, ...tasks])
-    toast({ title: "Tâche ajoutée", description: "Votre nouvelle tâche de maintenance est enregistrée." })
+  }
+
+  const handleAddTask = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!user || !db) return
+    
+    const formData = new FormData(e.currentTarget)
+    const recurrenceDays = Number(formData.get('recurrenceDays'))
+    const nextDue = addDays(new Date(), recurrenceDays)
+
+    const newTask = {
+      name: formData.get('name'),
+      room: formData.get('room'),
+      description: formData.get('description') || "",
+      estimatedMinutes: Number(formData.get('duration')),
+      recurrenceDays: recurrenceDays,
+      priority: formData.get('priority'),
+      nextDueDate: Timestamp.fromDate(nextDue),
+      isActive: true,
+      createdAt: serverTimestamp()
+    }
+
+    try {
+      const newDocRef = doc(collection(db, `users/${user.uid}/tasks`))
+      await setDoc(newDocRef, newTask)
+      setIsAddTaskOpen(false)
+      toast({ title: "Tâche ajoutée", description: "Votre nouveau rappel est enregistré." })
+    } catch (e) {
+      toast({ variant: "destructive", title: "Erreur lors de l'ajout" })
+    }
+  }
+
+  const getUrgencyColor = (dueDate: any) => {
+    if (!dueDate) return "bg-muted"
+    const date = new Date(dueDate.seconds * 1000)
+    const diff = differenceInDays(date, new Date())
+    if (isBefore(date, new Date()) && !isToday(date)) return "bg-red-500"
+    if (isToday(date) || diff <= 1) return "bg-orange-500"
+    if (diff <= 3) return "bg-yellow-500"
+    return "bg-green-500"
   }
 
   return (
@@ -112,27 +180,224 @@ export default function HomeManagementPage() {
       <AppNavigation />
       
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        <header className="mt-16 md:mt-0">
-          <h2 className="text-sm font-medium text-primary uppercase tracking-wider">LifeCycle Home</h2>
-          <h1 className="text-3xl font-bold">Gestion Maison & Plantes</h1>
+        <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">LifeCycle Home</h2>
+            <h1 className="text-3xl font-bold">Gestion Maison & Tâches</h1>
+          </div>
+          <div className="flex gap-2">
+             <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
+              <DialogTrigger asChild>
+                <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+                  <Plus className="w-4 h-4 mr-2" /> Nouvelle Tâche
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>Créer une tâche ménagère</DialogTitle>
+                  <DialogDescription>Ajoutez une tâche récurrente intelligente.</DialogDescription>
+                </DialogHeader>
+                <form onSubmit={handleAddTask} className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label>Nom de la tâche</Label>
+                    <Input name="name" placeholder="ex: Nettoyer le four" required />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Pièce / Zone</Label>
+                      <Select name="room" defaultValue="Cuisine">
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {["Cuisine", "Salon", "Chambre", "SdB", "Extérieur", "Général"].map(r => (
+                            <SelectItem key={r} value={r}>{r}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Priorité</Label>
+                      <Select name="priority" defaultValue="medium">
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="low">Basse</SelectItem>
+                          <SelectItem value="medium">Moyenne</SelectItem>
+                          <SelectItem value="high">Haute</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Durée estimée (min)</Label>
+                      <Input name="duration" type="number" defaultValue={15} />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Fréquence (jours)</Label>
+                      <Input name="recurrenceDays" type="number" defaultValue={7} />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-xs text-muted-foreground uppercase">Suggestions rapides</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {TASK_TEMPLATES.map((tmpl, idx) => (
+                        <Badge 
+                          key={idx} 
+                          variant="secondary" 
+                          className="cursor-pointer hover:bg-primary hover:text-primary-foreground"
+                          onClick={() => {
+                            const form = document.querySelector('form')
+                            if (form) {
+                              (form.elements.namedItem('name') as HTMLInputElement).value = tmpl.name;
+                              (form.elements.namedItem('duration') as HTMLInputElement).value = tmpl.duration.toString();
+                              (form.elements.namedItem('recurrenceDays') as HTMLInputElement).value = tmpl.freq.toString();
+                            }
+                          }}
+                        >
+                          {tmpl.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <DialogFooter className="pt-4">
+                    <Button type="submit" className="w-full">Enregistrer</Button>
+                  </DialogFooter>
+                </form>
+              </DialogContent>
+            </Dialog>
+          </div>
         </header>
 
-        <Tabs defaultValue="plants" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <TabsList className="bg-card/50 border border-border p-1 h-auto shrink-0 self-start">
-              <TabsTrigger value="plants" className="px-6 py-2">
-                <Leaf className="w-4 h-4 mr-2 text-green-500" /> Vos Plantes
-              </TabsTrigger>
-              <TabsTrigger value="maintenance" className="px-6 py-2">
-                <Home className="w-4 h-4 mr-2 text-primary" /> Entretien Maison
-              </TabsTrigger>
-            </TabsList>
+        <Tabs defaultValue="dashboard" value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="bg-card/50 border border-border p-1 h-auto overflow-x-auto no-scrollbar">
+            <TabsTrigger value="dashboard" className="px-6 py-2">
+              <LayoutDashboard className="w-4 h-4 mr-2" /> Tableau de bord
+            </TabsTrigger>
+            <TabsTrigger value="all" className="px-6 py-2">
+              <CheckSquare className="w-4 h-4 mr-2" /> Toutes les tâches
+            </TabsTrigger>
+            <TabsTrigger value="plants" className="px-6 py-2">
+              <Leaf className="w-4 h-4 mr-2" /> Vos Plantes
+            </TabsTrigger>
+          </TabsList>
 
-            {/* Contextual Buttons */}
-            <div className="flex gap-2">
-              {activeTab === 'plants' ? (
-                <>
-                  <Dialog>
+          <TabsContent value="dashboard" className="space-y-8 animate-in fade-in duration-500">
+            {/* Urgent Section */}
+            {(overdueTasks.length > 0 || todayTasks.length > 0) && (
+              <section className="space-y-4">
+                <h3 className="text-lg font-bold flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-orange-500" /> À faire en priorité
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {[...overdueTasks, ...todayTasks].map((task) => (
+                    <Card key={task.id} className="bg-card/40 border-l-4 border-l-orange-500 relative group overflow-hidden">
+                      <div className={cn("absolute top-0 right-0 w-16 h-16 opacity-10 -mr-4 -mt-4", getUrgencyColor(task.nextDueDate))} />
+                      <CardHeader className="pb-2">
+                        <div className="flex justify-between items-start">
+                          <Badge variant="outline" className="text-[10px] uppercase">{task.room}</Badge>
+                          {isBefore(new Date(task.nextDueDate.seconds * 1000), new Date()) && !isToday(new Date(task.nextDueDate.seconds * 1000)) && (
+                            <Badge variant="destructive" className="text-[10px]">EN RETARD</Badge>
+                          )}
+                        </div>
+                        <CardTitle className="text-lg mt-2">{task.name}</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex items-center gap-4 text-xs text-muted-foreground mb-4">
+                          <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {task.estimatedMinutes} min</span>
+                          <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> {format(new Date(task.nextDueDate.seconds * 1000), 'dd MMM', { locale: fr })}</span>
+                        </div>
+                        <Button 
+                          onClick={() => handleMarkDone(task)}
+                          className="w-full bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground group"
+                        >
+                          <CheckCircle2 className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
+                          Marquer fait
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* Room Breakdown */}
+            <section className="space-y-6">
+              <h3 className="text-lg font-bold">Par pièce</h3>
+              <div className="space-y-8">
+                {Object.entries(tasksByRoom).map(([room, roomTasks]) => (
+                  <div key={room} className="space-y-3">
+                    <h4 className="text-sm font-bold text-muted-foreground uppercase tracking-widest">{room}</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                      {roomTasks.map(task => (
+                        <div key={task.id} className="flex items-center justify-between p-4 bg-card/40 border border-border rounded-xl group hover:border-primary/50 transition-all">
+                          <div className="flex items-center gap-4">
+                            <div className={cn("w-3 h-3 rounded-full shadow-sm", getUrgencyColor(task.nextDueDate))} />
+                            <div>
+                              <div className="font-medium">{task.name}</div>
+                              <div className="text-[10px] text-muted-foreground flex items-center gap-2">
+                                <Clock className="w-2.5 h-2.5" /> {task.estimatedMinutes} min • Fait le {task.lastCompleted ? format(new Date(task.lastCompleted.seconds * 1000), 'dd/MM') : 'Jamais'}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-primary" onClick={() => handleMarkDone(task)}>
+                              <CheckCircle2 className="w-5 h-5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="h-8 w-8 text-destructive" onClick={() => handleDeleteTask(task.id)}>
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </TabsContent>
+
+          <TabsContent value="all" className="space-y-4 animate-in fade-in duration-500">
+            <Card className="bg-card/40 border-border">
+              <CardHeader>
+                <CardTitle>Journal des tâches</CardTitle>
+                <CardDescription>Liste complète de votre inventaire de maintenance.</CardDescription>
+              </CardHeader>
+              <CardContent className="p-0">
+                <div className="divide-y divide-border">
+                  {sortedTasks.map((task) => (
+                    <div key={task.id} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors group">
+                      <div className="flex items-center gap-4">
+                        <div className={cn("w-2 h-8 rounded-full", getUrgencyColor(task.nextDueDate))} />
+                        <div>
+                          <div className="font-semibold">{task.name}</div>
+                          <div className="text-xs text-muted-foreground">{task.room} • Tous les {task.recurrenceDays} jours</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right hidden sm:block">
+                          <div className="text-xs font-medium">Échéance</div>
+                          <div className="text-[10px] text-muted-foreground">{format(new Date(task.nextDueDate.seconds * 1000), 'dd MMMM yyyy', { locale: fr })}</div>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => handleMarkDone(task)}>
+                          <CheckCircle2 className="w-5 h-5 text-primary" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {(!tasks || tasks.length === 0) && (
+                    <div className="p-12 text-center space-y-4">
+                      <Home className="w-12 h-12 text-muted-foreground mx-auto opacity-20" />
+                      <p className="text-muted-foreground italic">Aucune tâche enregistrée.</p>
+                      <Button variant="outline" onClick={() => setIsAddTaskOpen(true)}>Ajouter ma première tâche</Button>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="plants" className="space-y-8 animate-in fade-in duration-500">
+             <div className="flex justify-end gap-2">
+                <Dialog>
                     <DialogTrigger asChild>
                       <Button className="bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg shadow-accent/20">
                         <Camera className="w-4 h-4 mr-2" /> Scanner Plante AI
@@ -151,13 +416,30 @@ export default function HomeManagementPage() {
                             <Camera className="w-12 h-12 text-muted-foreground opacity-20" />
                           )}
                         </div>
-                        <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileUpload} />
-                        <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="w-full">
+                        <input type="file" accept="image/*" className="hidden" id="plant-photo" onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            const reader = new FileReader()
+                            reader.onloadend = () => setPreviewUrl(reader.result as string)
+                            reader.readAsDataURL(file)
+                          }
+                        }} />
+                        <Button variant="outline" onClick={() => document.getElementById('plant-photo')?.click()} className="w-full">
                           {previewUrl ? "Changer de photo" : "Prendre / Choisir une photo"}
                         </Button>
                         
                         {previewUrl && !scanResult && (
-                          <Button onClick={handleScan} disabled={isScanning} className="w-full bg-primary">
+                          <Button onClick={async () => {
+                             setIsScanning(true)
+                             try {
+                               const res = await identifyPlant({ photoDataUri: previewUrl })
+                               setScanResult(res)
+                             } catch (e) {
+                               toast({ variant: "destructive", title: "Erreur" })
+                             } finally {
+                               setIsScanning(false)
+                             }
+                          }} disabled={isScanning} className="w-full bg-primary">
                             {isScanning ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Sparkles className="w-4 h-4 mr-2" />}
                             Analyser avec l'IA
                           </Button>
@@ -171,207 +453,54 @@ export default function HomeManagementPage() {
                             </div>
                             <div className="space-y-2">
                               <h5 className="text-sm font-bold flex items-center gap-2"><Droplets className="w-4 h-4 text-blue-500" /> Plan d'Hydratation</h5>
-                              <p className="text-xs text-muted-foreground">Fréquence : {scanResult.hydrationPlan.frequency}</p>
-                              <p className="text-xs text-muted-foreground">{scanResult.hydrationPlan.tips}</p>
+                              <p className="text-xs text-muted-foreground">{scanResult.hydrationPlan.frequency} • {scanResult.hydrationPlan.tips}</p>
                             </div>
                           </div>
                         )}
                       </div>
-                      <DialogFooter>
-                        <Button variant="ghost" onClick={() => { setPreviewUrl(null); setScanResult(null); }}>Réinitialiser</Button>
-                      </DialogFooter>
                     </DialogContent>
-                  </Dialog>
-                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-                    <Plus className="w-4 h-4 mr-2" /> Ajouter Plante
-                  </Button>
-                </>
-              ) : (
-                <Dialog>
-                  <DialogTrigger asChild>
-                    <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
-                      <Plus className="w-4 h-4 mr-2" /> Nouvelle Tâche
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                      <DialogTitle>Ajouter une Tâche</DialogTitle>
-                      <DialogDescription>Définissez une nouvelle action de maintenance pour votre foyer.</DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleAddTask} className="grid gap-4 py-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="task">Description de la tâche</Label>
-                        <Input id="task" name="task" placeholder="ex: Nettoyer le condenseur du frigo" required />
-                      </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="grid gap-2">
-                          <Label htmlFor="due">Échéance</Label>
-                          <Input id="due" name="due" placeholder="ex: Demain" required />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="category">Catégorie</Label>
-                          <Select name="category" defaultValue="Technique">
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="Technique">Technique</SelectItem>
-                              <SelectItem value="Admin">Admin</SelectItem>
-                              <SelectItem value="Cuisine">Cuisine</SelectItem>
-                              <SelectItem value="Sécurité">Sécurité</SelectItem>
-                              <SelectItem value="Jardin">Jardin</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="priority">Priorité</Label>
-                        <Select name="priority" defaultValue="medium">
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="low">Faible</SelectItem>
-                            <SelectItem value="medium">Moyenne</SelectItem>
-                            <SelectItem value="high">Haute</SelectItem>
-                            <SelectItem value="urgent">Urgent</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <DialogFooter className="pt-4">
-                        <Button type="submit">Enregistrer la tâche</Button>
-                      </DialogFooter>
-                    </form>
-                  </DialogContent>
                 </Dialog>
-              )}
-            </div>
-          </div>
+             </div>
 
-          <TabsContent value="plants" className="space-y-8 animate-in fade-in duration-500">
-            <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="bg-card/40 border-border">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
-                    <Droplets className="w-3 h-3 text-blue-500" /> Hydratation Globale
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-accent">74%</div>
-                  <Progress value={74} className="h-1.5 mt-2 bg-blue-500/10" />
-                </CardContent>
-              </Card>
-              <Card className="bg-card/40 border-border">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
-                    <AlertTriangle className="w-3 h-3 text-orange-500" /> Alertes
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">2</div>
-                  <p className="text-[10px] text-orange-500 mt-2 font-medium">Soif détectée</p>
-                </CardContent>
-              </Card>
-              <Card className="bg-card/40 border-border">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
-                    <Sun className="w-3 h-3 text-yellow-500" /> Luminosité
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold">Optimale</div>
-                </CardContent>
-              </Card>
-              <Card className="bg-card/40 border-border">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
-                    <Thermometer className="w-3 h-3 text-red-500" /> Température
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-red-500">24.5°C</div>
-                </CardContent>
-              </Card>
-            </section>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-              {plants.map((plant) => (
-                <Card key={plant.id} className="bg-card/40 border-border overflow-hidden hover:border-primary/50 transition-all group">
-                  <div className="h-40 bg-muted relative">
-                    <Image 
-                      src={`https://picsum.photos/seed/plant-${plant.id}/400/300`} 
-                      alt={plant.name}
-                      fill
-                      className="object-cover group-hover:scale-105 transition-transform duration-500"
-                      data-ai-hint="house plant"
-                    />
-                    <div className="absolute top-2 right-2">
-                      <Badge variant={plant.status === 'healthy' ? 'default' : plant.status === 'critical' ? 'destructive' : 'secondary'}>
-                        {plant.status === 'healthy' ? 'Vigoureuse' : plant.status === 'critical' ? 'Urgent' : 'Soif'}
-                      </Badge>
-                    </div>
-                  </div>
-                  <CardContent className="pt-4 space-y-4">
-                    <h3 className="font-bold text-lg">{plant.name}</h3>
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[10px] uppercase font-bold text-muted-foreground">
-                        <span>Santé</span>
-                        <span>{plant.health}%</span>
+             <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {[
+                  { name: "Monstera Deliciosa", id: 1, health: 65, status: "critical" },
+                  { name: "Calathea Orbifolia", id: 2, health: 92, status: "healthy" },
+                  { name: "Pothos Argenté", id: 3, health: 88, status: "healthy" },
+                  { name: "Ficus Lyrata", id: 4, health: 45, status: "critical" },
+                ].map((plant) => (
+                  <Card key={plant.id} className="bg-card/40 border-border overflow-hidden hover:border-primary/50 transition-all group">
+                    <div className="h-40 bg-muted relative">
+                      <Image 
+                        src={`https://picsum.photos/seed/plant-${plant.id}/400/300`} 
+                        alt={plant.name}
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
+                        data-ai-hint="house plant"
+                      />
+                      <div className="absolute top-2 right-2">
+                        <Badge variant={plant.status === 'healthy' ? 'default' : 'destructive'}>
+                          {plant.status === 'healthy' ? 'Vigoureuse' : 'Soif'}
+                        </Badge>
                       </div>
-                      <Progress value={plant.health} className="h-1.5" />
                     </div>
-                    <div className="flex items-center justify-between pt-2">
-                      <span className="text-xs font-medium">{plant.lastWatered}</span>
-                      <Button size="icon" variant="ghost" className="rounded-full text-blue-500 hover:bg-blue-500/10" onClick={() => toast({ title: plant.name, description: "Plante marquée comme arrosée." })}>
+                    <CardContent className="pt-4 space-y-4">
+                      <h3 className="font-bold text-lg">{plant.name}</h3>
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-[10px] uppercase font-bold text-muted-foreground">
+                          <span>Santé</span>
+                          <span>{plant.health}%</span>
+                        </div>
+                        <Progress value={plant.health} className="h-1.5" />
+                      </div>
+                      <Button size="icon" variant="ghost" className="w-full flex justify-between px-2 text-blue-500 hover:bg-blue-500/10">
+                        <span className="text-xs">Arroser</span>
                         <Droplets className="w-5 h-5" />
                       </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </TabsContent>
-
-          <TabsContent value="maintenance" className="space-y-6 animate-in slide-in-from-right duration-500">
-            <Card className="bg-card/40 border-border">
-              <CardHeader>
-                <CardTitle>Tâches d'Entretien</CardTitle>
-                <CardDescription>Visualisez et gérez les actions de maintenance pour votre domicile.</CardDescription>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="divide-y divide-border">
-                  {tasks.map((task) => (
-                    <div key={task.id} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors group">
-                      <div className="flex items-center gap-4">
-                        <div className={task.priority === 'urgent' ? "text-red-500" : "text-primary"}>
-                          <CheckSquare className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="font-semibold">{task.task}</div>
-                          <div className="text-xs text-muted-foreground">{task.category} • {task.due}</div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <Badge variant={task.priority === 'urgent' ? 'destructive' : task.priority === 'high' ? 'default' : 'outline'}>
-                          {task.priority.toUpperCase()}
-                        </Badge>
-                        <Button variant="ghost" size="icon" className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => {
-                          setTasks(tasks.filter(t => t.id !== task.id))
-                          toast({ title: "Tâche terminée", description: "Bravo pour l'entretien !" })
-                        }}>
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                  {tasks.length === 0 && (
-                    <div className="p-8 text-center text-muted-foreground italic">
-                      Toutes les tâches sont terminées !
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                    </CardContent>
+                  </Card>
+                ))}
+             </section>
           </TabsContent>
         </Tabs>
       </main>

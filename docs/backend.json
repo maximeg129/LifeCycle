@@ -32,6 +32,24 @@
         "imageHint": { "type": "string" }
       },
       "required": ["title", "ingredients", "instructions"]
+    },
+    "Task": {
+      "title": "Household Task",
+      "description": "A smart recurring household chore.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "room": { "type": "string", "enum": ["Cuisine", "Salon", "Chambre", "SdB", "Extérieur", "Général"] },
+        "estimatedMinutes": { "type": "number" },
+        "recurrenceDays": { "type": "number" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "lastCompleted": { "type": "string", "format": "date-time" },
+        "nextDueDate": { "type": "string", "format": "date-time" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "room", "recurrenceDays", "priority"]
     }
   },
   "auth": {
@@ -47,6 +65,10 @@
     "/users/{userId}/recipes": {
       "schema": "Recipe",
       "description": "User's personal cookbook collection."
+    },
+    "/users/{userId}/tasks": {
+      "schema": "Task",
+      "description": "User's household chore list."
     }
   }
 }
