@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { CheckCircle2, Eye, EyeOff, Loader2 } from 'lucide-react'
+import { CheckCircle2, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
 import { 
   createUserWithEmailAndPassword, 
   signInWithPopup, 
@@ -15,6 +15,7 @@ import {
 } from 'firebase/auth'
 import { useAuth } from '@/firebase'
 import { useToast } from '@/hooks/use-toast'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -27,10 +28,12 @@ export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setAuthError(null)
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       if (userCredential.user) {
@@ -40,11 +43,7 @@ export default function RegisterPage() {
       router.push('/home-management')
     } catch (error: any) {
       console.error("Registration error:", error)
-      toast({
-        variant: "destructive",
-        title: "Échec de l'inscription",
-        description: error.message || "Impossible de créer le compte."
-      })
+      setAuthError(error.message || "Impossible de créer le compte.")
     } finally {
       setIsLoading(false)
     }
@@ -52,6 +51,7 @@ export default function RegisterPage() {
 
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true)
+    setAuthError(null)
     const provider = new GoogleAuthProvider()
     provider.setCustomParameters({ prompt: 'select_account' })
     
@@ -64,20 +64,12 @@ export default function RegisterPage() {
     } catch (error: any) {
       console.error("Google Auth Error:", error)
       let message = "Impossible de s'inscrire avec Google."
-      
-      if (error.code === 'auth/operation-not-allowed') {
-        message = "La connexion Google n'est pas activée dans votre console Firebase (Authentication > Sign-in method)."
+      if (error.code === 'auth/popup-blocked') {
+        message = "Veuillez autoriser les fenêtres surgissantes pour ce site."
       } else if (error.code === 'auth/unauthorized-domain') {
-        message = "Ce domaine n'est pas autorisé dans votre console Firebase (Authentication > Settings > Authorized domains)."
-      } else if (error.code === 'auth/internal-error') {
-        message = "Configuration Firebase invalide. Vérifiez vos clés dans src/firebase/config.ts."
+        message = "Ce domaine n'est pas autorisé dans votre console Firebase."
       }
-      
-      toast({
-        variant: "destructive",
-        title: "Erreur d'authentification",
-        description: message
-      })
+      setAuthError(message)
     } finally {
       setIsGoogleLoading(false)
     }
@@ -89,14 +81,22 @@ export default function RegisterPage() {
         <div className="w-12 h-12 bg-foreground rounded-[14px] flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
           <CheckCircle2 className="w-7 h-7 text-background" />
         </div>
-        <span className="text-2xl font-bold tracking-tighter">Homly <span className="font-light opacity-50">Pro</span></span>
+        <span className="text-2xl font-bold tracking-tighter">Homly</span>
       </Link>
 
       <div className="w-full max-w-[420px] bg-white rounded-[32px] p-10 shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-gray-100">
-        <div className="flex bg-gray-50/80 p-1.5 rounded-[16px] mb-10">
-          <Link href="/login" className="flex-1 text-center py-2.5 text-sm font-semibold text-gray-400 hover:text-gray-600">Connexion</Link>
-          <Link href="/register" className="flex-1 text-center py-2.5 text-sm font-semibold rounded-[12px] bg-white shadow-sm ring-1 ring-black/5">Inscription</Link>
+        <div className="flex bg-secondary/80 p-1.5 rounded-[18px] mb-10">
+          <Link href="/login" className="flex-1 text-center py-2.5 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">Connexion</Link>
+          <Link href="/register" className="flex-1 text-center py-2.5 text-sm font-bold rounded-[14px] bg-white shadow-md text-foreground ring-1 ring-black/5">Inscription</Link>
         </div>
+
+        {authError && (
+          <Alert variant="destructive" className="mb-6 rounded-2xl border-none bg-red-50 text-red-600">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Erreur</AlertTitle>
+            <AlertDescription className="text-xs">{authError}</AlertDescription>
+          </Alert>
+        )}
 
         <form onSubmit={handleRegister} className="space-y-6">
           <div className="space-y-2.5">
@@ -104,7 +104,7 @@ export default function RegisterPage() {
             <Input 
               id="name" 
               placeholder="Jane Doe" 
-              className="rounded-2xl border-none bg-gray-50 h-14 px-5 focus-visible:ring-1 focus-visible:ring-primary/20"
+              className="rounded-2xl border border-border/60 bg-secondary/40 h-14 px-5 focus-visible:ring-1 focus-visible:ring-primary/20 focus-visible:bg-white transition-all"
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
@@ -116,7 +116,7 @@ export default function RegisterPage() {
               id="email" 
               type="email" 
               placeholder="votre@email.com" 
-              className="rounded-2xl border-none bg-gray-50 h-14 px-5 focus-visible:ring-1 focus-visible:ring-primary/20"
+              className="rounded-2xl border border-border/60 bg-secondary/40 h-14 px-5 focus-visible:ring-1 focus-visible:ring-primary/20 focus-visible:bg-white transition-all"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -129,7 +129,7 @@ export default function RegisterPage() {
                 id="password" 
                 type={showPassword ? "text" : "password"} 
                 placeholder="••••••••" 
-                className="rounded-2xl border-none bg-gray-50 h-14 px-5 pr-14 focus-visible:ring-1 focus-visible:ring-primary/20"
+                className="rounded-2xl border border-border/60 bg-secondary/40 h-14 px-5 pr-14 focus-visible:ring-1 focus-visible:ring-primary/20 focus-visible:bg-white transition-all"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -150,15 +150,15 @@ export default function RegisterPage() {
           </Button>
         </form>
 
-        <div className="relative my-10">
+        <div className="relative my-10 text-center">
           <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-gray-100"></span></div>
-          <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-[0.2em]"><span className="bg-white px-4 text-gray-300">ou</span></div>
+          <span className="relative bg-white px-4 text-[10px] font-bold uppercase tracking-[0.2em] text-gray-300">ou</span>
         </div>
 
         <Button 
           type="button" 
           variant="outline" 
-          className="w-full rounded-2xl h-14 border-gray-100 text-foreground hover:bg-gray-50 font-semibold transition-all"
+          className="w-full rounded-2xl h-14 border-border bg-white text-foreground hover:bg-secondary font-bold transition-all"
           onClick={handleGoogleLogin}
           disabled={isGoogleLoading}
         >

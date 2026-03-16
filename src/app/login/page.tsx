@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState } from 'react'
@@ -62,16 +61,14 @@ export default function LoginPage() {
       let message = "Impossible de se connecter avec Google."
       
       if (error.code === 'auth/popup-blocked') {
-        message = "La fenêtre de connexion a été bloquée. Veuillez autoriser les pop-ups pour ce site dans votre navigateur."
+        message = "La fenêtre de connexion a été bloquée par votre navigateur. Veuillez autoriser les fenêtres surgissantes pour ce site."
       } else if (error.code === 'auth/operation-not-allowed') {
-        message = "La méthode Google n'est pas activée dans votre console Firebase (Authentication > Sign-in method)."
+        message = "La connexion Google n'est pas activée. Veuillez l'activer dans Authentication > Sign-in method de votre console Firebase."
       } else if (error.code === 'auth/unauthorized-domain') {
         const domain = typeof window !== 'undefined' ? window.location.hostname : 'ce domaine'
-        message = `Le domaine ${domain} n'est pas autorisé. Ajoutez-le dans la console Firebase (Authentication > Paramètres > Domaines autorisés).`
+        message = `Le domaine ${domain} n'est pas autorisé. Ajoutez-le dans Authentication > Settings > Authorized domains.`
       } else if (error.code === 'auth/popup-closed-by-user') {
-        message = "La fenêtre de connexion a été fermée avant la fin de l'opération."
-      } else if (error.code === 'auth/internal-error' && error.message.includes('authorizedDomains')) {
-        message = "Erreur de configuration des domaines autorisés. Vérifiez votre fichier firebaseConfig et la console Firebase."
+        message = "Connexion annulée."
       }
       
       setAuthError(message)
@@ -90,15 +87,15 @@ export default function LoginPage() {
       </Link>
 
       <div className="w-full max-w-[420px] bg-white rounded-[32px] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.06)] border border-gray-100">
-        <div className="flex bg-gray-50/80 p-1 rounded-[14px] mb-10">
-          <Link href="/login" className="flex-1 text-center py-2.5 text-sm font-bold rounded-[12px] bg-white shadow-sm ring-1 ring-black/5">Connexion</Link>
-          <Link href="/register" className="flex-1 text-center py-2.5 text-sm font-bold text-gray-400 hover:text-gray-600">Inscription</Link>
+        <div className="flex bg-secondary/80 p-1.5 rounded-[18px] mb-10">
+          <Link href="/login" className="flex-1 text-center py-2.5 text-sm font-bold rounded-[14px] bg-white shadow-md text-foreground ring-1 ring-black/5">Connexion</Link>
+          <Link href="/register" className="flex-1 text-center py-2.5 text-sm font-bold text-muted-foreground hover:text-foreground transition-colors">Inscription</Link>
         </div>
 
         {authError && (
           <Alert variant="destructive" className="mb-6 rounded-2xl border-none bg-red-50 text-red-600">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Erreur d'authentification</AlertTitle>
+            <AlertTitle>Erreur</AlertTitle>
             <AlertDescription className="text-xs">{authError}</AlertDescription>
           </Alert>
         )}
@@ -110,7 +107,7 @@ export default function LoginPage() {
               id="email" 
               type="email" 
               placeholder="votre@email.com" 
-              className="rounded-2xl border-none bg-gray-50 h-14 px-6 focus-visible:ring-1 focus-visible:ring-primary/20"
+              className="rounded-2xl border border-border/60 bg-secondary/40 h-14 px-6 focus-visible:ring-1 focus-visible:ring-primary/20 focus-visible:bg-white transition-all"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -126,7 +123,7 @@ export default function LoginPage() {
                 id="password" 
                 type={showPassword ? "text" : "password"} 
                 placeholder="••••••••" 
-                className="rounded-2xl border-none bg-gray-50 h-14 px-6 pr-14 focus-visible:ring-1 focus-visible:ring-primary/20"
+                className="rounded-2xl border border-border/60 bg-secondary/40 h-14 px-6 pr-14 focus-visible:ring-1 focus-visible:ring-primary/20 focus-visible:bg-white transition-all"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -134,7 +131,7 @@ export default function LoginPage() {
               <button 
                 type="button" 
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-300 hover:text-gray-600 transition-colors"
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
               >
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
@@ -154,7 +151,7 @@ export default function LoginPage() {
         <Button 
           type="button" 
           variant="outline" 
-          className="w-full rounded-2xl h-14 border-gray-100 font-bold hover:bg-gray-50"
+          className="w-full rounded-2xl h-14 border-border bg-white font-bold hover:bg-secondary transition-all"
           onClick={handleGoogleLogin}
           disabled={isGoogleLoading}
         >

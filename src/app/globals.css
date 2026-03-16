@@ -4,7 +4,7 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 0 0% 99%;
     --foreground: 0 0% 10%;
     --card: 0 0% 100%;
     --card-foreground: 0 0% 10%;
@@ -12,16 +12,16 @@
     --popover-foreground: 0 0% 10%;
     --primary: 230 60% 50%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 210 20% 98%;
+    --secondary: 240 5% 96%;
     --secondary-foreground: 0 0% 10%;
-    --muted: 210 20% 96%;
+    --muted: 240 5% 94%;
     --muted-foreground: 210 10% 40%;
     --accent: 230 60% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
-    --border: 210 20% 90%;
-    --input: 210 20% 90%;
+    --border: 240 5% 90%;
+    --input: 240 5% 90%;
     --ring: 230 60% 50%;
     --radius: 1.25rem;
   }
@@ -59,7 +59,7 @@
 }
 
 .apple-card {
-  @apply bg-card border border-border/40 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-[24px] transition-all duration-300 hover:shadow-[0_20px_40px_rgb(0,0,0,0.08)] hover:-translate-y-1;
+  @apply bg-card border border-border/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-[24px] transition-all duration-300 hover:shadow-[0_20px_40px_rgb(0,0,0,0.06)] hover:-translate-y-1;
 }
 
 .glass-header {
