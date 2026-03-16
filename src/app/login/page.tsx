@@ -32,13 +32,13 @@ export default function LoginPage() {
     setIsLoading(true)
     try {
       await signInWithEmailAndPassword(auth, email, password)
-      toast({ title: "Welcome back!", description: "You have successfully logged in." })
+      toast({ title: "Bon retour !", description: "Connexion réussie." })
       router.push('/home-management')
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Login failed",
-        description: error.message || "Invalid email or password."
+        title: "Échec de la connexion",
+        description: "Email ou mot de passe incorrect."
       })
     } finally {
       setIsLoading(false)
@@ -54,7 +54,7 @@ export default function LoginPage() {
     } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Google Login failed",
+        title: "Échec de Google Login",
         description: error.message
       })
     } finally {
@@ -63,44 +63,44 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F8F8F8] flex flex-col items-center justify-center p-6 font-body">
-      <Link href="/" className="mb-10 flex items-center gap-2">
-        <div className="w-8 h-8 bg-[#1A1A1A] rounded-lg flex items-center justify-center">
-          <CheckCircle2 className="w-5 h-5 text-white" />
+    <div className="min-h-screen bg-[#FBFBFD] flex flex-col items-center justify-center p-6 font-body">
+      <Link href="/" className="mb-10 flex flex-col items-center gap-2 group">
+        <div className="w-12 h-12 bg-foreground rounded-[14px] flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
+          <CheckCircle2 className="w-7 h-7 text-background" />
         </div>
-        <span className="text-xl font-bold tracking-tight">Homly</span>
+        <span className="text-2xl font-bold tracking-tighter">LifeCycle <span className="font-light opacity-50">Pro</span></span>
       </Link>
 
-      <div className="w-full max-w-[420px] bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100">
-        <div className="flex bg-gray-50 p-1 rounded-xl mb-8">
-          <Link href="/login" className="flex-1 text-center py-2 text-sm font-semibold rounded-lg bg-white shadow-sm">Log in</Link>
-          <Link href="/register" className="flex-1 text-center py-2 text-sm font-semibold text-gray-400 hover:text-gray-600">Register</Link>
+      <div className="w-full max-w-[400px] bg-white rounded-[32px] p-10 shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-gray-100">
+        <div className="flex bg-gray-50/80 p-1.5 rounded-[16px] mb-10">
+          <Link href="/login" className="flex-1 text-center py-2.5 text-sm font-semibold rounded-[12px] bg-white shadow-sm ring-1 ring-black/5">Connexion</Link>
+          <Link href="/register" className="flex-1 text-center py-2.5 text-sm font-semibold text-gray-400 hover:text-gray-600">Inscription</Link>
         </div>
 
-        <form onSubmit={handleLogin} className="space-y-5">
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+        <form onSubmit={handleLogin} className="space-y-6">
+          <div className="space-y-2.5">
+            <Label htmlFor="email" className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground ml-1">Email</Label>
             <Input 
               id="email" 
               type="email" 
-              placeholder="name@example.com" 
-              className="rounded-xl border-gray-200 py-6"
+              placeholder="votre@email.com" 
+              className="rounded-2xl border-none bg-gray-50 h-14 px-5 focus-visible:ring-1 focus-visible:ring-primary/20"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
             />
           </div>
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <Label htmlFor="password">Password</Label>
-              <Link href="#" className="text-xs text-[#4F6EF7] hover:underline">Forgot password?</Link>
+          <div className="space-y-2.5">
+            <div className="flex justify-between items-center ml-1">
+              <Label htmlFor="password" className="text-[11px] font-bold uppercase tracking-widest text-muted-foreground">Mot de passe</Label>
+              <Link href="#" className="text-[11px] text-[#0066CC] hover:underline font-semibold">Oublié ?</Link>
             </div>
             <div className="relative">
               <Input 
                 id="password" 
                 type={showPassword ? "text" : "password"} 
                 placeholder="••••••••" 
-                className="rounded-xl border-gray-200 py-6 pr-12"
+                className="rounded-2xl border-none bg-gray-50 h-14 px-5 pr-14 focus-visible:ring-1 focus-visible:ring-primary/20"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -108,28 +108,28 @@ export default function LoginPage() {
               <button 
                 type="button" 
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                className="absolute right-5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
               >
                 {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
               </button>
             </div>
           </div>
 
-          <Button type="submit" className="w-full bg-[#1A1A1A] text-white hover:bg-gray-800 rounded-xl py-6 text-base font-bold" disabled={isLoading}>
+          <Button type="submit" className="w-full bg-foreground text-background hover:bg-gray-800 rounded-2xl h-14 text-base font-bold shadow-xl shadow-black/10 transition-all hover:-translate-y-0.5" disabled={isLoading}>
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : null}
-            Log in
+            Se connecter
           </Button>
         </form>
 
-        <div className="relative my-8">
+        <div className="relative my-10">
           <div className="absolute inset-0 flex items-center"><span className="w-full border-t border-gray-100"></span></div>
-          <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-4 text-gray-400 font-medium">or</span></div>
+          <div className="relative flex justify-center text-[10px] uppercase font-bold tracking-[0.2em]"><span className="bg-white px-4 text-gray-300">ou</span></div>
         </div>
 
         <Button 
           type="button" 
           variant="outline" 
-          className="w-full rounded-xl py-6 border-gray-200 text-[#1A1A1A] hover:bg-gray-50 font-semibold"
+          className="w-full rounded-2xl h-14 border-gray-100 text-foreground hover:bg-gray-50 font-semibold transition-all"
           onClick={handleGoogleLogin}
           disabled={isGoogleLoading}
         >
@@ -141,11 +141,11 @@ export default function LoginPage() {
               <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
             </svg>
           )}
-          Continue with Google
+          Continuer avec Google
         </Button>
 
-        <p className="mt-8 text-center text-sm text-gray-500">
-          No account yet? <Link href="/register" className="text-[#4F6EF7] font-bold hover:underline">Sign up free</Link>
+        <p className="mt-10 text-center text-sm text-gray-400">
+          Pas encore de compte ? <Link href="/register" className="text-[#0066CC] font-bold hover:underline ml-1">S'inscrire gratuitement</Link>
         </p>
       </div>
     </div>
