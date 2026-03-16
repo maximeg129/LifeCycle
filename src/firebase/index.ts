@@ -1,4 +1,3 @@
-
 'use client';
 
 import { firebaseConfig } from '@/firebase/config';
@@ -18,6 +17,7 @@ export function initializeFirebase() {
   if (apps.length > 0) {
     app = apps[0];
   } else {
+    // Force l'utilisation de la config manuelle pour éviter authorizedDomains error
     app = initializeApp(firebaseConfig);
   }
 
