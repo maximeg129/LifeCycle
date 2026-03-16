@@ -7,38 +7,24 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
 /**
- * Initialise Firebase de manière robuste.
- * Si l'initialisation automatique échoue ou est incomplète, 
- * on utilise la configuration manuelle définie dans config.ts.
+ * Initialise Firebase de manière déterministe.
+ * Utilise toujours l'objet firebaseConfig explicite pour éviter les erreurs
+ * d'itérables liées à une configuration automatique incomplète.
  */
 export function initializeFirebase() {
-  if (!getApps().length) {
-    let firebaseApp: FirebaseApp;
-    
-    // On privilégie la config manuelle en développement pour éviter les erreurs d'itérables
-    // car initializeApp() sans arguments peut parfois renvoyer un objet partiel.
-    if (process.env.NODE_ENV === 'development') {
-      firebaseApp = initializeApp(firebaseConfig);
-    } else {
-      try {
-        firebaseApp = initializeApp();
-      } catch (e) {
-        console.warn('Automatic initialization failed, falling back to config object.', e);
-        firebaseApp = initializeApp(firebaseConfig);
-      }
-    }
+  const apps = getApps();
+  let app: FirebaseApp;
 
-    return getSdks(firebaseApp);
+  if (apps.length > 0) {
+    app = apps[0];
+  } else {
+    app = initializeApp(firebaseConfig);
   }
 
-  return getSdks(getApp());
-}
-
-export function getSdks(firebaseApp: FirebaseApp) {
   return {
-    firebaseApp,
-    auth: getAuth(firebaseApp),
-    firestore: getFirestore(firebaseApp)
+    firebaseApp: app,
+    auth: getAuth(app),
+    firestore: getFirestore(app)
   };
 }
 

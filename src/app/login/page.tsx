@@ -62,14 +62,16 @@ export default function LoginPage() {
       let message = "Impossible de se connecter avec Google."
       
       if (error.code === 'auth/popup-blocked') {
-        message = "La fenêtre de connexion a été bloquée par votre navigateur. Veuillez autoriser les pop-ups."
+        message = "La fenêtre de connexion a été bloquée. Veuillez autoriser les pop-ups pour ce site dans votre navigateur."
       } else if (error.code === 'auth/operation-not-allowed') {
-        message = "La méthode Google n'est pas activée dans votre console Firebase."
+        message = "La méthode Google n'est pas activée dans votre console Firebase (Authentication > Sign-in method)."
       } else if (error.code === 'auth/unauthorized-domain') {
         const domain = typeof window !== 'undefined' ? window.location.hostname : 'ce domaine'
-        message = `Le domaine ${domain} n'est pas autorisé dans votre console Firebase (Authentication > Paramètres).`
+        message = `Le domaine ${domain} n'est pas autorisé. Ajoutez-le dans la console Firebase (Authentication > Paramètres > Domaines autorisés).`
       } else if (error.code === 'auth/popup-closed-by-user') {
-        message = "La fenêtre de connexion a été fermée."
+        message = "La fenêtre de connexion a été fermée avant la fin de l'opération."
+      } else if (error.code === 'auth/internal-error' && error.message.includes('authorizedDomains')) {
+        message = "Erreur de configuration des domaines autorisés. Vérifiez votre fichier firebaseConfig et la console Firebase."
       }
       
       setAuthError(message)
@@ -96,7 +98,7 @@ export default function LoginPage() {
         {authError && (
           <Alert variant="destructive" className="mb-6 rounded-2xl border-none bg-red-50 text-red-600">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Erreur</AlertTitle>
+            <AlertTitle>Erreur d'authentification</AlertTitle>
             <AlertDescription className="text-xs">{authError}</AlertDescription>
           </Alert>
         )}
