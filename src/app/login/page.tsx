@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState } from 'react'
@@ -35,6 +34,7 @@ export default function LoginPage() {
       toast({ title: "Bon retour !", description: "Connexion réussie." })
       router.push('/home-management')
     } catch (error: any) {
+      console.error("Login error:", error)
       toast({
         variant: "destructive",
         title: "Échec de la connexion",
@@ -48,14 +48,29 @@ export default function LoginPage() {
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true)
     const provider = new GoogleAuthProvider()
+    // Force la sélection du compte pour éviter les erreurs de session
+    provider.setCustomParameters({ prompt: 'select_account' })
+    
     try {
       await signInWithPopup(auth, provider)
+      toast({ title: "Succès", description: "Connexion Google réussie." })
       router.push('/home-management')
     } catch (error: any) {
+      console.error("Google Auth Error:", error)
+      let message = "Impossible de se connecter avec Google."
+      
+      if (error.code === 'auth/api-key-not-valid') {
+        message = "La clé API Firebase n'est pas valide. Vérifiez votre configuration."
+      } else if (error.code === 'auth/unauthorized-domain') {
+        message = "Ce domaine n'est pas autorisé dans la console Firebase."
+      } else if (error.code === 'auth/popup-closed-by-user') {
+        message = "La fenêtre de connexion a été fermée."
+      }
+      
       toast({
         variant: "destructive",
-        title: "Échec de Google Login",
-        description: error.message
+        title: "Erreur d'authentification",
+        description: message
       })
     } finally {
       setIsGoogleLoading(false)
@@ -71,7 +86,7 @@ export default function LoginPage() {
         <span className="text-2xl font-bold tracking-tighter">LifeCycle <span className="font-light opacity-50">Pro</span></span>
       </Link>
 
-      <div className="w-full max-w-[400px] bg-white rounded-[32px] p-10 shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-gray-100">
+      <div className="w-full max-w-[420px] bg-white rounded-[32px] p-10 shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-gray-100">
         <div className="flex bg-gray-50/80 p-1.5 rounded-[16px] mb-10">
           <Link href="/login" className="flex-1 text-center py-2.5 text-sm font-semibold rounded-[12px] bg-white shadow-sm ring-1 ring-black/5">Connexion</Link>
           <Link href="/register" className="flex-1 text-center py-2.5 text-sm font-semibold text-gray-400 hover:text-gray-600">Inscription</Link>

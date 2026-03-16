@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState } from 'react'
@@ -40,6 +39,7 @@ export default function RegisterPage() {
       toast({ title: "Compte créé !", description: "Bienvenue sur LifeCycle Pro." })
       router.push('/home-management')
     } catch (error: any) {
+      console.error("Registration error:", error)
       toast({
         variant: "destructive",
         title: "Échec de l'inscription",
@@ -53,14 +53,26 @@ export default function RegisterPage() {
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true)
     const provider = new GoogleAuthProvider()
+    provider.setCustomParameters({ prompt: 'select_account' })
+    
     try {
       await signInWithPopup(auth, provider)
+      toast({ title: "Succès", description: "Bienvenue !" })
       router.push('/home-management')
     } catch (error: any) {
+      console.error("Google Auth Error:", error)
+      let message = "Impossible de s'inscrire avec Google."
+      
+      if (error.code === 'auth/api-key-not-valid') {
+        message = "Configuration Firebase invalide."
+      } else if (error.code === 'auth/unauthorized-domain') {
+        message = "Domaine non autorisé dans Firebase."
+      }
+      
       toast({
         variant: "destructive",
-        title: "Échec de Google Login",
-        description: error.message
+        title: "Erreur d'authentification",
+        description: message
       })
     } finally {
       setIsGoogleLoading(false)
@@ -76,7 +88,7 @@ export default function RegisterPage() {
         <span className="text-2xl font-bold tracking-tighter">LifeCycle <span className="font-light opacity-50">Pro</span></span>
       </Link>
 
-      <div className="w-full max-w-[400px] bg-white rounded-[32px] p-10 shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-gray-100">
+      <div className="w-full max-w-[420px] bg-white rounded-[32px] p-10 shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-gray-100">
         <div className="flex bg-gray-50/80 p-1.5 rounded-[16px] mb-10">
           <Link href="/login" className="flex-1 text-center py-2.5 text-sm font-semibold text-gray-400 hover:text-gray-600">Connexion</Link>
           <Link href="/register" className="flex-1 text-center py-2.5 text-sm font-semibold rounded-[12px] bg-white shadow-sm ring-1 ring-black/5">Inscription</Link>
