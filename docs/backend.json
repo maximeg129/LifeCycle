@@ -1,45 +1,10 @@
 {
   "entities": {
-    "UserProfile": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "UserProfile",
-      "type": "object",
-      "description": "Represents a user's profile information within the application. This entity stores metadata about the user linked to their authentication ID, but no sensitive authentication data.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the UserProfile entity, corresponding to the external authentication system's user ID."
-        },
-        "email": {
-          "type": "string",
-          "description": "The user's primary email address.",
-          "format": "email"
-        },
-        "displayName": {
-          "type": "string",
-          "description": "The user's display name or preferred name."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp indicating when the user profile was initially created.",
-          "format": "date-time"
-        },
-        "lastLogin": {
-          "type": "string",
-          "description": "Timestamp indicating the user's last login.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "createdAt"
-      ]
-    },
     "Activity": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Activity",
       "type": "object",
-      "description": "Represents a logged training activity, such as a bike ride, run, or swim.",
+      "description": "Represents a recorded training activity, such as a bike ride, run, or swim.",
       "properties": {
         "id": {
           "type": "string",
@@ -47,157 +12,117 @@
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who performed this activity. (Relationship: UserProfile 1:N Activity)"
+          "description": "Reference to the User who performed this activity. (Relationship: User 1:N Activity)"
+        },
+        "activityDate": {
+          "type": "string",
+          "description": "The date and time when the activity took place.",
+          "format": "date-time"
         },
         "type": {
           "type": "string",
-          "description": "The type of the training activity (e.g., 'ride', 'run', 'swim', 'hike')."
-        },
-        "date": {
-          "type": "string",
-          "description": "Date and time when the activity took place.",
-          "format": "date-time"
-        },
-        "durationSeconds": {
-          "type": "number",
-          "description": "Total duration of the activity in seconds."
+          "description": "The type of the activity (e.g., 'Ride', 'Run', 'Swim', 'Walk')."
         },
         "distanceKm": {
           "type": "number",
           "description": "Total distance covered during the activity in kilometers."
         },
+        "durationMinutes": {
+          "type": "number",
+          "description": "Total duration of the activity in minutes."
+        },
         "elevationGainMeters": {
           "type": "number",
-          "description": "Total elevation gain achieved during the activity in meters."
+          "description": "Total elevation gained during the activity in meters."
         },
         "averagePowerWatts": {
           "type": "number",
-          "description": "Average power output in watts during the activity (primarily for cycling)."
+          "description": "Average power output during the activity in watts, if recorded."
         },
         "normalizedPowerWatts": {
           "type": "number",
-          "description": "Normalized power output in watts, a more accurate measure of physiological cost (primarily for cycling)."
+          "description": "Normalized power output during the activity in watts, if recorded."
         },
         "averageHeartRateBpm": {
           "type": "number",
-          "description": "Average heart rate in beats per minute during the activity."
+          "description": "Average heart rate during the activity in beats per minute, if recorded."
         },
         "tss": {
           "type": "number",
-          "description": "Training Stress Score (TSS) quantifying the training load of the activity."
+          "description": "Training Stress Score for the activity, if calculated."
         },
         "rpe": {
           "type": "number",
-          "description": "Rate of Perceived Exertion (RPE) on a scale (e.g., 1-10) for the activity."
+          "description": "Rate of Perceived Exertion for the activity (scale 1-10)."
         },
         "notes": {
           "type": "string",
-          "description": "Any additional notes or comments about the activity."
+          "description": "Additional notes or comments about the activity."
         },
-        "fitFileUri": {
+        "gpxFileUrl": {
           "type": "string",
-          "description": "URI to the original .fit file uploaded for this activity, if applicable.",
+          "description": "URL to the GPX file associated with this activity, if imported.",
           "format": "uri"
         },
-        "gpxFileUri": {
+        "fitFileUrl": {
           "type": "string",
-          "description": "URI to the original .gpx file uploaded for this activity, if applicable.",
+          "description": "URL to the FIT file associated with this activity, if imported.",
           "format": "uri"
+        },
+        "bikeId": {
+          "type": "string",
+          "description": "Reference to the Bike used for this activity. (Relationship: Bike 1:N Activity)"
         }
       },
       "required": [
         "id",
         "userId",
+        "activityDate",
         "type",
-        "date",
-        "durationSeconds",
-        "distanceKm"
+        "distanceKm",
+        "durationMinutes",
+        "elevationGainMeters"
       ]
     },
-    "TrainingMetric": {
+    "TrainingPlan": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "TrainingMetric",
+      "title": "TrainingPlan",
       "type": "object",
-      "description": "Represents daily calculated training metrics for performance tracking, such as CTL, ATL, and TSB.",
+      "description": "Defines an overarching training plan with specific goals and a duration.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the TrainingMetric entity."
+          "description": "Unique identifier for the TrainingPlan entity."
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile for whom these metrics are calculated. (Relationship: UserProfile 1:N TrainingMetric)"
-        },
-        "date": {
-          "type": "string",
-          "description": "The specific date for which these training metrics are recorded.",
-          "format": "date"
-        },
-        "ctl": {
-          "type": "number",
-          "description": "Chronic Training Load (CTL), representing long-term fitness and training volume."
-        },
-        "atl": {
-          "type": "number",
-          "description": "Acute Training Load (ATL), representing short-term fatigue from recent training."
-        },
-        "tsb": {
-          "type": "number",
-          "description": "Training Stress Balance (TSB), indicating the balance between fitness and fatigue, suggesting readiness to perform."
-        }
-      },
-      "required": [
-        "id",
-        "userId",
-        "date",
-        "ctl",
-        "atl",
-        "tsb"
-      ]
-    },
-    "TrainingGoal": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "TrainingGoal",
-      "type": "object",
-      "description": "Represents a specific training objective or goal set by the user.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the TrainingGoal entity."
-        },
-        "userId": {
-          "type": "string",
-          "description": "Reference to the UserProfile who set this goal. (Relationship: UserProfile 1:N TrainingGoal)"
+          "description": "Reference to the User who owns this training plan. (Relationship: User 1:N TrainingPlan)"
         },
         "name": {
           "type": "string",
-          "description": "A descriptive name for the training goal."
+          "description": "The name of the training plan."
         },
         "description": {
           "type": "string",
-          "description": "Detailed description of what the goal entails."
+          "description": "A detailed description of the training plan."
         },
         "startDate": {
           "type": "string",
-          "description": "The date when the training goal officially started.",
+          "description": "The start date of the training plan.",
           "format": "date"
         },
         "endDate": {
           "type": "string",
-          "description": "The target date for achieving the training goal.",
+          "description": "The end date of the training plan.",
           "format": "date"
-        },
-        "targetMetric": {
-          "type": "string",
-          "description": "The specific metric being targeted by this goal (e.g., 'distance', 'elevation', 'power')."
-        },
-        "targetValue": {
-          "type": "number",
-          "description": "The numerical target value for the chosen metric (e.g., 1000 for 1000km distance)."
         },
         "status": {
           "type": "string",
-          "description": "The current status of the goal (e.g., 'active', 'completed', 'archived', 'on_hold')."
+          "description": "The current status of the training plan (e.g., 'Active', 'Completed', 'Draft', 'Archived')."
+        },
+        "targetTSS": {
+          "type": "number",
+          "description": "The target total Training Stress Score for the entire plan."
         }
       },
       "required": [
@@ -206,61 +131,75 @@
         "name",
         "startDate",
         "endDate",
-        "targetMetric",
-        "targetValue",
         "status"
       ]
     },
-    "TrainingPlan": {
+    "TrainingSession": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "TrainingPlan",
+      "title": "TrainingSession",
       "type": "object",
-      "description": "Represents a structured training plan designed to achieve one or more training goals.",
+      "description": "Represents a specific, scheduled training session within a larger training plan.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the TrainingPlan entity."
+          "description": "Unique identifier for the TrainingSession entity."
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who created or is following this plan. (Relationship: UserProfile 1:N TrainingPlan)"
+          "description": "Reference to the User who owns this training session. (Relationship: User 1:N TrainingSession)"
+        },
+        "trainingPlanId": {
+          "type": "string",
+          "description": "Reference to the TrainingPlan this session belongs to. (Relationship: TrainingPlan 1:N TrainingSession)"
         },
         "name": {
           "type": "string",
-          "description": "A descriptive name for the training plan."
+          "description": "The name of the training session."
         },
         "description": {
           "type": "string",
-          "description": "Detailed description of the training plan, its focus, and methodology."
+          "description": "A detailed description of the training session."
         },
-        "startDate": {
+        "scheduledDate": {
           "type": "string",
-          "description": "The planned start date for the training plan.",
+          "description": "The scheduled date for this training session.",
           "format": "date"
         },
-        "endDate": {
-          "type": "string",
-          "description": "The planned end date for the training plan.",
-          "format": "date"
+        "durationTargetMinutes": {
+          "type": "number",
+          "description": "The target duration for this session in minutes."
         },
-        "goalId": {
+        "tssTarget": {
+          "type": "number",
+          "description": "The target Training Stress Score for this session."
+        },
+        "isCompleted": {
+          "type": "boolean",
+          "description": "Indicates if the training session has been completed."
+        },
+        "activityId": {
           "type": "string",
-          "description": "Reference to a specific training goal that this plan aims to achieve. (Relationship: TrainingGoal 1:N TrainingPlan)"
+          "description": "Reference to the actual Activity recorded for this session if completed. (Relationship: Activity 1:1 TrainingSession)"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about the training session."
         }
       },
       "required": [
         "id",
         "userId",
+        "trainingPlanId",
         "name",
-        "startDate",
-        "endDate"
+        "scheduledDate",
+        "isCompleted"
       ]
     },
     "Bike": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Bike",
       "type": "object",
-      "description": "Represents a user's bicycle, storing general information and overall tracking metrics.",
+      "description": "Represents an individual bicycle owned by the user, serving as an inventory item.",
       "properties": {
         "id": {
           "type": "string",
@@ -268,40 +207,41 @@
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who owns this bike. (Relationship: UserProfile 1:N Bike)"
+          "description": "Reference to the User who owns this bike. (Relationship: User 1:N Bike)"
         },
         "name": {
           "type": "string",
-          "description": "A user-defined name for the bike (e.g., 'Road Bike', 'Mountain Bike', 'Commuter')."
+          "description": "A user-friendly name for the bike (e.g., 'Road Bike', 'MTB')."
         },
         "brand": {
           "type": "string",
-          "description": "The brand or manufacturer of the bike."
+          "description": "The brand of the bike."
         },
         "model": {
           "type": "string",
-          "description": "The specific model name of the bike."
+          "description": "The model of the bike."
         },
         "weightKg": {
           "type": "number",
           "description": "The weight of the bike in kilograms."
         },
-        "price": {
+        "priceEuros": {
           "type": "number",
-          "description": "The purchase price of the bike."
+          "description": "The purchase price of the bike in Euros."
         },
         "purchaseDate": {
           "type": "string",
           "description": "The date when the bike was purchased.",
           "format": "date"
         },
-        "totalDistanceKm": {
-          "type": "number",
-          "description": "The cumulative total distance ridden on this bike in kilometers (calculated field)."
-        },
-        "status": {
+        "imageUrl": {
           "type": "string",
-          "description": "The current status of the bike (e.g., 'active', 'archived', 'sold')."
+          "description": "URL to an image of the bike.",
+          "format": "uri"
+        },
+        "totalKilometers": {
+          "type": "number",
+          "description": "The total kilometers accumulated on this bike. (Calculated field, initialized to 0)"
         }
       },
       "required": [
@@ -309,16 +249,14 @@
         "userId",
         "name",
         "brand",
-        "model",
-        "purchaseDate",
-        "status"
+        "model"
       ]
     },
     "Component": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Component",
       "type": "object",
-      "description": "Represents an individual bicycle component with its own tracking and maintenance history.",
+      "description": "Details individual parts of a bicycle, allowing for tracking of mileage and maintenance needs.",
       "properties": {
         "id": {
           "type": "string",
@@ -326,133 +264,139 @@
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who owns this component. (Relationship: UserProfile 1:N Component)"
+          "description": "Reference to the User who owns this component. (Relationship: User 1:N Component)"
         },
         "bikeId": {
           "type": "string",
-          "description": "Reference to the Bike on which this component is currently installed or was previously installed. (Relationship: Bike 1:N Component)"
+          "description": "Reference to the Bike this component is installed on. (Relationship: Bike 1:N Component)"
+        },
+        "name": {
+          "type": "string",
+          "description": "A descriptive name for the component (e.g., 'Chain', 'Front Tire', 'Cassette')."
         },
         "type": {
           "type": "string",
-          "description": "The type of the component (e.g., 'chain', 'tires', 'cassette', 'brake pads', 'derailleur')."
+          "description": "The type of the component (e.g., 'Drivetrain', 'Wheel', 'Brakes', 'Tyre', 'Accessory')."
         },
         "brand": {
           "type": "string",
-          "description": "The brand or manufacturer of the component."
+          "description": "The brand of the component."
         },
         "model": {
           "type": "string",
-          "description": "The specific model name of the component."
+          "description": "The model of the component."
         },
         "purchaseDate": {
           "type": "string",
           "description": "The date when the component was purchased.",
           "format": "date"
         },
-        "price": {
+        "priceEuros": {
           "type": "number",
-          "description": "The purchase price of the component."
+          "description": "The purchase price of the component in Euros."
         },
-        "initialDistanceKm": {
+        "weightGrams": {
           "type": "number",
-          "description": "The distance (in kilometers) already recorded on the component at the time of its installation, if it was not new."
+          "description": "The weight of the component in grams."
         },
-        "currentDistanceKm": {
+        "estimatedLifeKm": {
           "type": "number",
-          "description": "The cumulative total distance accumulated on this component in kilometers (calculated field)."
+          "description": "The estimated lifespan of the component in kilometers."
         },
-        "estimatedLifespanDistanceKm": {
+        "estimatedLifeHours": {
           "type": "number",
-          "description": "The manufacturer's or user's estimated lifespan of the component in kilometers."
-        },
-        "estimatedLifespanMonths": {
-          "type": "number",
-          "description": "The estimated lifespan of the component in months, useful for time-based wear (optional)."
-        },
-        "alertThresholdPercentage": {
-          "type": "number",
-          "description": "The percentage of estimated lifespan (0-100) at which a wear alert should be triggered (e.g., 80 for 80% wear)."
+          "description": "The estimated lifespan of the component in hours."
         },
         "installationDate": {
           "type": "string",
-          "description": "The date when the component was installed on the bike.",
+          "description": "The date when the component was installed.",
           "format": "date"
         },
-        "removalDate": {
-          "type": "string",
-          "description": "The date when the component was removed from the bike (if replaced or retired).",
-          "format": "date"
+        "currentKm": {
+          "type": "number",
+          "description": "The current kilometers accumulated on this component since installation or last reset. (Calculated field, initialized to 0)"
         },
-        "status": {
+        "currentHours": {
+          "type": "number",
+          "description": "The current hours accumulated on this component since installation or last reset. (Calculated field, initialized to 0)"
+        },
+        "alertThresholdKm": {
+          "type": "number",
+          "description": "The kilometer threshold at which an wear alert should be triggered for this component."
+        },
+        "alertThresholdHours": {
+          "type": "number",
+          "description": "The hour threshold at which an wear alert should be triggered for this component."
+        },
+        "notes": {
           "type": "string",
-          "description": "The current status of the component (e.g., 'active', 'retired', 'stored', 'disposed')."
+          "description": "Additional notes or comments about the component."
         }
       },
       "required": [
         "id",
         "userId",
         "bikeId",
-        "type",
-        "brand",
-        "model",
-        "purchaseDate",
-        "installationDate",
-        "status"
+        "name",
+        "type"
       ]
     },
-    "MaintenanceLog": {
+    "MaintenanceRecord": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "MaintenanceLog",
+      "title": "MaintenanceRecord",
       "type": "object",
-      "description": "Records maintenance actions performed on a bike or a specific component.",
+      "description": "Logs a specific maintenance event performed on a bike or a component.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the MaintenanceLog entity."
+          "description": "Unique identifier for the MaintenanceRecord entity."
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who recorded this maintenance. (Relationship: UserProfile 1:N MaintenanceLog)"
-        },
-        "componentId": {
-          "type": "string",
-          "description": "Reference to the specific component for which maintenance was performed. (Relationship: Component 1:N MaintenanceLog)"
+          "description": "Reference to the User who recorded this maintenance. (Relationship: User 1:N MaintenanceRecord)"
         },
         "bikeId": {
           "type": "string",
-          "description": "Reference to the bike for which maintenance was performed, if not component-specific (e.g., 'full bike wash'). If 'componentId' is set, this should typically match the component's parent bike. (Relationship: Bike 1:N MaintenanceLog)"
+          "description": "Reference to the Bike on which maintenance was performed. (Relationship: Bike 1:N MaintenanceRecord)"
+        },
+        "componentId": {
+          "type": "string",
+          "description": "Reference to the Component on which maintenance was performed. (Relationship: Component 1:N MaintenanceRecord)"
         },
         "date": {
           "type": "string",
-          "description": "Date and time when the maintenance was performed.",
+          "description": "The date and time when the maintenance was performed.",
           "format": "date-time"
         },
-        "cost": {
+        "description": {
+          "type": "string",
+          "description": "A description of the maintenance performed (e.g., 'Chain cleaning', 'Tire replacement', 'Full service')."
+        },
+        "costEuros": {
           "type": "number",
-          "description": "The cost incurred for this maintenance action."
+          "description": "The cost of the maintenance in Euros."
         },
         "notes": {
           "type": "string",
-          "description": "Detailed notes about the maintenance performed, observations, or parts used."
+          "description": "Additional notes about the maintenance."
         },
-        "action": {
-          "type": "string",
-          "description": "The type of maintenance action performed (e.g., 'cleaned', 'replaced', 'lubed', 'inspected', 'adjusted')."
+        "odometerReadingKm": {
+          "type": "number",
+          "description": "The bike's total mileage in kilometers at the time of maintenance."
         }
       },
       "required": [
         "id",
         "userId",
         "date",
-        "cost",
-        "action"
+        "description"
       ]
     },
     "Recipe": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Recipe",
       "type": "object",
-      "description": "Represents a culinary recipe, including ingredients, instructions, and user preferences.",
+      "description": "Stores details for a cooking recipe, including ingredients, instructions, and metadata.",
       "properties": {
         "id": {
           "type": "string",
@@ -460,63 +404,65 @@
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who created or saved this recipe. (Relationship: UserProfile 1:N Recipe)"
+          "description": "Reference to the User who created or saved this recipe. (Relationship: User 1:N Recipe)"
         },
         "name": {
           "type": "string",
-          "description": "The name or title of the recipe."
+          "description": "The name of the recipe."
         },
         "description": {
           "type": "string",
-          "description": "A short description or summary of the recipe."
+          "description": "A brief description of the recipe."
         },
-        "preparationTimeMinutes": {
+        "prepTimeMinutes": {
           "type": "number",
-          "description": "Estimated time required for preparation in minutes."
+          "description": "The estimated preparation time for the recipe in minutes."
         },
-        "cookingTimeMinutes": {
+        "cookTimeMinutes": {
           "type": "number",
-          "description": "Estimated time required for cooking in minutes."
+          "description": "The estimated cooking time for the recipe in minutes."
         },
         "servings": {
           "type": "number",
-          "description": "The number of portions or servings the recipe yields."
+          "description": "The number of servings the recipe yields."
         },
         "instructions": {
           "type": "array",
-          "description": "An ordered list of steps or instructions for preparing the recipe.",
+          "description": "An ordered list of instructions for preparing the recipe.",
           "items": {
             "type": "string"
           }
         },
-        "ingredients": {
-          "type": "array",
-          "description": "A list of ingredients required for the recipe, each with its quantity and unit.",
-          "items": {
-            "type": "string"
-          }
+        "notes": {
+          "type": "string",
+          "description": "Additional notes or tips for the recipe."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL to an image of the prepared dish.",
+          "format": "uri"
+        },
+        "rating": {
+          "type": "number",
+          "description": "A personal rating for the recipe (e.g., 1-5 stars)."
         },
         "isFavorite": {
           "type": "boolean",
-          "description": "Indicates if the user has marked this recipe as a favorite."
-        },
-        "personalRating": {
-          "type": "number",
-          "description": "The user's personal rating for the recipe on a scale (e.g., 1-5)."
+          "description": "Indicates if the recipe is marked as a favorite."
         },
         "createdAt": {
           "type": "string",
-          "description": "Timestamp indicating when the recipe was created.",
+          "description": "The date and time when the recipe was created.",
           "format": "date-time"
         },
         "updatedAt": {
           "type": "string",
-          "description": "Timestamp indicating when the recipe was last updated.",
+          "description": "The date and time when the recipe was last updated.",
           "format": "date-time"
         },
         "tagIds": {
           "type": "array",
-          "description": "References to Tags associated with this recipe, allowing for multi-level categorization. (Relationship: Tag N:N Recipe)",
+          "description": "References to Tags associated with this recipe. (Relationship: Tag N:N Recipe)",
           "items": {
             "type": "string"
           }
@@ -526,19 +472,17 @@
         "id",
         "userId",
         "name",
-        "preparationTimeMinutes",
-        "cookingTimeMinutes",
         "servings",
         "instructions",
-        "ingredients",
-        "createdAt"
+        "createdAt",
+        "updatedAt"
       ]
     },
     "Tag": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Tag",
       "type": "object",
-      "description": "Represents a categorical tag used for organizing recipes.",
+      "description": "Generic tag for categorizing various items across the application, like recipes or tasks.",
       "properties": {
         "id": {
           "type": "string",
@@ -546,200 +490,102 @@
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who created or uses this tag. (Relationship: UserProfile 1:N Tag)"
+          "description": "Reference to the User who owns this tag. Can be null for system-wide tags. (Relationship: User 1:N Tag)"
         },
         "name": {
           "type": "string",
-          "description": "The name of the tag (e.g., 'Italian', 'High Protein', 'Breakfast')."
+          "description": "The name of the tag (e.g., 'Vegan', 'High Protein', 'Weeknight Meal')."
         },
-        "type": {
+        "category": {
           "type": "string",
-          "description": "The category type of the tag (e.g., 'cuisine', 'mealType', 'macroFocus', 'technique')."
-        },
-        "colorHex": {
-          "type": "string",
-          "description": "Hexadecimal color code for visual representation of the tag in the UI."
+          "description": "A category for the tag (e.g., 'Cuisine Type', 'Dietary Preference', 'Macro Focus', 'Technique')."
         }
       },
       "required": [
         "id",
-        "userId",
-        "name",
-        "type"
-      ]
-    },
-    "PantryItem": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "PantryItem",
-      "type": "object",
-      "description": "Represents a single item stored in the user's pantry or stock.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the PantryItem entity."
-        },
-        "userId": {
-          "type": "string",
-          "description": "Reference to the UserProfile who owns this pantry item. (Relationship: UserProfile 1:N PantryItem)"
-        },
-        "name": {
-          "type": "string",
-          "description": "The name of the pantry item (e.g., 'Rice', 'Canned Tomatoes', 'Olive Oil')."
-        },
-        "categoryId": {
-          "type": "string",
-          "description": "Reference to the category this pantry item belongs to. (Relationship: PantryCategory 1:N PantryItem)"
-        },
-        "quantity": {
-          "type": "number",
-          "description": "The current quantity of the item in stock."
-        },
-        "unit": {
-          "type": "string",
-          "description": "The unit of measurement for the item (e.g., 'kg', 'can', 'pack', 'bottle')."
-        },
-        "expirationDate": {
-          "type": "string",
-          "description": "The expiration date of the item.",
-          "format": "date"
-        },
-        "barcode": {
-          "type": "string",
-          "description": "The barcode number of the item, if available for quick scanning."
-        },
-        "notes": {
-          "type": "string",
-          "description": "Additional notes or details about the pantry item."
-        },
-        "location": {
-          "type": "string",
-          "description": "The physical storage location of the item (e.g., 'fridge', 'freezer', 'cupboard', 'spices')."
-        },
-        "lastUpdatedAt": {
-          "type": "string",
-          "description": "Timestamp indicating when the item's details (e.g., quantity) were last updated.",
-          "format": "date-time"
-        }
-      },
-      "required": [
-        "id",
-        "userId",
-        "name",
-        "categoryId",
-        "quantity",
-        "unit",
-        "location"
-      ]
-    },
-    "PantryCategory": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "PantryCategory",
-      "type": "object",
-      "description": "Represents a user-defined category for organizing pantry items.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the PantryCategory entity."
-        },
-        "userId": {
-          "type": "string",
-          "description": "Reference to the UserProfile who owns this category. (Relationship: UserProfile 1:N PantryCategory)"
-        },
-        "name": {
-          "type": "string",
-          "description": "The name of the pantry category (e.g., 'Vegetables', 'Dairy', 'Grains')."
-        }
-      },
-      "required": [
-        "id",
-        "userId",
         "name"
       ]
     },
-    "WeatherForecast": {
+    "Ingredient": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "WeatherForecast",
+      "title": "Ingredient",
       "type": "object",
-      "description": "Stores weather forecast data for a specific location and time, used for cycling recommendations.",
+      "description": "Represents a general food ingredient, used for recipe definitions and pantry management.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the WeatherForecast entity."
+          "description": "Unique identifier for the Ingredient entity."
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile for whom this forecast was fetched. (Relationship: UserProfile 1:N WeatherForecast)"
+          "description": "Reference to the User who defined this ingredient. Can be null for common system ingredients. (Relationship: User 1:N Ingredient)"
         },
-        "locationName": {
+        "name": {
           "type": "string",
-          "description": "A user-friendly name for the forecast location (e.g., 'Home', 'Work')."
+          "description": "The common name of the ingredient (e.g., 'Flour', 'Sugar', 'Chicken Breast')."
         },
-        "latitude": {
-          "type": "number",
-          "description": "The latitude coordinate of the forecast location."
-        },
-        "longitude": {
-          "type": "number",
-          "description": "The longitude coordinate of the forecast location."
-        },
-        "forecastTimestamp": {
+        "description": {
           "type": "string",
-          "description": "The specific timestamp for which this forecast data is valid.",
-          "format": "date-time"
+          "description": "A detailed description or notes about the ingredient."
         },
-        "recordedAt": {
+        "defaultUnitOfMeasure": {
           "type": "string",
-          "description": "The timestamp when this forecast data was fetched or recorded from the external API.",
-          "format": "date-time"
+          "description": "The default unit of measure for this ingredient (e.g., 'g', 'ml', 'unit', 'cup')."
         },
-        "temperatureCelsius": {
-          "type": "number",
-          "description": "The temperature in Celsius at the forecast timestamp."
-        },
-        "feelsLikeTemperatureCelsius": {
-          "type": "number",
-          "description": "The 'feels like' temperature in Celsius, accounting for wind chill and humidity."
-        },
-        "windSpeedKmh": {
-          "type": "number",
-          "description": "The wind speed in kilometers per hour."
-        },
-        "windDirection": {
+        "barcode": {
           "type": "string",
-          "description": "The cardinal direction from which the wind is blowing (e.g., 'NW', 'E')."
-        },
-        "precipitationProbabilityPercent": {
-          "type": "number",
-          "description": "The probability of precipitation in percentage (0-100)."
-        },
-        "weatherDescription": {
-          "type": "string",
-          "description": "A general textual description of the weather conditions (e.g., 'Clear sky', 'Light rain')."
-        },
-        "iconCode": {
-          "type": "string",
-          "description": "An icon code provided by the weather API for visual representation of conditions (e.g., '01d')."
+          "description": "The EAN/UPC barcode of the ingredient, if available."
         }
       },
       "required": [
         "id",
-        "userId",
-        "locationName",
-        "latitude",
-        "longitude",
-        "forecastTimestamp",
-        "recordedAt",
-        "temperatureCelsius",
-        "windSpeedKmh",
-        "precipitationProbabilityPercent",
-        "weatherDescription"
+        "name"
+      ]
+    },
+    "RecipeIngredient": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "RecipeIngredient",
+      "type": "object",
+      "description": "Links an ingredient to a specific recipe, specifying the quantity and preparation.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the RecipeIngredient entity."
+        },
+        "recipeId": {
+          "type": "string",
+          "description": "Reference to the Recipe this ingredient belongs to. (Relationship: Recipe 1:N RecipeIngredient)"
+        },
+        "ingredientId": {
+          "type": "string",
+          "description": "Reference to the Ingredient used in the recipe. (Relationship: Ingredient 1:N RecipeIngredient)"
+        },
+        "quantity": {
+          "type": "number",
+          "description": "The quantity of the ingredient required for the recipe."
+        },
+        "unit": {
+          "type": "string",
+          "description": "The specific unit of measure for this ingredient in the context of the recipe (e.g., 'tbsp', 'cup', 'g', 'medium')."
+        },
+        "notes": {
+          "type": "string",
+          "description": "Specific preparation notes for this ingredient in the recipe (e.g., 'finely chopped', 'diced')."
+        }
+      },
+      "required": [
+        "id",
+        "recipeId",
+        "ingredientId",
+        "quantity",
+        "unit"
       ]
     },
     "CyclingClothingItem": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "CyclingClothingItem",
       "type": "object",
-      "description": "Represents an item of the user's cycling apparel inventory, used for weather-based recommendations.",
+      "description": "An inventory item for cycling apparel, used by the weather assistant for recommendations.",
       "properties": {
         "id": {
           "type": "string",
@@ -747,47 +593,47 @@
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who owns this clothing item. (Relationship: UserProfile 1:N CyclingClothingItem)"
+          "description": "Reference to the User who owns this clothing item. (Relationship: User 1:N CyclingClothingItem)"
         },
         "name": {
           "type": "string",
-          "description": "A user-defined name for the clothing item (e.g., 'Castelli Thermal Jersey', 'Rapha Lightweight Gilet')."
+          "description": "The name of the clothing item (e.g., 'Castelli Thermal Jersey', 'Rapha Wind Vest')."
         },
         "type": {
           "type": "string",
-          "description": "The general type of clothing item (e.g., 'jersey', 'jacket', 'shorts', 'gloves', 'base layer', 'shoe covers')."
+          "description": "The type of clothing item (e.g., 'Jersey', 'Jacket', 'Base Layer', 'Bibs', 'Gloves', 'Socks', 'Helmet')."
         },
         "brand": {
           "type": "string",
-          "description": "The brand or manufacturer of the clothing item."
+          "description": "The brand of the clothing item."
         },
         "model": {
           "type": "string",
-          "description": "The specific model name of the clothing item."
+          "description": "The model of the clothing item."
         },
-        "minTemperatureCelsius": {
-          "type": "number",
-          "description": "The minimum recommended ambient temperature (in Celsius) for comfortable use of this item."
+        "description": {
+          "type": "string",
+          "description": "A detailed description of the clothing item."
         },
-        "maxTemperatureCelsius": {
+        "minTempCelsius": {
           "type": "number",
-          "description": "The maximum recommended ambient temperature (in Celsius) for comfortable use of this item."
+          "description": "The minimum recommended temperature in Celsius for this item."
+        },
+        "maxTempCelsius": {
+          "type": "number",
+          "description": "The maximum recommended temperature in Celsius for this item."
         },
         "isWindproof": {
           "type": "boolean",
-          "description": "Indicates whether the clothing item provides protection against wind."
+          "description": "Indicates if the item is windproof."
         },
         "isWaterproof": {
           "type": "boolean",
-          "description": "Indicates whether the clothing item provides protection against rain/water."
+          "description": "Indicates if the item is waterproof."
         },
-        "layer": {
+        "layerType": {
           "type": "string",
-          "description": "The layer type of the clothing item (e.g., 'base', 'mid', 'outer', 'accessory')."
-        },
-        "colorHex": {
-          "type": "string",
-          "description": "Hexadecimal color code of the item, for visual representation or sorting."
+          "description": "The type of layer this item represents (e.g., 'Base', 'Mid', 'Outer', 'Accessory')."
         },
         "imageUrl": {
           "type": "string",
@@ -800,46 +646,43 @@
         "userId",
         "name",
         "type",
-        "minTemperatureCelsius",
-        "maxTemperatureCelsius",
         "isWindproof",
-        "isWaterproof",
-        "layer"
+        "isWaterproof"
       ]
     },
-    "BikeSetup": {
+    "TirePressureSetup": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "BikeSetup",
+      "title": "TirePressureSetup",
       "type": "object",
-      "description": "Stores a user's saved tire pressure configurations for different bikes and conditions.",
+      "description": "Stores user-defined or recommended tire pressure settings for different bikes and conditions.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the BikeSetup entity."
+          "description": "Unique identifier for the TirePressureSetup entity."
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who created this setup. (Relationship: UserProfile 1:N BikeSetup)"
+          "description": "Reference to the User who owns this tire pressure setup. (Relationship: User 1:N TirePressureSetup)"
         },
         "bikeId": {
           "type": "string",
-          "description": "Reference to the Bike this setup applies to. (Relationship: Bike 1:N BikeSetup)"
+          "description": "Reference to the Bike this setup is associated with. (Relationship: Bike 1:N TirePressureSetup)"
         },
         "name": {
           "type": "string",
-          "description": "A descriptive name for the tire pressure setup (e.g., 'Road Dry Setup', 'Gravel Wet Setup')."
+          "description": "A descriptive name for the tire pressure setup (e.g., 'Road Race Setup', 'Gravel Commute')."
         },
         "riderWeightKg": {
           "type": "number",
-          "description": "The rider's weight in kilograms (including gear)."
+          "description": "The rider's weight in kilograms used for the calculation."
         },
         "bikeWeightKg": {
           "type": "number",
-          "description": "The bike's weight in kilograms (including accessories)."
+          "description": "The bike's weight in kilograms used for the calculation."
         },
         "tireWidthMm": {
           "type": "number",
-          "description": "The width of the tires in millimeters."
+          "description": "The width of the tire in millimeters."
         },
         "tireType": {
           "type": "string",
@@ -847,61 +690,43 @@
         },
         "terrainType": {
           "type": "string",
-          "description": "The type of terrain the setup is optimized for (e.g., 'smooth_road', 'cobbles', 'light_gravel', 'heavy_gravel')."
+          "description": "The type of terrain for which the pressure is optimized (e.g., 'smooth_road', 'cobbles', 'light_gravel', 'heavy_gravel', 'mixed')."
         },
         "weatherCondition": {
           "type": "string",
-          "description": "The weather condition for which the setup is optimized (e.g., 'dry', 'wet')."
+          "description": "The weather conditions for which the pressure is optimized (e.g., 'dry', 'wet', 'mixed')."
         },
-        "recommendedPressureFrontBar": {
+        "recommendedFrontPressureBar": {
           "type": "number",
           "description": "The recommended front tire pressure in bar."
         },
-        "recommendedPressureFrontPSI": {
-          "type": "number",
-          "description": "The recommended front tire pressure in PSI."
-        },
-        "recommendedPressureRearBar": {
+        "recommendedRearPressureBar": {
           "type": "number",
           "description": "The recommended rear tire pressure in bar."
         },
-        "recommendedPressureRearPSI": {
-          "type": "number",
-          "description": "The recommended rear tire pressure in PSI."
-        },
         "notes": {
           "type": "string",
-          "description": "Additional notes or observations about this tire pressure setup."
-        },
-        "createdAt": {
-          "type": "string",
-          "description": "Timestamp when this tire pressure setup was created.",
-          "format": "date-time"
+          "description": "Additional notes about this tire pressure setup."
         }
       },
       "required": [
         "id",
         "userId",
-        "bikeId",
         "name",
         "riderWeightKg",
         "bikeWeightKg",
         "tireWidthMm",
         "tireType",
         "terrainType",
-        "weatherCondition",
-        "recommendedPressureFrontBar",
-        "recommendedPressureFrontPSI",
-        "recommendedPressureRearBar",
-        "recommendedPressureRearPSI",
-        "createdAt"
+        "recommendedFrontPressureBar",
+        "recommendedRearPressureBar"
       ]
     },
     "Plant": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "Plant",
       "type": "object",
-      "description": "Represents an individual indoor plant owned by the user, with its specific care requirements and status.",
+      "description": "Represents an indoor plant, including its care schedule and health status.",
       "properties": {
         "id": {
           "type": "string",
@@ -909,261 +734,235 @@
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who owns this plant. (Relationship: UserProfile 1:N Plant)"
+          "description": "Reference to the User who owns this plant. (Relationship: User 1:N Plant)"
         },
         "species": {
           "type": "string",
-          "description": "The botanical species name of the plant (e.g., 'Monstera Deliciosa', 'Ficus Lyrata')."
+          "description": "The botanical species name of the plant."
         },
         "nickname": {
           "type": "string",
-          "description": "A user-defined nickname for the plant (e.g., 'Patrice', 'Greeny')."
+          "description": "A personal nickname for the plant."
         },
         "location": {
           "type": "string",
-          "description": "The physical location of the plant within the user's home (e.g., 'living room window', 'kitchen shelf')."
+          "description": "The physical location of the plant in the user's home (e.g., 'Living Room', 'Kitchen Window')."
         },
         "acquisitionDate": {
           "type": "string",
-          "description": "The date when the plant was acquired by the user.",
+          "description": "The date when the plant was acquired.",
           "format": "date"
         },
-        "photoUrl": {
+        "imageUrl": {
           "type": "string",
-          "description": "URL to a photo of the plant for visual identification.",
+          "description": "URL to an image of the plant.",
           "format": "uri"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about the plant or its care."
         },
         "wateringFrequencyDays": {
           "type": "number",
-          "description": "The recommended frequency for watering the plant, in days (e.g., 7 for weekly)."
+          "description": "The frequency of watering for the plant in days (e.g., 7 for weekly)."
         },
         "lastWateringDate": {
           "type": "string",
-          "description": "The date of the plant's last recorded watering.",
+          "description": "The date of the last watering action.",
           "format": "date"
         },
         "healthStatus": {
           "type": "string",
-          "description": "A simple visual indicator of the plant's current health (e.g., 'green' for healthy, 'yellow' for needs attention, 'red' for critical)."
-        },
-        "notes": {
-          "type": "string",
-          "description": "Additional notes or care instructions specific to this plant."
+          "description": "A simple visual indicator of the plant's health (e.g., 'green', 'yellow', 'red')."
         }
       },
       "required": [
         "id",
         "userId",
         "species",
-        "location",
-        "acquisitionDate",
         "wateringFrequencyDays"
       ]
     },
-    "PlantActionLog": {
+    "PlantAction": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "PlantActionLog",
+      "title": "PlantAction",
       "type": "object",
-      "description": "Records specific care actions performed on an indoor plant, such as watering, fertilizing, or repotting.",
+      "description": "Logs specific actions performed on a plant, such as watering, repotting, or fertilizing.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the PlantActionLog entity."
+          "description": "Unique identifier for the PlantAction entity."
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who recorded this action. (Relationship: UserProfile 1:N PlantActionLog)"
+          "description": "Reference to the User who performed this action. (Relationship: User 1:N PlantAction)"
         },
         "plantId": {
           "type": "string",
-          "description": "Reference to the Plant for which the action was performed. (Relationship: Plant 1:N PlantActionLog)"
-        },
-        "date": {
-          "type": "string",
-          "description": "Date and time when the action was performed.",
-          "format": "date-time"
+          "description": "Reference to the Plant on which the action was performed. (Relationship: Plant 1:N PlantAction)"
         },
         "actionType": {
           "type": "string",
-          "description": "The type of action performed (e.g., 'watering', 'repotting', 'fertilizing', 'pruning', 'pest_treatment')."
+          "description": "The type of action performed (e.g., 'watering', 'repotting', 'fertilizing', 'pruning', 'cleaning')."
+        },
+        "actionDate": {
+          "type": "string",
+          "description": "The date and time when the action was performed.",
+          "format": "date-time"
         },
         "notes": {
           "type": "string",
-          "description": "Additional notes or details about the action (e.g., 'used organic fertilizer', 'moved to brighter spot')."
+          "description": "Additional notes about the action."
         }
       },
       "required": [
         "id",
         "userId",
         "plantId",
-        "date",
-        "actionType"
+        "actionType",
+        "actionDate"
       ]
     },
-    "BudgetCategory": {
+    "PantryItem": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "BudgetCategory",
+      "title": "PantryItem",
       "type": "object",
-      "description": "Represents a user-defined category for personal financial budgeting.",
+      "description": "Tracks individual items currently in the user's pantry, fridge, or freezer, with quantities and expiration dates.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the BudgetCategory entity."
+          "description": "Unique identifier for the PantryItem entity."
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who owns this budget category. (Relationship: UserProfile 1:N BudgetCategory)"
+          "description": "Reference to the User who owns this pantry item. (Relationship: User 1:N PantryItem)"
         },
-        "name": {
+        "ingredientId": {
           "type": "string",
-          "description": "The name of the budget category (e.g., 'Groceries', 'Transport', 'Subscriptions', 'Bike Gear')."
+          "description": "Reference to the generic Ingredient definition, if applicable. (Relationship: Ingredient 1:N PantryItem)"
         },
-        "monthlyBudgetAmount": {
+        "customName": {
+          "type": "string",
+          "description": "Custom name for the item if it's not linked to a generic ingredient."
+        },
+        "location": {
+          "type": "string",
+          "description": "The storage location of the item (e.g., 'fridge', 'freezer', 'cupboard', 'spices', 'other')."
+        },
+        "quantity": {
           "type": "number",
-          "description": "The target monthly budget amount allocated for this category."
+          "description": "The quantity of the item in stock."
         },
-        "colorHex": {
+        "unit": {
           "type": "string",
-          "description": "Hexadecimal color code for visual representation of the category in the UI."
-        }
-      },
-      "required": [
-        "id",
-        "userId",
-        "name",
-        "monthlyBudgetAmount"
-      ]
-    },
-    "Expense": {
-      "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Expense",
-      "type": "object",
-      "description": "Represents a single manual financial expense recorded by the user.",
-      "properties": {
-        "id": {
-          "type": "string",
-          "description": "Unique identifier for the Expense entity."
+          "description": "The unit of measure for the quantity (e.g., 'g', 'ml', 'unit', 'pack')."
         },
-        "userId": {
+        "expirationDate": {
           "type": "string",
-          "description": "Reference to the UserProfile who recorded this expense. (Relationship: UserProfile 1:N Expense)"
-        },
-        "date": {
-          "type": "string",
-          "description": "The date when the expense occurred.",
+          "description": "The expiration date of the item.",
           "format": "date"
         },
-        "amount": {
-          "type": "number",
-          "description": "The amount of the expense in local currency."
-        },
-        "budgetCategoryId": {
+        "barcode": {
           "type": "string",
-          "description": "Reference to the budget category this expense falls under. (Relationship: BudgetCategory 1:N Expense)"
+          "description": "The scanned barcode of the item, if available."
         },
         "notes": {
           "type": "string",
-          "description": "Additional notes or details about the expense."
+          "description": "Additional notes about the pantry item."
         },
-        "description": {
+        "addedDate": {
           "type": "string",
-          "description": "A short, descriptive label for the expense (e.g., 'Coffee', 'Groceries store', 'New tires')."
+          "description": "The date and time when the item was added to the pantry.",
+          "format": "date-time"
+        },
+        "lastUpdatedDate": {
+          "type": "string",
+          "description": "The date and time when the item's details were last updated.",
+          "format": "date-time"
         }
       },
       "required": [
         "id",
         "userId",
-        "date",
-        "amount",
-        "budgetCategoryId",
-        "description"
+        "location",
+        "quantity",
+        "unit",
+        "addedDate",
+        "lastUpdatedDate"
       ]
     },
-    "Task": {
+    "ShoppingListItem": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "Task",
+      "title": "ShoppingListItem",
       "type": "object",
-      "description": "Represents a domestic task or reminder, including details like due date and recurrence.",
+      "description": "Represents an item on the user's shopping list.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the Task entity."
+          "description": "Unique identifier for the ShoppingListItem entity."
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who created or is assigned this task. (Relationship: UserProfile 1:N Task)"
+          "description": "Reference to the User who owns this shopping list item. (Relationship: User 1:N ShoppingListItem)"
         },
-        "title": {
+        "ingredientId": {
           "type": "string",
-          "description": "The title or brief description of the task."
+          "description": "Reference to the generic Ingredient definition, if applicable. (Relationship: Ingredient 1:N ShoppingListItem)"
         },
-        "description": {
+        "customName": {
           "type": "string",
-          "description": "A more detailed description of the task."
+          "description": "Custom name for the item if it's not linked to a generic ingredient."
         },
-        "dueDate": {
+        "quantity": {
+          "type": "number",
+          "description": "The desired quantity of the item to purchase."
+        },
+        "unit": {
           "type": "string",
-          "description": "The target due date for completing the task.",
-          "format": "date"
+          "description": "The unit of measure for the desired quantity (e.g., 'g', 'ml', 'pack')."
         },
-        "isRecurring": {
+        "isPurchased": {
           "type": "boolean",
-          "description": "Indicates whether the task is a recurring one."
+          "description": "Indicates if the item has been purchased."
         },
-        "recurrencePattern": {
+        "addedDate": {
           "type": "string",
-          "description": "A string describing the recurrence pattern (e.g., 'daily', 'weekly', 'monthly', 'every_3_months', 'yearly')."
-        },
-        "categoryId": {
-          "type": "string",
-          "description": "Reference to the category this task belongs to. (Relationship: TaskCategory 1:N Task)"
-        },
-        "status": {
-          "type": "string",
-          "description": "The current status of the task (e.g., 'pending', 'completed', 'snoozed', 'overdue')."
-        },
-        "completedAt": {
-          "type": "string",
-          "description": "Timestamp indicating when the task was marked as completed.",
+          "description": "The date and time when the item was added to the shopping list.",
           "format": "date-time"
         },
-        "createdAt": {
+        "notes": {
           "type": "string",
-          "description": "Timestamp indicating when the task was initially created.",
-          "format": "date-time"
+          "description": "Additional notes about the shopping list item."
         }
       },
       "required": [
         "id",
         "userId",
-        "title",
-        "isRecurring",
-        "categoryId",
-        "status",
-        "createdAt"
+        "isPurchased",
+        "addedDate"
       ]
     },
-    "TaskCategory": {
+    "ExpenseCategory": {
       "$schema": "http://json-schema.org/draft-07/schema#",
-      "title": "TaskCategory",
+      "title": "ExpenseCategory",
       "type": "object",
-      "description": "Represents a user-defined category for organizing tasks.",
+      "description": "Defines a category for tracking expenses and budgets.",
       "properties": {
         "id": {
           "type": "string",
-          "description": "Unique identifier for the TaskCategory entity."
+          "description": "Unique identifier for the ExpenseCategory entity."
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who owns this category. (Relationship: UserProfile 1:N TaskCategory)"
+          "description": "Reference to the User who owns this expense category. (Relationship: User 1:N ExpenseCategory)"
         },
         "name": {
           "type": "string",
-          "description": "The name of the task category (e.g., 'Household', 'Admin', 'Bike Maintenance', 'Garden')."
+          "description": "The name of the expense category (e.g., 'Groceries', 'Bike Gear', 'Utilities')."
         },
-        "colorHex": {
+        "icon": {
           "type": "string",
-          "description": "Hexadecimal color code for visual representation of the category in the UI."
+          "description": "Name or identifier for an icon representing the category."
         }
       },
       "required": [
@@ -1172,11 +971,193 @@
         "name"
       ]
     },
+    "MonthlyBudget": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "MonthlyBudget",
+      "type": "object",
+      "description": "Sets a monthly financial budget, associating allocated amounts to specific expense categories.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the MonthlyBudget entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who owns this monthly budget. (Relationship: User 1:N MonthlyBudget)"
+        },
+        "monthYear": {
+          "type": "string",
+          "description": "The month and year for which the budget applies (format YYYY-MM, e.g., '2023-11')."
+        },
+        "totalIncomeEuros": {
+          "type": "number",
+          "description": "The total income for the budgeted month in Euros."
+        },
+        "totalBudgetedAmountEuros": {
+          "type": "number",
+          "description": "The sum of all allocated amounts for this month across all categories in Euros."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "monthYear"
+      ]
+    },
+    "BudgetAllocation": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "BudgetAllocation",
+      "type": "object",
+      "description": "Specifies the budgeted amount for a particular expense category within a given month.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the BudgetAllocation entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who owns this budget allocation. (Relationship: User 1:N BudgetAllocation)"
+        },
+        "monthlyBudgetId": {
+          "type": "string",
+          "description": "Reference to the MonthlyBudget this allocation belongs to. (Relationship: MonthlyBudget 1:N BudgetAllocation)"
+        },
+        "expenseCategoryId": {
+          "type": "string",
+          "description": "Reference to the ExpenseCategory for this allocation. (Relationship: ExpenseCategory 1:N BudgetAllocation)"
+        },
+        "allocatedAmountEuros": {
+          "type": "number",
+          "description": "The amount budgeted for this category in Euros for the month."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "monthlyBudgetId",
+        "expenseCategoryId",
+        "allocatedAmountEuros"
+      ]
+    },
+    "Expense": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Expense",
+      "type": "object",
+      "description": "Records an individual financial expenditure made by the user.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Expense entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who made this expense. (Relationship: User 1:N Expense)"
+        },
+        "amountEuros": {
+          "type": "number",
+          "description": "The amount of the expenditure in Euros."
+        },
+        "expenseCategoryId": {
+          "type": "string",
+          "description": "Reference to the category of this expense. (Relationship: ExpenseCategory 1:N Expense)"
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of what the expense was for."
+        },
+        "date": {
+          "type": "string",
+          "description": "The date and time when the expense occurred.",
+          "format": "date-time"
+        },
+        "notes": {
+          "type": "string",
+          "description": "Additional notes about the expense."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "amountEuros",
+        "expenseCategoryId",
+        "date"
+      ]
+    },
+    "Task": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Task",
+      "type": "object",
+      "description": "Manages personal tasks and reminders, including due dates and recurrence patterns.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Task entity."
+        },
+        "userId": {
+          "type": "string",
+          "description": "Reference to the User who owns this task. (Relationship: User 1:N Task)"
+        },
+        "title": {
+          "type": "string",
+          "description": "The title or brief description of the task."
+        },
+        "description": {
+          "type": "string",
+          "description": "A detailed description of the task."
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "The date when the task is due.",
+          "format": "date"
+        },
+        "isCompleted": {
+          "type": "boolean",
+          "description": "Indicates if the task has been completed."
+        },
+        "priority": {
+          "type": "string",
+          "description": "The priority level of the task (e.g., 'low', 'medium', 'high')."
+        },
+        "category": {
+          "type": "string",
+          "description": "A category for the task (e.g., 'Household', 'Admin', 'Bike', 'Plants')."
+        },
+        "recurrenceType": {
+          "type": "string",
+          "description": "The type of recurrence for the task (e.g., 'none', 'daily', 'weekly', 'monthly', 'yearly')."
+        },
+        "recurrenceValue": {
+          "type": "number",
+          "description": "The value for the recurrence type (e.g., 2 for 'every 2 weeks')."
+        },
+        "createdAt": {
+          "type": "string",
+          "description": "The date and time when the task was created.",
+          "format": "date-time"
+        },
+        "completedDate": {
+          "type": "string",
+          "description": "The date and time when the task was completed.",
+          "format": "date-time"
+        },
+        "originRef": {
+          "type": "string",
+          "description": "Optional reference to an originating entity like a Plant or PantryItem if this task was generated from an alert."
+        }
+      },
+      "required": [
+        "id",
+        "userId",
+        "title",
+        "isCompleted",
+        "createdAt"
+      ]
+    },
     "HealthMetric": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "HealthMetric",
       "type": "object",
-      "description": "Records daily health and well-being metrics for the user, such as weight, sleep, and hydration.",
+      "description": "Tracks various personal health and wellness metrics over time.",
       "properties": {
         "id": {
           "type": "string",
@@ -1184,51 +1165,49 @@
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile for whom these metrics are recorded. (Relationship: UserProfile 1:N HealthMetric)"
+          "description": "Reference to the User who recorded this metric. (Relationship: User 1:N HealthMetric)"
         },
         "date": {
           "type": "string",
-          "description": "The specific date for which these health metrics are recorded.",
+          "description": "The date when the health metric was recorded.",
           "format": "date"
         },
         "weightKg": {
           "type": "number",
-          "description": "The user's body weight in kilograms."
+          "description": "The recorded body weight in kilograms."
         },
         "bodyFatPercentage": {
           "type": "number",
-          "description": "The user's body fat percentage."
+          "description": "The recorded body fat percentage."
         },
-        "muscleMassPercentage": {
+        "muscleMassKg": {
           "type": "number",
-          "description": "The user's muscle mass percentage."
+          "description": "The recorded muscle mass in kilograms."
         },
         "sleepHours": {
           "type": "number",
-          "description": "The number of hours of sleep recorded for the day."
+          "description": "The reported hours of sleep."
         },
         "hydrationLiters": {
           "type": "number",
-          "description": "The daily hydration intake in liters."
+          "description": "The reported daily hydration intake in liters."
         },
         "notes": {
           "type": "string",
-          "description": "Additional notes or observations about the health metrics for the day."
+          "description": "Additional notes about the health metrics for the day."
         }
       },
       "required": [
         "id",
         "userId",
-        "date",
-        "weightKg",
-        "sleepHours"
+        "date"
       ]
     },
     "HealthGoal": {
       "$schema": "http://json-schema.org/draft-07/schema#",
       "title": "HealthGoal",
       "type": "object",
-      "description": "Represents a personal health and well-being goal set by the user.",
+      "description": "Defines a specific health-related objective the user aims to achieve.",
       "properties": {
         "id": {
           "type": "string",
@@ -1236,47 +1215,40 @@
         },
         "userId": {
           "type": "string",
-          "description": "Reference to the UserProfile who set this goal. (Relationship: UserProfile 1:N HealthGoal)"
+          "description": "Reference to the User who set this health goal. (Relationship: User 1:N HealthGoal)"
         },
-        "name": {
+        "metricType": {
           "type": "string",
-          "description": "A descriptive name for the health goal."
+          "description": "The type of health metric this goal applies to (e.g., 'weight', 'body_fat', 'muscle_mass', 'sleep', 'hydration')."
         },
-        "description": {
-          "type": "string",
-          "description": "Detailed description of what the health goal entails."
+        "targetValue": {
+          "type": "number",
+          "description": "The target value for the chosen metric."
         },
         "startDate": {
           "type": "string",
-          "description": "The date when the health goal officially started.",
+          "description": "The start date of the health goal.",
           "format": "date"
         },
         "endDate": {
           "type": "string",
-          "description": "The target date for achieving the health goal.",
-          "format": "date"
+          "description": "The target end date for achieving the goal."
         },
-        "targetMetric": {
+        "notes": {
           "type": "string",
-          "description": "The specific health metric being targeted by this goal (e.g., 'weight', 'sleep_hours', 'body_fat_percentage')."
-        },
-        "targetValue": {
-          "type": "number",
-          "description": "The numerical target value for the chosen metric (e.g., 70 for 70kg weight, 8 for 8 hours of sleep)."
+          "description": "Additional notes about the health goal."
         },
         "status": {
           "type": "string",
-          "description": "The current status of the goal (e.g., 'active', 'completed', 'archived', 'on_hold')."
+          "description": "The current status of the goal (e.g., 'active', 'achieved', 'abandoned')."
         }
       },
       "required": [
         "id",
         "userId",
-        "name",
-        "startDate",
-        "endDate",
-        "targetMetric",
+        "metricType",
         "targetValue",
+        "startDate",
         "status"
       ]
     }
@@ -1290,97 +1262,65 @@
   "firestore": {
     "structure": [
       {
-        "path": "/users/{userId}",
-        "definition": {
-          "entityName": "UserProfile",
-          "schema": {
-            "$ref": "#/backend/entities/UserProfile"
-          },
-          "description": "Stores the profile information for a specific user. The document ID corresponds to the Firebase Authentication User ID.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user, matching Firebase Authentication UID."
-            }
-          ]
-        }
-      },
-      {
         "path": "/users/{userId}/activities/{activityId}",
         "definition": {
           "entityName": "Activity",
           "schema": {
             "$ref": "#/backend/entities/Activity"
           },
-          "description": "Collection of logged training activities for a user. Each document includes the 'userId' for authorization independence.",
+          "description": "Stores individual training activities for a user. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who owns the activity."
             },
             {
               "name": "activityId",
-              "description": "The unique identifier for the specific activity."
+              "description": "The unique identifier of the activity."
             }
           ]
         }
       },
       {
-        "path": "/users/{userId}/trainingMetrics/{metricId}",
-        "definition": {
-          "entityName": "TrainingMetric",
-          "schema": {
-            "$ref": "#/backend/entities/TrainingMetric"
-          },
-          "description": "Collection of daily calculated training metrics for a user. Each document includes the 'userId' for authorization independence.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user."
-            },
-            {
-              "name": "metricId",
-              "description": "The unique identifier for the training metric entry."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/trainingGoals/{goalId}",
-        "definition": {
-          "entityName": "TrainingGoal",
-          "schema": {
-            "$ref": "#/backend/entities/TrainingGoal"
-          },
-          "description": "Collection of personal training goals set by a user. Each document includes the 'userId' for authorization independence.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user."
-            },
-            {
-              "name": "goalId",
-              "description": "The unique identifier for the training goal."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/trainingPlans/{planId}",
+        "path": "/users/{userId}/trainingPlans/{trainingPlanId}",
         "definition": {
           "entityName": "TrainingPlan",
           "schema": {
             "$ref": "#/backend/entities/TrainingPlan"
           },
-          "description": "Collection of structured training plans created or followed by a user. Each document includes the 'userId' for authorization independence.",
+          "description": "Stores overarching training plans for a user. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who owns the training plan."
             },
             {
-              "name": "planId",
-              "description": "The unique identifier for the training plan."
+              "name": "trainingPlanId",
+              "description": "The unique identifier of the training plan."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/trainingPlans/{trainingPlanId}/trainingSessions/{sessionId}",
+        "definition": {
+          "entityName": "TrainingSession",
+          "schema": {
+            "$ref": "#/backend/entities/TrainingSession"
+          },
+          "description": "Stores individual training sessions within a specific training plan. Includes denormalized 'userId' and 'trainingPlanId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who owns the training session."
+            },
+            {
+              "name": "trainingPlanId",
+              "description": "The unique identifier of the parent training plan."
+            },
+            {
+              "name": "sessionId",
+              "description": "The unique identifier of the training session."
             }
           ]
         }
@@ -1392,55 +1332,59 @@
           "schema": {
             "$ref": "#/backend/entities/Bike"
           },
-          "description": "Collection of bicycles owned by a user. Each document includes the 'userId' for authorization independence.",
+          "description": "Manages a user's inventory of bicycles. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who owns the bike."
             },
             {
               "name": "bikeId",
-              "description": "The unique identifier for the bike."
+              "description": "The unique identifier of the bike."
             }
           ]
         }
       },
       {
-        "path": "/users/{userId}/components/{componentId}",
+        "path": "/users/{userId}/bikes/{bikeId}/components/{componentId}",
         "definition": {
           "entityName": "Component",
           "schema": {
             "$ref": "#/backend/entities/Component"
           },
-          "description": "Collection of bicycle components owned by a user, linked to a specific bike. Each document includes the 'userId' and 'bikeId' for authorization independence and direct reference.",
+          "description": "Details individual components installed on a specific bike. Includes denormalized 'userId' and 'bikeId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who owns the component."
+            },
+            {
+              "name": "bikeId",
+              "description": "The unique identifier of the parent bike."
             },
             {
               "name": "componentId",
-              "description": "The unique identifier for the component."
+              "description": "The unique identifier of the component."
             }
           ]
         }
       },
       {
-        "path": "/users/{userId}/maintenanceLogs/{logId}",
+        "path": "/users/{userId}/maintenanceRecords/{recordId}",
         "definition": {
-          "entityName": "MaintenanceLog",
+          "entityName": "MaintenanceRecord",
           "schema": {
-            "$ref": "#/backend/entities/MaintenanceLog"
+            "$ref": "#/backend/entities/MaintenanceRecord"
           },
-          "description": "Collection of maintenance records for bikes or components. Each document includes 'userId', 'bikeId', and 'componentId' for authorization and direct reference, ensuring independence.",
+          "description": "Logs maintenance events for bikes or components. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who recorded the maintenance."
             },
             {
-              "name": "logId",
-              "description": "The unique identifier for the maintenance log entry."
+              "name": "recordId",
+              "description": "The unique identifier of the maintenance record."
             }
           ]
         }
@@ -1452,15 +1396,39 @@
           "schema": {
             "$ref": "#/backend/entities/Recipe"
           },
-          "description": "Collection of culinary recipes created or saved by a user. Each document includes the 'userId' for authorization independence.",
+          "description": "Stores cooking recipes created or saved by a user. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who owns the recipe."
             },
             {
               "name": "recipeId",
-              "description": "The unique identifier for the recipe."
+              "description": "The unique identifier of the recipe."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/recipes/{recipeId}/recipeIngredients/{recipeIngredientId}",
+        "definition": {
+          "entityName": "RecipeIngredient",
+          "schema": {
+            "$ref": "#/backend/entities/RecipeIngredient"
+          },
+          "description": "Links an ingredient to a specific recipe with quantity and notes. 'userId' is implicitly inherited from the parent recipe path, 'recipeId' is denormalized.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who owns the recipe."
+            },
+            {
+              "name": "recipeId",
+              "description": "The unique identifier of the parent recipe."
+            },
+            {
+              "name": "recipeIngredientId",
+              "description": "The unique identifier for the recipe ingredient entry."
             }
           ]
         }
@@ -1472,75 +1440,35 @@
           "schema": {
             "$ref": "#/backend/entities/Tag"
           },
-          "description": "Collection of user-defined tags for organizing recipes. Each document includes the 'userId' for authorization independence.",
+          "description": "Stores user-defined tags for categorizing items. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who owns the tag."
             },
             {
               "name": "tagId",
-              "description": "The unique identifier for the tag."
+              "description": "The unique identifier of the tag."
             }
           ]
         }
       },
       {
-        "path": "/users/{userId}/pantryItems/{pantryItemId}",
+        "path": "/users/{userId}/ingredients/{ingredientId}",
         "definition": {
-          "entityName": "PantryItem",
+          "entityName": "Ingredient",
           "schema": {
-            "$ref": "#/backend/entities/PantryItem"
+            "$ref": "#/backend/entities/Ingredient"
           },
-          "description": "Collection of items in the user's pantry. Each document includes the 'userId' for authorization independence.",
+          "description": "Manages user-defined ingredients. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who defined the ingredient."
             },
             {
-              "name": "pantryItemId",
-              "description": "The unique identifier for the pantry item."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/pantryCategories/{categoryId}",
-        "definition": {
-          "entityName": "PantryCategory",
-          "schema": {
-            "$ref": "#/backend/entities/PantryCategory"
-          },
-          "description": "Collection of user-defined categories for pantry items. Each document includes the 'userId' for authorization independence.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user."
-            },
-            {
-              "name": "categoryId",
-              "description": "The unique identifier for the pantry category."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/weatherForecasts/{forecastId}",
-        "definition": {
-          "entityName": "WeatherForecast",
-          "schema": {
-            "$ref": "#/backend/entities/WeatherForecast"
-          },
-          "description": "Collection of cached weather forecasts fetched for the user. Each document includes the 'userId' for authorization independence.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user."
-            },
-            {
-              "name": "forecastId",
-              "description": "The unique identifier for the weather forecast entry."
+              "name": "ingredientId",
+              "description": "The unique identifier of the ingredient."
             }
           ]
         }
@@ -1552,35 +1480,39 @@
           "schema": {
             "$ref": "#/backend/entities/CyclingClothingItem"
           },
-          "description": "Collection of the user's cycling apparel inventory. Each document includes the 'userId' for authorization independence.",
+          "description": "Inventories a user's cycling apparel. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who owns the clothing item."
             },
             {
               "name": "itemId",
-              "description": "The unique identifier for the cycling clothing item."
+              "description": "The unique identifier of the clothing item."
             }
           ]
         }
       },
       {
-        "path": "/users/{userId}/bikeSetups/{setupId}",
+        "path": "/users/{userId}/bikes/{bikeId}/tirePressureSetups/{setupId}",
         "definition": {
-          "entityName": "BikeSetup",
+          "entityName": "TirePressureSetup",
           "schema": {
-            "$ref": "#/backend/entities/BikeSetup"
+            "$ref": "#/backend/entities/TirePressureSetup"
           },
-          "description": "Collection of saved tire pressure setups for a user's bikes. Each document includes the 'userId' and 'bikeId' for authorization and direct reference, ensuring independence.",
+          "description": "Stores user-defined tire pressure settings for a specific bike. Includes denormalized 'userId' and 'bikeId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who owns this setup."
+            },
+            {
+              "name": "bikeId",
+              "description": "The unique identifier of the parent bike."
             },
             {
               "name": "setupId",
-              "description": "The unique identifier for the bike setup."
+              "description": "The unique identifier of the tire pressure setup."
             }
           ]
         }
@@ -1592,55 +1524,143 @@
           "schema": {
             "$ref": "#/backend/entities/Plant"
           },
-          "description": "Collection of indoor plants owned by a user. Each document includes the 'userId' for authorization independence.",
+          "description": "Manages a user's indoor plants. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who owns the plant."
             },
             {
               "name": "plantId",
-              "description": "The unique identifier for the plant."
+              "description": "The unique identifier of the plant."
             }
           ]
         }
       },
       {
-        "path": "/users/{userId}/plantActionLogs/{logId}",
+        "path": "/users/{userId}/plants/{plantId}/plantActions/{actionId}",
         "definition": {
-          "entityName": "PlantActionLog",
+          "entityName": "PlantAction",
           "schema": {
-            "$ref": "#/backend/entities/PlantActionLog"
+            "$ref": "#/backend/entities/PlantAction"
           },
-          "description": "Collection of care actions recorded for a user's plants. Each document includes 'userId' and 'plantId' for authorization and direct reference, ensuring independence.",
+          "description": "Logs actions performed on a specific plant. Includes denormalized 'userId' and 'plantId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who performed the action."
             },
             {
-              "name": "logId",
-              "description": "The unique identifier for the plant action log entry."
+              "name": "plantId",
+              "description": "The unique identifier of the parent plant."
+            },
+            {
+              "name": "actionId",
+              "description": "The unique identifier of the plant action."
             }
           ]
         }
       },
       {
-        "path": "/users/{userId}/budgetCategories/{categoryId}",
+        "path": "/users/{userId}/pantryItems/{pantryItemId}",
         "definition": {
-          "entityName": "BudgetCategory",
+          "entityName": "PantryItem",
           "schema": {
-            "$ref": "#/backend/entities/BudgetCategory"
+            "$ref": "#/backend/entities/PantryItem"
           },
-          "description": "Collection of user-defined financial budget categories. Each document includes the 'userId' for authorization independence.",
+          "description": "Tracks items in the user's pantry. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who owns the pantry item."
+            },
+            {
+              "name": "pantryItemId",
+              "description": "The unique identifier of the pantry item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/shoppingListItems/{shoppingListItemId}",
+        "definition": {
+          "entityName": "ShoppingListItem",
+          "schema": {
+            "$ref": "#/backend/entities/ShoppingListItem"
+          },
+          "description": "Manages items on the user's shopping list. Includes denormalized 'userId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who owns the shopping list item."
+            },
+            {
+              "name": "shoppingListItemId",
+              "description": "The unique identifier of the shopping list item."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/expenseCategories/{categoryId}",
+        "definition": {
+          "entityName": "ExpenseCategory",
+          "schema": {
+            "$ref": "#/backend/entities/ExpenseCategory"
+          },
+          "description": "Defines custom expense categories for a user. Includes denormalized 'userId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who owns the expense category."
             },
             {
               "name": "categoryId",
-              "description": "The unique identifier for the budget category."
+              "description": "The unique identifier of the expense category."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/monthlyBudgets/{monthlyBudgetId}",
+        "definition": {
+          "entityName": "MonthlyBudget",
+          "schema": {
+            "$ref": "#/backend/entities/MonthlyBudget"
+          },
+          "description": "Sets monthly financial budgets for a user. Includes denormalized 'userId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who owns the monthly budget."
+            },
+            {
+              "name": "monthlyBudgetId",
+              "description": "The unique identifier of the monthly budget."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/users/{userId}/monthlyBudgets/{monthlyBudgetId}/budgetAllocations/{allocationId}",
+        "definition": {
+          "entityName": "BudgetAllocation",
+          "schema": {
+            "$ref": "#/backend/entities/BudgetAllocation"
+          },
+          "description": "Allocates budgeted amounts for specific categories within a monthly budget. Includes denormalized 'userId' and 'monthlyBudgetId' for authorization independence.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique identifier of the user who owns this allocation."
+            },
+            {
+              "name": "monthlyBudgetId",
+              "description": "The unique identifier of the parent monthly budget."
+            },
+            {
+              "name": "allocationId",
+              "description": "The unique identifier of the budget allocation."
             }
           ]
         }
@@ -1652,15 +1672,15 @@
           "schema": {
             "$ref": "#/backend/entities/Expense"
           },
-          "description": "Collection of personal financial expenses recorded by a user. Each document includes 'userId' and 'budgetCategoryId' for authorization and direct reference, ensuring independence.",
+          "description": "Records individual financial expenditures. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who made the expense."
             },
             {
               "name": "expenseId",
-              "description": "The unique identifier for the expense."
+              "description": "The unique identifier of the expense."
             }
           ]
         }
@@ -1672,35 +1692,15 @@
           "schema": {
             "$ref": "#/backend/entities/Task"
           },
-          "description": "Collection of domestic tasks and reminders for a user. Each document includes 'userId' and 'categoryId' for authorization and direct reference, ensuring independence.",
+          "description": "Manages personal tasks and reminders. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who owns the task."
             },
             {
               "name": "taskId",
-              "description": "The unique identifier for the task."
-            }
-          ]
-        }
-      },
-      {
-        "path": "/users/{userId}/taskCategories/{categoryId}",
-        "definition": {
-          "entityName": "TaskCategory",
-          "schema": {
-            "$ref": "#/backend/entities/TaskCategory"
-          },
-          "description": "Collection of user-defined categories for tasks. Each document includes the 'userId' for authorization independence.",
-          "params": [
-            {
-              "name": "userId",
-              "description": "The unique identifier of the user."
-            },
-            {
-              "name": "categoryId",
-              "description": "The unique identifier for the task category."
+              "description": "The unique identifier of the task."
             }
           ]
         }
@@ -1712,15 +1712,15 @@
           "schema": {
             "$ref": "#/backend/entities/HealthMetric"
           },
-          "description": "Collection of daily health and well-being metrics for a user. Each document includes the 'userId' for authorization independence.",
+          "description": "Tracks various personal health and wellness metrics over time. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who recorded the metric."
             },
             {
               "name": "metricId",
-              "description": "The unique identifier for the health metric entry."
+              "description": "The unique identifier of the health metric entry."
             }
           ]
         }
@@ -1732,20 +1732,20 @@
           "schema": {
             "$ref": "#/backend/entities/HealthGoal"
           },
-          "description": "Collection of personal health and well-being goals set by a user. Each document includes the 'userId' for authorization independence.",
+          "description": "Defines specific health-related objectives for a user. Includes denormalized 'userId' for authorization independence.",
           "params": [
             {
               "name": "userId",
-              "description": "The unique identifier of the user."
+              "description": "The unique identifier of the user who set the health goal."
             },
             {
               "name": "goalId",
-              "description": "The unique identifier for the health goal."
+              "description": "The unique identifier of the health goal."
             }
           ]
         }
       }
     ],
-    "reasoning": "The recommended Firestore data structure adheres strictly to the CORE DESIGN PRINCIPLES and DESIGN STRATEGY MANDATES to ensure a secure, scalable, and easily debuggable architecture. The primary strategy employed is **Structural Segregation** and **Authorization Independence via Denormalization**.\n\nAll user-specific data is organized under a top-level collection `/users/{userId}`. Each document within these user-specific subcollections (e.g., `/users/{userId}/activities/{activityId}`) explicitly includes the `userId` field in its data. This denormalization is **CRITICAL** for Authorization Independence. It eliminates the need for `get()` operations in Firestore Security Rules to check parent documents for ownership, which would break atomic operations and introduce performance overhead. Instead, rules can simply verify `request.auth.uid == resource.data.userId`.\n\nThis structure also naturally supports **Query Against Principals (QAPs)**. Since all documents within a user's subcollection belong exclusively to that user, any `list` operation performed on a path like `/users/{userId}/activities` will inherently only return data owned by `request.auth.uid`. There is no need for complex rule-based filtering, which is notoriously inefficient and insecure if misconfigured.\n\n**Key aspects of the design:**\n\n1.  **Rooted in User UID:** Every piece of personal data resides under a path `/users/{userId}/...`. The `UserProfile` itself is a document at `/users/{userId}`.\n2.  **Explicit Ownership:** Each document within user-specific subcollections contains a `userId` field, serving as a denormalized ownership attribute. This makes security rules simple and highly performant (`allow read, write: if request.auth.uid == resource.data.userId;`).\n3.  **Flat Subcollections:** While entities like `Component` logically belong to a `Bike`, they are placed as direct subcollections of `/users/{userId}/components/{componentId}` rather than deeply nested (`/users/{userId}/bikes/{bikeId}/components/{componentId}`). This avoids overly deep paths, simplifies rule writing, and makes data access more flexible without complex parent traversals.\n4.  **Descriptive Wildcards:** Wildcards in paths are semantically named (e.g., `{userId}`, `{activityId}`) for clarity and debuggability.\n5.  **Status Fields:** Entities with lifecycle states (e.g., `TrainingGoal.status`, `Task.status`) utilize a single, explicit `status` field, adhering to the principle of Explicit State Modeling.\n6.  **DBAC Alignment:** Authorization relies solely on `request.auth.uid` and the `userId` field within documents, aligning with Database-Backed Access Control. There are no custom claims used for authorization.\n\nThis architecture provides a robust foundation for `LifeCycle Pro`, ensuring that data is securely isolated, easy to query, and straightforward to manage from a rules perspective, while remaining scalable for future multi-user enhancements (which would involve adding explicit membership maps or global roles to shared data if introduced)."
+    "reasoning": "The recommended Firestore data structure adheres strictly to the CORE DESIGN PRINCIPLES and DESIGN STRATEGY MANDATES, prioritizing security, scalability, and debuggability for a personal all-in-one application. The central strategy is **Path-Based Ownership** and **Structural Segregation**, nesting all user-specific data directly under a dedicated user document path: `/users/{userId}/`. This approach intrinsically links data ownership to the authenticated user's ID, simplifying security rules and ensuring strict data isolation.\n\n**Authorization Independence (CRITICAL):** By making all collections subcollections of `/users/{userId}/`, the authorization context (`request.auth.uid`) is directly available as the `{userId}` wildcard in the path. Every document in these subcollections includes a `userId` field (e.g., `Activity.userId`, `TrainingPlan.userId`, `Bike.userId`). This denormalization means that security rules can always verify `request.auth.uid == userId` against the document's own data and the path parameter, without needing expensive and complex `get()` calls to parent documents to ascertain ownership. For deeply nested subcollections like `trainingSessions` or `components`, the immediate parent's ID (`trainingPlanId`, `bikeId`) is also denormalized into the child document. This allows atomic operations and avoids hierarchical authorization dependencies.\n\n**Structural Segregation (Homogeneous Security Posture):** All documents within any given collection (e.g., `/users/{userId}/activities`, `/users/{userId}/recipes`) share the exact same security requirements: they are owned by the `{userId}` in the path. This eliminates the need for complex conditional logic within rules to differentiate access levels for documents within the same collection, making rules simpler, more robust, and easier to debug.\n\n**QAPs (Rules are not Filters):** This structure naturally supports Queryable Access Patterns (QAPs). When a client queries a collection like `/users/YOUR_UID/activities`, Firestore's security rules can directly enforce that `request.auth.uid` must match `YOUR_UID`. This means that `list` operations automatically receive only the data the user is authorized to see, eliminating the possibility of accidentally querying unauthorized data or relying on client-side filtering for security. The rules explicitly grant read/write access only if `request.auth.uid` matches the `{userId}` wildcard in the path, which in turn matches the `userId` field within each document.\n\n**Access Modeling:**\n*   **Private Data:** All data is treated as private and user-owned, stored under `/users/{userId}/...`. This leverages Path-Based ownership for maximum simplicity and security.\n*   **Hierarchical Paths for User-Owned Data:** Entities with `1:N` relationships to a `User` (e.g., `Activities`, `Bikes`, `Recipes`) are placed directly under the user's path. Further nested `1:N` relationships (e.g., `Components` under `Bikes`, `TrainingSessions` under `TrainingPlans`) continue this hierarchical path, maintaining clear ownership and authorization context.\n\n**Invariants:** The `userId` field is explicitly included in every top-level user-owned document and in first-level nested subcollection documents (e.g., `TrainingSession`, `Component`). This field acts as a strong invariant, allowing security rules to verify that the `userId` in the path matches the `userId` in the document, preventing data corruption or unauthorized writes where a document might be created or moved under the wrong user's path.\n\nThis design ensures that security rules are minimal, highly declarative, and easy to audit, directly mapping to the database structure. It inherently supports future scalability for multi-user environments by providing isolated data silos for each user, with the potential to introduce shared data patterns (e.g., collaborative recipes) through additional denormalization (e.g., `members` map) if required, without breaking the core per-user isolation."
   }
 }
