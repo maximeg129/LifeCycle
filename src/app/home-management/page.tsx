@@ -1,3 +1,4 @@
+
 "use client"
 
 import React, { useState, useMemo } from 'react'
@@ -37,7 +38,7 @@ import { useToast } from '@/hooks/use-toast'
 import { identifyPlant } from '@/ai/flows/identify-plant-flow'
 import { useUser, useFirestore, useCollection } from '@/firebase'
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, query, where, Timestamp } from 'firebase/firestore'
-import { format, addDays, isBefore, isToday, differenceInDays } from 'date-fns'
+import { format, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 
@@ -231,7 +232,7 @@ export default function HomeManagementPage() {
                       <h3 className="text-2xl font-bold tracking-tight leading-none">{task.name}</h3>
                       <div className="flex gap-4 text-[11px] font-bold text-muted-foreground uppercase tracking-widest">
                         <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5" /> {task.estimatedMinutes} min</span>
-                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {format(new Date(task.nextDueDate.seconds * 1000), 'dd MMM', { locale: fr })}</span>
+                        <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> {task.nextDueDate?.seconds ? format(new Date(task.nextDueDate.seconds * 1000), 'dd MMM', { locale: fr }) : 'N/A'}</span>
                       </div>
                     </div>
                     <Button 
@@ -241,7 +242,8 @@ export default function HomeManagementPage() {
                       Marquer comme fait
                     </Button>
                   </Card>
-                ))}
+                ))
+              )}
             </div>
           </TabsContent>
 
