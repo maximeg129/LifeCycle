@@ -44,7 +44,7 @@ export default function PricingPage() {
   ]
 
   return (
-    <div className="min-h-screen bg-white text-[#1A1A1A] font-body flex flex-col items-center py-20 px-6">
+    <div className="min-h-screen bg-background text-foreground font-body flex flex-col items-center py-20 px-6">
       <Link href="/" className="mb-12 flex items-center gap-2">
         <div className="w-8 h-8 bg-[#1A1A1A] rounded-lg flex items-center justify-center">
           <CheckCircle2 className="w-5 h-5 text-white" />
@@ -59,7 +59,7 @@ export default function PricingPage() {
 
       {/* Toggle */}
       <div className="flex items-center gap-4 mb-16">
-        <span className={cn("text-sm font-medium transition-colors", !isAnnual ? "text-[#1A1A1A]" : "text-gray-400")}>Mensuel</span>
+        <span className={cn("text-sm font-medium transition-colors", !isAnnual ? "text-foreground" : "text-gray-400")}>Mensuel</span>
         <button
           onClick={() => setIsAnnual(!isAnnual)}
           className="w-12 h-6 bg-gray-100 rounded-full relative p-1 transition-all"
@@ -69,7 +69,7 @@ export default function PricingPage() {
             isAnnual ? "translate-x-6" : "translate-x-0"
           )} />
         </button>
-        <span className={cn("text-sm font-medium transition-colors", isAnnual ? "text-[#1A1A1A]" : "text-gray-400")}>
+        <span className={cn("text-sm font-medium transition-colors", isAnnual ? "text-foreground" : "text-gray-400")}>
           Annuel <Badge className="ml-2 bg-[#4F6EF7]/10 text-[#4F6EF7] border-none text-[10px]">-35%</Badge>
         </span>
       </div>
@@ -83,7 +83,7 @@ export default function PricingPage() {
               "relative p-8 rounded-[32px] border transition-all",
               plan.popular
                 ? "border-[#4F6EF7] shadow-[0_32px_64px_-16px_rgba(79,110,247,0.15)] ring-1 ring-[#4F6EF7]"
-                : "border-gray-100 shadow-sm"
+                : "border-border shadow-sm"
             )}
           >
             {plan.popular && (
@@ -105,7 +105,7 @@ export default function PricingPage() {
 
             <Button asChild className={cn(
               "w-full rounded-xl py-6 mb-8",
-              plan.popular ? "bg-[#4F6EF7] hover:bg-[#4F6EF7]/90 text-white" : "bg-white border border-gray-200 text-[#1A1A1A] hover:bg-gray-50"
+              plan.popular ? "bg-[#4F6EF7] hover:bg-[#4F6EF7]/90 text-white" : "bg-card border border-border text-foreground hover:bg-muted"
             )}>
               <Link href={plan.href}>{plan.cta}</Link>
             </Button>
