@@ -40,7 +40,7 @@ import {
 import Image from 'next/image'
 import { useToast } from '@/hooks/use-toast'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useUser, useFirestore, useCollection } from '@/firebase'
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
 import { collection, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -58,7 +58,11 @@ export default function NutritionPage() {
 
   // Firestore Recipes
   const recipesPath = user ? `users/${user.uid}/recipes` : null
-  const { data: recipes, loading: loadingRecipes } = useCollection(recipesPath)
+  const recipesRef = useMemoFirebase(() => {
+    if (!recipesPath || !db) return null
+    return collection(db, recipesPath)
+  }, [db, recipesPath])
+  const { data: recipes, isLoading: loadingRecipes } = useCollection(recipesRef)
 
   const handleAddRecipe = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()

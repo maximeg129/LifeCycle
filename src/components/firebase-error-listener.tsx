@@ -9,15 +9,17 @@ import { errorEmitter } from '@/firebase/error-emitter';
  */
 export function FirebaseErrorListener() {
   useEffect(() => {
-    const unsubscribe = errorEmitter.on('permission-error', (error) => {
-      // On jette l'erreur de manière asynchrone pour qu'elle remonte au top-level
-      // sans bloquer le thread React actuel.
+    const handler = (error: Error) => {
       setTimeout(() => {
         throw error;
       }, 0);
-    });
+    };
 
-    return () => unsubscribe();
+    errorEmitter.on('permission-error', handler);
+
+    return () => {
+      errorEmitter.off('permission-error', handler);
+    };
   }, []);
 
   return null;
