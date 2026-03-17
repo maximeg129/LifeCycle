@@ -221,7 +221,7 @@ export default function HomeManagementPage() {
                 </div>
               ) : (
                 sortedTasks.map((task) => (
-                  <Card key={task.id} className="apple-card border-none p-8 flex flex-col justify-between h-full bg-white/50 backdrop-blur-sm">
+                  <Card key={task.id} className="apple-card border-none p-8 flex flex-col justify-between h-full">
                     <div className="space-y-6">
                       <div className="flex justify-between items-start">
                         <Badge variant="outline" className="bg-primary/5 text-primary font-bold px-4 py-1.5 rounded-full text-[10px] uppercase tracking-widest border-none">
@@ -304,7 +304,7 @@ export default function HomeManagementPage() {
                   { name: "Pothos Argenté", id: 3, health: 78, status: "Stable" },
                   { name: "Ficus Lyrata", id: 4, health: 65, status: "Surveiller" },
                 ].map((plant) => (
-                  <div key={plant.id} className="apple-card border-none overflow-hidden group bg-white">
+                  <div key={plant.id} className="apple-card border-none overflow-hidden group">
                     <div className="h-64 relative">
                       <Image src={`https://picsum.photos/seed/plant-${plant.id}/500/500`} alt={plant.name} fill className="object-cover transition-transform duration-1000 group-hover:scale-105" />
                       <div className="absolute top-4 right-4">
