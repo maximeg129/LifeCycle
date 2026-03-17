@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -57,6 +57,7 @@ export default function HomeManagementPage() {
 
   const [room, setRoom] = useState("Cuisine")
   const [priority, setPriority] = useState<string>("medium")
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const tasksPath = user ? `users/${user.uid}/tasks` : null
   const tasksQuery = useMemoFirebase(() => {
@@ -200,6 +201,24 @@ export default function HomeManagementPage() {
           </Dialog>
         </header>
 
+        {/* Input file hors Dialog pour garantir le geste utilisateur */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            if (file) {
+              const reader = new FileReader()
+              reader.onloadend = () => setPreviewUrl(reader.result as string)
+              reader.readAsDataURL(file)
+            }
+            // Reset so the same file can be re-selected
+            if (fileInputRef.current) fileInputRef.current.value = ''
+          }}
+        />
+
         <Tabs defaultValue="dashboard" value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           <TabsList className="bg-secondary/50 p-1.5 rounded-[20px] w-fit border border-border/40">
             <TabsTrigger value="dashboard" className="px-10 py-3 rounded-2xl data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-lg font-bold transition-all">
@@ -251,7 +270,7 @@ export default function HomeManagementPage() {
 
           <TabsContent value="plants" className="space-y-8 animate-in fade-in duration-500">
              <div className="flex justify-end mb-8">
-                <Dialog>
+                <Dialog onOpenChange={(open) => { if (!open) { setPreviewUrl(null); setScanResult(null) } }}>
                     <DialogTrigger asChild>
                       <Button className="rounded-full h-14 px-8 bg-green-500 text-white font-bold shadow-xl shadow-green-500/20 hover:bg-green-600 transition-all active:scale-95">
                         <Camera className="w-5 h-5 mr-2" /> Identification IA
@@ -266,16 +285,8 @@ export default function HomeManagementPage() {
                         <div className="w-full aspect-square bg-secondary/30 rounded-[32px] flex items-center justify-center overflow-hidden relative border-2 border-dashed border-border">
                           {previewUrl ? <Image src={previewUrl} alt="Preview" fill className="object-cover" /> : <Camera className="w-16 h-16 text-muted-foreground/30" />}
                         </div>
-                        <input type="file" accept="image/*" className="hidden" id="plant-photo" onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) {
-                            const reader = new FileReader()
-                            reader.onloadend = () => setPreviewUrl(reader.result as string)
-                            reader.readAsDataURL(file)
-                          }
-                        }} />
                         <div className="grid grid-cols-1 w-full gap-4">
-                          <Button variant="outline" onClick={() => document.getElementById('plant-photo')?.click()} className="w-full h-14 rounded-2xl border-border bg-transparent font-bold">
+                          <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="w-full h-14 rounded-2xl border-border bg-transparent font-bold">
                             {previewUrl ? "Changer la photo" : "Prendre une photo"}
                           </Button>
                           {previewUrl && !scanResult && (
