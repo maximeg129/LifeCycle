@@ -64,7 +64,7 @@ export default function HomeManagementPage() {
     return query(collection(db, tasksPath), where("isActive", "==", true))
   }, [db, tasksPath])
   
-  const { data: tasks, loading: loadingTasks } = useCollection(tasksQuery)
+  const { data: tasks, isLoading: loadingTasks } = useCollection(tasksQuery)
 
   const sortedTasks = useMemo(() => {
     if (!tasks) return []

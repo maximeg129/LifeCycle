@@ -48,7 +48,7 @@ export default function LandingPage() {
           <div className="w-9 h-9 bg-foreground rounded-[10px] flex items-center justify-center shadow-lg">
             <CheckCircle2 className="w-5 h-5 text-background" />
           </div>
-          <span className="text-xl font-bold tracking-tight">Homly <span className="font-light opacity-40">Pro</span></span>
+          <span className="text-xl font-bold tracking-tight">LifeCycle <span className="font-light opacity-40">Pro</span></span>
         </div>
 
         <div className="hidden md:flex items-center gap-10 text-[13px] font-semibold tracking-wide opacity-70">
@@ -81,7 +81,7 @@ export default function LandingPage() {
             <Link href="/register">Commencer gratuitement</Link>
           </Button>
           <Button variant="ghost" size="lg" className="rounded-full h-16 px-12 text-lg font-semibold hover:bg-muted/50" onClick={() => document.getElementById('features')?.scrollIntoView({ behavior: 'smooth' })}>
-            Découvrir Homly <ArrowRight className="ml-2 w-5 h-5" />
+            Découvrir LifeCycle <ArrowRight className="ml-2 w-5 h-5" />
           </Button>
         </div>
       </section>
@@ -111,7 +111,7 @@ export default function LandingPage() {
         <ShieldCheck className="w-16 h-16 mx-auto text-primary/20 mb-12" />
         <h2 className="text-5xl md:text-[80px] font-bold tracking-tighter mb-12 leading-none">Prêt pour le prochain niveau ?</h2>
         <p className="text-xl text-muted-foreground mb-16 max-w-2xl mx-auto leading-relaxed opacity-70">
-          Rejoignez ceux qui ne laissent rien au hasard. Homly est gratuit pour commencer, exceptionnel pour performer.
+          Rejoignez ceux qui ne laissent rien au hasard. LifeCycle est gratuit pour commencer, exceptionnel pour performer.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
           <Button asChild size="lg" className="rounded-full h-20 px-16 text-xl font-bold shadow-2xl bg-foreground text-background transition-all hover:scale-[1.03]">
@@ -130,7 +130,7 @@ export default function LandingPage() {
               <div className="w-9 h-9 bg-foreground rounded-lg flex items-center justify-center">
                 <CheckCircle2 className="w-5 h-5 text-background" />
               </div>
-              <span className="font-bold text-xl tracking-tight">Homly</span>
+              <span className="font-bold text-xl tracking-tight">LifeCycle</span>
             </div>
             <p className="text-sm text-muted-foreground opacity-60">Votre vie, enfin organisée.</p>
           </div>
@@ -138,7 +138,7 @@ export default function LandingPage() {
             <Link href="#" className="hover:opacity-100 transition-opacity">Confidentialité</Link>
             <Link href="#" className="hover:opacity-100 transition-opacity">Contact</Link>
           </div>
-          <p className="text-sm text-muted-foreground opacity-40">© 2024 Homly Inc.</p>
+          <p className="text-sm text-muted-foreground opacity-40">© 2026 LifeCycle Pro.</p>
         </div>
       </footer>
     </div>

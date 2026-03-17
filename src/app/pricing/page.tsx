@@ -1,4 +1,3 @@
-
 "use client"
 
 import React, { useState } from 'react'
@@ -13,32 +12,32 @@ export default function PricingPage() {
 
   const plans = [
     {
-      name: "Free",
+      name: "Gratuit",
       price: 0,
-      description: "Ideal for individuals or small apartments.",
+      description: "Idéal pour les particuliers ou petits espaces.",
       features: [
-        "Up to 10 tasks",
-        "Basic recurrence (weekly / monthly)",
-        "Email reminders only",
-        "1 household member",
+        "Jusqu'à 10 tâches",
+        "Récurrence basique (hebdo / mensuel)",
+        "Rappels par email uniquement",
+        "1 membre du foyer",
       ],
-      cta: "Get started free",
+      cta: "Commencer gratuitement",
       href: "/register",
       popular: false
     },
     {
       name: "Premium",
       price: isAnnual ? 3.25 : 4.99,
-      description: "Perfect for busy families and large homes.",
+      description: "Parfait pour les familles actives et les grands foyers.",
       features: [
-        "Unlimited tasks",
-        "Smart recurrence (custom intervals)",
-        "Push notifications + daily digest",
-        "Up to 5 household members",
-        "Priority support",
-        "No ads"
+        "Tâches illimitées",
+        "Récurrence intelligente (intervalles personnalisés)",
+        "Notifications push + résumé quotidien",
+        "Jusqu'à 5 membres du foyer",
+        "Support prioritaire",
+        "Sans publicité"
       ],
-      cta: "Start 14-day free trial",
+      cta: "Essai gratuit 14 jours",
       href: "/register?plan=premium",
       popular: true
     }
@@ -50,18 +49,18 @@ export default function PricingPage() {
         <div className="w-8 h-8 bg-[#1A1A1A] rounded-lg flex items-center justify-center">
           <CheckCircle2 className="w-5 h-5 text-white" />
         </div>
-        <span className="text-xl font-bold tracking-tight">Homly</span>
+        <span className="text-xl font-bold tracking-tight">LifeCycle</span>
       </Link>
 
       <header className="text-center max-w-2xl mb-12">
-        <h1 className="text-4xl md:text-5xl font-bold mb-4">Simple, fair pricing.</h1>
-        <p className="text-gray-500 text-lg">Choose the plan that fits your household's rhythm.</p>
+        <h1 className="text-4xl md:text-5xl font-bold mb-4">Des tarifs simples et justes.</h1>
+        <p className="text-gray-500 text-lg">Choisissez le plan qui correspond au rythme de votre foyer.</p>
       </header>
 
       {/* Toggle */}
       <div className="flex items-center gap-4 mb-16">
-        <span className={cn("text-sm font-medium transition-colors", !isAnnual ? "text-[#1A1A1A]" : "text-gray-400")}>Monthly</span>
-        <button 
+        <span className={cn("text-sm font-medium transition-colors", !isAnnual ? "text-[#1A1A1A]" : "text-gray-400")}>Mensuel</span>
+        <button
           onClick={() => setIsAnnual(!isAnnual)}
           className="w-12 h-6 bg-gray-100 rounded-full relative p-1 transition-all"
         >
@@ -71,36 +70,36 @@ export default function PricingPage() {
           )} />
         </button>
         <span className={cn("text-sm font-medium transition-colors", isAnnual ? "text-[#1A1A1A]" : "text-gray-400")}>
-          Annually <Badge className="ml-2 bg-[#4F6EF7]/10 text-[#4F6EF7] border-none text-[10px]">Save 35%</Badge>
+          Annuel <Badge className="ml-2 bg-[#4F6EF7]/10 text-[#4F6EF7] border-none text-[10px]">-35%</Badge>
         </span>
       </div>
 
       {/* Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl w-full">
         {plans.map((plan) => (
-          <div 
+          <div
             key={plan.name}
             className={cn(
               "relative p-8 rounded-[32px] border transition-all",
-              plan.popular 
-                ? "border-[#4F6EF7] shadow-[0_32px_64px_-16px_rgba(79,110,247,0.15)] ring-1 ring-[#4F6EF7]" 
+              plan.popular
+                ? "border-[#4F6EF7] shadow-[0_32px_64px_-16px_rgba(79,110,247,0.15)] ring-1 ring-[#4F6EF7]"
                 : "border-gray-100 shadow-sm"
             )}
           >
             {plan.popular && (
               <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#4F6EF7] text-white text-[10px] font-bold uppercase tracking-widest px-4 py-1.5 rounded-full">
-                Most popular
+                Le plus populaire
               </div>
             )}
             <div className="mb-8">
               <h3 className="text-2xl font-bold mb-2">{plan.name}</h3>
               <p className="text-sm text-gray-400 mb-6">{plan.description}</p>
               <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-bold">€{plan.price}</span>
-                <span className="text-gray-400 text-sm">/month</span>
+                <span className="text-4xl font-bold">{plan.price}€</span>
+                <span className="text-gray-400 text-sm">/mois</span>
               </div>
               {plan.price > 0 && isAnnual && (
-                <p className="text-xs text-[#4F6EF7] mt-1 font-medium">Billed annually (€39/year)</p>
+                <p className="text-xs text-[#4F6EF7] mt-1 font-medium">Facturé annuellement (39€/an)</p>
               )}
             </div>
 
@@ -125,7 +124,7 @@ export default function PricingPage() {
         ))}
       </div>
 
-      <p className="mt-16 text-gray-400 text-sm">No credit card required for free plan. Cancel anytime.</p>
+      <p className="mt-16 text-gray-400 text-sm">Aucune carte de crédit requise pour le plan gratuit. Annulation à tout moment.</p>
     </div>
   )
 }

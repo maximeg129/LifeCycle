@@ -39,7 +39,7 @@ export default function RegisterPage() {
       if (userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name })
       }
-      toast({ title: "Compte créé !", description: "Bienvenue sur Homly." })
+      toast({ title: "Compte créé !", description: "Bienvenue sur LifeCycle." })
       router.push('/home-management')
     } catch (error: any) {
       console.error("Registration error:", error)
@@ -58,7 +58,7 @@ export default function RegisterPage() {
     try {
       const result = await signInWithPopup(auth, provider)
       if (result.user) {
-        toast({ title: "Succès", description: "Bienvenue sur Homly !" })
+        toast({ title: "Succès", description: "Bienvenue sur LifeCycle !" })
         router.push('/home-management')
       }
     } catch (error: any) {
@@ -81,7 +81,7 @@ export default function RegisterPage() {
         <div className="w-12 h-12 bg-foreground rounded-[14px] flex items-center justify-center shadow-lg group-hover:scale-105 transition-transform">
           <CheckCircle2 className="w-7 h-7 text-background" />
         </div>
-        <span className="text-2xl font-bold tracking-tighter">Homly</span>
+        <span className="text-2xl font-bold tracking-tighter">LifeCycle</span>
       </Link>
 
       <div className="w-full max-w-[420px] bg-white rounded-[32px] p-10 shadow-[0_20px_50px_rgba(0,0,0,0.05)] border border-gray-100">

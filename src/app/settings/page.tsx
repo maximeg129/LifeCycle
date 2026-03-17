@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { useUser, useFirestore, useDoc } from '@/firebase';
+import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { ShieldCheck, ExternalLink, Save, Loader2, Key, User } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -19,8 +19,11 @@ export default function SettingsPage() {
   const db = useFirestore();
   const { toast } = useToast();
   
-  const settingsPath = user ? `users/${user.uid}/settings/intervals` : null;
-  const { data: settings, loading: loadingSettings } = useDoc(settingsPath);
+  const settingsRef = useMemoFirebase(() => {
+    if (!user || !db) return null
+    return doc(db, `users/${user.uid}/settings/intervals`)
+  }, [db, user])
+  const { data: settings, isLoading: loadingSettings } = useDoc(settingsRef);
 
   const [athleteId, setAthleteId] = useState('');
   const [apiKey, setApiKey] = useState('');

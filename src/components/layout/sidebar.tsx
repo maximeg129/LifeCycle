@@ -145,7 +145,7 @@ export function AppNavigation() {
         </header>
 
         <nav className="fixed bottom-0 left-0 right-0 h-20 bg-white/90 dark:bg-black/90 backdrop-blur-2xl border-t border-border/40 z-40 flex items-center justify-around px-4 pb-2">
-          {navItems.slice(0, 4).concat([{ name: 'Settings', href: '/settings', icon: Settings }]).map((item) => {
+          {navItems.slice(0, 4).concat([{ name: 'Réglages', href: '/settings', icon: Settings }]).map((item) => {
             const isActive = pathname === item.href
             return (
               <Link key={item.href} href={item.href} className="flex flex-col items-center gap-1.5 min-w-[64px]">

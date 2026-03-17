@@ -83,7 +83,7 @@ export default function LoginPage() {
         <div className="w-14 h-14 bg-foreground rounded-[16px] flex items-center justify-center shadow-xl transition-transform group-hover:scale-105">
           <CheckCircle2 className="w-8 h-8 text-background" />
         </div>
-        <span className="text-2xl font-bold tracking-tight">Homly</span>
+        <span className="text-2xl font-bold tracking-tight">LifeCycle</span>
       </Link>
 
       <div className="w-full max-w-[420px] bg-white rounded-[32px] p-10 shadow-[0_30px_60px_rgba(0,0,0,0.06)] border border-gray-100">
