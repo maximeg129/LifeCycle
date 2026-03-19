@@ -12,7 +12,9 @@ import {
   HeartPulse,
   Settings,
   Menu,
-  LogOut
+  LogOut,
+  Home,
+  Flower2
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -25,7 +27,8 @@ const navItems = [
   { name: 'Cyclisme', href: '/cycling', icon: Bike },
   { name: 'Nutrition', href: '/nutrition', icon: CookingPot },
   { name: 'Météo AI', href: '/weather', icon: CloudSun },
-  { name: 'Maison & Plantes', href: '/home-management', icon: Leaf },
+  { name: 'Maison', href: '/home-management', icon: Home },
+  { name: 'Botanica', href: '/botanica', icon: Flower2 },
   { name: 'Vie & Santé', href: '/lifestyle', icon: HeartPulse },
   { name: 'Finances', href: '/finance', icon: Wallet },
 ]
