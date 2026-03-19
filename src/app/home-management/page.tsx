@@ -1,40 +1,36 @@
 "use client"
 
-import React, { useState, useMemo, useRef, useEffect } from 'react'
+import React, { useState, useMemo, useRef } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Textarea } from '@/components/ui/textarea'
+import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription
+  DialogDescription,
+  DialogTrigger
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Leaf,
   Droplets,
   CheckCircle2,
   Plus,
-  AlertTriangle,
   Clock,
   Loader2,
   Calendar,
-  LayoutGrid,
-  Heart,
-  RefreshCw,
-  History,
   Flower2,
-  ShieldAlert,
-  Trash2,
   Camera,
-  Sparkles
+  Sparkles,
+  Trash2
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { identifyPlant } from '@/ai/flows/identify-plant-flow'
@@ -56,7 +52,6 @@ import {
 import { format, addDays, differenceInDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 // --- Utilities ---
 
@@ -166,9 +161,6 @@ export default function HomeManagementPage() {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [plantAnalyses, setPlantAnalyses] = useState<any[]>([])
   const [loadingAnalyses, setLoadingAnalyses] = useState(false)
-  const [isReanalyzing, setIsReanalyzing] = useState(false)
-  const [reanalysisPreviewUrl, setReanalysisPreviewUrl] = useState<string | null>(null)
-  const reanalysisFileInputRef = useRef<HTMLInputElement>(null)
 
   // --- Task handlers ---
   const handleMarkDone = async (task: any) => {
@@ -255,7 +247,7 @@ export default function HomeManagementPage() {
     try {
       const thumbnail = previewUrl ? await compressImage(previewUrl) : null
       const plantRef = doc(collection(db, `users/${user.uid}/plants`))
-      await setDoc(plantRef, {
+      const plantData = {
         nickname: plantNickname || scanResult.name,
         species: scanResult.species,
         location: plantLocation,
@@ -270,7 +262,8 @@ export default function HomeManagementPage() {
         notes: plantNotes,
         userId: user.uid,
         createdAt: serverTimestamp()
-      })
+      }
+      await setDoc(plantRef, plantData)
       await setDoc(doc(collection(db, `users/${user.uid}/plants/${plantRef.id}/analyses`)), {
         ...scanResult,
         photoUrl: thumbnail,
@@ -316,9 +309,11 @@ export default function HomeManagementPage() {
             <h1 className="text-4xl md:text-5xl font-bold tracking-tighter text-gradient">Votre espace personnel</h1>
           </div>
           <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
-            <Button onClick={() => setIsAddTaskOpen(true)} className="rounded-full h-14 px-8 bg-primary text-primary-foreground font-bold shadow-2xl shadow-primary/20">
-              <Plus className="w-5 h-5 mr-2" /> Nouvelle Tâche
-            </Button>
+            <DialogTrigger asChild>
+              <Button onClick={() => setIsAddTaskOpen(true)} className="rounded-full h-14 px-8 bg-primary text-primary-foreground font-bold shadow-2xl shadow-primary/20 transition-all hover:scale-105">
+                <Plus className="w-5 h-5 mr-2" /> Nouvelle Tâche
+              </Button>
+            </DialogTrigger>
             <DialogContent className="sm:max-w-[480px] rounded-[32px] p-8 border-none shadow-3xl">
               <DialogHeader><DialogTitle className="text-2xl font-bold">Nouvelle routine</DialogTitle></DialogHeader>
               <form onSubmit={handleAddTask} className="space-y-6 pt-4">
@@ -327,16 +322,30 @@ export default function HomeManagementPage() {
                   <Input name="taskName" placeholder="ex: Nettoyer la machine à café..." className="rounded-2xl bg-secondary/50 border-none h-14 px-5" required />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <Select value={room} onValueChange={setRoom}><SelectTrigger className="rounded-2xl h-14"><SelectValue /></SelectTrigger>
-                    <SelectContent>{["Cuisine", "Salon", "Chambre", "SdB", "Extérieur", "Général"].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-                  </Select>
-                  <Select value={priority} onValueChange={setPriority}><SelectTrigger className="rounded-2xl h-14"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="low">Basse</SelectItem><SelectItem value="medium">Moyenne</SelectItem><SelectItem value="high">Haute</SelectItem></SelectContent>
-                  </Select>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Pièce</Label>
+                    <Select value={room} onValueChange={setRoom}>
+                      <SelectTrigger className="rounded-2xl h-14"><SelectValue /></SelectTrigger>
+                      <SelectContent>{["Cuisine", "Salon", "Chambre", "SdB", "Extérieur", "Général"].map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Priorité</Label>
+                    <Select value={priority} onValueChange={setPriority}>
+                      <SelectTrigger className="rounded-2xl h-14"><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="low">Basse</SelectItem><SelectItem value="medium">Moyenne</SelectItem><SelectItem value="high">Haute</SelectItem></SelectContent>
+                    </Select>
+                  </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
-                  <Input name="duration" type="number" defaultValue={15} className="rounded-2xl h-14" />
-                  <Input name="recurrenceDays" type="number" defaultValue={7} className="rounded-2xl h-14" />
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Durée (min)</Label>
+                    <Input name="duration" type="number" defaultValue={15} className="rounded-2xl h-14" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Récurrence (jours)</Label>
+                    <Input name="recurrenceDays" type="number" defaultValue={7} className="rounded-2xl h-14" />
+                  </div>
                 </div>
                 <Button type="submit" className="w-full h-16 rounded-2xl font-bold bg-primary text-white" disabled={isSavingTask}>
                   {isSavingTask ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Planifier"}
@@ -352,27 +361,27 @@ export default function HomeManagementPage() {
 
         <Tabs defaultValue="dashboard" value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           <TabsList className="bg-secondary/50 p-1.5 rounded-[20px] w-fit border border-border/40">
-            <TabsTrigger value="dashboard" className="px-10 py-3 rounded-2xl data-[state=active]:bg-card data-[state=active]:text-primary font-bold">Routine</TabsTrigger>
-            <TabsTrigger value="plants" className="relative px-10 py-3 rounded-2xl data-[state=active]:bg-card data-[state=active]:text-primary font-bold">Jardin d'Hiver
-              {overdueCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">{overdueCount}</span>}
+            <TabsTrigger value="dashboard" className="px-10 py-3 rounded-2xl data-[state=active]:bg-card data-[state=active]:text-primary font-bold transition-all">Routine</TabsTrigger>
+            <TabsTrigger value="plants" className="relative px-10 py-3 rounded-2xl data-[state=active]:bg-card data-[state=active]:text-primary font-bold transition-all">Jardin d'Hiver
+              {overdueCount > 0 && <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center animate-pulse shadow-lg">{overdueCount}</span>}
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="dashboard" className="space-y-12 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               {loadingTasks ? Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-64 rounded-[32px] bg-muted/20 animate-pulse" />) : sortedTasks.length === 0 ? (
-                <div className="col-span-full py-32 text-center opacity-40"><CheckCircle2 className="w-16 h-16 mx-auto mb-4" /><p className="font-bold uppercase text-xs">Tout est sous contrôle</p></div>
+                <div className="col-span-full py-32 text-center opacity-40"><CheckCircle2 className="w-16 h-16 mx-auto mb-4" /><p className="font-bold uppercase text-xs tracking-widest">Tout est sous contrôle</p></div>
               ) : sortedTasks.map((task) => (
                 <Card key={task.id} className="apple-card border-none p-8 flex flex-col justify-between h-full">
                   <div className="space-y-6">
                     <div className="flex justify-between items-start">
-                      <Badge variant="outline" className="bg-primary/5 text-primary font-bold rounded-full text-[10px] border-none">{task.room}</Badge>
-                      <div className={cn("w-2 h-2 rounded-full", task.priority === 'high' ? 'bg-red-500' : task.priority === 'medium' ? 'bg-orange-500' : 'bg-green-500')} />
+                      <Badge variant="outline" className="bg-primary/5 text-primary font-bold rounded-full text-[10px] border-none px-3 py-1 uppercase tracking-wider">{task.room}</Badge>
+                      <div className={cn("w-2.5 h-2.5 rounded-full shadow-sm", task.priority === 'high' ? 'bg-red-500' : task.priority === 'medium' ? 'bg-orange-500' : 'bg-green-500')} />
                     </div>
                     <h3 className="text-2xl font-bold tracking-tight">{task.name}</h3>
-                    <div className="flex gap-6 text-[10px] font-bold text-muted-foreground uppercase">
-                      <span className="flex items-center gap-2"><Clock className="w-3.5 h-3.5" /> {task.estimatedMinutes} min</span>
-                      <span className="flex items-center gap-2"><Calendar className="w-3.5 h-3.5" /> {task.nextDueDate?.seconds ? format(new Date(task.nextDueDate.seconds * 1000), 'dd MMM', { locale: fr }) : 'N/A'}</span>
+                    <div className="flex gap-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                      <span className="flex items-center gap-2"><Clock className="w-3.5 h-3.5 opacity-60" /> {task.estimatedMinutes} min</span>
+                      <span className="flex items-center gap-2"><Calendar className="w-3.5 h-3.5 opacity-60" /> {task.nextDueDate?.seconds ? format(new Date(task.nextDueDate.seconds * 1000), 'dd MMM', { locale: fr }) : 'N/A'}</span>
                     </div>
                   </div>
                   <Button onClick={() => handleMarkDone(task)} className="w-full h-14 rounded-2xl bg-secondary text-foreground hover:bg-primary hover:text-white transition-all font-bold mt-10">Terminer</Button>
@@ -383,13 +392,13 @@ export default function HomeManagementPage() {
 
           <TabsContent value="plants" className="space-y-8 animate-in fade-in duration-500">
             <div className="flex justify-end">
-              <Button onClick={() => { resetIdentifyDialog(); setIsIdentifyOpen(true) }} className="rounded-full h-14 px-8 bg-green-500 text-white font-bold">
+              <Button onClick={() => { resetIdentifyDialog(); setIsIdentifyOpen(true) }} className="rounded-full h-14 px-8 bg-green-500 text-white font-bold shadow-xl shadow-green-500/20 hover:scale-105 transition-all">
                 <Camera className="w-5 h-5 mr-2" /> Identification IA
               </Button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
               {loadingPlants ? Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-80 rounded-[32px] bg-muted/20 animate-pulse" />) : !plants || plants.length === 0 ? (
-                <div className="col-span-full py-32 text-center opacity-40"><Flower2 className="w-16 h-16 mx-auto mb-4" /><p className="font-bold uppercase text-xs">Aucune plante suivie</p></div>
+                <div className="col-span-full py-32 text-center opacity-40"><Flower2 className="w-16 h-16 mx-auto mb-4" /><p className="font-bold uppercase text-xs tracking-widest">Aucune plante suivie</p></div>
               ) : (plants as any[]).map((plant) => {
                 const daysUntil = getDaysUntilWatering(plant); const score = plant.healthScore ?? 75
                 return (
@@ -397,14 +406,14 @@ export default function HomeManagementPage() {
                     <div className="h-52 relative bg-gradient-to-br from-green-900/30 to-green-700/10">
                       {plant.thumbnailUrl ? <img src={plant.thumbnailUrl} alt={plant.nickname} className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-105" /> : <div className="w-full h-full flex items-center justify-center"><Leaf className="w-16 h-16 text-green-500/30" /></div>}
                       <div className="absolute top-3 right-3 flex flex-col gap-1.5 items-end">
-                        <Badge className={cn("rounded-full bg-white/95 backdrop-blur font-bold border-none px-3 py-1 text-[10px]", score >= 75 ? 'text-green-600' : score >= 50 ? 'text-orange-500' : 'text-red-500')}>{getHealthLabel(score)}</Badge>
+                        <Badge className={cn("rounded-full bg-white/95 backdrop-blur font-bold border-none px-3 py-1 text-[10px] shadow-sm", score >= 75 ? 'text-green-600' : score >= 50 ? 'text-orange-500' : 'text-red-500')}>{getHealthLabel(score)}</Badge>
                       </div>
                     </div>
                     <div className="p-5 space-y-4">
                       <div><h3 className="font-bold text-lg leading-none">{plant.nickname}</h3><p className="text-xs text-muted-foreground mt-1 italic">{plant.species}</p></div>
                       <div className="space-y-1.5"><div className="flex justify-between text-[10px] font-bold uppercase opacity-40"><span>Santé</span><span className={getHealthColor(score)}>{score}%</span></div><Progress value={score} className="h-1" /></div>
-                      <div className={cn("flex items-center gap-1.5 text-[10px] font-bold uppercase", daysUntil < 0 ? 'text-red-500' : 'text-muted-foreground')}><Droplets className="w-3.5 h-3.5" />{daysUntil < 0 ? `En retard de ${Math.abs(daysUntil)}j` : `Dans ${daysUntil} jours`}</div>
-                      <Button onClick={(e) => handleWater(plant, e)} className="w-full h-11 rounded-2xl bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white font-bold text-sm">Arroser</Button>
+                      <div className={cn("flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest", daysUntil < 0 ? 'text-red-500' : 'text-muted-foreground')}><Droplets className="w-3.5 h-3.5" />{daysUntil < 0 ? `En retard de ${Math.abs(daysUntil)}j` : `Dans ${daysUntil} jours`}</div>
+                      <Button onClick={(e) => handleWater(plant, e)} className="w-full h-11 rounded-2xl bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white font-bold text-sm transition-all shadow-sm">Arroser</Button>
                     </div>
                   </div>
                 )
@@ -419,27 +428,36 @@ export default function HomeManagementPage() {
           <DialogHeader><DialogTitle className="text-2xl font-bold">{identifyStep === 'photo' ? 'Analyse Botanique' : "Confirmer l'ajout"}</DialogTitle></DialogHeader>
           {identifyStep === 'photo' ? (
             <div className="flex flex-col items-center gap-6 py-4">
-              <div className="w-full aspect-square bg-secondary/30 rounded-[28px] flex items-center justify-center overflow-hidden relative border-2 border-dashed border-border cursor-pointer" onClick={() => fileInputRef.current?.click()}>
-                {previewUrl ? <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" /> : <div className="text-center text-muted-foreground/40"><Camera className="w-16 h-16 mx-auto mb-2" /><p className="text-sm font-medium">Prendre une photo</p></div>}
+              <div className="w-full aspect-square bg-secondary/30 rounded-[28px] flex items-center justify-center overflow-hidden relative border-2 border-dashed border-border cursor-pointer transition-all hover:bg-secondary/50 group" onClick={() => fileInputRef.current?.click()}>
+                {previewUrl ? <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" /> : <div className="text-center text-muted-foreground/40 group-hover:scale-110 transition-transform"><Camera className="w-16 h-16 mx-auto mb-2 opacity-20" /><p className="text-sm font-medium">Prendre une photo</p></div>}
               </div>
-              <Button onClick={handleScan} className="w-full h-14 rounded-2xl bg-green-500 text-white font-bold" disabled={isScanning || !previewUrl}>
+              <Button onClick={handleScan} className="w-full h-14 rounded-2xl bg-green-500 text-white font-bold shadow-lg shadow-green-500/20" disabled={isScanning || !previewUrl}>
                 {isScanning ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Sparkles className="w-5 h-5 mr-2" />} Identifier
               </Button>
             </div>
           ) : scanResult && (
             <div className="space-y-5">
-              <div className="bg-green-500/10 p-4 rounded-2xl space-y-2">
-                <p className="font-bold text-lg">{scanResult.name}</p>
-                <p className="text-sm italic text-muted-foreground">{scanResult.species}</p>
-                <p className="text-sm">{scanResult.healthAnalysis}</p>
+              <div className="bg-green-500/10 p-5 rounded-2xl space-y-2 border border-green-500/20">
+                <p className="font-bold text-lg text-green-400">{scanResult.name}</p>
+                <p className="text-xs italic text-muted-foreground opacity-70">{scanResult.species}</p>
+                <p className="text-sm leading-relaxed">{scanResult.healthAnalysis}</p>
               </div>
               <div className="space-y-4">
-                <Input value={plantNickname} onChange={e => setPlantNickname(e.target.value)} placeholder="Surnom" className="h-12 rounded-2xl" />
-                <Select value={plantLocation} onValueChange={setPlantLocation}><SelectTrigger className="h-12 rounded-2xl"><SelectValue /></SelectTrigger>
-                  <SelectContent>{["Salon", "Cuisine", "Chambre", "Salle de bain", "Balcon", "Jardin"].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
-                </Select>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Surnom</Label>
+                  <Input value={plantNickname} onChange={e => setPlantNickname(e.target.value)} placeholder="Surnom" className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Emplacement</Label>
+                  <Select value={plantLocation} onValueChange={setPlantLocation}>
+                    <SelectTrigger className="h-12 rounded-2xl bg-secondary/50 border-none px-5"><SelectValue /></SelectTrigger>
+                    <SelectContent>{["Salon", "Cuisine", "Chambre", "Salle de bain", "Balcon", "Jardin"].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
               </div>
-              <Button onClick={handleSavePlant} className="w-full h-14 rounded-2xl bg-green-500 text-white font-bold" disabled={isSavingPlant}>Ajouter</Button>
+              <Button onClick={handleSavePlant} className="w-full h-14 rounded-2xl bg-green-500 text-white font-bold shadow-xl shadow-green-500/20" disabled={isSavingPlant}>
+                {isSavingPlant ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Ajouter au jardin"}
+              </Button>
             </div>
           )}
         </DialogContent>
@@ -449,18 +467,43 @@ export default function HomeManagementPage() {
         <DialogContent className="sm:max-w-[560px] rounded-[32px] p-0 border-none shadow-3xl overflow-hidden">
           {selectedPlant && (
             <div className="flex flex-col h-full">
-              <div className="h-40 relative bg-gradient-to-br from-green-900/40 to-green-700/20">
+              <div className="h-48 relative bg-gradient-to-br from-green-900/40 to-green-700/20">
                 {selectedPlant.thumbnailUrl && <img src={selectedPlant.thumbnailUrl} alt={selectedPlant.nickname} className="w-full h-full object-cover opacity-60" />}
-                <div className="absolute bottom-4 left-6"><h2 className="text-2xl font-bold">{selectedPlant.nickname}</h2><p className="text-sm text-muted-foreground italic">{selectedPlant.species}</p></div>
-              </div>
-              <div className="p-6 space-y-6">
-                <div className="bg-secondary/30 p-4 rounded-2xl flex justify-between items-center"><span className="text-sm font-bold">État de santé</span><span className={cn("text-sm font-bold", getHealthColor(selectedPlant.healthScore ?? 75))}>{selectedPlant.healthScore ?? 75}%</span></div>
-                <div className="space-y-2"><p className="text-[10px] font-bold uppercase opacity-40">Historique d'analyses</p>
-                  <ScrollArea className="h-40">{loadingAnalyses ? <Loader2 className="w-6 h-6 animate-spin mx-auto" /> : plantAnalyses.map(a => (
-                    <div key={a.id} className="p-3 bg-secondary/20 rounded-xl mb-2 flex justify-between text-xs"><span>{a.analyzedAt?.seconds ? format(new Date(a.analyzedAt.seconds * 1000), 'dd/MM/yy') : '—'}</span><span className={getHealthColor(a.healthScore)}>{a.healthScore}%</span></div>
-                  ))}</ScrollArea>
+                <div className="absolute bottom-6 left-8">
+                  <h2 className="text-3xl font-bold tracking-tight">{selectedPlant.nickname}</h2>
+                  <p className="text-sm text-muted-foreground italic opacity-80">{selectedPlant.species}</p>
                 </div>
-                <Button variant="outline" className="w-full h-12 rounded-2xl border-destructive/20 text-destructive hover:bg-destructive/10" onClick={(e) => { e.stopPropagation(); deleteDoc(doc(db, `users/${user!.uid}/plants`, selectedPlant.id)); setIsDetailOpen(false); toast({ title: "Plante supprimée" }) }}>Supprimer</Button>
+              </div>
+              <div className="p-8 space-y-8">
+                <div className="bg-secondary/30 p-5 rounded-2xl flex justify-between items-center border border-border/40">
+                  <span className="text-sm font-bold opacity-60">État de santé</span>
+                  <span className={cn("text-lg font-bold", getHealthColor(selectedPlant.healthScore ?? 75))}>{selectedPlant.healthScore ?? 75}%</span>
+                </div>
+                <div className="space-y-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest opacity-40">Historique d'analyses</p>
+                  <ScrollArea className="h-48 pr-4">
+                    {loadingAnalyses ? (
+                      <div className="flex justify-center py-10"><Loader2 className="w-6 h-6 animate-spin opacity-20" /></div>
+                    ) : plantAnalyses.map(a => (
+                      <div key={a.id} className="p-4 bg-secondary/20 rounded-2xl mb-3 flex justify-between items-center border border-border/20">
+                        <span className="text-sm font-medium">{a.analyzedAt?.seconds ? format(new Date(a.analyzedAt.seconds * 1000), 'dd MMM yyyy', { locale: fr }) : '—'}</span>
+                        <Badge variant="outline" className={cn("border-none bg-background/50", getHealthColor(a.healthScore))}>{a.healthScore}%</Badge>
+                      </div>
+                    ))}
+                  </ScrollArea>
+                </div>
+                <div className="flex gap-3 pt-4">
+                  <Button variant="outline" className="flex-1 h-14 rounded-2xl border-destructive/20 text-destructive hover:bg-destructive/10 font-bold" onClick={async (e) => { 
+                    e.stopPropagation(); 
+                    if (!user) return;
+                    await deleteDoc(doc(db, `users/${user.uid}/plants`, selectedPlant.id)); 
+                    setIsDetailOpen(false); 
+                    toast({ title: "Plante supprimée" });
+                  }}>
+                    <Trash2 className="w-4 h-4 mr-2" /> Supprimer
+                  </Button>
+                  <Button className="flex-1 h-14 rounded-2xl font-bold" onClick={() => setIsDetailOpen(false)}>Fermer</Button>
+                </div>
               </div>
             </div>
           )}
