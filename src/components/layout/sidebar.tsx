@@ -156,7 +156,7 @@ export function AppNavigation() {
 
         {/* Bottom nav */}
         <nav className="fixed bottom-0 left-0 right-0 h-[72px] bg-background/90 backdrop-blur-2xl border-t border-border/50 z-40 flex items-center justify-around px-2 pb-2 safe-area-bottom">
-          {navItems.slice(0, 4).concat([{ name: 'Réglages', href: '/settings', icon: Settings }]).map((item) => {
+          {[navItems[0], navItems[1], navItems[3], navItems[4], { name: 'Réglages', href: '/settings', icon: Settings }].map((item) => {
             const isActive = pathname === item.href
             return (
               <Link key={item.href} href={item.href} className="flex flex-col items-center gap-1 min-w-[56px] py-1">
