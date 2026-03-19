@@ -7,14 +7,15 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
   DialogTrigger
 } from '@/components/ui/dialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -30,7 +31,10 @@ import {
   Flower2,
   Camera,
   Sparkles,
-  Trash2
+  Trash2,
+  AlertTriangle,
+  Heart,
+  Info
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { identifyPlant } from '@/ai/flows/identify-plant-flow'
@@ -142,8 +146,7 @@ export default function HomeManagementPage() {
 
   // --- Plant identification state ---
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [isIdentifyOpen, setIsIdentifyOpen] = useState(false)
-  const [identifyStep, setIdentifyStep] = useState<'photo' | 'confirm'>('photo')
+  const [isAddPlantOpen, setIsAddPlantOpen] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
   const [scanResult, setScanResult] = useState<IdentifyPlantOutput | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -209,10 +212,9 @@ export default function HomeManagementPage() {
   }
 
   // --- Plant handlers ---
-  const resetIdentifyDialog = () => {
+  const resetAddPlantDialog = () => {
     setPreviewUrl(null)
     setScanResult(null)
-    setIdentifyStep('photo')
     setPlantNickname('')
     setPlantNotes('')
     setPlantLocation('Salon')
@@ -233,7 +235,7 @@ export default function HomeManagementPage() {
       if (daysMatch) setPlantWateringDays(Number(daysMatch[1]))
       const mlMatch = res.hydrationPlan?.amount?.match(/(\d+)/)
       if (mlMatch) setPlantWateringAmount(Number(mlMatch[1]))
-      setIdentifyStep('confirm')
+      // scroll to results — no step change needed in unified flow
     } catch {
       toast({ variant: "destructive", title: "Erreur d'analyse" })
     } finally {
@@ -242,34 +244,40 @@ export default function HomeManagementPage() {
   }
 
   const handleSavePlant = async () => {
-    if (!user || !db || !scanResult) return
+    if (!user || !db) return
+    if (!plantNickname.trim()) {
+      toast({ variant: "destructive", title: "Un surnom est requis" })
+      return
+    }
     setIsSavingPlant(true)
     try {
       const thumbnail = previewUrl ? await compressImage(previewUrl) : null
       const plantRef = doc(collection(db, `users/${user.uid}/plants`))
       const plantData = {
-        nickname: plantNickname || scanResult.name,
-        species: scanResult.species,
+        nickname: plantNickname,
+        species: scanResult?.species ?? '',
         location: plantLocation,
         wateringFrequencyDays: plantWateringDays,
         wateringAmountMl: plantWateringAmount,
         lastWateringDate: plantLastWateringDate ? Timestamp.fromDate(new Date(plantLastWateringDate)) : serverTimestamp(),
         purchaseDate: plantPurchaseDate ? Timestamp.fromDate(new Date(plantPurchaseDate)) : null,
-        healthScore: scanResult.healthScore,
-        healthStatus: getHealthStatus(scanResult.healthScore),
-        lastAnalysisAlerts: scanResult.alerts,
+        healthScore: scanResult?.healthScore ?? 75,
+        healthStatus: getHealthStatus(scanResult?.healthScore ?? 75),
+        lastAnalysisAlerts: scanResult?.alerts ?? [],
         thumbnailUrl: thumbnail,
         notes: plantNotes,
         userId: user.uid,
         createdAt: serverTimestamp()
       }
       await setDoc(plantRef, plantData)
-      await setDoc(doc(collection(db, `users/${user.uid}/plants/${plantRef.id}/analyses`)), {
-        ...scanResult,
-        photoUrl: thumbnail,
-        analyzedAt: serverTimestamp()
-      })
-      setIsIdentifyOpen(false)
+      if (scanResult) {
+        await setDoc(doc(collection(db, `users/${user.uid}/plants/${plantRef.id}/analyses`)), {
+          ...scanResult,
+          photoUrl: thumbnail,
+          analyzedAt: serverTimestamp()
+        })
+      }
+      setIsAddPlantOpen(false)
       toast({ title: "Plante ajoutée" })
     } catch {
       toast({ variant: "destructive", title: "Erreur d'enregistrement" })
@@ -392,8 +400,8 @@ export default function HomeManagementPage() {
 
           <TabsContent value="plants" className="space-y-8 animate-in fade-in duration-500">
             <div className="flex justify-end">
-              <Button onClick={() => { resetIdentifyDialog(); setIsIdentifyOpen(true) }} className="rounded-full h-14 px-8 bg-green-500 text-white font-bold shadow-xl shadow-green-500/20 hover:scale-105 transition-all">
-                <Camera className="w-5 h-5 mr-2" /> Identification IA
+              <Button onClick={() => { resetAddPlantDialog(); setIsAddPlantOpen(true) }} className="rounded-full h-14 px-8 bg-green-500 text-white font-bold shadow-xl shadow-green-500/20 hover:scale-105 transition-all">
+                <Plus className="w-5 h-5 mr-2" /> Ajouter une plante
               </Button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
@@ -423,43 +431,207 @@ export default function HomeManagementPage() {
         </Tabs>
       </main>
 
-      <Dialog open={isIdentifyOpen} onOpenChange={(open) => { setIsIdentifyOpen(open); if (!open) resetIdentifyDialog() }}>
-        <DialogContent className="sm:max-w-[500px] rounded-[32px] p-8 border-none shadow-3xl">
-          <DialogHeader><DialogTitle className="text-2xl font-bold">{identifyStep === 'photo' ? 'Analyse Botanique' : "Confirmer l'ajout"}</DialogTitle></DialogHeader>
-          {identifyStep === 'photo' ? (
-            <div className="flex flex-col items-center gap-6 py-4">
-              <div className="w-full aspect-square bg-secondary/30 rounded-[28px] flex items-center justify-center overflow-hidden relative border-2 border-dashed border-border cursor-pointer transition-all hover:bg-secondary/50 group" onClick={() => fileInputRef.current?.click()}>
-                {previewUrl ? <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" /> : <div className="text-center text-muted-foreground/40 group-hover:scale-110 transition-transform"><Camera className="w-16 h-16 mx-auto mb-2 opacity-20" /><p className="text-sm font-medium">Prendre une photo</p></div>}
+      <Dialog open={isAddPlantOpen} onOpenChange={(open) => { setIsAddPlantOpen(open); if (!open) resetAddPlantDialog() }}>
+        <DialogContent className="sm:max-w-[540px] rounded-[32px] p-0 border-none shadow-3xl overflow-hidden max-h-[90vh] flex flex-col">
+          <DialogHeader className="px-8 pt-8 pb-4 shrink-0">
+            <DialogTitle className="text-2xl font-bold">Ajouter une plante</DialogTitle>
+          </DialogHeader>
+
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="px-8 pb-8 space-y-6">
+
+              {/* Photo + AI identification zone */}
+              <div className="space-y-3">
+                <div
+                  className="w-full h-52 bg-secondary/30 rounded-[24px] flex items-center justify-center overflow-hidden relative border-2 border-dashed border-border cursor-pointer transition-all hover:bg-secondary/50 group"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {previewUrl
+                    ? <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
+                    : (
+                      <div className="text-center text-muted-foreground/40 group-hover:scale-105 transition-transform">
+                        <Camera className="w-12 h-12 mx-auto mb-2 opacity-30" />
+                        <p className="text-sm font-medium">Appuyer pour ajouter une photo</p>
+                        <p className="text-xs opacity-60 mt-1">Optionnel · Permet l'identification IA</p>
+                      </div>
+                    )
+                  }
+                  {previewUrl && (
+                    <div className="absolute bottom-3 right-3">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click() }}
+                        className="bg-black/60 backdrop-blur text-white text-xs font-bold px-3 py-1.5 rounded-full hover:bg-black/80 transition-all"
+                      >
+                        Changer
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {previewUrl && (
+                  <Button
+                    onClick={handleScan}
+                    className="w-full h-12 rounded-2xl bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white font-bold border border-green-500/20 transition-all"
+                    disabled={isScanning}
+                  >
+                    {isScanning
+                      ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Analyse en cours…</>
+                      : <><Sparkles className="w-4 h-4 mr-2" /> Identifier avec l'IA</>
+                    }
+                  </Button>
+                )}
               </div>
-              <Button onClick={handleScan} className="w-full h-14 rounded-2xl bg-green-500 text-white font-bold shadow-lg shadow-green-500/20" disabled={isScanning || !previewUrl}>
-                {isScanning ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Sparkles className="w-5 h-5 mr-2" />} Identifier
-              </Button>
-            </div>
-          ) : scanResult && (
-            <div className="space-y-5">
-              <div className="bg-green-500/10 p-5 rounded-2xl space-y-2 border border-green-500/20">
-                <p className="font-bold text-lg text-green-400">{scanResult.name}</p>
-                <p className="text-xs italic text-muted-foreground opacity-70">{scanResult.species}</p>
-                <p className="text-sm leading-relaxed">{scanResult.healthAnalysis}</p>
-              </div>
+
+              {/* AI Results */}
+              {scanResult && (
+                <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-400">
+                  <div className="bg-green-500/8 border border-green-500/20 rounded-[20px] p-5 space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-lg text-green-400 leading-tight">{scanResult.name}</p>
+                        <p className="text-xs italic text-muted-foreground mt-0.5">{scanResult.species}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className={cn("text-2xl font-bold", getHealthColor(scanResult.healthScore))}>{scanResult.healthScore}%</span>
+                        <span className="text-[10px] uppercase font-bold opacity-40">Santé</span>
+                      </div>
+                    </div>
+
+                    <Progress value={scanResult.healthScore} className="h-1.5" />
+
+                    <p className="text-sm leading-relaxed text-muted-foreground">{scanResult.healthAnalysis}</p>
+
+                    {scanResult.alerts.length > 0 && (
+                      <div className="space-y-1.5">
+                        {scanResult.alerts.map((alert, i) => (
+                          <div key={i} className="flex items-start gap-2 text-orange-400 text-xs font-medium">
+                            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                            <span>{alert}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <Separator className="opacity-20" />
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="bg-blue-500/10 rounded-2xl p-3 space-y-1">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Arrosage</p>
+                        <p className="text-sm font-bold text-blue-400">{scanResult.hydrationPlan.frequency}</p>
+                        <p className="text-xs text-muted-foreground">{scanResult.hydrationPlan.amount}</p>
+                      </div>
+                      <div className="bg-secondary/40 rounded-2xl p-3 space-y-1">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Conseil eau</p>
+                        <p className="text-xs text-muted-foreground leading-relaxed">{scanResult.hydrationPlan.tips}</p>
+                      </div>
+                    </div>
+
+                    {scanResult.generalCare.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Entretien</p>
+                        {scanResult.generalCare.map((tip, i) => (
+                          <div key={i} className="flex items-start gap-2 text-muted-foreground text-xs">
+                            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary/60" />
+                            <span>{tip}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <Separator className="opacity-20" />
+
+              {/* Plant details form */}
               <div className="space-y-4">
+                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Détails de la plante</p>
+
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Surnom</Label>
-                  <Input value={plantNickname} onChange={e => setPlantNickname(e.target.value)} placeholder="Surnom" className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Surnom *</Label>
+                  <Input
+                    value={plantNickname}
+                    onChange={e => setPlantNickname(e.target.value)}
+                    placeholder="ex: Mon Monstera, Ficus du salon…"
+                    className="h-12 rounded-2xl bg-secondary/50 border-none px-5"
+                  />
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Emplacement</Label>
+                    <Select value={plantLocation} onValueChange={setPlantLocation}>
+                      <SelectTrigger className="h-12 rounded-2xl bg-secondary/50 border-none px-5"><SelectValue /></SelectTrigger>
+                      <SelectContent>{["Salon", "Cuisine", "Chambre", "Salle de bain", "Balcon", "Jardin"].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Fréquence (jours)</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      value={plantWateringDays}
+                      onChange={e => setPlantWateringDays(Number(e.target.value))}
+                      className="h-12 rounded-2xl bg-secondary/50 border-none px-5"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Quantité (ml)</Label>
+                    <Input
+                      type="number"
+                      min={10}
+                      step={10}
+                      value={plantWateringAmount}
+                      onChange={e => setPlantWateringAmount(Number(e.target.value))}
+                      className="h-12 rounded-2xl bg-secondary/50 border-none px-5"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Dernier arrosage</Label>
+                    <Input
+                      type="date"
+                      value={plantLastWateringDate}
+                      onChange={e => setPlantLastWateringDate(e.target.value)}
+                      className="h-12 rounded-2xl bg-secondary/50 border-none px-5"
+                    />
+                  </div>
+                </div>
+
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Emplacement</Label>
-                  <Select value={plantLocation} onValueChange={setPlantLocation}>
-                    <SelectTrigger className="h-12 rounded-2xl bg-secondary/50 border-none px-5"><SelectValue /></SelectTrigger>
-                    <SelectContent>{["Salon", "Cuisine", "Chambre", "Salle de bain", "Balcon", "Jardin"].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
-                  </Select>
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Date d'acquisition</Label>
+                  <Input
+                    type="date"
+                    value={plantPurchaseDate}
+                    onChange={e => setPlantPurchaseDate(e.target.value)}
+                    className="h-12 rounded-2xl bg-secondary/50 border-none px-5"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Notes</Label>
+                  <Textarea
+                    value={plantNotes}
+                    onChange={e => setPlantNotes(e.target.value)}
+                    placeholder="Observations, emplacement précis…"
+                    className="rounded-2xl bg-secondary/50 border-none px-5 py-3 min-h-[80px] resize-none"
+                  />
                 </div>
               </div>
-              <Button onClick={handleSavePlant} className="w-full h-14 rounded-2xl bg-green-500 text-white font-bold shadow-xl shadow-green-500/20" disabled={isSavingPlant}>
-                {isSavingPlant ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : "Ajouter au jardin"}
+
+              <Button
+                onClick={handleSavePlant}
+                className="w-full h-14 rounded-2xl bg-green-500 text-white font-bold shadow-xl shadow-green-500/20 hover:bg-green-600 transition-all"
+                disabled={isSavingPlant}
+              >
+                {isSavingPlant ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Leaf className="w-5 h-5 mr-2" />}
+                Ajouter au jardin
               </Button>
             </div>
-          )}
+          </ScrollArea>
         </DialogContent>
       </Dialog>
 
