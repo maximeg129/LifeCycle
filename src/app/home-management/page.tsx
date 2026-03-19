@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useMemo, useRef, useEffect } from 'react'
-import React, { useState, useMemo } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -24,12 +23,6 @@ import {
   CheckCircle2,
   Plus,
   AlertTriangle,
-  DialogTrigger,
-  DialogDescription
-} from '@/components/ui/dialog'
-import {
-  CheckCircle2,
-  Plus,
   Clock,
   Loader2,
   Calendar,
@@ -58,11 +51,6 @@ import {
   Timestamp
 } from 'firebase/firestore'
 import { format, addDays, differenceInDays } from 'date-fns'
-} from 'lucide-react'
-import { useToast } from '@/hooks/use-toast'
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
-import { collection, doc, setDoc, serverTimestamp, query, where, Timestamp } from 'firebase/firestore'
-import { format, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 
