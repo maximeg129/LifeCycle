@@ -222,13 +222,15 @@ export default function HomeManagementPage() {
     setPlantWateringAmount(200)
     setPlantPurchaseDate('')
     setPlantLastWateringDate(new Date().toISOString().split('T')[0])
+    if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const handleScan = async () => {
     if (!previewUrl) return
     setIsScanning(true)
     try {
-      const res = await identifyPlant({ photoDataUri: previewUrl })
+      const compressed = await compressImage(previewUrl)
+      const res = await identifyPlant({ photoDataUri: compressed })
       setScanResult(res)
       setPlantNickname(res.name)
       const daysMatch = res.hydrationPlan?.frequency?.match(/(\d+)/)
@@ -259,8 +261,8 @@ export default function HomeManagementPage() {
         location: plantLocation,
         wateringFrequencyDays: plantWateringDays,
         wateringAmountMl: plantWateringAmount,
-        lastWateringDate: plantLastWateringDate ? Timestamp.fromDate(new Date(plantLastWateringDate)) : serverTimestamp(),
-        purchaseDate: plantPurchaseDate ? Timestamp.fromDate(new Date(plantPurchaseDate)) : null,
+        lastWateringDate: plantLastWateringDate ? Timestamp.fromDate(new Date(plantLastWateringDate + 'T12:00:00')) : serverTimestamp(),
+        purchaseDate: plantPurchaseDate ? Timestamp.fromDate(new Date(plantPurchaseDate + 'T12:00:00')) : null,
         healthScore: scanResult?.healthScore ?? 75,
         healthStatus: getHealthStatus(scanResult?.healthScore ?? 75),
         lastAnalysisAlerts: scanResult?.alerts ?? [],
