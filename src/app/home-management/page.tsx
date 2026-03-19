@@ -175,6 +175,8 @@ export default function HomeManagementPage() {
   const [plantWateringDays, setPlantWateringDays] = useState(7)
   const [plantNotes, setPlantNotes] = useState('')
   const [plantWateringAmount, setPlantWateringAmount] = useState(200)
+  const [plantPurchaseDate, setPlantPurchaseDate] = useState('')
+  const [plantLastWateringDate, setPlantLastWateringDate] = useState(() => new Date().toISOString().split('T')[0])
 
   // --- Plant detail state ---
   const [selectedPlant, setSelectedPlant] = useState<any>(null)
@@ -241,6 +243,8 @@ export default function HomeManagementPage() {
     setPlantLocation('Salon')
     setPlantWateringDays(7)
     setPlantWateringAmount(200)
+    setPlantPurchaseDate('')
+    setPlantLastWateringDate(new Date().toISOString().split('T')[0])
   }
 
   const handleScan = async () => {
@@ -275,7 +279,12 @@ export default function HomeManagementPage() {
         location: plantLocation,
         wateringFrequencyDays: plantWateringDays,
         wateringAmountMl: plantWateringAmount,
-        lastWateringDate: serverTimestamp(),
+        lastWateringDate: plantLastWateringDate
+          ? Timestamp.fromDate(new Date(plantLastWateringDate))
+          : serverTimestamp(),
+        purchaseDate: plantPurchaseDate
+          ? Timestamp.fromDate(new Date(plantPurchaseDate))
+          : null,
         healthScore: scanResult.healthScore,
         healthStatus: getHealthStatus(scanResult.healthScore),
         lastAnalysisAlerts: scanResult.alerts,
@@ -752,6 +761,29 @@ export default function HomeManagementPage() {
                     </Select>
                   </div>
 
+                  {/* Purchase date + last watering date */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground ml-1">Date d'achat</Label>
+                      <Input
+                        type="date"
+                        value={plantPurchaseDate}
+                        onChange={e => setPlantPurchaseDate(e.target.value)}
+                        className="rounded-2xl bg-secondary/50 border-none h-12 px-4"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground ml-1">Dernier arrosage</Label>
+                      <Input
+                        type="date"
+                        value={plantLastWateringDate}
+                        onChange={e => setPlantLastWateringDate(e.target.value)}
+                        max={new Date().toISOString().split('T')[0]}
+                        className="rounded-2xl bg-secondary/50 border-none h-12 px-4"
+                      />
+                    </div>
+                  </div>
+
                   {/* Watering fields with AI hints */}
                   <div className="bg-blue-500/5 rounded-2xl p-4 space-y-3 border border-blue-500/10">
                     <div className="flex items-center gap-2 mb-1">
@@ -900,7 +932,7 @@ export default function HomeManagementPage() {
                               <Droplets className="w-4 h-4 text-blue-500" />
                               <span className="text-xs font-bold uppercase tracking-widest text-blue-500">Arrosage</span>
                             </div>
-                            <div className="flex gap-4">
+                            <div className="flex gap-4 flex-wrap">
                               <div>
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Cycle</p>
                                 <p className="text-sm font-bold">{selectedPlant.wateringFrequencyDays ?? '—'} jours</p>
@@ -911,7 +943,18 @@ export default function HomeManagementPage() {
                                   <p className="text-sm font-bold">{selectedPlant.wateringAmountMl} ml</p>
                                 </div>
                               ) : null}
+                              {selectedPlant.lastWateringDate?.seconds ? (
+                                <div>
+                                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Dernier arrosage</p>
+                                  <p className="text-sm font-bold">{format(new Date(selectedPlant.lastWateringDate.seconds * 1000), 'dd MMM yyyy', { locale: fr })}</p>
+                                </div>
+                              ) : null}
                             </div>
+                            {selectedPlant.purchaseDate?.seconds ? (
+                              <p className="text-[10px] text-muted-foreground mt-1">
+                                Achetée le {format(new Date(selectedPlant.purchaseDate.seconds * 1000), 'dd MMM yyyy', { locale: fr })}
+                              </p>
+                            ) : null}
                             <p className="text-sm font-medium">{plantAnalyses[0].hydrationPlan?.frequency}</p>
                             <p className="text-sm text-muted-foreground">{plantAnalyses[0].hydrationPlan?.tips}</p>
                           </div>
