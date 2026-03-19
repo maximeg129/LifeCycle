@@ -174,6 +174,7 @@ export default function HomeManagementPage() {
   const [plantLocation, setPlantLocation] = useState('Salon')
   const [plantWateringDays, setPlantWateringDays] = useState(7)
   const [plantNotes, setPlantNotes] = useState('')
+  const [plantWateringAmount, setPlantWateringAmount] = useState(200)
 
   // --- Plant detail state ---
   const [selectedPlant, setSelectedPlant] = useState<any>(null)
@@ -239,6 +240,7 @@ export default function HomeManagementPage() {
     setPlantNotes('')
     setPlantLocation('Salon')
     setPlantWateringDays(7)
+    setPlantWateringAmount(200)
   }
 
   const handleScan = async () => {
@@ -248,6 +250,11 @@ export default function HomeManagementPage() {
       const res = await identifyPlant({ photoDataUri: previewUrl })
       setScanResult(res)
       setPlantNickname(res.name)
+      // Pre-fill watering fields from AI recommendation
+      const daysMatch = res.hydrationPlan?.frequency?.match(/(\d+)/)
+      if (daysMatch) setPlantWateringDays(Number(daysMatch[1]))
+      const mlMatch = res.hydrationPlan?.amount?.match(/(\d+)/)
+      if (mlMatch) setPlantWateringAmount(Number(mlMatch[1]))
       setIdentifyStep('confirm')
     } catch {
       toast({ variant: "destructive", title: "Erreur d'analyse" })
@@ -267,6 +274,7 @@ export default function HomeManagementPage() {
         species: scanResult.species,
         location: plantLocation,
         wateringFrequencyDays: plantWateringDays,
+        wateringAmountMl: plantWateringAmount,
         lastWateringDate: serverTimestamp(),
         healthScore: scanResult.healthScore,
         healthStatus: getHealthStatus(scanResult.healthScore),
@@ -696,42 +704,42 @@ export default function HomeManagementPage() {
               </div>
             </div>
           ) : scanResult ? (
-            <ScrollArea className="max-h-[65vh]">
-              <div className="space-y-5 py-4 pr-2">
-                {/* AI result summary */}
-                <div className="bg-green-500/10 rounded-2xl p-4 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="w-4 h-4 text-green-500" />
-                    <span className="text-xs font-bold uppercase tracking-widest text-green-500">Identifiée par IA</span>
-                  </div>
-                  <p className="font-bold text-lg">{scanResult.name}</p>
-                  <p className="text-sm text-muted-foreground italic">{scanResult.species}</p>
-                  <span className={cn("text-sm font-bold", getHealthColor(scanResult.healthScore))}>
-                    Santé : {scanResult.healthScore}/100
-                  </span>
-                  {scanResult.alerts.length > 0 && (
-                    <div className="flex items-start gap-2 mt-2 bg-red-500/10 rounded-xl p-3">
-                      <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
-                      <div className="space-y-0.5">
-                        {scanResult.alerts.map((alert, i) => (
-                          <p key={i} className="text-xs text-red-400">{alert}</p>
-                        ))}
-                      </div>
+            <div className="flex flex-col gap-4">
+              <ScrollArea className="max-h-[55vh]">
+                <div className="space-y-5 py-2 pr-2">
+                  {/* AI result summary */}
+                  <div className="bg-green-500/10 rounded-2xl p-4 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-green-500" />
+                      <span className="text-xs font-bold uppercase tracking-widest text-green-500">Identifiée par IA</span>
                     </div>
-                  )}
-                  <p className="text-xs text-muted-foreground mt-1">{scanResult.healthAnalysis}</p>
-                </div>
+                    <p className="font-bold text-lg">{scanResult.name}</p>
+                    <p className="text-sm text-muted-foreground italic">{scanResult.species}</p>
+                    <span className={cn("text-sm font-bold", getHealthColor(scanResult.healthScore))}>
+                      Santé : {scanResult.healthScore}/100
+                    </span>
+                    {scanResult.alerts.length > 0 && (
+                      <div className="flex items-start gap-2 mt-2 bg-red-500/10 rounded-xl p-3">
+                        <AlertTriangle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                          {scanResult.alerts.map((alert, i) => (
+                            <p key={i} className="text-xs text-red-400">{alert}</p>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">{scanResult.healthAnalysis}</p>
+                  </div>
 
-                {/* Editable fields */}
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground ml-1">Surnom</Label>
-                  <Input
-                    value={plantNickname}
-                    onChange={e => setPlantNickname(e.target.value)}
-                    className="rounded-2xl bg-secondary/50 border-none h-12 px-4"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
+                  {/* Editable fields */}
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground ml-1">Surnom</Label>
+                    <Input
+                      value={plantNickname}
+                      onChange={e => setPlantNickname(e.target.value)}
+                      className="rounded-2xl bg-secondary/50 border-none h-12 px-4"
+                    />
+                  </div>
                   <div className="space-y-2">
                     <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground ml-1">Emplacement</Label>
                     <Select value={plantLocation} onValueChange={setPlantLocation}>
@@ -743,46 +751,77 @@ export default function HomeManagementPage() {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* Watering fields with AI hints */}
+                  <div className="bg-blue-500/5 rounded-2xl p-4 space-y-3 border border-blue-500/10">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Droplets className="w-4 h-4 text-blue-400" />
+                      <span className="text-[10px] uppercase font-bold tracking-widest text-blue-400">Cycle d'arrosage</span>
+                    </div>
+                    {scanResult.hydrationPlan && (
+                      <p className="text-[11px] text-muted-foreground italic">
+                        IA recommande : {scanResult.hydrationPlan.frequency} · {scanResult.hydrationPlan.amount}
+                      </p>
+                    )}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground ml-1">Fréquence (jours)</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={plantWateringDays}
+                          onChange={e => setPlantWateringDays(Number(e.target.value))}
+                          className="rounded-2xl bg-secondary/50 border-none h-12 px-4"
+                        />
+                        <p className="text-[10px] text-muted-foreground ml-1">Arroser tous les X jours</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground ml-1">Quantité (ml)</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          step={50}
+                          value={plantWateringAmount}
+                          onChange={e => setPlantWateringAmount(Number(e.target.value))}
+                          className="rounded-2xl bg-secondary/50 border-none h-12 px-4"
+                        />
+                        <p className="text-[10px] text-muted-foreground ml-1">Eau par session</p>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="space-y-2">
-                    <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground ml-1">Arrosage (jours)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={plantWateringDays}
-                      onChange={e => setPlantWateringDays(Number(e.target.value))}
-                      className="rounded-2xl bg-secondary/50 border-none h-12 px-4"
+                    <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground ml-1">Notes (optionnel)</Label>
+                    <Textarea
+                      value={plantNotes}
+                      onChange={e => setPlantNotes(e.target.value)}
+                      placeholder="Notes personnelles..."
+                      className="rounded-2xl bg-secondary/50 border-none resize-none px-4 py-3"
+                      rows={2}
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground ml-1">Notes (optionnel)</Label>
-                  <Textarea
-                    value={plantNotes}
-                    onChange={e => setPlantNotes(e.target.value)}
-                    placeholder="Notes personnelles..."
-                    className="rounded-2xl bg-secondary/50 border-none resize-none px-4 py-3"
-                    rows={2}
-                  />
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setIdentifyStep('photo')}
-                    className="flex-1 h-12 rounded-2xl border-border"
-                  >
-                    Retour
-                  </Button>
-                  <Button
-                    onClick={handleSavePlant}
-                    className="flex-1 h-14 rounded-2xl bg-green-500 text-white font-bold shadow-lg shadow-green-500/20"
-                    disabled={isSavingPlant}
-                  >
-                    {isSavingPlant ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Plus className="w-5 h-5 mr-2" />}
-                    Ajouter
-                  </Button>
-                </div>
+              </ScrollArea>
+
+              {/* Action buttons outside ScrollArea — always visible */}
+              <div className="flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => setIdentifyStep('photo')}
+                  className="flex-1 h-12 rounded-2xl border-border"
+                >
+                  Retour
+                </Button>
+                <Button
+                  onClick={handleSavePlant}
+                  className="flex-1 h-14 rounded-2xl bg-green-500 text-white font-bold shadow-lg shadow-green-500/20"
+                  disabled={isSavingPlant}
+                >
+                  {isSavingPlant ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Plus className="w-5 h-5 mr-2" />}
+                  Ajouter
+                </Button>
               </div>
-            </ScrollArea>
+            </div>
           ) : null}
         </DialogContent>
       </Dialog>
@@ -860,6 +899,18 @@ export default function HomeManagementPage() {
                             <div className="flex items-center gap-2">
                               <Droplets className="w-4 h-4 text-blue-500" />
                               <span className="text-xs font-bold uppercase tracking-widest text-blue-500">Arrosage</span>
+                            </div>
+                            <div className="flex gap-4">
+                              <div>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Cycle</p>
+                                <p className="text-sm font-bold">{selectedPlant.wateringFrequencyDays ?? '—'} jours</p>
+                              </div>
+                              {selectedPlant.wateringAmountMl ? (
+                                <div>
+                                  <p className="text-[10px] text-muted-foreground uppercase tracking-widest">Quantité</p>
+                                  <p className="text-sm font-bold">{selectedPlant.wateringAmountMl} ml</p>
+                                </div>
+                              ) : null}
                             </div>
                             <p className="text-sm font-medium">{plantAnalyses[0].hydrationPlan?.frequency}</p>
                             <p className="text-sm text-muted-foreground">{plantAnalyses[0].hydrationPlan?.tips}</p>
