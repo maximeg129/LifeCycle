@@ -6,16 +6,36 @@
 
 // ── Types ────────────────────────────────────────────────────────────
 
-export interface IntervalsAthlete {
+/** Raw athlete profile from GET /api/v1/athlete/{id} */
+interface IntervalsAthleteRaw {
   id: string;
+  firstname?: string;
+  lastname?: string;
   name?: string;
-  icu_ftp?: number;
+  ftp?: number;
+  weight?: number;
+}
+
+/** Fitness data point from GET /api/v1/athlete/{id}/fitness */
+interface IntervalsFitnessEntry {
   icu_ctl?: number;
   icu_atl?: number;
   icu_tsb?: number;
-  icu_weight?: number;
-  icu_ramp_rate?: number;
   icu_training_load?: number;
+  icu_ramp_rate?: number;
+}
+
+/** Merged athlete + fitness data exposed to the UI */
+export interface IntervalsAthlete {
+  id: string;
+  name?: string;
+  ftp?: number;
+  weight?: number;
+  ctl?: number;
+  atl?: number;
+  tsb?: number;
+  rampRate?: number;
+  trainingLoad?: number;
 }
 
 export interface IntervalsActivity {
@@ -26,23 +46,21 @@ export interface IntervalsActivity {
   moving_time?: number;
   elapsed_time?: number;
   distance?: number;
-  icu_average_watts: number | null;
-  icu_weighted_avg_watts: number | null;
-  icu_intensity: number | null;
-  icu_training_load: number | null;
-  icu_ftp: number | null;
-  average_heartrate: number | null;
-  max_heartrate: number | null;
+  average_watts?: number | null;
+  weighted_average_watts?: number | null;
+  icu_intensity?: number | null;
+  icu_training_load?: number | null;
+  icu_ftp?: number | null;
+  icu_weight?: number | null;
+  average_heartrate?: number | null;
+  max_heartrate?: number | null;
   total_elevation_gain?: number;
   average_speed?: number;
   max_speed?: number;
-  calories: number | null;
-  icu_eftp: number | null;
-  gap: number | null;
-  icu_power_hr_z2: string | null;
-  icu_power_hr_z3: string | null;
-  icu_power_hr_z4: string | null;
-  icu_power_hr_z5: string | null;
+  calories?: number | null;
+  icu_ctl?: number | null;
+  icu_atl?: number | null;
+  icu_tsb?: number | null;
 }
 
 export interface IntervalsWellness {
@@ -121,9 +139,26 @@ export class IntervalsService {
     return response.json();
   }
 
-  /** Profil athlète avec CTL/ATL/TSB/FTP actuels */
+  /** Profil athlète avec CTL/ATL/TSB/FTP actuels (fusionne /athlete et /fitness) */
   async getAthlete(): Promise<IntervalsAthlete> {
-    return this.fetchIntervals<IntervalsAthlete>('');
+    const today = new Date().toISOString().slice(0, 10);
+    const [profile, fitness] = await Promise.all([
+      this.fetchIntervals<IntervalsAthleteRaw>(''),
+      this.fetchIntervals<IntervalsFitnessEntry[]>(`/fitness?oldest=${today}&newest=${today}`)
+        .catch(() => [] as IntervalsFitnessEntry[]),
+    ]);
+    const latest = fitness.length > 0 ? fitness[fitness.length - 1] : null;
+    return {
+      id: profile.id,
+      name: profile.name || [profile.firstname, profile.lastname].filter(Boolean).join(' ') || undefined,
+      ftp: profile.ftp,
+      weight: profile.weight,
+      ctl: latest?.icu_ctl,
+      atl: latest?.icu_atl,
+      tsb: latest?.icu_tsb,
+      rampRate: latest?.icu_ramp_rate,
+      trainingLoad: latest?.icu_training_load,
+    };
   }
 
   /** Activités entre deux dates (YYYY-MM-DD) */
@@ -144,16 +179,19 @@ export class IntervalsService {
     return this.fetchIntervals<IntervalsWellness>(`/wellness/${date}`);
   }
 
-  /** Courbe de fitness (CTL/ATL/TSB) entre deux dates — dérivée du endpoint wellness */
+  /** Courbe de fitness (CTL/ATL/TSB) entre deux dates via /fitness endpoint */
   async getFitnessChart(oldest: string, newest: string): Promise<IntervalsFitnessDay[]> {
-    const wellness = await this.getWellnessRange(oldest, newest);
-    return wellness.map(w => ({
-      date: w.id,
-      ctl: w.ctl ?? 0,
-      atl: w.atl ?? 0,
-      tsb: (w.ctl ?? 0) - (w.atl ?? 0),
-      trainingLoad: w.atlLoad ?? 0,
-    }));
+    const params = new URLSearchParams({ oldest, newest });
+    const entries = await this.fetchIntervals<(IntervalsFitnessEntry & { date?: string })[]>(`/fitness?${params}`);
+    return entries
+      .filter(e => e.date)
+      .map(e => ({
+        date: e.date!,
+        ctl: e.icu_ctl ?? 0,
+        atl: e.icu_atl ?? 0,
+        tsb: e.icu_tsb ?? ((e.icu_ctl ?? 0) - (e.icu_atl ?? 0)),
+        trainingLoad: e.icu_training_load ?? 0,
+      }));
   }
 
   /** Détail d'une activité */

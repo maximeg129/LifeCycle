@@ -216,7 +216,7 @@ export default function CyclingHub() {
                           <CardTitle className="text-xs text-muted-foreground uppercase">Fitness (CTL)</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-4xl font-bold">{safeRound(athlete.data.icu_ctl)}</div>
+                          <div className="text-4xl font-bold">{safeRound(athlete.data.ctl)}</div>
                           <div className="mt-2 flex items-center text-xs text-muted-foreground">
                             <TrendingUp className="w-3 h-3 mr-1" /> Charge chronique
                           </div>
@@ -227,8 +227,8 @@ export default function CyclingHub() {
                           <CardTitle className="text-xs text-muted-foreground uppercase">Fatigue (ATL)</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-4xl font-bold">{safeRound(athlete.data.icu_atl)}</div>
-                          <Progress value={Math.min(100, ((athlete.data.icu_atl ?? 0) / Math.max(athlete.data.icu_ctl ?? 1, 1)) * 100)} className="h-1.5 mt-2" />
+                          <div className="text-4xl font-bold">{safeRound(athlete.data.atl)}</div>
+                          <Progress value={Math.min(100, ((athlete.data.atl ?? 0) / Math.max(athlete.data.ctl ?? 1, 1)) * 100)} className="h-1.5 mt-2" />
                         </CardContent>
                       </Card>
                       <Card className="bg-card/40 border-border">
@@ -237,7 +237,7 @@ export default function CyclingHub() {
                         </CardHeader>
                         <CardContent>
                           {(() => {
-                            const rawTsb = athlete.data.icu_tsb
+                            const rawTsb = athlete.data.tsb
                             const tsb = rawTsb != null && !isNaN(rawTsb) ? Math.round(rawTsb) : null
                             const label = tsbLabel(tsb ?? 0)
                             return (
@@ -259,10 +259,10 @@ export default function CyclingHub() {
                           <CardTitle className="text-xs text-muted-foreground uppercase">FTP</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-4xl font-bold">{athlete.data.icu_ftp ?? '—'}<span className="text-lg text-muted-foreground ml-1">W</span></div>
-                          {athlete.data.icu_ftp && athlete.data.icu_weight && athlete.data.icu_weight > 0 && (
+                          <div className="text-4xl font-bold">{athlete.data.ftp ?? '—'}<span className="text-lg text-muted-foreground ml-1">W</span></div>
+                          {athlete.data.ftp && athlete.data.weight && athlete.data.weight > 0 && (
                             <div className="mt-2 text-xs text-muted-foreground">
-                              {(athlete.data.icu_ftp / athlete.data.icu_weight).toFixed(2)} W/kg
+                              {(athlete.data.ftp / athlete.data.weight).toFixed(2)} W/kg
                             </div>
                           )}
                         </CardContent>
@@ -328,9 +328,9 @@ export default function CyclingHub() {
                                 <span className="text-sm font-medium">{formatDistance(ride.distance)}</span>
                                 <span className="text-[10px] text-muted-foreground">Distance</span>
                               </div>
-                              {ride.icu_average_watts && (
+                              {ride.average_watts && (
                                 <div className="hidden md:flex flex-col items-end">
-                                  <span className="text-sm font-medium">{ride.icu_average_watts}W</span>
+                                  <span className="text-sm font-medium">{ride.average_watts}W</span>
                                   <span className="text-[10px] text-muted-foreground">Puis. Moy</span>
                                 </div>
                               )}
