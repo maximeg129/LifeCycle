@@ -176,11 +176,24 @@ export class IntervalsService {
     };
   }
 
-  /** Activités entre deux dates (YYYY-MM-DD) */
+  /** Activités entre deux dates (YYYY-MM-DD) — enrichit avec les détails individuels si nécessaire */
   async getActivities(oldest: string, newest?: string): Promise<IntervalsActivity[]> {
     const params = new URLSearchParams({ oldest });
     if (newest) params.set('newest', newest);
-    return this.fetchIntervals<IntervalsActivity[]>(`/activities?${params}`);
+    const list = await this.fetchIntervals<IntervalsActivity[]>(`/activities?${params}`);
+
+    // Strava-synced activities return minimal data from the list endpoint.
+    // Fetch individual details in parallel to get Intervals-computed fields (TSS, power, etc.)
+    const needsEnrichment = list.some(a => a.moving_time == null && a.icu_training_load == null);
+    if (!needsEnrichment) return list;
+
+    const enriched = await Promise.all(
+      list.map(a =>
+        this.fetchIntervals<IntervalsActivity>(`/activities/${a.id}`)
+          .catch(() => a) // fallback to list data if individual fetch fails
+      ),
+    );
+    return enriched;
   }
 
   /** Données wellness entre deux dates */
