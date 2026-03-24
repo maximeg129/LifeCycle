@@ -319,7 +319,9 @@ export default function CyclingHub() {
                               <div>
                                 <div className="font-semibold">{ride.name || 'Activité sans titre'}</div>
                                 <div className="text-xs text-muted-foreground">
-                                  {formatDistanceToNow(parseISO(ride.start_date_local), { addSuffix: true, locale: fr })}
+                                  {ride.start_date_local
+                                    ? formatDistanceToNow(parseISO(ride.start_date_local), { addSuffix: true, locale: fr })
+                                    : 'Date inconnue'}
                                 </div>
                               </div>
                             </div>

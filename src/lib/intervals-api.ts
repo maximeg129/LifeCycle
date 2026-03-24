@@ -50,7 +50,7 @@ export interface IntervalsActivity {
   id: string;
   name?: string;
   type?: string;
-  start_date_local: string;
+  start_date_local?: string;
   moving_time?: number;
   elapsed_time?: number;
   distance?: number;
