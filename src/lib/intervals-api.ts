@@ -12,17 +12,25 @@ interface IntervalsAthleteRaw {
   firstname?: string;
   lastname?: string;
   name?: string;
-  ftp?: number;
   weight?: number;
+  icu_weight?: number;
+  icu_resting_hr?: number;
+  sportSettings?: Array<{
+    types?: string[];
+    ftp?: number;
+    lthr?: number;
+    max_hr?: number;
+  }>;
 }
 
-/** Fitness data point from GET /api/v1/athlete/{id}/fitness */
-interface IntervalsFitnessEntry {
-  icu_ctl?: number;
-  icu_atl?: number;
-  icu_tsb?: number;
-  icu_training_load?: number;
-  icu_ramp_rate?: number;
+/** Wellness data point from GET /api/v1/athlete/{id}/wellness */
+interface IntervalsWellnessEntry {
+  id: string; // date string e.g. "2026-03-24"
+  ctl?: number;
+  atl?: number;
+  ctlLoad?: number;
+  atlLoad?: number;
+  rampRate?: number;
 }
 
 /** Merged athlete + fitness data exposed to the UI */
@@ -139,25 +147,32 @@ export class IntervalsService {
     return response.json();
   }
 
-  /** Profil athlète avec CTL/ATL/TSB/FTP actuels (fusionne /athlete et /fitness) */
+  /** Profil athlète avec CTL/ATL/TSB/FTP actuels (fusionne /athlete et /wellness) */
   async getAthlete(): Promise<IntervalsAthlete> {
     const today = new Date().toISOString().slice(0, 10);
-    const [profile, fitness] = await Promise.all([
+    const [profile, wellness] = await Promise.all([
       this.fetchIntervals<IntervalsAthleteRaw>(''),
-      this.fetchIntervals<IntervalsFitnessEntry[]>(`/fitness?oldest=${today}&newest=${today}`)
-        .catch(() => [] as IntervalsFitnessEntry[]),
+      this.fetchIntervals<IntervalsWellnessEntry>(`/wellness/${today}`)
+        .catch(() => null),
     ]);
-    const latest = fitness.length > 0 ? fitness[fitness.length - 1] : null;
+
+    // Extract cycling FTP from sportSettings (find the entry whose types include "Ride")
+    const cyclingSport = profile.sportSettings?.find(s => s.types?.some(t => /ride/i.test(t)));
+    const ftp = cyclingSport?.ftp ?? profile.sportSettings?.[0]?.ftp;
+
+    // Prefer icu_weight (Intervals-tracked) over weight (Strava-synced, often null)
+    const weight = profile.icu_weight ?? profile.weight;
+
     return {
       id: profile.id,
       name: profile.name || [profile.firstname, profile.lastname].filter(Boolean).join(' ') || undefined,
-      ftp: profile.ftp,
-      weight: profile.weight,
-      ctl: latest?.icu_ctl,
-      atl: latest?.icu_atl,
-      tsb: latest?.icu_tsb,
-      rampRate: latest?.icu_ramp_rate,
-      trainingLoad: latest?.icu_training_load,
+      ftp,
+      weight,
+      ctl: wellness?.ctl,
+      atl: wellness?.atl,
+      tsb: wellness?.ctl != null && wellness?.atl != null ? wellness.ctl - wellness.atl : undefined,
+      rampRate: wellness?.rampRate,
+      trainingLoad: wellness?.ctlLoad,
     };
   }
 
@@ -179,18 +194,18 @@ export class IntervalsService {
     return this.fetchIntervals<IntervalsWellness>(`/wellness/${date}`);
   }
 
-  /** Courbe de fitness (CTL/ATL/TSB) entre deux dates via /fitness endpoint */
+  /** Courbe de fitness (CTL/ATL/TSB) entre deux dates via /wellness endpoint */
   async getFitnessChart(oldest: string, newest: string): Promise<IntervalsFitnessDay[]> {
     const params = new URLSearchParams({ oldest, newest });
-    const entries = await this.fetchIntervals<(IntervalsFitnessEntry & { date?: string })[]>(`/fitness?${params}`);
+    const entries = await this.fetchIntervals<IntervalsWellnessEntry[]>(`/wellness?${params}`);
     return entries
-      .filter(e => e.date)
+      .filter(e => e.id && (e.ctl != null || e.atl != null))
       .map(e => ({
-        date: e.date!,
-        ctl: e.icu_ctl ?? 0,
-        atl: e.icu_atl ?? 0,
-        tsb: e.icu_tsb ?? ((e.icu_ctl ?? 0) - (e.icu_atl ?? 0)),
-        trainingLoad: e.icu_training_load ?? 0,
+        date: e.id,
+        ctl: e.ctl ?? 0,
+        atl: e.atl ?? 0,
+        tsb: (e.ctl ?? 0) - (e.atl ?? 0),
+        trainingLoad: e.ctlLoad ?? 0,
       }));
   }
 

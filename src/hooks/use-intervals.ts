@@ -60,16 +60,11 @@ export function useAthlete() {
     setIsLoading(true)
     setError(null)
     try {
-      // Debug: log raw API response
-      const debugRes = await fetch('/api/intervals/debug', { headers: buildHeaders(creds.athleteId, creds.apiKey) })
-      if (debugRes.ok) console.log('[Intervals Debug]', await debugRes.json())
-
       const result = await fetchProxy<IntervalsAthlete>(
         '/api/intervals/athlete',
         creds.athleteId,
         creds.apiKey,
       )
-      console.log('[Intervals] Athlete result:', result)
       setData(result)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur inconnue')
@@ -105,7 +100,6 @@ export function useActivities(oldest: string, newest?: string) {
         creds.athleteId,
         creds.apiKey,
       )
-      if (result.length > 0) console.log('[Intervals] First activity keys:', Object.keys(result[0]), 'sample:', result[0])
       setData(result)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur inconnue')

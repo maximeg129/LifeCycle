@@ -16,9 +16,9 @@ export async function GET(request: NextRequest) {
   const oldest30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
   try {
-    const [athleteRes, fitnessRes, activitiesRes] = await Promise.all([
+    const [athleteRes, wellnessRes, activitiesRes] = await Promise.all([
       fetch(baseUrl, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
-      fetch(`${baseUrl}/fitness?oldest=${today}&newest=${today}`, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
+      fetch(`${baseUrl}/wellness/${today}`, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
       fetch(`${baseUrl}/activities?oldest=${oldest30}&newest=${today}`, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
     ])
 
@@ -29,12 +29,10 @@ export async function GET(request: NextRequest) {
         _keys: athleteRes && typeof athleteRes === 'object' ? Object.keys(athleteRes) : null,
         _sample: athleteRes,
       },
-      fitness: {
-        _type: typeof fitnessRes,
-        _isArray: Array.isArray(fitnessRes),
-        _length: Array.isArray(fitnessRes) ? fitnessRes.length : null,
-        _firstKeys: Array.isArray(fitnessRes) && fitnessRes.length > 0 ? Object.keys(fitnessRes[0]) : null,
-        _first: Array.isArray(fitnessRes) && fitnessRes.length > 0 ? fitnessRes[0] : fitnessRes,
+      wellness: {
+        _type: typeof wellnessRes,
+        _keys: wellnessRes && typeof wellnessRes === 'object' ? Object.keys(wellnessRes) : null,
+        _sample: wellnessRes,
       },
       activities: {
         _type: typeof activitiesRes,
