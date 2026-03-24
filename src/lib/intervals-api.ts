@@ -8,24 +8,24 @@
 
 export interface IntervalsAthlete {
   id: string;
-  name: string;
-  icu_ftp: number;
-  icu_ctl: number;
-  icu_atl: number;
-  icu_tsb: number;
-  icu_weight: number;
-  icu_ramp_rate: number;
-  icu_training_load: number;
+  name?: string;
+  icu_ftp?: number;
+  icu_ctl?: number;
+  icu_atl?: number;
+  icu_tsb?: number;
+  icu_weight?: number;
+  icu_ramp_rate?: number;
+  icu_training_load?: number;
 }
 
 export interface IntervalsActivity {
   id: string;
-  name: string;
-  type: string;
+  name?: string;
+  type?: string;
   start_date_local: string;
-  moving_time: number;
-  elapsed_time: number;
-  distance: number;
+  moving_time?: number;
+  elapsed_time?: number;
+  distance?: number;
   icu_average_watts: number | null;
   icu_weighted_avg_watts: number | null;
   icu_intensity: number | null;
@@ -33,9 +33,9 @@ export interface IntervalsActivity {
   icu_ftp: number | null;
   average_heartrate: number | null;
   max_heartrate: number | null;
-  total_elevation_gain: number;
-  average_speed: number;
-  max_speed: number;
+  total_elevation_gain?: number;
+  average_speed?: number;
+  max_speed?: number;
   calories: number | null;
   icu_eftp: number | null;
   gap: number | null;

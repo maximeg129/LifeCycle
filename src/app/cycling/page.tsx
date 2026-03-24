@@ -35,16 +35,23 @@ import { useAthlete, useActivities, useFitnessChart } from '@/hooks/use-interval
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function formatDuration(seconds: number): string {
+function formatDuration(seconds: number | null | undefined): string {
+  if (!seconds) return '—'
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   if (h > 0) return `${h}h${m.toString().padStart(2, '0')}`
   return `${m}min`
 }
 
-function formatDistance(meters: number): string {
+function formatDistance(meters: number | null | undefined): string {
+  if (meters == null || isNaN(meters)) return '—'
   const km = meters / 1000
   return km >= 100 ? `${Math.round(km)} km` : `${km.toFixed(1)} km`
+}
+
+function safeRound(value: number | null | undefined): string {
+  if (value == null || isNaN(value)) return '—'
+  return String(Math.round(value))
 }
 
 function tsbLabel(tsb: number): { text: string; className: string } {
@@ -209,7 +216,7 @@ export default function CyclingHub() {
                           <CardTitle className="text-xs text-muted-foreground uppercase">Fitness (CTL)</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-4xl font-bold">{Math.round(athlete.data.icu_ctl)}</div>
+                          <div className="text-4xl font-bold">{safeRound(athlete.data.icu_ctl)}</div>
                           <div className="mt-2 flex items-center text-xs text-muted-foreground">
                             <TrendingUp className="w-3 h-3 mr-1" /> Charge chronique
                           </div>
@@ -220,8 +227,8 @@ export default function CyclingHub() {
                           <CardTitle className="text-xs text-muted-foreground uppercase">Fatigue (ATL)</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-4xl font-bold">{Math.round(athlete.data.icu_atl)}</div>
-                          <Progress value={Math.min(100, (athlete.data.icu_atl / Math.max(athlete.data.icu_ctl, 1)) * 100)} className="h-1.5 mt-2" />
+                          <div className="text-4xl font-bold">{safeRound(athlete.data.icu_atl)}</div>
+                          <Progress value={Math.min(100, ((athlete.data.icu_atl ?? 0) / Math.max(athlete.data.icu_ctl ?? 1, 1)) * 100)} className="h-1.5 mt-2" />
                         </CardContent>
                       </Card>
                       <Card className="bg-card/40 border-border">
@@ -230,16 +237,17 @@ export default function CyclingHub() {
                         </CardHeader>
                         <CardContent>
                           {(() => {
-                            const tsb = Math.round(athlete.data.icu_tsb)
-                            const label = tsbLabel(tsb)
+                            const rawTsb = athlete.data.icu_tsb
+                            const tsb = rawTsb != null && !isNaN(rawTsb) ? Math.round(rawTsb) : null
+                            const label = tsbLabel(tsb ?? 0)
                             return (
                               <>
-                                <div className={`text-4xl font-bold ${label.className}`}>
-                                  {tsb > 0 ? `+${tsb}` : tsb}
+                                <div className={`text-4xl font-bold ${tsb != null ? label.className : ''}`}>
+                                  {tsb != null ? (tsb > 0 ? `+${tsb}` : tsb) : '—'}
                                 </div>
                                 <div className="mt-2 flex items-center text-xs text-muted-foreground">
-                                  {tsb >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                                  {label.text}
+                                  {tsb == null || tsb >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
+                                  {tsb != null ? label.text : 'Données indisponibles'}
                                 </div>
                               </>
                             )
@@ -251,8 +259,8 @@ export default function CyclingHub() {
                           <CardTitle className="text-xs text-muted-foreground uppercase">FTP</CardTitle>
                         </CardHeader>
                         <CardContent>
-                          <div className="text-4xl font-bold">{athlete.data.icu_ftp}<span className="text-lg text-muted-foreground ml-1">W</span></div>
-                          {athlete.data.icu_weight > 0 && (
+                          <div className="text-4xl font-bold">{athlete.data.icu_ftp ?? '—'}<span className="text-lg text-muted-foreground ml-1">W</span></div>
+                          {athlete.data.icu_ftp && athlete.data.icu_weight && athlete.data.icu_weight > 0 && (
                             <div className="mt-2 text-xs text-muted-foreground">
                               {(athlete.data.icu_ftp / athlete.data.icu_weight).toFixed(2)} W/kg
                             </div>
@@ -303,7 +311,7 @@ export default function CyclingHub() {
                                 <Bike className="w-5 h-5" />
                               </div>
                               <div>
-                                <div className="font-semibold">{ride.name}</div>
+                                <div className="font-semibold">{ride.name || 'Activité sans titre'}</div>
                                 <div className="text-xs text-muted-foreground">
                                   {formatDistanceToNow(parseISO(ride.start_date_local), { addSuffix: true, locale: fr })}
                                 </div>
@@ -320,7 +328,7 @@ export default function CyclingHub() {
                                   <span className="text-[10px] text-muted-foreground">Puis. Moy</span>
                                 </div>
                               )}
-                              {ride.total_elevation_gain > 0 && (
+                              {ride.total_elevation_gain != null && ride.total_elevation_gain > 0 && (
                                 <div className="hidden lg:flex flex-col items-end">
                                   <span className="text-sm font-medium flex items-center gap-1">
                                     <Mountain className="w-3 h-3" /> {Math.round(ride.total_elevation_gain)}m
