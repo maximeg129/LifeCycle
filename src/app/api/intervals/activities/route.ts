@@ -19,8 +19,21 @@ export async function GET(request: NextRequest) {
 
   try {
     const service = new IntervalsService(athleteId, apiKey)
-    const data = await service.getActivities(oldest, newest ?? undefined)
-    return NextResponse.json(data)
+    const list = await service.getActivities(oldest, newest ?? undefined)
+
+    // Strava-synced activities return minimal data from the list endpoint.
+    // Enrich with individual details to get Intervals-computed fields (TSS, power…).
+    const needsEnrichment = list.some(a => a.moving_time == null && a.icu_training_load == null)
+    if (!needsEnrichment) {
+      return NextResponse.json(list)
+    }
+
+    const enriched = await Promise.all(
+      list.map(a =>
+        service.getActivity(a.id).catch(() => a)
+      ),
+    )
+    return NextResponse.json(enriched)
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 502 })
