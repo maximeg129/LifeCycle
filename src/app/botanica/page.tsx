@@ -230,6 +230,8 @@ export default function BotanicaPage() {
         healthStatus: getHealthStatus(scanResult?.healthScore ?? 75),
         lastAnalysisAlerts: scanResult?.alerts ?? [],
         lastHealthAnalysis: scanResult?.healthAnalysis ?? '',
+        lastHydrationPlan: scanResult?.hydrationPlan ?? null,
+        lastGeneralCare: scanResult?.generalCare ?? [],
         lastAnalysisDate: scanResult ? serverTimestamp() : null,
         thumbnailUrl: thumbnail,
         notes,
@@ -329,6 +331,8 @@ export default function BotanicaPage() {
         updateData.healthStatus = getHealthStatus(detailScanResult.healthScore)
         updateData.lastAnalysisAlerts = detailScanResult.alerts
         updateData.lastHealthAnalysis = detailScanResult.healthAnalysis
+        updateData.lastHydrationPlan = detailScanResult.hydrationPlan
+        updateData.lastGeneralCare = detailScanResult.generalCare
         updateData.lastAnalysisDate = serverTimestamp()
 
         // Save to analyses sub-collection
@@ -448,27 +452,27 @@ export default function BotanicaPage() {
                         <Leaf className="w-16 h-16 text-green-500/30" />
                       </div>
                     )}
-                    <div className="absolute top-3 right-3">
+                    <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2">
+                      <Badge className="rounded-full bg-black/40 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5 shrink-0">
+                        <MapPin className="w-3 h-3 shrink-0" /> <span className="truncate max-w-[80px]">{plant.location || 'Non défini'}</span>
+                      </Badge>
                       <Badge className={cn(
-                        "rounded-full backdrop-blur shadow-sm font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5",
+                        "rounded-full backdrop-blur shadow-sm font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5 shrink-0",
                         needsWater ? "bg-orange-500/90 text-white" : "bg-white/95 text-green-600"
                       )}>
                         {needsWater
-                          ? <><AlertTriangle className="w-3 h-3" /> En retard {Math.abs(daysUntil)}j</>
+                          ? <><AlertTriangle className="w-3 h-3" /> {Math.abs(daysUntil)}j</>
                           : <><CheckCircle2 className="w-3 h-3" /> {getHealthLabel(score)}</>
                         }
                       </Badge>
                     </div>
-                    <div className="absolute top-3 left-3 flex flex-col gap-1.5">
-                      <Badge className="rounded-full bg-black/40 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5">
-                        <MapPin className="w-3 h-3" /> {plant.location || 'Non défini'}
-                      </Badge>
-                      {isAnalysisOverdue(plant) && (
+                    {isAnalysisOverdue(plant) && (
+                      <div className="absolute bottom-3 left-3">
                         <Badge className="rounded-full bg-purple-500/90 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5">
                           <Camera className="w-3 h-3" /> Analyse recommandée
                         </Badge>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="p-6 space-y-4 flex flex-col flex-1">
@@ -846,6 +850,64 @@ export default function BotanicaPage() {
                   {selectedPlant.species && (
                     <p className="text-xs text-muted-foreground italic">{selectedPlant.species}</p>
                   )}
+                </div>
+              )}
+
+              {/* Last AI scan results */}
+              {selectedPlant?.lastHealthAnalysis && !detailScanResult && (
+                <div className="space-y-3">
+                  <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest flex items-center gap-2">
+                    <Sparkles className="w-3.5 h-3.5" /> Dernière analyse IA
+                  </p>
+                  <div className="bg-green-500/8 border border-green-500/20 rounded-[20px] p-5 space-y-4">
+                    <p className="text-sm leading-relaxed text-muted-foreground">{selectedPlant.lastHealthAnalysis}</p>
+
+                    {selectedPlant.lastAnalysisAlerts?.length > 0 && (
+                      <div className="space-y-1.5">
+                        {selectedPlant.lastAnalysisAlerts.map((alert: string, i: number) => (
+                          <div key={i} className="flex items-start gap-2 text-orange-400 text-xs font-medium">
+                            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                            <span>{alert}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {selectedPlant.lastHydrationPlan && (
+                      <>
+                        <Separator className="opacity-20" />
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="bg-blue-500/10 rounded-2xl p-3 space-y-1">
+                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Arrosage</p>
+                            <p className="text-sm font-bold text-blue-400">{selectedPlant.lastHydrationPlan.frequency}</p>
+                            <p className="text-xs text-muted-foreground">{selectedPlant.lastHydrationPlan.amount}</p>
+                          </div>
+                          <div className="bg-secondary/40 rounded-2xl p-3 space-y-1">
+                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Conseil eau</p>
+                            <p className="text-xs text-muted-foreground leading-relaxed">{selectedPlant.lastHydrationPlan.tips}</p>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {selectedPlant.lastGeneralCare?.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Entretien</p>
+                        {selectedPlant.lastGeneralCare.map((tip: string, i: number) => (
+                          <div key={i} className="flex items-start gap-2 text-muted-foreground text-xs">
+                            <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary/60" />
+                            <span>{tip}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {selectedPlant.lastAnalysisDate?.seconds && (
+                      <p className="text-[10px] text-muted-foreground/50 text-right">
+                        Analysé le {format(new Date(selectedPlant.lastAnalysisDate.seconds * 1000), 'dd MMMM yyyy', { locale: fr })}
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 
