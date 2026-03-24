@@ -102,6 +102,43 @@ export default function BotanicaPage() {
   const { user } = useUser()
   const db = useFirestore()
 
+  // --- States declared FIRST to avoid ReferenceErrors ---
+  
+  // Add plant dialog state
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isAddOpen, setIsAddOpen] = useState(false)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [isScanning, setIsScanning] = useState(false)
+  const [scanResult, setScanResult] = useState<IdentifyPlantOutput | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [nickname, setNickname] = useState('')
+  const [location, setLocation] = useState('Salon')
+  const [wateringDays, setWateringDays] = useState(7)
+  const [wateringAmount, setWateringAmount] = useState(200)
+  const [lastWateringDate, setLastWateringDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [purchaseDate, setPurchaseDate] = useState('')
+  const [notes, setNotes] = useState('')
+
+  // Detail dialog state
+  const detailFileInputRef = useRef<HTMLInputElement>(null)
+  const [selectedPlant, setSelectedPlant] = useState<any>(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [editNickname, setEditNickname] = useState('')
+  const [editLocation, setEditLocation] = useState('Salon')
+  const [editWateringDays, setEditWateringDays] = useState(7)
+  const [editWateringAmount, setEditWateringAmount] = useState(200)
+  const [editNotes, setEditNotes] = useState('')
+  const [editPurchaseDate, setEditPurchaseDate] = useState('')
+  const [isDetailSaving, setIsDetailSaving] = useState(false)
+  const [detailPreviewUrl, setDetailPreviewUrl] = useState<string | null>(null)
+  const [isDetailScanning, setIsDetailScanning] = useState(false)
+  const [detailScanResult, setDetailScanResult] = useState<IdentifyPlantOutput | null>(null)
+
+  // Delete state
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  // --- Firestore Data Subscriptions ---
+
   const plantsPath = user ? `users/${user.uid}/plants` : null
   const plantsQuery = useMemoFirebase(() => {
     if (!plantsPath || !db) return null
@@ -109,7 +146,7 @@ export default function BotanicaPage() {
   }, [db, plantsPath])
   const { data: plants, isLoading: loadingPlants } = useCollection(plantsQuery)
 
-  // --- Analyses history for selected plant ---
+  // Analyses history for selected plant
   const analysesQuery = useMemoFirebase(() => {
     if (!db || !user || !selectedPlant) return null
     return query(
@@ -133,39 +170,6 @@ export default function BotanicaPage() {
     () => plants?.filter((p: any) => getDaysUntilWatering(p) < 0).length ?? 0,
     [plants]
   )
-
-  // --- Add plant dialog state ---
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  const [isAddOpen, setIsAddOpen] = useState(false)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-  const [isScanning, setIsScanning] = useState(false)
-  const [scanResult, setScanResult] = useState<IdentifyPlantOutput | null>(null)
-  const [isSaving, setIsSaving] = useState(false)
-  const [nickname, setNickname] = useState('')
-  const [location, setLocation] = useState('Salon')
-  const [wateringDays, setWateringDays] = useState(7)
-  const [wateringAmount, setWateringAmount] = useState(200)
-  const [lastWateringDate, setLastWateringDate] = useState(() => new Date().toISOString().split('T')[0])
-  const [purchaseDate, setPurchaseDate] = useState('')
-  const [notes, setNotes] = useState('')
-
-  // --- Detail dialog state ---
-  const detailFileInputRef = useRef<HTMLInputElement>(null)
-  const [selectedPlant, setSelectedPlant] = useState<any>(null)
-  const [isDetailOpen, setIsDetailOpen] = useState(false)
-  const [editNickname, setEditNickname] = useState('')
-  const [editLocation, setEditLocation] = useState('Salon')
-  const [editWateringDays, setEditWateringDays] = useState(7)
-  const [editWateringAmount, setEditWateringAmount] = useState(200)
-  const [editNotes, setEditNotes] = useState('')
-  const [editPurchaseDate, setEditPurchaseDate] = useState('')
-  const [isDetailSaving, setIsDetailSaving] = useState(false)
-  const [detailPreviewUrl, setDetailPreviewUrl] = useState<string | null>(null)
-  const [isDetailScanning, setIsDetailScanning] = useState(false)
-  const [detailScanResult, setDetailScanResult] = useState<IdentifyPlantOutput | null>(null)
-
-  // --- Delete state ---
-  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   // --- Handlers ---
   const resetDialog = () => {
