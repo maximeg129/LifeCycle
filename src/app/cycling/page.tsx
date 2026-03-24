@@ -305,7 +305,13 @@ export default function CyclingHub() {
                     ) : (
                       <div className="divide-y divide-border">
                         {activities.data.slice(0, 20).map((ride) => (
-                          <div key={ride.id} className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors cursor-pointer group">
+                          <a
+                            key={ride.id}
+                            href={`https://intervals.icu/activities/${ride.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors cursor-pointer group"
+                          >
                             <div className="flex items-center gap-4">
                               <div className="p-2 rounded-lg bg-primary/10 text-primary">
                                 <Bike className="w-5 h-5" />
@@ -350,7 +356,7 @@ export default function CyclingHub() {
                               </div>
                               <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                             </div>
-                          </div>
+                          </a>
                         ))}
                       </div>
                     )}
