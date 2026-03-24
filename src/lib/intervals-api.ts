@@ -64,6 +64,9 @@ export interface IntervalsWellness {
   diastolic?: number;
   ctl?: number;
   atl?: number;
+  ctlLoad?: number;
+  atlLoad?: number;
+  rampRate?: number;
   ctl2?: number;
   atl2?: number;
 }
@@ -141,10 +144,16 @@ export class IntervalsService {
     return this.fetchIntervals<IntervalsWellness>(`/wellness/${date}`);
   }
 
-  /** Courbe de fitness (CTL/ATL/TSB) entre deux dates */
+  /** Courbe de fitness (CTL/ATL/TSB) entre deux dates — dérivée du endpoint wellness */
   async getFitnessChart(oldest: string, newest: string): Promise<IntervalsFitnessDay[]> {
-    const params = new URLSearchParams({ oldest, newest });
-    return this.fetchIntervals<IntervalsFitnessDay[]>(`/fitness/${oldest}/${newest}`);
+    const wellness = await this.getWellnessRange(oldest, newest);
+    return wellness.map(w => ({
+      date: w.id,
+      ctl: w.ctl ?? 0,
+      atl: w.atl ?? 0,
+      tsb: (w.ctl ?? 0) - (w.atl ?? 0),
+      trainingLoad: w.atlLoad ?? 0,
+    }));
   }
 
   /** Détail d'une activité */
