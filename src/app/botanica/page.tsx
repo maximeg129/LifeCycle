@@ -452,27 +452,27 @@ export default function BotanicaPage() {
                         <Leaf className="w-16 h-16 text-green-500/30" />
                       </div>
                     )}
-                    <div className="absolute top-3 right-3">
+                    <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2">
+                      <Badge className="rounded-full bg-black/40 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5 shrink-0">
+                        <MapPin className="w-3 h-3 shrink-0" /> <span className="truncate max-w-[80px]">{plant.location || 'Non défini'}</span>
+                      </Badge>
                       <Badge className={cn(
-                        "rounded-full backdrop-blur shadow-sm font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5",
+                        "rounded-full backdrop-blur shadow-sm font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5 shrink-0",
                         needsWater ? "bg-orange-500/90 text-white" : "bg-white/95 text-green-600"
                       )}>
                         {needsWater
-                          ? <><AlertTriangle className="w-3 h-3" /> En retard {Math.abs(daysUntil)}j</>
+                          ? <><AlertTriangle className="w-3 h-3" /> {Math.abs(daysUntil)}j</>
                           : <><CheckCircle2 className="w-3 h-3" /> {getHealthLabel(score)}</>
                         }
                       </Badge>
                     </div>
-                    <div className="absolute top-3 left-3 flex flex-col gap-1.5">
-                      <Badge className="rounded-full bg-black/40 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5">
-                        <MapPin className="w-3 h-3" /> {plant.location || 'Non défini'}
-                      </Badge>
-                      {isAnalysisOverdue(plant) && (
+                    {isAnalysisOverdue(plant) && (
+                      <div className="absolute bottom-3 left-3">
                         <Badge className="rounded-full bg-purple-500/90 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5">
                           <Camera className="w-3 h-3" /> Analyse recommandée
                         </Badge>
-                      )}
-                    </div>
+                      </div>
+                    )}
                   </div>
 
                   <div className="p-6 space-y-4 flex flex-col flex-1">
