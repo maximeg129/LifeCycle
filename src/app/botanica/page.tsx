@@ -31,13 +31,15 @@ import {
   MapPin,
   Info,
   Flower2,
+  History,
 } from 'lucide-react'
+import { Line, LineChart, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 import Image from 'next/image'
 import { useToast } from '@/hooks/use-toast'
 import { identifyPlant } from '@/ai/flows/identify-plant-flow'
 import type { IdentifyPlantOutput } from '@/ai/flows/identify-plant-flow'
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
-import { collection, doc, setDoc, deleteDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
+import { collection, doc, setDoc, deleteDoc, serverTimestamp, Timestamp, query, orderBy } from 'firebase/firestore'
 import { format, differenceInDays, addDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -85,6 +87,14 @@ function getHealthStatus(score: number): string {
   return 'red'
 }
 
+const ANALYSIS_FREQUENCY_DAYS = 30
+
+function isAnalysisOverdue(plant: any): boolean {
+  if (!plant.lastAnalysisDate?.seconds) return true // never analyzed
+  const lastAnalysis = new Date(plant.lastAnalysisDate.seconds * 1000)
+  return differenceInDays(new Date(), lastAnalysis) >= ANALYSIS_FREQUENCY_DAYS
+}
+
 // --- Component ---
 
 export default function BotanicaPage() {
@@ -98,6 +108,26 @@ export default function BotanicaPage() {
     return collection(db, plantsPath)
   }, [db, plantsPath])
   const { data: plants, isLoading: loadingPlants } = useCollection(plantsQuery)
+
+  // --- Analyses history for selected plant ---
+  const analysesQuery = useMemoFirebase(() => {
+    if (!db || !user || !selectedPlant) return null
+    return query(
+      collection(db, `users/${user.uid}/plants/${selectedPlant.id}/analyses`),
+      orderBy('createdAt', 'asc')
+    )
+  }, [db, user, selectedPlant])
+  const { data: analyses } = useCollection(analysesQuery)
+
+  const chartData = useMemo(() => {
+    if (!analyses || analyses.length === 0) return []
+    return (analyses as any[]).map((a) => ({
+      date: a.createdAt?.seconds
+        ? format(new Date(a.createdAt.seconds * 1000), 'dd/MM', { locale: fr })
+        : '?',
+      score: a.healthScore ?? 0,
+    }))
+  }, [analyses])
 
   const overdueCount = useMemo(
     () => plants?.filter((p: any) => getDaysUntilWatering(p) < 0).length ?? 0,
@@ -118,6 +148,21 @@ export default function BotanicaPage() {
   const [lastWateringDate, setLastWateringDate] = useState(() => new Date().toISOString().split('T')[0])
   const [purchaseDate, setPurchaseDate] = useState('')
   const [notes, setNotes] = useState('')
+
+  // --- Detail dialog state ---
+  const detailFileInputRef = useRef<HTMLInputElement>(null)
+  const [selectedPlant, setSelectedPlant] = useState<any>(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [editNickname, setEditNickname] = useState('')
+  const [editLocation, setEditLocation] = useState('Salon')
+  const [editWateringDays, setEditWateringDays] = useState(7)
+  const [editWateringAmount, setEditWateringAmount] = useState(200)
+  const [editNotes, setEditNotes] = useState('')
+  const [editPurchaseDate, setEditPurchaseDate] = useState('')
+  const [isDetailSaving, setIsDetailSaving] = useState(false)
+  const [detailPreviewUrl, setDetailPreviewUrl] = useState<string | null>(null)
+  const [isDetailScanning, setIsDetailScanning] = useState(false)
+  const [detailScanResult, setDetailScanResult] = useState<IdentifyPlantOutput | null>(null)
 
   // --- Delete state ---
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -180,17 +225,128 @@ export default function BotanicaPage() {
         healthScore: scanResult?.healthScore ?? 75,
         healthStatus: getHealthStatus(scanResult?.healthScore ?? 75),
         lastAnalysisAlerts: scanResult?.alerts ?? [],
+        lastHealthAnalysis: scanResult?.healthAnalysis ?? '',
+        lastAnalysisDate: scanResult ? serverTimestamp() : null,
         thumbnailUrl: thumbnail,
         notes,
         userId: user.uid,
         createdAt: serverTimestamp(),
       })
+      // Save first analysis to history sub-collection
+      if (scanResult) {
+        const analysisRef = doc(collection(db, `users/${user.uid}/plants/${plantRef.id}/analyses`))
+        await setDoc(analysisRef, {
+          healthScore: scanResult.healthScore,
+          healthAnalysis: scanResult.healthAnalysis,
+          alerts: scanResult.alerts,
+          hydrationPlan: scanResult.hydrationPlan,
+          generalCare: scanResult.generalCare,
+          thumbnailUrl: thumbnail,
+          createdAt: serverTimestamp(),
+        })
+      }
       setIsAddOpen(false)
       toast({ title: 'Plante ajoutée', description: `${nickname} rejoint votre jardin.` })
     } catch {
       toast({ variant: 'destructive', title: "Erreur lors de l'enregistrement" })
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleOpenDetail = (plant: any) => {
+    setSelectedPlant(plant)
+    setEditNickname(plant.nickname || '')
+    setEditLocation(plant.location || 'Salon')
+    setEditWateringDays(plant.wateringFrequencyDays || 7)
+    setEditWateringAmount(plant.wateringAmountMl || 200)
+    setEditNotes(plant.notes || '')
+    setEditPurchaseDate(
+      plant.purchaseDate?.seconds
+        ? format(new Date(plant.purchaseDate.seconds * 1000), 'yyyy-MM-dd')
+        : ''
+    )
+    setDetailPreviewUrl(null)
+    setDetailScanResult(null)
+    if (detailFileInputRef.current) detailFileInputRef.current.value = ''
+    setIsDetailOpen(true)
+  }
+
+  const handleDetailScan = async () => {
+    if (!detailPreviewUrl || !selectedPlant) return
+    setIsDetailScanning(true)
+    try {
+      const compressed = await compressImage(detailPreviewUrl)
+      const res = await identifyPlant({
+        photoDataUri: compressed,
+        locationContext: selectedPlant.location,
+        plantContext: {
+          name: selectedPlant.nickname,
+          species: selectedPlant.species,
+          previousHealthAnalysis: selectedPlant.lastHealthAnalysis,
+          daysSinceLastAnalysis: selectedPlant.lastAnalysisDate?.seconds
+            ? differenceInDays(new Date(), new Date(selectedPlant.lastAnalysisDate.seconds * 1000))
+            : undefined,
+        },
+      })
+      setDetailScanResult(res)
+    } catch {
+      toast({ variant: 'destructive', title: "Erreur d'analyse" })
+    } finally {
+      setIsDetailScanning(false)
+    }
+  }
+
+  const handleSaveDetail = async () => {
+    if (!user || !db || !selectedPlant) return
+    if (!editNickname.trim()) {
+      toast({ variant: 'destructive', title: 'Un surnom est requis' })
+      return
+    }
+    setIsDetailSaving(true)
+    try {
+      const ref = doc(db, `users/${user.uid}/plants`, selectedPlant.id)
+      const updateData: any = {
+        nickname: editNickname,
+        location: editLocation,
+        wateringFrequencyDays: editWateringDays,
+        wateringAmountMl: editWateringAmount,
+        notes: editNotes,
+        purchaseDate: editPurchaseDate
+          ? Timestamp.fromDate(new Date(editPurchaseDate + 'T12:00:00'))
+          : null,
+      }
+
+      // If a new scan was done, update plant + save analysis to history
+      if (detailScanResult) {
+        const newThumbnail = detailPreviewUrl ? await compressImage(detailPreviewUrl) : null
+        if (newThumbnail) updateData.thumbnailUrl = newThumbnail
+        updateData.healthScore = detailScanResult.healthScore
+        updateData.healthStatus = getHealthStatus(detailScanResult.healthScore)
+        updateData.lastAnalysisAlerts = detailScanResult.alerts
+        updateData.lastHealthAnalysis = detailScanResult.healthAnalysis
+        updateData.lastAnalysisDate = serverTimestamp()
+
+        // Save to analyses sub-collection
+        const analysisRef = doc(collection(db, `users/${user.uid}/plants/${selectedPlant.id}/analyses`))
+        await setDoc(analysisRef, {
+          healthScore: detailScanResult.healthScore,
+          healthAnalysis: detailScanResult.healthAnalysis,
+          alerts: detailScanResult.alerts,
+          hydrationPlan: detailScanResult.hydrationPlan,
+          generalCare: detailScanResult.generalCare,
+          thumbnailUrl: newThumbnail,
+          createdAt: serverTimestamp(),
+        })
+      }
+
+      await setDoc(ref, updateData, { merge: true })
+      setIsDetailOpen(false)
+      toast({ title: 'Plante mise à jour' })
+    } catch {
+      toast({ variant: 'destructive', title: 'Erreur lors de la mise à jour' })
+    } finally {
+      setIsDetailSaving(false)
     }
   }
 
@@ -279,7 +435,7 @@ export default function BotanicaPage() {
                 : null
 
               return (
-                <div key={plant.id} className="apple-card border-none overflow-hidden group flex flex-col">
+                <div key={plant.id} onClick={() => handleOpenDetail(plant)} className="apple-card border-none overflow-hidden group flex flex-col cursor-pointer">
                   <div className="h-52 relative bg-green-900/20 flex-shrink-0">
                     {plant.thumbnailUrl ? (
                       <Image src={plant.thumbnailUrl} alt={plant.nickname || plant.name} fill className="object-cover transition-transform duration-1000 group-hover:scale-105" />
@@ -299,10 +455,15 @@ export default function BotanicaPage() {
                         }
                       </Badge>
                     </div>
-                    <div className="absolute top-3 left-3">
+                    <div className="absolute top-3 left-3 flex flex-col gap-1.5">
                       <Badge className="rounded-full bg-black/40 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5">
                         <MapPin className="w-3 h-3" /> {plant.location || 'Non défini'}
                       </Badge>
+                      {isAnalysisOverdue(plant) && (
+                        <Badge className="rounded-full bg-purple-500/90 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5">
+                          <Camera className="w-3 h-3" /> Analyse recommandée
+                        </Badge>
+                      )}
                     </div>
                   </div>
 
@@ -573,6 +734,221 @@ export default function BotanicaPage() {
               >
                 {isSaving ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Leaf className="w-5 h-5 mr-2" />}
                 Ajouter au jardin
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detail file input */}
+      <input
+        ref={detailFileInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0]
+          if (file) {
+            const reader = new FileReader()
+            reader.onloadend = () => setDetailPreviewUrl(reader.result as string)
+            reader.readAsDataURL(file)
+          }
+        }}
+      />
+
+      {/* Plant detail dialog */}
+      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+        <DialogContent className="sm:max-w-[540px] rounded-[32px] p-0 border-none shadow-3xl overflow-hidden max-h-[90vh] flex flex-col">
+          <DialogHeader className="px-8 pt-8 pb-4 shrink-0">
+            <DialogTitle className="text-2xl font-bold">{selectedPlant?.nickname || 'Détail'}</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <div className="px-8 pb-8 space-y-6">
+              {/* Photo with re-upload */}
+              <div className="space-y-3">
+                <div
+                  className="w-full h-52 rounded-[24px] overflow-hidden relative bg-secondary/30 flex items-center justify-center cursor-pointer group"
+                  onClick={() => detailFileInputRef.current?.click()}
+                >
+                  {detailPreviewUrl ? (
+                    <Image src={detailPreviewUrl} alt="Nouvelle photo" fill className="object-cover" />
+                  ) : selectedPlant?.thumbnailUrl ? (
+                    <Image src={selectedPlant.thumbnailUrl} alt={selectedPlant.nickname} fill className="object-cover" />
+                  ) : (
+                    <Leaf className="w-16 h-16 text-green-500/30" />
+                  )}
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity text-white text-center">
+                      <Camera className="w-8 h-8 mx-auto mb-1" />
+                      <p className="text-xs font-bold">Nouvelle photo</p>
+                    </div>
+                  </div>
+                </div>
+
+                {detailPreviewUrl && (
+                  <Button
+                    onClick={handleDetailScan}
+                    className="w-full h-12 rounded-2xl bg-green-500/10 text-green-400 hover:bg-green-500 hover:text-white font-bold border border-green-500/20 transition-all"
+                    disabled={isDetailScanning}
+                  >
+                    {isDetailScanning
+                      ? <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Analyse de suivi en cours…</>
+                      : <><Sparkles className="w-4 h-4 mr-2" /> Analyser l'évolution</>
+                    }
+                  </Button>
+                )}
+              </div>
+
+              {/* Detail scan results */}
+              {detailScanResult && (
+                <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-400">
+                  <div className="bg-green-500/8 border border-green-500/20 rounded-[20px] p-5 space-y-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-lg text-green-400 leading-tight">{detailScanResult.name}</p>
+                        <p className="text-xs italic text-muted-foreground mt-0.5">{detailScanResult.species}</p>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0">
+                        <span className={cn("text-2xl font-bold", getHealthColor(detailScanResult.healthScore))}>{detailScanResult.healthScore}%</span>
+                        <span className="text-[10px] uppercase font-bold opacity-40">Santé</span>
+                      </div>
+                    </div>
+                    <Progress value={detailScanResult.healthScore} className="h-1.5" />
+                    <p className="text-sm leading-relaxed text-muted-foreground">{detailScanResult.healthAnalysis}</p>
+                    {detailScanResult.alerts.length > 0 && (
+                      <div className="space-y-1.5">
+                        {detailScanResult.alerts.map((alert, i) => (
+                          <div key={i} className="flex items-start gap-2 text-orange-400 text-xs font-medium">
+                            <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                            <span>{alert}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Health summary */}
+              {selectedPlant && (
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest opacity-40">
+                    <span>Santé</span>
+                    <span className={getHealthColor(selectedPlant.healthScore ?? 75)}>{selectedPlant.healthScore ?? 75}%</span>
+                  </div>
+                  <Progress value={selectedPlant.healthScore ?? 75} className="h-1.5" />
+                  {selectedPlant.species && (
+                    <p className="text-xs text-muted-foreground italic">{selectedPlant.species}</p>
+                  )}
+                </div>
+              )}
+
+              <Separator className="opacity-20" />
+
+              {/* Editable fields */}
+              <div className="space-y-4">
+                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Modifier les informations</p>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Surnom *</Label>
+                  <Input value={editNickname} onChange={e => setEditNickname(e.target.value)} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Emplacement</Label>
+                    <Select value={editLocation} onValueChange={setEditLocation}>
+                      <SelectTrigger className="h-12 rounded-2xl bg-secondary/50 border-none px-5"><SelectValue /></SelectTrigger>
+                      <SelectContent>{['Salon', 'Cuisine', 'Chambre', 'Salle de bain', 'Bureau', 'Balcon', 'Jardin'].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Fréquence (jours)</Label>
+                    <Input type="number" min={1} value={editWateringDays} onChange={e => setEditWateringDays(Number(e.target.value))} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Quantité (ml)</Label>
+                    <Input type="number" min={10} step={10} value={editWateringAmount} onChange={e => setEditWateringAmount(Number(e.target.value))} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Date d'acquisition</Label>
+                    <Input type="date" value={editPurchaseDate} onChange={e => setEditPurchaseDate(e.target.value)} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Notes</Label>
+                  <Textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Observations…" className="rounded-2xl bg-secondary/50 border-none px-5 py-3 min-h-[80px] resize-none" />
+                </div>
+              </div>
+
+              {/* Analysis history */}
+              {analyses && (analyses as any[]).length > 0 && (
+                <>
+                  <Separator className="opacity-20" />
+                  <div className="space-y-4">
+                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest flex items-center gap-2">
+                      <History className="w-3.5 h-3.5" /> Historique des analyses
+                    </p>
+
+                    {/* Chart */}
+                    {chartData.length >= 2 && (
+                      <div className="bg-secondary/30 rounded-[20px] p-4">
+                        <ResponsiveContainer width="100%" height={120}>
+                          <LineChart data={chartData}>
+                            <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.3} />
+                            <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.3} width={30} />
+                            <Tooltip
+                              contentStyle={{ background: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: 12, fontSize: 12 }}
+                              formatter={(value: number) => [`${value}%`, 'Santé']}
+                            />
+                            <Line type="monotone" dataKey="score" stroke="hsl(130, 60%, 50%)" strokeWidth={2} dot={{ r: 4, fill: 'hsl(130, 60%, 50%)' }} />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
+
+                    {/* Timeline */}
+                    <div className="space-y-3">
+                      {([...(analyses as any[])].reverse()).map((analysis, i) => (
+                        <div key={analysis.id || i} className="bg-secondary/20 rounded-2xl p-4 space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-muted-foreground font-medium">
+                              {analysis.createdAt?.seconds
+                                ? format(new Date(analysis.createdAt.seconds * 1000), 'dd MMMM yyyy', { locale: fr })
+                                : 'Date inconnue'}
+                            </span>
+                            <span className={cn("text-sm font-bold", getHealthColor(analysis.healthScore))}>
+                              {analysis.healthScore}%
+                            </span>
+                          </div>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{analysis.healthAnalysis}</p>
+                          {analysis.alerts?.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5">
+                              {analysis.alerts.map((alert: string, j: number) => (
+                                <Badge key={j} variant="outline" className="text-[10px] text-orange-400 border-orange-400/30">{alert}</Badge>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <Button
+                onClick={handleSaveDetail}
+                className="w-full h-14 rounded-2xl bg-green-500 text-white font-bold shadow-xl shadow-green-500/20 hover:bg-green-600 transition-all"
+                disabled={isDetailSaving}
+              >
+                {isDetailSaving ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Leaf className="w-5 h-5 mr-2" />}
+                Enregistrer
               </Button>
             </div>
           </div>
