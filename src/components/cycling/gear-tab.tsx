@@ -25,11 +25,20 @@ import {
   Shield,
   ScanBarcode,
 } from 'lucide-react'
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase'
 import { collection, doc, deleteDoc, updateDoc } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { useToast } from '@/hooks/use-toast'
+import { useAthlete } from '@/hooks/use-intervals'
+import type { IntervalsGear } from '@/lib/intervals-api'
 import {
   type Bike as BikeType,
   type BikeComponent,
@@ -41,6 +50,7 @@ import {
 import { AddBikeDialog } from './add-bike-dialog'
 import { AddComponentDialog } from './add-component-dialog'
 import { ReplaceComponentDialog } from './replace-component-dialog'
+import { useGearSync } from './use-gear-sync'
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -105,6 +115,24 @@ export function GearTab() {
     return collection(db, `users/${user.uid}/components`)
   }, [db, user])
   const { data: components, isLoading: loadingComponents } = useCollection<BikeComponent>(componentsRef)
+
+  // Intervals.icu integration
+  const athlete = useAthlete()
+  const intervalsSettingsRef = useMemoFirebase(() => {
+    if (!user || !db) return null
+    return doc(db, `users/${user.uid}/settings/intervals`)
+  }, [db, user])
+  const { data: intervalsSettings } = useDoc<{ intervalsAthleteId: string; intervalsApiKey: string }>(intervalsSettingsRef)
+
+  const { syncKm, linkBike, isSyncing } = useGearSync({
+    bikes: (bikes || []) as BikeType[],
+    components: (components || []) as BikeComponent[],
+    athleteId: intervalsSettings?.intervalsAthleteId || null,
+    apiKey: intervalsSettings?.intervalsApiKey || null,
+  })
+
+  const externalBikes: IntervalsGear[] = athlete.data?.bikes?.filter(b => !b.retired) || []
+  const isIntervalsConfigured = !!intervalsSettings?.intervalsAthleteId
 
   // Local state
   const [expandedBike, setExpandedBike] = useState<string | null>(null)
@@ -225,6 +253,18 @@ export function GearTab() {
               <Bike className="w-6 h-6 text-primary" /> Vos Velos
             </h3>
             <div className="flex gap-2">
+              {isIntervalsConfigured && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={syncKm}
+                  disabled={isSyncing}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
+                  {isSyncing ? 'Sync...' : 'Sync km'}
+                </Button>
+              )}
               <AddComponentDialog bikes={activeBikes} />
               <AddBikeDialog />
             </div>
@@ -320,6 +360,35 @@ export function GearTab() {
                             <Trash2 className="w-3 h-3 mr-1" /> Supprimer velo
                           </Button>
                         </div>
+
+                        {/* Intervals.icu gear linking */}
+                        {isIntervalsConfigured && externalBikes.length > 0 && (
+                          <div className="p-3 bg-muted/20 flex items-center gap-3 border-t border-border">
+                            <span className="text-xs text-muted-foreground whitespace-nowrap">Lier a Intervals.icu :</span>
+                            <Select
+                              value={bike.externalGearId || '_none'}
+                              onValueChange={(v) => linkBike(bike.id, v === '_none' ? null : v)}
+                            >
+                              <SelectTrigger className="h-8 w-64 text-xs">
+                                <SelectValue placeholder="Non lie" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="_none">Non lie</SelectItem>
+                                {externalBikes.map(g => (
+                                  <SelectItem key={g.id} value={g.id}>
+                                    {g.name || `${g.brand_name} ${g.model_name}`}
+                                    {g.distance ? ` (${Math.round(g.distance / 1000)} km)` : ''}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            {bike.lastSyncDate && (
+                              <span className="text-[10px] text-muted-foreground">
+                                Derniere sync : {bike.lastSyncDate}
+                              </span>
+                            )}
+                          </div>
+                        )}
 
                         {bikeComps.length === 0 ? (
                           <div className="p-4 text-center text-sm text-muted-foreground">

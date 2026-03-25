@@ -62,6 +62,8 @@ export function AddBikeDialog() {
       productUrl: fd.get('productUrl')?.toString() || '',
       notes: fd.get('notes')?.toString() || '',
       isActive: true,
+      externalGearId: null,
+      lastSyncDate: null,
       createdAt: serverTimestamp(),
     }
 

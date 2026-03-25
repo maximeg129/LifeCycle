@@ -17,6 +17,8 @@ export interface Bike {
   productUrl: string
   notes: string
   isActive: boolean
+  externalGearId: string | null // Intervals.icu / Strava gear ID
+  lastSyncDate: string | null   // ISO date of last km sync
   createdAt: Timestamp
 }
 
