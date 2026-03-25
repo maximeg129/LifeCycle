@@ -20,11 +20,6 @@ export async function GET(request: NextRequest) {
   try {
     const service = new IntervalsService(athleteId, apiKey)
     const data = await service.getActivities(oldest, newest ?? undefined)
-    // Debug: log first activity fields to understand what the list endpoint returns
-    if (data.length > 0) {
-      console.log('[intervals/activities] Sample activity keys:', Object.keys(data[0]))
-      console.log('[intervals/activities] Sample activity:', JSON.stringify(data[0], null, 2))
-    }
     return NextResponse.json(data)
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'

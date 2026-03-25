@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useMemo } from 'react'
+import React, { useMemo } from 'react'
 import { format, subDays, formatDistanceToNow, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { AppNavigation } from '@/components/layout/sidebar'
@@ -26,7 +26,6 @@ import {
   AlertTriangle,
   RefreshCw,
   Settings,
-  Mountain,
   Timer,
   Flame,
 } from 'lucide-react'
@@ -126,13 +125,14 @@ export default function CyclingHub() {
   const activities = useActivities(activitiesOldest, newest)
   const fitness = useFitnessChart(fitnessOldest, newest)
 
-  // Debug: log raw activity data to browser console
-  useEffect(() => {
-    if (activities.data.length > 0) {
-      console.log('[debug] Activity keys:', Object.keys(activities.data[0]))
-      console.log('[debug] First activity:', activities.data[0])
+  // Map date → daily training load from fitness data
+  const dailyLoad = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const day of fitness.data) {
+      if (day.trainingLoad > 0) map.set(day.date, day.trainingLoad)
     }
-  }, [activities.data])
+    return map
+  }, [fitness.data])
 
   const isConfigured = athlete.isConfigured
 
@@ -312,62 +312,60 @@ export default function CyclingHub() {
                       </div>
                     ) : (
                       <div className="divide-y divide-border">
-                        {activities.data.slice(0, 20).map((ride) => (
-                          <a
-                            key={ride.id}
-                            href={`https://intervals.icu/activities/${ride.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors cursor-pointer group"
-                          >
-                            <div className="flex items-center gap-4">
-                              <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                                <Bike className="w-5 h-5" />
-                              </div>
-                              <div>
-                                <div className="font-semibold">{ride.name || 'Activité sans titre'}</div>
-                                <div className="text-xs text-muted-foreground">
-                                  {ride.start_date_local
-                                    ? formatDistanceToNow(parseISO(ride.start_date_local), { addSuffix: true, locale: fr })
-                                    : 'Date inconnue'}
+                        {activities.data.slice(0, 20).map((ride) => {
+                          const dateStr = ride.start_date_local?.slice(0, 10)
+                          const load = dateStr ? dailyLoad.get(dateStr) : undefined
+                          return (
+                            <div
+                              key={ride.id}
+                              className="flex items-center justify-between p-4"
+                            >
+                              <div className="flex items-center gap-4">
+                                <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                                  <Bike className="w-5 h-5" />
                                 </div>
+                                <div>
+                                  <div className="font-semibold">
+                                    {ride.name || (dateStr ? format(parseISO(dateStr), 'EEEE d MMMM', { locale: fr }) : 'Activité')}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {ride.start_date_local
+                                      ? formatDistanceToNow(parseISO(ride.start_date_local), { addSuffix: true, locale: fr })
+                                      : 'Date inconnue'}
+                                    {ride.source === 'STRAVA' && (
+                                      <span className="ml-2 text-orange-400">Strava</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-6">
+                                {ride.distance ? (
+                                  <div className="hidden md:flex flex-col items-end">
+                                    <span className="text-sm font-medium">{formatDistance(ride.distance)}</span>
+                                    <span className="text-[10px] text-muted-foreground">Distance</span>
+                                  </div>
+                                ) : null}
+                                {ride.moving_time ? (
+                                  <div className="hidden md:flex flex-col items-end">
+                                    <span className="text-sm font-medium flex items-center gap-1">
+                                      <Timer className="w-3 h-3" /> {formatDuration(ride.moving_time)}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">Durée</span>
+                                  </div>
+                                ) : null}
+                                {(ride.icu_training_load || load) && (
+                                  <div className="flex flex-col items-end">
+                                    <span className="text-sm font-medium flex items-center gap-1">
+                                      <Flame className="w-3 h-3 text-orange-400" />
+                                      {Math.round(ride.icu_training_load ?? load ?? 0)}
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground">Charge</span>
+                                  </div>
+                                )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-6">
-                              <div className="hidden md:flex flex-col items-end">
-                                <span className="text-sm font-medium">{formatDistance(ride.distance)}</span>
-                                <span className="text-[10px] text-muted-foreground">Distance</span>
-                              </div>
-                              {ride.average_watts && (
-                                <div className="hidden md:flex flex-col items-end">
-                                  <span className="text-sm font-medium">{ride.average_watts}W</span>
-                                  <span className="text-[10px] text-muted-foreground">Puis. Moy</span>
-                                </div>
-                              )}
-                              {ride.total_elevation_gain != null && ride.total_elevation_gain > 0 && (
-                                <div className="hidden lg:flex flex-col items-end">
-                                  <span className="text-sm font-medium flex items-center gap-1">
-                                    <Mountain className="w-3 h-3" /> {Math.round(ride.total_elevation_gain)}m
-                                  </span>
-                                  <span className="text-[10px] text-muted-foreground">D+</span>
-                                </div>
-                              )}
-                              {ride.icu_training_load && (
-                                <div className="hidden lg:flex flex-col items-end">
-                                  <span className="text-sm font-medium">{Math.round(ride.icu_training_load)}</span>
-                                  <span className="text-[10px] text-muted-foreground">TSS</span>
-                                </div>
-                              )}
-                              <div className="flex flex-col items-end">
-                                <span className="text-sm font-medium flex items-center gap-1">
-                                  <Timer className="w-3 h-3" /> {formatDuration(ride.moving_time)}
-                                </span>
-                                <span className="text-[10px] text-muted-foreground">Durée</span>
-                              </div>
-                              <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
-                            </div>
-                          </a>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                   </CardContent>
