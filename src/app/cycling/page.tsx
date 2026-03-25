@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useMemo } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { format, subDays, formatDistanceToNow, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { AppNavigation } from '@/components/layout/sidebar'
@@ -125,6 +125,14 @@ export default function CyclingHub() {
   const athlete = useAthlete()
   const activities = useActivities(activitiesOldest, newest)
   const fitness = useFitnessChart(fitnessOldest, newest)
+
+  // Debug: log raw activity data to browser console
+  useEffect(() => {
+    if (activities.data.length > 0) {
+      console.log('[debug] Activity keys:', Object.keys(activities.data[0]))
+      console.log('[debug] First activity:', activities.data[0])
+    }
+  }, [activities.data])
 
   const isConfigured = athlete.isConfigured
 
