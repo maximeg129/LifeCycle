@@ -55,7 +55,7 @@ export interface BikeComponent {
   retailer: string
   productUrl: string
   warrantyMonths: number | null
-  barcode: string
+  tireWidth: number | null // mm, only for tire_front / tire_rear
   notes: string
   status: 'active' | 'warning' | 'critical' | 'retired'
   retiredDate: string | null
@@ -151,3 +151,71 @@ export const COMPONENT_GROUPS: { label: string; categories: ComponentCategory[] 
     categories: ['bar_tape', 'cables_shift', 'cables_brake', 'bottom_bracket', 'cleats'],
   },
 ]
+
+// ── Templates composants par type de velo ────────────────────────────
+
+export type BikeTemplate = { category: ComponentCategory; defaultBrand?: string }[]
+
+const ROAD_TEMPLATE: BikeTemplate = [
+  { category: 'chain' },
+  { category: 'cassette' },
+  { category: 'chainrings' },
+  { category: 'brake_pads_front' },
+  { category: 'brake_pads_rear' },
+  { category: 'tire_front' },
+  { category: 'tire_rear' },
+  { category: 'bar_tape' },
+  { category: 'cables_shift' },
+  { category: 'cables_brake' },
+  { category: 'bottom_bracket' },
+  { category: 'cleats' },
+]
+
+const MTB_TEMPLATE: BikeTemplate = [
+  { category: 'chain' },
+  { category: 'cassette' },
+  { category: 'chainrings' },
+  { category: 'brake_pads_front' },
+  { category: 'brake_pads_rear' },
+  { category: 'disc_rotor_front' },
+  { category: 'disc_rotor_rear' },
+  { category: 'tire_front' },
+  { category: 'tire_rear' },
+  { category: 'tubeless_sealant' },
+  { category: 'bottom_bracket' },
+  { category: 'cleats' },
+]
+
+const GRAVEL_TEMPLATE: BikeTemplate = [
+  { category: 'chain' },
+  { category: 'cassette' },
+  { category: 'chainrings' },
+  { category: 'brake_pads_front' },
+  { category: 'brake_pads_rear' },
+  { category: 'disc_rotor_front' },
+  { category: 'disc_rotor_rear' },
+  { category: 'tire_front' },
+  { category: 'tire_rear' },
+  { category: 'tubeless_sealant' },
+  { category: 'bar_tape' },
+  { category: 'cables_shift' },
+  { category: 'cables_brake' },
+  { category: 'bottom_bracket' },
+  { category: 'cleats' },
+]
+
+export const BIKE_TEMPLATES: Record<BikeType, BikeTemplate> = {
+  road: ROAD_TEMPLATE,
+  gravel: GRAVEL_TEMPLATE,
+  mtb: MTB_TEMPLATE,
+  tt: ROAD_TEMPLATE,
+  track: [
+    { category: 'chain' },
+    { category: 'chainrings' },
+    { category: 'tire_front' },
+    { category: 'tire_rear' },
+    { category: 'bottom_bracket' },
+    { category: 'bar_tape' },
+  ],
+  other: ROAD_TEMPLATE,
+}

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Switch } from '@/components/ui/switch'
 import {
   Dialog,
   DialogContent,
@@ -28,7 +29,13 @@ import { useUser, useFirestore } from '@/firebase'
 import { collection, doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
-import { type BikeType, BIKE_TYPE_LABELS } from './gear-types'
+import {
+  type BikeType,
+  BIKE_TYPE_LABELS,
+  BIKE_TEMPLATES,
+  DEFAULT_THRESHOLDS,
+  COMPONENT_CATEGORY_LABELS,
+} from './gear-types'
 
 export function AddBikeDialog() {
   const { toast } = useToast()
@@ -37,8 +44,9 @@ export function AddBikeDialog() {
   const [open, setOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [bikeType, setBikeType] = useState<BikeType>('road')
+  const [initComponents, setInitComponents] = useState(true)
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!user || !db) return
 
@@ -50,13 +58,16 @@ export function AddBikeDialog() {
     }
 
     setIsSaving(true)
+    const today = format(new Date(), 'yyyy-MM-dd')
+    const totalKm = Number(fd.get('totalKm')) || 0
+
     const bikeData = {
       name,
       type: bikeType,
       brand: fd.get('brand')?.toString() || '',
       model: fd.get('model')?.toString() || '',
-      totalKm: Number(fd.get('totalKm')) || 0,
-      purchaseDate: fd.get('purchaseDate')?.toString() || format(new Date(), 'yyyy-MM-dd'),
+      totalKm,
+      purchaseDate: fd.get('purchaseDate')?.toString() || today,
       purchasePrice: fd.get('purchasePrice') ? Number(fd.get('purchasePrice')) : null,
       retailer: fd.get('retailer')?.toString() || '',
       productUrl: fd.get('productUrl')?.toString() || '',
@@ -68,19 +79,60 @@ export function AddBikeDialog() {
     }
 
     const bikeRef = doc(collection(db, `users/${user.uid}/bikes`))
-    setDoc(bikeRef, bikeData)
-      .then(() => {
-        setOpen(false)
-        toast({ title: 'Velo ajoute', description: `${name} a ete ajoute a votre garage.` })
+
+    try {
+      await setDoc(bikeRef, bikeData)
+
+      // Create template components if option is enabled
+      if (initComponents) {
+        const template = BIKE_TEMPLATES[bikeType]
+        const writes = template.map(tmpl => {
+          const compRef = doc(collection(db, `users/${user.uid}/components`))
+          return setDoc(compRef, {
+            bikeId: bikeRef.id,
+            category: tmpl.category,
+            brand: '',
+            model: '',
+            installedDate: today,
+            installedAtKm: 0,
+            currentKm: 0,
+            thresholdKm: DEFAULT_THRESHOLDS[tmpl.category],
+            purchaseDate: today,
+            purchasePrice: null,
+            retailer: '',
+            productUrl: '',
+            warrantyMonths: null,
+            tireWidth: (tmpl.category === 'tire_front' || tmpl.category === 'tire_rear') ? 28 : null,
+            notes: '',
+            status: 'active' as const,
+            retiredDate: null,
+            retiredAtKm: null,
+            retiredReason: null,
+            createdAt: serverTimestamp(),
+          })
+        })
+        await Promise.all(writes)
+      }
+
+      setOpen(false)
+      const compCount = initComponents ? BIKE_TEMPLATES[bikeType].length : 0
+      toast({
+        title: 'Velo ajoute',
+        description: compCount > 0
+          ? `${name} + ${compCount} composants initialises.`
+          : `${name} ajoute a votre garage.`,
       })
-      .catch(() => {
-        errorEmitter.emit(
-          'permission-error',
-          new FirestorePermissionError({ path: bikeRef.path, operation: 'create', requestResourceData: bikeData })
-        )
-      })
-      .finally(() => setIsSaving(false))
+    } catch {
+      errorEmitter.emit(
+        'permission-error',
+        new FirestorePermissionError({ path: bikeRef.path, operation: 'create', requestResourceData: bikeData })
+      )
+    } finally {
+      setIsSaving(false)
+    }
   }
+
+  const templateCount = BIKE_TEMPLATES[bikeType].length
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -150,6 +202,23 @@ export function AddBikeDialog() {
             <Label htmlFor="bike-notes">Notes</Label>
             <Textarea id="bike-notes" name="notes" placeholder="Taille, couleur, details..." rows={2} />
           </div>
+
+          {/* Component template toggle */}
+          <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border">
+            <div>
+              <div className="text-sm font-medium">Initialiser les composants</div>
+              <div className="text-[10px] text-muted-foreground">
+                {templateCount} composants standard pour un velo {BIKE_TYPE_LABELS[bikeType].toLowerCase()}
+              </div>
+              {initComponents && (
+                <div className="text-[10px] text-muted-foreground mt-1">
+                  {BIKE_TEMPLATES[bikeType].map(t => COMPONENT_CATEGORY_LABELS[t.category]).join(', ')}
+                </div>
+              )}
+            </div>
+            <Switch checked={initComponents} onCheckedChange={setInitComponents} />
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
             <Button type="submit" disabled={isSaving}>

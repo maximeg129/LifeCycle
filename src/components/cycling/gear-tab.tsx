@@ -10,28 +10,25 @@ import { Progress } from '@/components/ui/progress'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
-  Bike,
-  Wrench,
-  Zap,
-  Gauge,
-  ChevronRight,
-  ChevronDown,
-  History,
-  Trash2,
-  ExternalLink,
-  AlertTriangle,
-  Euro,
-  RefreshCw,
-  Shield,
-  ScanBarcode,
-} from 'lucide-react'
-import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import {
+  Bike,
+  Zap,
+  ChevronRight,
+  ChevronDown,
+  History,
+  Trash2,
+  ExternalLink,
+  Euro,
+  RefreshCw,
+  Shield,
+  TrendingDown,
+} from 'lucide-react'
 import { useUser, useFirestore, useCollection, useMemoFirebase, useDoc } from '@/firebase'
 import { collection, doc, deleteDoc, updateDoc } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
@@ -50,51 +47,10 @@ import {
 import { AddBikeDialog } from './add-bike-dialog'
 import { AddComponentDialog } from './add-component-dialog'
 import { ReplaceComponentDialog } from './replace-component-dialog'
+import { ComponentRow, computeStatus } from './component-row'
+import { ReplacementHistory } from './replacement-history'
+import { TirePressureCard } from './tire-pressure-card'
 import { useGearSync } from './use-gear-sync'
-
-// ── Helpers ──────────────────────────────────────────────────────────
-
-function computeStatus(comp: BikeComponent): 'active' | 'warning' | 'critical' {
-  if (comp.status === 'retired') return 'active'
-  const ratio = comp.currentKm / comp.thresholdKm
-  if (ratio >= 1) return 'critical'
-  if (ratio >= 0.8) return 'warning'
-  return 'active'
-}
-
-function warrantyActive(comp: BikeComponent): boolean {
-  if (!comp.warrantyMonths || !comp.purchaseDate) return false
-  const expiry = addMonths(parseISO(comp.purchaseDate), comp.warrantyMonths)
-  return isBefore(new Date(), expiry)
-}
-
-function formatWarrantyExpiry(comp: BikeComponent): string {
-  if (!comp.warrantyMonths || !comp.purchaseDate) return ''
-  const expiry = addMonths(parseISO(comp.purchaseDate), comp.warrantyMonths)
-  return format(expiry, 'dd MMM yyyy', { locale: fr })
-}
-
-// ── Tire pressure calculator ─────────────────────────────────────────
-
-function calcPressure(weightKg: number, tireWidthMm: number): { front: number; rear: number } {
-  // Simplified formula based on rider weight and tire width
-  // Base: 28mm tire, 75kg rider => ~5.0/5.2 bar
-  const baseWidth = 28
-  const baseWeight = 75
-  const basePressure = 5.1
-
-  const widthFactor = baseWidth / tireWidthMm
-  const weightFactor = weightKg / baseWeight
-
-  const avgPressure = basePressure * widthFactor * weightFactor
-  const front = Math.round((avgPressure * 0.96) * 10) / 10 // Front slightly less
-  const rear = Math.round((avgPressure * 1.04) * 10) / 10  // Rear slightly more
-
-  return {
-    front: Math.max(2.0, Math.min(9.0, front)),
-    rear: Math.max(2.0, Math.min(9.0, rear)),
-  }
-}
 
 // ── Main component ───────────────────────────────────────────────────
 
@@ -124,22 +80,20 @@ export function GearTab() {
   }, [db, user])
   const { data: intervalsSettings } = useDoc<{ intervalsAthleteId: string; intervalsApiKey: string }>(intervalsSettingsRef)
 
+  const externalBikes: IntervalsGear[] = athlete.data?.bikes?.filter(b => !b.retired) || []
+  const isIntervalsConfigured = !!intervalsSettings?.intervalsAthleteId
+
   const { syncKm, linkBike, isSyncing } = useGearSync({
     bikes: (bikes || []) as BikeType[],
     components: (components || []) as BikeComponent[],
     athleteId: intervalsSettings?.intervalsAthleteId || null,
     apiKey: intervalsSettings?.intervalsApiKey || null,
+    externalBikes,
   })
-
-  const externalBikes: IntervalsGear[] = athlete.data?.bikes?.filter(b => !b.retired) || []
-  const isIntervalsConfigured = !!intervalsSettings?.intervalsAthleteId
 
   // Local state
   const [expandedBike, setExpandedBike] = useState<string | null>(null)
   const [replacingComponent, setReplacingComponent] = useState<BikeComponent | null>(null)
-  const [weight, setWeight] = useState(75)
-  const [tireWidth, setTireWidth] = useState(28)
-  const [pressure, setPressure] = useState<{ front: number; rear: number } | null>(null)
 
   // Active bikes
   const activeBikes = useMemo(() => {
@@ -158,7 +112,7 @@ export function GearTab() {
     return map
   }, [components])
 
-  // Maintenance alerts (warning + critical)
+  // Maintenance alerts
   const alerts = useMemo(() => {
     return (components || [])
       .filter(c => c.status !== 'retired')
@@ -175,13 +129,19 @@ export function GearTab() {
       .slice(0, 8)
   }, [components])
 
-  // Total cost
+  // Total cost with cost/km
   const totalCost = useMemo(() => {
     let bikesCost = 0
     let componentsCost = 0
-    for (const b of (bikes || [])) bikesCost += b.purchasePrice || 0
+    let totalBikeKm = 0
+    for (const b of (bikes || [])) {
+      bikesCost += b.purchasePrice || 0
+      totalBikeKm += b.totalKm || 0
+    }
     for (const c of (components || [])) componentsCost += c.purchasePrice || 0
-    return { bikes: bikesCost, components: componentsCost, total: bikesCost + componentsCost }
+    const total = bikesCost + componentsCost
+    const costPerKm = totalBikeKm > 0 ? total / totalBikeKm : null
+    return { bikes: bikesCost, components: componentsCost, total, costPerKm }
   }, [bikes, components])
 
   // Warranty alerts
@@ -219,7 +179,6 @@ export function GearTab() {
     updateDoc(ref, { totalKm: newKm })
       .catch(() => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update' })))
 
-    // Update all active components for this bike proportionally
     const bikeComponents = componentsByBike.get(bikeId) || []
     const bike = activeBikes.find(b => b.id === bikeId)
     if (!bike) return
@@ -235,15 +194,11 @@ export function GearTab() {
     }
   }
 
-  const handleCalcPressure = () => {
-    setPressure(calcPressure(weight, tireWidth))
-  }
-
   if (!user) return null
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-      {/* ── Left Column: Bikes + Alerts ── */}
+      {/* ── Left Column ── */}
       <div className="lg:col-span-2 space-y-6">
 
         {/* Bikes section */}
@@ -254,13 +209,7 @@ export function GearTab() {
             </h3>
             <div className="flex gap-2">
               {isIntervalsConfigured && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-2"
-                  onClick={syncKm}
-                  disabled={isSyncing}
-                >
+                <Button size="sm" variant="outline" className="gap-2" onClick={syncKm} disabled={isSyncing}>
                   <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
                   {isSyncing ? 'Sync...' : 'Sync km'}
                 </Button>
@@ -271,9 +220,9 @@ export function GearTab() {
           </div>
 
           {loadingBikes ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Skeleton className="h-48 rounded-xl" />
-              <Skeleton className="h-48 rounded-xl" />
+            <div className="space-y-4">
+              <Skeleton className="h-24 rounded-xl" />
+              <Skeleton className="h-24 rounded-xl" />
             </div>
           ) : activeBikes.length === 0 ? (
             <Card className="bg-card/40 border-border border-dashed">
@@ -288,26 +237,35 @@ export function GearTab() {
                 const isExpanded = expandedBike === bike.id
                 const criticalCount = bikeComps.filter(c => computeStatus(c) === 'critical').length
                 const warningCount = bikeComps.filter(c => computeStatus(c) === 'warning').length
+                const bikeCostTotal = (bike.purchasePrice || 0) + bikeComps.reduce((s, c) => s + (c.purchasePrice || 0), 0)
+                const bikeCostPerKm = bike.totalKm > 0 && bikeCostTotal > 0
+                  ? bikeCostTotal / bike.totalKm
+                  : null
 
                 return (
                   <Card key={bike.id} className="bg-card/40 border-border overflow-hidden hover:border-primary/50 transition-all">
-                    {/* Bike header */}
                     <div className="p-4 flex items-center justify-between">
                       <div className="flex items-center gap-4">
                         <div className="p-2 rounded-lg bg-primary/10 text-primary">
                           <Bike className="w-6 h-6" />
                         </div>
                         <div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <h4 className="font-bold text-lg">{bike.name}</h4>
                             <Badge className={BIKE_TYPE_COLORS[bike.type]}>{BIKE_TYPE_LABELS[bike.type]}</Badge>
                             {criticalCount > 0 && <Badge variant="destructive">{criticalCount} alerte{criticalCount > 1 ? 's' : ''}</Badge>}
                             {warningCount > 0 && !criticalCount && <Badge variant="secondary">{warningCount} a surveiller</Badge>}
                           </div>
-                          <p className="text-xs text-muted-foreground">
-                            {bike.brand} {bike.model} &middot; {bike.totalKm.toLocaleString('fr-FR')} km
-                            {bike.purchaseDate && ` &middot; Achat: ${format(parseISO(bike.purchaseDate), 'MMM yyyy', { locale: fr })}`}
-                          </p>
+                          <div className="text-xs text-muted-foreground flex items-center gap-2 flex-wrap">
+                            <span>{bike.brand} {bike.model}</span>
+                            <span>&middot; {bike.totalKm.toLocaleString('fr-FR')} km</span>
+                            {bikeCostPerKm != null && (
+                              <span className="flex items-center gap-1 text-primary">
+                                <TrendingDown className="w-3 h-3" />
+                                {bikeCostPerKm >= 1 ? `${bikeCostPerKm.toFixed(2)} EUR/km` : `${(bikeCostPerKm * 100).toFixed(1)} ct/km`}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -316,19 +274,13 @@ export function GearTab() {
                             <Button variant="ghost" size="icon" className="h-8 w-8"><ExternalLink className="w-4 h-4" /></Button>
                           </a>
                         )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="gap-1"
-                          onClick={() => setExpandedBike(isExpanded ? null : bike.id)}
-                        >
+                        <Button variant="ghost" size="sm" className="gap-1" onClick={() => setExpandedBike(isExpanded ? null : bike.id)}>
                           {bikeComps.length} composant{bikeComps.length !== 1 ? 's' : ''}
                           {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                         </Button>
                       </div>
                     </div>
 
-                    {/* Expanded: components list */}
                     {isExpanded && (
                       <div className="border-t border-border">
                         {/* Quick km update */}
@@ -338,26 +290,13 @@ export function GearTab() {
                             type="number"
                             className="h-8 w-32"
                             defaultValue={bike.totalKm}
-                            onBlur={(e) => {
-                              const v = Number(e.target.value)
-                              if (v > bike.totalKm) handleUpdateKm(bike.id, v)
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                const v = Number((e.target as HTMLInputElement).value)
-                                if (v > bike.totalKm) handleUpdateKm(bike.id, v)
-                              }
-                            }}
+                            onBlur={(e) => { const v = Number(e.target.value); if (v > bike.totalKm) handleUpdateKm(bike.id, v) }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { const v = Number((e.target as HTMLInputElement).value); if (v > bike.totalKm) handleUpdateKm(bike.id, v) } }}
                           />
                           <span className="text-xs text-muted-foreground">km</span>
                           <div className="flex-1" />
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive text-xs"
-                            onClick={() => handleDeleteBike(bike.id, bike.name)}
-                          >
-                            <Trash2 className="w-3 h-3 mr-1" /> Supprimer velo
+                          <Button variant="ghost" size="sm" className="text-destructive text-xs" onClick={() => handleDeleteBike(bike.id, bike.name)}>
+                            <Trash2 className="w-3 h-3 mr-1" /> Supprimer
                           </Button>
                         </div>
 
@@ -365,13 +304,8 @@ export function GearTab() {
                         {isIntervalsConfigured && externalBikes.length > 0 && (
                           <div className="p-3 bg-muted/20 flex items-center gap-3 border-t border-border">
                             <span className="text-xs text-muted-foreground whitespace-nowrap">Lier a Intervals.icu :</span>
-                            <Select
-                              value={bike.externalGearId || '_none'}
-                              onValueChange={(v) => linkBike(bike.id, v === '_none' ? null : v)}
-                            >
-                              <SelectTrigger className="h-8 w-64 text-xs">
-                                <SelectValue placeholder="Non lie" />
-                              </SelectTrigger>
+                            <Select value={bike.externalGearId || '_none'} onValueChange={(v) => linkBike(bike.id, v === '_none' ? null : v)}>
+                              <SelectTrigger className="h-8 w-64 text-xs"><SelectValue placeholder="Non lie" /></SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="_none">Non lie</SelectItem>
                                 {externalBikes.map(g => (
@@ -383,13 +317,12 @@ export function GearTab() {
                               </SelectContent>
                             </Select>
                             {bike.lastSyncDate && (
-                              <span className="text-[10px] text-muted-foreground">
-                                Derniere sync : {bike.lastSyncDate}
-                              </span>
+                              <span className="text-[10px] text-muted-foreground">Sync : {bike.lastSyncDate}</span>
                             )}
                           </div>
                         )}
 
+                        {/* Components list */}
                         {bikeComps.length === 0 ? (
                           <div className="p-4 text-center text-sm text-muted-foreground">
                             Aucun composant. Ajoutez-en pour suivre l&apos;usure.
@@ -404,102 +337,16 @@ export function GearTab() {
                                   <div className="px-4 py-2 bg-muted/20">
                                     <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{group.label}</span>
                                   </div>
-                                  {groupComps.map(comp => {
-                                    const status = computeStatus(comp)
-                                    const ratio = Math.min(100, (comp.currentKm / comp.thresholdKm) * 100)
-                                    const hasWarranty = warrantyActive(comp)
-                                    return (
-                                      <div key={comp.id} className="flex flex-col gap-2 p-4 hover:bg-muted/10 transition-colors">
-                                        <div className="flex justify-between items-center">
-                                          <div className="flex items-center gap-2">
-                                            <span className="font-medium text-sm">{COMPONENT_CATEGORY_LABELS[comp.category]}</span>
-                                            {comp.brand && <span className="text-xs text-muted-foreground">{comp.brand} {comp.model}</span>}
-                                            {hasWarranty && (
-                                              <Badge variant="outline" className="text-[10px] gap-1">
-                                                <Shield className="w-3 h-3" /> Garantie {formatWarrantyExpiry(comp)}
-                                              </Badge>
-                                            )}
-                                            {comp.barcode && (
-                                              <Badge variant="outline" className="text-[10px] gap-1">
-                                                <ScanBarcode className="w-3 h-3" /> {comp.barcode}
-                                              </Badge>
-                                            )}
-                                          </div>
-                                          <div className="flex items-center gap-2">
-                                            <Badge variant={status === 'critical' ? 'destructive' : status === 'warning' ? 'secondary' : 'outline'}>
-                                              {status === 'critical' ? 'Remplacer' : status === 'warning' ? 'Surveiller' : 'OK'}
-                                            </Badge>
-                                            <Button
-                                              variant="ghost"
-                                              size="sm"
-                                              className="text-xs h-7"
-                                              onClick={() => setReplacingComponent(comp)}
-                                            >
-                                              <RefreshCw className="w-3 h-3 mr-1" /> Remplacer
-                                            </Button>
-                                            {comp.productUrl && (
-                                              <a href={comp.productUrl} target="_blank" rel="noopener noreferrer">
-                                                <Button variant="ghost" size="icon" className="h-7 w-7">
-                                                  <ExternalLink className="w-3 h-3" />
-                                                </Button>
-                                              </a>
-                                            )}
-                                            <Button
-                                              variant="ghost"
-                                              size="icon"
-                                              className="h-7 w-7 text-destructive"
-                                              onClick={() => handleDeleteComponent(comp.id)}
-                                            >
-                                              <Trash2 className="w-3 h-3" />
-                                            </Button>
-                                          </div>
-                                        </div>
-                                        <Progress value={ratio} className="h-1.5" />
-                                        <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-tight">
-                                          <span>Usage: {comp.currentKm.toLocaleString('fr-FR')} km</span>
-                                          <span>Seuil: {comp.thresholdKm.toLocaleString('fr-FR')} km</span>
-                                        </div>
-                                        {comp.purchasePrice != null && comp.purchasePrice > 0 && (
-                                          <div className="text-[10px] text-muted-foreground flex items-center gap-3">
-                                            <span className="flex items-center gap-1"><Euro className="w-3 h-3" /> {comp.purchasePrice.toFixed(2)}</span>
-                                            {comp.retailer && <span>{comp.retailer}</span>}
-                                            {comp.installedDate && <span>Installe le {format(parseISO(comp.installedDate), 'dd MMM yyyy', { locale: fr })}</span>}
-                                          </div>
-                                        )}
-                                      </div>
-                                    )
-                                  })}
+                                  {groupComps.map(comp => (
+                                    <ComponentRow key={comp.id} comp={comp} onReplace={setReplacingComponent} onDelete={handleDeleteComponent} />
+                                  ))}
                                 </div>
                               )
                             })}
-                            {/* Components not in any group */}
-                            {bikeComps.filter(c => !COMPONENT_GROUPS.some(g => g.categories.includes(c.category))).map(comp => {
-                              const status = computeStatus(comp)
-                              const ratio = Math.min(100, (comp.currentKm / comp.thresholdKm) * 100)
-                              return (
-                                <div key={comp.id} className="flex flex-col gap-2 p-4 hover:bg-muted/10">
-                                  <div className="flex justify-between items-center">
-                                    <span className="font-medium text-sm">{COMPONENT_CATEGORY_LABELS[comp.category]} {comp.brand} {comp.model}</span>
-                                    <div className="flex items-center gap-2">
-                                      <Badge variant={status === 'critical' ? 'destructive' : status === 'warning' ? 'secondary' : 'outline'}>
-                                        {status === 'critical' ? 'Remplacer' : status === 'warning' ? 'Surveiller' : 'OK'}
-                                      </Badge>
-                                      <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setReplacingComponent(comp)}>
-                                        <RefreshCw className="w-3 h-3 mr-1" /> Remplacer
-                                      </Button>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDeleteComponent(comp.id)}>
-                                        <Trash2 className="w-3 h-3" />
-                                      </Button>
-                                    </div>
-                                  </div>
-                                  <Progress value={ratio} className="h-1.5" />
-                                  <div className="flex justify-between text-[10px] text-muted-foreground uppercase">
-                                    <span>Usage: {comp.currentKm.toLocaleString('fr-FR')} km</span>
-                                    <span>Seuil: {comp.thresholdKm.toLocaleString('fr-FR')} km</span>
-                                  </div>
-                                </div>
-                              )
-                            })}
+                            {/* Ungrouped */}
+                            {bikeComps.filter(c => !COMPONENT_GROUPS.some(g => g.categories.includes(c.category))).map(comp => (
+                              <ComponentRow key={comp.id} comp={comp} onReplace={setReplacingComponent} onDelete={handleDeleteComponent} />
+                            ))}
                           </div>
                         )}
                       </div>
@@ -517,10 +364,7 @@ export function GearTab() {
             <Zap className="w-6 h-6 text-accent" /> Alertes Maintenance
           </h3>
           {loadingComponents ? (
-            <div className="space-y-3">
-              <Skeleton className="h-20 rounded-xl" />
-              <Skeleton className="h-20 rounded-xl" />
-            </div>
+            <div className="space-y-3"><Skeleton className="h-20 rounded-xl" /><Skeleton className="h-20 rounded-xl" /></div>
           ) : alerts.length === 0 ? (
             <Card className="bg-card/40 border-border">
               <CardContent className="py-6 text-center text-sm text-muted-foreground">
@@ -572,56 +416,27 @@ export function GearTab() {
                     <span className="text-xs text-muted-foreground ml-2">{comp.brand} {comp.model}</span>
                   </div>
                   <Badge variant="outline" className="text-yellow-400 border-yellow-500/30">
-                    Expire le {formatWarrantyExpiry(comp)}
+                    Expire le {(() => {
+                      if (!comp.warrantyMonths || !comp.purchaseDate) return ''
+                      return format(addMonths(parseISO(comp.purchaseDate), comp.warrantyMonths), 'dd MMM yyyy', { locale: fr })
+                    })()}
                   </Badge>
                 </div>
               ))}
             </div>
           )}
         </section>
+
+        {/* Replacement history */}
+        <ReplacementHistory components={(components || []) as BikeComponent[]} bikes={activeBikes} />
       </div>
 
-      {/* ── Right Column: Tools ── */}
+      {/* ── Right Column ── */}
       <div className="space-y-6">
-        {/* Tire pressure calculator */}
-        <Card className="bg-card border-border shadow-lg">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Gauge className="w-5 h-5 text-primary" /> Pression Pneus
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Poids Cycliste (kg)</label>
-                  <Input type="number" value={weight} onChange={e => setWeight(Number(e.target.value))} className="h-8" />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Largeur Pneu (mm)</label>
-                  <Input type="number" value={tireWidth} onChange={e => setTireWidth(Number(e.target.value))} className="h-8" />
-                </div>
-              </div>
-              <Button className="w-full bg-accent text-accent-foreground hover:bg-accent/90" onClick={handleCalcPressure}>
-                Calculer Pression
-              </Button>
-            </div>
-            {pressure && (
-              <div className="pt-6 border-t border-border grid grid-cols-2 gap-4 text-center">
-                <div className="p-3 bg-muted rounded-lg">
-                  <div className="text-xl font-bold">{pressure.front}</div>
-                  <div className="text-[10px] text-muted-foreground uppercase">Avant (Bar)</div>
-                </div>
-                <div className="p-3 bg-muted rounded-lg">
-                  <div className="text-xl font-bold">{pressure.rear}</div>
-                  <div className="text-[10px] text-muted-foreground uppercase">Arriere (Bar)</div>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+        {/* Tire pressure - linked to bike tires */}
+        <TirePressureCard bikes={activeBikes} components={(components || []) as BikeComponent[]} />
 
-        {/* Cost summary */}
+        {/* Cost summary with cost/km */}
         <Card className="bg-card border-border shadow-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -643,6 +458,17 @@ export function GearTab() {
               <div className="text-2xl font-bold text-primary">{totalCost.total.toFixed(0)}<span className="text-sm ml-1">EUR</span></div>
               <div className="text-[10px] text-muted-foreground uppercase">Total investi</div>
             </div>
+            {totalCost.costPerKm != null && (
+              <div className="p-3 bg-muted/50 rounded-lg text-center">
+                <div className="text-lg font-bold flex items-center justify-center gap-1">
+                  <TrendingDown className="w-4 h-4 text-primary" />
+                  {totalCost.costPerKm >= 1
+                    ? `${totalCost.costPerKm.toFixed(2)} EUR/km`
+                    : `${(totalCost.costPerKm * 100).toFixed(1)} ct/km`}
+                </div>
+                <div className="text-[10px] text-muted-foreground uppercase">Cout moyen par km</div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

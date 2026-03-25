@@ -83,7 +83,9 @@ export function AddComponentDialog({ bikes, preselectedBikeId }: Props) {
       retailer: fd.get('retailer')?.toString() || '',
       productUrl: fd.get('productUrl')?.toString() || '',
       warrantyMonths: fd.get('warrantyMonths') ? Number(fd.get('warrantyMonths')) : null,
-      barcode: fd.get('barcode')?.toString() || '',
+      tireWidth: (category === 'tire_front' || category === 'tire_rear')
+        ? (Number(fd.get('tireWidth')) || 28)
+        : null,
       notes: fd.get('notes')?.toString() || '',
       status: 'active' as const,
       retiredDate: null,
@@ -220,10 +222,12 @@ export function AddComponentDialog({ bikes, preselectedBikeId }: Props) {
             <Input id="comp-url" name="productUrl" type="url" placeholder="https://..." />
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="comp-barcode">Code-barres / EAN</Label>
-            <Input id="comp-barcode" name="barcode" placeholder="Scanner ou saisir manuellement" />
-          </div>
+          {(category === 'tire_front' || category === 'tire_rear') && (
+            <div className="space-y-2">
+              <Label htmlFor="comp-tire-width">Largeur pneu (mm)</Label>
+              <Input id="comp-tire-width" name="tireWidth" type="number" min={20} max={80} defaultValue={28} />
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="comp-notes">Notes</Label>

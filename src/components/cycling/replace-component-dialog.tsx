@@ -86,7 +86,9 @@ export function ReplaceComponentDialog({ component, open, onOpenChange }: Props)
       retailer: fd.get('retailer')?.toString() || '',
       productUrl: fd.get('productUrl')?.toString() || '',
       warrantyMonths: fd.get('warrantyMonths') ? Number(fd.get('warrantyMonths')) : null,
-      barcode: fd.get('barcode')?.toString() || '',
+      tireWidth: (component.category === 'tire_front' || component.category === 'tire_rear')
+        ? (Number(fd.get('tireWidth')) || component.tireWidth || 28)
+        : null,
       notes: fd.get('notes')?.toString() || '',
       status: 'active' as const,
       retiredDate: null,
@@ -195,10 +197,12 @@ export function ReplaceComponentDialog({ component, open, onOpenChange }: Props)
               <Label htmlFor="replace-warranty">Garantie (mois)</Label>
               <Input id="replace-warranty" name="warrantyMonths" type="number" min={0} />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="replace-barcode">Code-barres</Label>
-              <Input id="replace-barcode" name="barcode" />
-            </div>
+            {(component.category === 'tire_front' || component.category === 'tire_rear') && (
+              <div className="space-y-2">
+                <Label htmlFor="replace-tire-width">Largeur pneu (mm)</Label>
+                <Input id="replace-tire-width" name="tireWidth" type="number" min={20} max={80} defaultValue={component.tireWidth || 28} />
+              </div>
+            )}
           </div>
 
           <div className="space-y-2">
