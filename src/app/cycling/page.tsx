@@ -9,20 +9,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
-import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar } from 'recharts'
 import {
   Bike,
   Wrench,
-  History,
   ChevronRight,
   TrendingUp,
   TrendingDown,
   Activity,
-  Zap,
-  Gauge,
   AlertTriangle,
   RefreshCw,
   Settings,
@@ -31,6 +27,7 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 import { useAthlete, useActivities, useFitnessChart } from '@/hooks/use-intervals'
+import { GearTab } from '@/components/cycling/gear-tab'
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -443,134 +440,9 @@ export default function CyclingHub() {
             )}
           </TabsContent>
 
-          {/* ── Tab Matériel (inchangé – hardcoded pour l'instant) ── */}
+          {/* ── Tab Matériel (Firestore-backed) ── */}
           <TabsContent value="gear" className="space-y-8">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 space-y-6">
-                <section className="space-y-4">
-                  <h3 className="text-xl font-bold flex items-center gap-2">
-                    <Bike className="w-6 h-6 text-primary" /> Vos Vélos
-                  </h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Card className="bg-card/40 border-border overflow-hidden group hover:border-primary/50 transition-all">
-                      <div className="h-32 bg-muted relative">
-                        <div className="absolute top-2 right-2 flex gap-1">
-                          <Badge className="bg-accent/20 text-accent border-accent/20">Route</Badge>
-                        </div>
-                      </div>
-                      <CardContent className="pt-4">
-                        <h4 className="font-bold text-lg">Canyon Ultimate CF SLX</h4>
-                        <p className="text-xs text-muted-foreground mb-4">Total: 8,420 km</p>
-                        <Button variant="ghost" size="sm" className="w-full justify-between text-xs">
-                          Gérer les composants <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </CardContent>
-                    </Card>
-                    <Card className="bg-card/40 border-border overflow-hidden group hover:border-primary/50 transition-all">
-                      <div className="h-32 bg-muted relative">
-                        <div className="absolute top-2 right-2 flex gap-1">
-                          <Badge className="bg-primary/20 text-primary border-primary/20">VTT</Badge>
-                        </div>
-                      </div>
-                      <CardContent className="pt-4">
-                        <h4 className="font-bold text-lg">Specialized Epic Evo</h4>
-                        <p className="text-xs text-muted-foreground mb-4">Total: 2,150 km</p>
-                        <Button variant="ghost" size="sm" className="w-full justify-between text-xs">
-                          Gérer les composants <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  </div>
-                </section>
-
-                <section className="space-y-4">
-                  <h3 className="text-xl font-bold flex items-center gap-2">
-                    <Zap className="w-6 h-6 text-accent" /> Alertes Maintenance
-                  </h3>
-                  <div className="space-y-3">
-                    {[
-                      { item: 'Chaîne (Canyon Ultimate)', km: 3250, limit: 4000, status: 'warning' as const },
-                      { item: 'Plaquettes Avant (Specialized)', km: 1800, limit: 2000, status: 'urgent' as const },
-                      { item: 'Pneus GP5000 (Canyon)', km: 4500, limit: 5000, status: 'warning' as const }
-                    ].map((maint, i) => (
-                      <div key={i} className="flex flex-col gap-2 p-4 bg-card/40 border border-border rounded-xl">
-                        <div className="flex justify-between items-center">
-                          <span className="font-medium">{maint.item}</span>
-                          <Badge variant={maint.status === 'urgent' ? 'destructive' : 'secondary'}>
-                            {maint.status === 'urgent' ? 'Remplacer' : 'Surveiller'}
-                          </Badge>
-                        </div>
-                        <Progress value={(maint.km / maint.limit) * 100} className="h-2" />
-                        <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-tight">
-                          <span>Usage: {maint.km} km</span>
-                          <span>Limite: {maint.limit} km</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              </div>
-
-              <div className="space-y-6">
-                <Card className="bg-card border-border shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Gauge className="w-5 h-5 text-primary" /> Pression Pneus
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-1">
-                          <label className="text-[10px] uppercase font-bold text-muted-foreground">Poids Cycliste</label>
-                          <Input type="number" defaultValue={75} className="h-8" />
-                        </div>
-                        <div className="space-y-1">
-                          <label className="text-[10px] uppercase font-bold text-muted-foreground">Largeur Pneu</label>
-                          <Input type="number" defaultValue={28} className="h-8" />
-                        </div>
-                      </div>
-                      <Button className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
-                        Calculer Pression
-                      </Button>
-                    </div>
-                    <div className="pt-6 border-t border-border grid grid-cols-2 gap-4 text-center">
-                      <div className="p-3 bg-muted rounded-lg">
-                        <div className="text-xl font-bold">5.2</div>
-                        <div className="text-[10px] text-muted-foreground uppercase">Avant (Bar)</div>
-                      </div>
-                      <div className="p-3 bg-muted rounded-lg">
-                        <div className="text-xl font-bold">5.4</div>
-                        <div className="text-[10px] text-muted-foreground uppercase">Arrière (Bar)</div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="bg-card border-border shadow-lg">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <History className="w-5 h-5 text-primary" /> Derniers Coûts
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3">
-                    {[
-                      { item: 'Chaîne Shimano 11v', price: '45€', date: '20 Mai' },
-                      { item: 'Plaquettes Organiques', price: '18€', date: '12 Mai' },
-                      { item: 'Lubrifiant SQUIRT', price: '12€', date: '05 Mai' }
-                    ].map((cost, i) => (
-                      <div key={i} className="flex justify-between items-center py-2 border-b border-border last:border-0">
-                        <div>
-                          <div className="text-sm font-medium">{cost.item}</div>
-                          <div className="text-[10px] text-muted-foreground">{cost.date}</div>
-                        </div>
-                        <div className="font-bold text-accent">{cost.price}</div>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
+            <GearTab />
           </TabsContent>
         </Tabs>
       </main>
