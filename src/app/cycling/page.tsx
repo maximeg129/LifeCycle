@@ -316,9 +316,12 @@ export default function CyclingHub() {
                           const dateStr = ride.start_date_local?.slice(0, 10)
                           const load = dateStr ? dailyLoad.get(dateStr) : undefined
                           return (
-                            <div
+                            <a
                               key={ride.id}
-                              className="flex items-center justify-between p-4"
+                              href={`https://intervals.icu/activities/${ride.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors cursor-pointer group"
                             >
                               <div className="flex items-center gap-4">
                                 <div className="p-2 rounded-lg bg-primary/10 text-primary">
@@ -362,8 +365,9 @@ export default function CyclingHub() {
                                     <span className="text-[10px] text-muted-foreground">Charge</span>
                                   </div>
                                 )}
+                                <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                               </div>
-                            </div>
+                            </a>
                           )
                         })}
                       </div>
