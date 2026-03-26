@@ -355,6 +355,43 @@ export default function LifestylePage() {
     return wellness7[wellness7.length - 1]
   }, [wellness7])
 
+  // Find the most recent value for each metric (not all fields are filled every day)
+  const latestHrv = useMemo(() => {
+    for (let i = wellness7.length - 1; i >= 0; i--) {
+      if (wellness7[i].hrv != null) return wellness7[i].hrv
+    }
+    return null
+  }, [wellness7])
+
+  const latestSleepSecs = useMemo(() => {
+    for (let i = wellness7.length - 1; i >= 0; i--) {
+      if (wellness7[i].sleepSecs != null) return wellness7[i].sleepSecs
+    }
+    return null
+  }, [wellness7])
+
+  const latestSleepScore = useMemo(() => {
+    for (let i = wellness7.length - 1; i >= 0; i--) {
+      const s = wellness7[i].sleepScore ?? wellness7[i].sleepQuality
+      if (s != null) return s
+    }
+    return null
+  }, [wellness7])
+
+  const latestReadiness = useMemo(() => {
+    for (let i = wellness7.length - 1; i >= 0; i--) {
+      if (wellness7[i].readiness != null) return wellness7[i].readiness
+    }
+    return null
+  }, [wellness7])
+
+  const latestRhr = useMemo(() => {
+    for (let i = wellness7.length - 1; i >= 0; i--) {
+      if (wellness7[i].restingHR != null) return wellness7[i].restingHR
+    }
+    return null
+  }, [wellness7])
+
   // Averages
   const avg7Hrv = useMemo(() => avg(wellness7.map(d => d.hrv)), [wellness7])
   const avg30Hrv = useMemo(() => avg(wellness30.data.map(d => d.hrv)), [wellness30.data])
@@ -613,7 +650,7 @@ export default function LifestylePage() {
                         <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">HRV</span>
                       </div>
                       <div className="text-3xl font-bold tracking-tight mb-1">
-                        {latestDay?.hrv != null ? `${Math.round(latestDay.hrv)} ms` : '—'}
+                        {latestHrv != null ? `${Math.round(latestHrv)} ms` : '—'}
                       </div>
                       <p className="text-xs text-muted-foreground mb-4">
                         {avg7Hrv != null ? `Moy. 7j : ${Math.round(avg7Hrv)} ms` : 'Aucune donnée'}
@@ -627,7 +664,7 @@ export default function LifestylePage() {
                           )
                         })()}
                       </p>
-                      <Progress value={latestDay?.hrv ? Math.min(100, (latestDay.hrv / 100) * 100) : 0} className="h-1.5" />
+                      <Progress value={latestHrv ? Math.min(100, (latestHrv / 100) * 100) : 0} className="h-1.5" />
                     </Card>
 
                     {/* Sommeil */}
@@ -639,15 +676,15 @@ export default function LifestylePage() {
                         <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Sommeil</span>
                       </div>
                       <div className="text-3xl font-bold tracking-tight mb-1">
-                        {formatSleepDuration(latestDay?.sleepSecs)}
+                        {formatSleepDuration(latestSleepSecs)}
                       </div>
                       <p className="text-xs text-muted-foreground mb-4">
                         {avg7Sleep != null ? `Moy. 7j : ${avg7Sleep.toFixed(1)}h` : 'Aucune donnée'}
-                        {latestDay?.sleepScore != null && (
-                          <span className="ml-2">Score : {latestDay.sleepScore}%</span>
+                        {latestSleepScore != null && (
+                          <span className="ml-2">Score : {latestSleepScore}%</span>
                         )}
                       </p>
-                      <Progress value={latestDay?.sleepScore ?? (latestDay?.sleepSecs ? Math.min(100, (latestDay.sleepSecs / 28800) * 100) : 0)} className="h-1.5" />
+                      <Progress value={latestSleepScore ?? (latestSleepSecs ? Math.min(100, (latestSleepSecs / 28800) * 100) : 0)} className="h-1.5" />
                     </Card>
 
                     {/* Readiness */}
@@ -658,13 +695,13 @@ export default function LifestylePage() {
                         </div>
                         <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Readiness</span>
                       </div>
-                      <div className={cn("text-3xl font-bold tracking-tight mb-1", readinessColor(latestDay?.readiness ?? null))}>
-                        {latestDay?.readiness != null ? `${latestDay.readiness}/100` : '—'}
+                      <div className={cn("text-3xl font-bold tracking-tight mb-1", readinessColor(latestReadiness ?? null))}>
+                        {latestReadiness != null ? `${latestReadiness}/100` : '—'}
                       </div>
                       <p className="text-xs text-muted-foreground mb-4">
-                        {readinessLabel(latestDay?.readiness ?? null)}
+                        {readinessLabel(latestReadiness ?? null)}
                       </p>
-                      <Progress value={latestDay?.readiness ?? 0} className="h-1.5" />
+                      <Progress value={latestReadiness ?? 0} className="h-1.5" />
                     </Card>
 
                     {/* FC repos */}
@@ -676,7 +713,7 @@ export default function LifestylePage() {
                         <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">FC Repos</span>
                       </div>
                       <div className="text-3xl font-bold tracking-tight mb-1">
-                        {latestDay?.restingHR != null ? `${latestDay.restingHR} bpm` : '—'}
+                        {latestRhr != null ? `${latestRhr} bpm` : '—'}
                       </div>
                       <p className="text-xs text-muted-foreground mb-4">
                         {avg7Rhr != null ? `Moy. 7j : ${Math.round(avg7Rhr)} bpm` : 'Aucune donnée'}
@@ -690,7 +727,7 @@ export default function LifestylePage() {
                           )
                         })()}
                       </p>
-                      <Progress value={latestDay?.restingHR ? Math.min(100, ((100 - latestDay.restingHR) / 60) * 100) : 0} className="h-1.5" />
+                      <Progress value={latestRhr ? Math.min(100, ((100 - latestRhr) / 60) * 100) : 0} className="h-1.5" />
                     </Card>
                   </>
                 )}
@@ -731,6 +768,7 @@ export default function LifestylePage() {
                     <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                       <Brain className="w-5 h-5 text-primary" /> Humeur & Motivation
                     </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">Ressenti subjectif sur les 7 derniers jours. Une baisse combinée humeur + motivation est un signal précoce de surentraînement.</p>
                   </CardHeader>
                   <CardContent className="p-0 h-[200px]">
                     {wellness7.some(d => d.mood != null) ? (
@@ -759,6 +797,7 @@ export default function LifestylePage() {
                     <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                       <Activity className="w-5 h-5 text-red-500" /> HRV — 7 derniers jours
                     </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">Variabilité cardiaque : le meilleur indicateur de récupération du système nerveux autonome. Plus c&apos;est haut, mieux vous récupérez.</p>
                   </CardHeader>
                   <CardContent className="p-0 h-[200px]">
                     {wellness7.some(d => d.hrv != null) ? (
@@ -768,7 +807,7 @@ export default function LifestylePage() {
                           hrv: d.hrv,
                         }))}>
                           <XAxis dataKey="day" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                          <YAxis domain={['dataMin - 10', 'dataMax + 10']} stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}ms`} />
+                          <YAxis domain={[(min: number) => Math.floor(min - 10), (max: number) => Math.ceil(max + 10)]} stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${Math.round(v)}ms`} />
                           <Line type="monotone" dataKey="hrv" stroke="hsl(0 84% 60%)" strokeWidth={2} dot={{ fill: "hsl(0 84% 60%)", r: 4 }} />
                         </LineChart>
                       </ResponsiveContainer>
@@ -907,10 +946,10 @@ export default function LifestylePage() {
                     <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Dernière nuit</span>
                   </div>
                   <div className="text-3xl font-bold tracking-tight">
-                    {formatSleepDuration(latestDay?.sleepSecs)}
+                    {formatSleepDuration(latestSleepSecs)}
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {latestDay?.sleepScore != null ? `Score : ${latestDay.sleepScore}%` : latestDay?.id ? format(parseISO(latestDay.id), 'EEEE', { locale: fr }) : ''}
+                    {latestSleepScore != null ? `Score : ${latestSleepScore}%` : ''}
                   </p>
                 </Card>
               </div>
@@ -921,6 +960,7 @@ export default function LifestylePage() {
                   <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                     <Moon className="w-5 h-5 text-indigo-500" /> Durée de sommeil — 30 jours
                   </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">Un cycliste a besoin de 7-9h de sommeil pour une adaptation optimale à l&apos;entraînement. Sous 6h, la synthèse protéique et la sécrétion d&apos;hormone de croissance sont réduites.</p>
                 </CardHeader>
                 <CardContent className="p-0 h-[280px]">
                   {sleepChartData.length > 0 ? (
@@ -992,6 +1032,7 @@ export default function LifestylePage() {
                   <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                     <Activity className="w-5 h-5 text-red-500" /> Variabilité cardiaque (HRV) — 30 jours
                   </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">Tendance long terme de votre HRV. Une baisse progressive sur plusieurs semaines indique une accumulation de fatigue. La valeur absolue importe moins que la tendance.</p>
                 </CardHeader>
                 <CardContent className="p-0 h-[280px]">
                   {hrvChartData.length > 0 ? (
@@ -999,7 +1040,7 @@ export default function LifestylePage() {
                       <LineChart data={hrvChartData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="date" stroke="#888888" fontSize={11} tickLine={false} axisLine={false} />
-                        <YAxis domain={['dataMin - 10', 'dataMax + 10']} stroke="#888888" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}ms`} />
+                        <YAxis domain={[(min: number) => Math.floor(min - 10), (max: number) => Math.ceil(max + 10)]} stroke="#888888" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${Math.round(v)}ms`} />
                         <ChartTooltip content={<ChartTooltipContent />} />
                         <Line type="monotone" dataKey="hrv" stroke="var(--color-hrv)" strokeWidth={2} dot={{ fill: "var(--color-hrv)", r: 3 }} name="HRV" />
                       </LineChart>
@@ -1018,6 +1059,7 @@ export default function LifestylePage() {
                   <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                     <HeartPulse className="w-5 h-5 text-pink-500" /> FC repos — 30 jours
                   </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">Une hausse de +5 bpm sur plusieurs jours par rapport à votre baseline signale une fatigue accumulée ou un début de maladie. En phase de forme, la FC repos baisse naturellement.</p>
                 </CardHeader>
                 <CardContent className="p-0 h-[280px]">
                   {rhrChartData.length > 0 ? (
@@ -1025,7 +1067,7 @@ export default function LifestylePage() {
                       <LineChart data={rhrChartData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="date" stroke="#888888" fontSize={11} tickLine={false} axisLine={false} />
-                        <YAxis domain={['dataMin - 5', 'dataMax + 5']} stroke="#888888" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}bpm`} />
+                        <YAxis domain={[(min: number) => Math.floor(min - 5), (max: number) => Math.ceil(max + 5)]} stroke="#888888" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${Math.round(v)}bpm`} />
                         <ChartTooltip content={<ChartTooltipContent />} />
                         <Line type="monotone" dataKey="restingHR" stroke="var(--color-restingHR)" strokeWidth={2} dot={{ fill: "var(--color-restingHR)", r: 3 }} name="FC repos" />
                       </LineChart>
@@ -1257,6 +1299,7 @@ export default function LifestylePage() {
                   <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                     <Weight className="w-5 h-5 text-purple-500" /> Évolution du poids — 30 jours
                   </CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">Le rapport W/kg est déterminant en montagne. Suivez votre poids pour optimiser ce ratio tout en préservant votre puissance.</p>
                 </CardHeader>
                 <CardContent className="p-0 h-[280px]">
                   {weightChartData.length > 0 ? (
@@ -1270,7 +1313,7 @@ export default function LifestylePage() {
                         </defs>
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="date" stroke="#888888" fontSize={11} tickLine={false} axisLine={false} />
-                        <YAxis domain={['dataMin - 1', 'dataMax + 1']} stroke="#888888" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${v}kg`} />
+                        <YAxis domain={[(min: number) => Math.floor(min - 1), (max: number) => Math.ceil(max + 1)]} stroke="#888888" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v: number) => `${Math.round(v * 10) / 10}kg`} />
                         <ChartTooltip content={<ChartTooltipContent />} />
                         <Area type="monotone" dataKey="weight" stroke="var(--color-weight)" fill="url(#weightGradient)" strokeWidth={2} name="Poids" />
                       </AreaChart>
