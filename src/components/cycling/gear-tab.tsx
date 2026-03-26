@@ -47,6 +47,7 @@ import {
 import { AddBikeDialog } from './add-bike-dialog'
 import { AddComponentDialog } from './add-component-dialog'
 import { ReplaceComponentDialog } from './replace-component-dialog'
+import { EditComponentDialog } from './edit-component-dialog'
 import { ComponentRow, computeStatus } from './component-row'
 import { ReplacementHistory } from './replacement-history'
 import { TirePressureCard } from './tire-pressure-card'
@@ -93,6 +94,7 @@ export function GearTab() {
 
   // Local state
   const [expandedBike, setExpandedBike] = useState<string | null>(null)
+  const [editingComponent, setEditingComponent] = useState<BikeComponent | null>(null)
   const [replacingComponent, setReplacingComponent] = useState<BikeComponent | null>(null)
 
   // Active bikes
@@ -338,14 +340,14 @@ export function GearTab() {
                                     <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{group.label}</span>
                                   </div>
                                   {groupComps.map(comp => (
-                                    <ComponentRow key={comp.id} comp={comp} onReplace={setReplacingComponent} onDelete={handleDeleteComponent} />
+                                    <ComponentRow key={comp.id} comp={comp} onEdit={setEditingComponent} onReplace={setReplacingComponent} onDelete={handleDeleteComponent} />
                                   ))}
                                 </div>
                               )
                             })}
                             {/* Ungrouped */}
                             {bikeComps.filter(c => !COMPONENT_GROUPS.some(g => g.categories.includes(c.category))).map(comp => (
-                              <ComponentRow key={comp.id} comp={comp} onReplace={setReplacingComponent} onDelete={handleDeleteComponent} />
+                              <ComponentRow key={comp.id} comp={comp} onEdit={setEditingComponent} onReplace={setReplacingComponent} onDelete={handleDeleteComponent} />
                             ))}
                           </div>
                         )}
@@ -502,6 +504,15 @@ export function GearTab() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Edit component dialog */}
+      {editingComponent && (
+        <EditComponentDialog
+          component={editingComponent}
+          open={!!editingComponent}
+          onOpenChange={(open) => { if (!open) setEditingComponent(null) }}
+        />
+      )}
 
       {/* Replace component dialog */}
       {replacingComponent && (

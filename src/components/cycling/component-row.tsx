@@ -6,7 +6,7 @@ import { fr } from 'date-fns/locale'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
-import { Euro, ExternalLink, RefreshCw, Shield, Trash2, TrendingDown } from 'lucide-react'
+import { Euro, ExternalLink, Pencil, RefreshCw, Shield, Trash2, TrendingDown } from 'lucide-react'
 import { type BikeComponent, COMPONENT_CATEGORY_LABELS } from './gear-types'
 
 function computeStatus(comp: BikeComponent): 'active' | 'warning' | 'critical' {
@@ -38,11 +38,12 @@ function costPerKm(comp: BikeComponent): string | null {
 
 interface Props {
   comp: BikeComponent
+  onEdit: (comp: BikeComponent) => void
   onReplace: (comp: BikeComponent) => void
   onDelete: (compId: string) => void
 }
 
-export function ComponentRow({ comp, onReplace, onDelete }: Props) {
+export function ComponentRow({ comp, onEdit, onReplace, onDelete }: Props) {
   const status = computeStatus(comp)
   const ratio = Math.min(100, (comp.currentKm / comp.thresholdKm) * 100)
   const hasWarranty = warrantyActive(comp)
@@ -64,6 +65,9 @@ export function ComponentRow({ comp, onReplace, onDelete }: Props) {
           <Badge variant={status === 'critical' ? 'destructive' : status === 'warning' ? 'secondary' : 'outline'}>
             {status === 'critical' ? 'Remplacer' : status === 'warning' ? 'Surveiller' : 'OK'}
           </Badge>
+          <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => onEdit(comp)}>
+            <Pencil className="w-3 h-3 mr-1" /> Modifier
+          </Button>
           <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => onReplace(comp)}>
             <RefreshCw className="w-3 h-3 mr-1" /> Remplacer
           </Button>
