@@ -30,6 +30,7 @@ import { cn } from '@/lib/utils'
 import {
   Line, LineChart, XAxis, YAxis, ResponsiveContainer, Area, AreaChart,
   CartesianGrid, Bar, BarChart, ComposedChart,
+  ScatterChart, Scatter, ZAxis, Tooltip, Cell,
 } from 'recharts'
 import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
 import Link from 'next/link'
@@ -182,6 +183,113 @@ const weightChartConfig: ChartConfig = {
   weight: { label: 'Poids (kg)', color: 'hsl(260, 60%, 60%)' },
 }
 
+// ── Recovery Score ───────────────────────────────────────────────────
+
+interface RecoveryScoreResult {
+  score: number
+  components: {
+    hrv: { score: number; weight: number; available: boolean }
+    sleep: { score: number; weight: number; available: boolean }
+    rhr: { score: number; weight: number; available: boolean }
+    mood: { score: number; weight: number; available: boolean }
+  }
+  label: string
+  color: string
+}
+
+function computeRecoveryScore(
+  wellness7: IntervalsWellness[],
+  avg30Hrv: number | null,
+  avg30Rhr: number | null,
+): RecoveryScoreResult | null {
+  if (wellness7.length === 0) return null
+
+  const recent = wellness7.slice(-3) // last 3 days for freshness
+
+  // HRV component (40%): compare recent avg to 30-day baseline
+  const recentHrv = avg(recent.map(d => d.hrv))
+  let hrvScore = 50
+  let hrvAvailable = false
+  if (recentHrv != null && avg30Hrv != null && avg30Hrv > 0) {
+    hrvAvailable = true
+    const ratio = recentHrv / avg30Hrv
+    // ratio 1.0 = 75/100, 0.85 = 50, 1.15 = 100, 0.7 = 25
+    hrvScore = Math.max(0, Math.min(100, 75 + (ratio - 1) * 166))
+  }
+
+  // Sleep component (30%): based on average hours + score
+  const recentSleepHours = avg(recent.map(d => d.sleepSecs ? d.sleepSecs / 3600 : null))
+  const recentSleepScore = avg(recent.map(d => d.sleepScore ?? d.sleepQuality))
+  let sleepScore = 50
+  let sleepAvailable = false
+  if (recentSleepHours != null) {
+    sleepAvailable = true
+    // 8h = 100, 7h = 75, 6h = 50, 5h = 25
+    const hoursScore = Math.max(0, Math.min(100, (recentSleepHours - 4) * 25))
+    sleepScore = recentSleepScore != null ? (hoursScore * 0.5 + recentSleepScore * 0.5) : hoursScore
+  }
+
+  // Resting HR component (20%): lower is better relative to baseline
+  const recentRhr = avg(recent.map(d => d.restingHR))
+  let rhrScore = 50
+  let rhrAvailable = false
+  if (recentRhr != null && avg30Rhr != null && avg30Rhr > 0) {
+    rhrAvailable = true
+    const ratio = recentRhr / avg30Rhr
+    // ratio 1.0 = 75, 1.1 = 50, 0.9 = 100, 1.2 = 25
+    rhrScore = Math.max(0, Math.min(100, 75 - (ratio - 1) * 250))
+  }
+
+  // Mood component (10%): direct from 1-5 scale
+  const recentMood = avg(recent.map(d => d.mood))
+  let moodScore = 50
+  let moodAvailable = false
+  if (recentMood != null) {
+    moodAvailable = true
+    moodScore = (recentMood / 5) * 100
+  }
+
+  // Weighted average with dynamic weights if some data missing
+  const components = [
+    { score: hrvScore, baseWeight: 0.4, available: hrvAvailable },
+    { score: sleepScore, baseWeight: 0.3, available: sleepAvailable },
+    { score: rhrScore, baseWeight: 0.2, available: rhrAvailable },
+    { score: moodScore, baseWeight: 0.1, available: moodAvailable },
+  ]
+  const availableComponents = components.filter(c => c.available)
+  if (availableComponents.length === 0) return null
+
+  const totalWeight = availableComponents.reduce((sum, c) => sum + c.baseWeight, 0)
+  const score = Math.round(
+    availableComponents.reduce((sum, c) => sum + (c.score * c.baseWeight / totalWeight), 0)
+  )
+
+  const label = score >= 80 ? 'Excellente' : score >= 65 ? 'Bonne' : score >= 45 ? 'Modérée' : 'Faible'
+  const color = score >= 80 ? 'text-green-500' : score >= 65 ? 'text-blue-500' : score >= 45 ? 'text-yellow-500' : 'text-red-500'
+
+  return {
+    score,
+    components: {
+      hrv: { score: Math.round(hrvScore), weight: 40, available: hrvAvailable },
+      sleep: { score: Math.round(sleepScore), weight: 30, available: sleepAvailable },
+      rhr: { score: Math.round(rhrScore), weight: 20, available: rhrAvailable },
+      mood: { score: Math.round(moodScore), weight: 10, available: moodAvailable },
+    },
+    label,
+    color,
+  }
+}
+
+// ── Scatter plot colors ──────────────────────────────────────────────
+
+function scatterPointColor(hrv: number, avgHrv: number): string {
+  const ratio = hrv / avgHrv
+  if (ratio >= 1.05) return 'hsl(142, 71%, 45%)' // green — recovered
+  if (ratio >= 0.9) return 'hsl(230, 84%, 63%)' // blue — normal
+  if (ratio >= 0.8) return 'hsl(40, 90%, 55%)' // yellow — caution
+  return 'hsl(0, 84%, 63%)' // red — fatigued
+}
+
 // ── AI Recommendation type ───────────────────────────────────────────
 
 type AIRecommendation = {
@@ -332,6 +440,22 @@ export default function LifestylePage() {
     return (athlete.data.ftp / latestWeight).toFixed(2)
   }, [athlete.data?.ftp, latestWeight])
 
+  // Recovery Score
+  const recoveryScore = useMemo(() => {
+    return computeRecoveryScore(wellness7, avg30Hrv, avg30Rhr)
+  }, [wellness7, avg30Hrv, avg30Rhr])
+
+  // Scatter plot data: CTL vs HRV (30 days)
+  const scatterData = useMemo(() => {
+    return wellness30.data
+      .filter(d => d.ctl != null && d.hrv != null)
+      .map(d => ({
+        ctl: Math.round(d.ctl!),
+        hrv: Math.round(d.hrv!),
+        date: format(parseISO(d.id), 'dd/MM', { locale: fr }),
+      }))
+  }, [wellness30.data])
+
   // AI recommendation
   const fetchAiRecommendation = useCallback(async () => {
     if (!wellness7.length) return
@@ -411,6 +535,64 @@ export default function LifestylePage() {
 
             {/* ── Tab: Vue d'ensemble ── */}
             <TabsContent value="overview" className="space-y-8 animate-in fade-in duration-500">
+              {/* Recovery Score */}
+              {!isLoading && recoveryScore && (
+                <Card className="apple-card border-none p-8">
+                  <div className="flex flex-col md:flex-row items-center gap-8">
+                    {/* Big score circle */}
+                    <div className="relative w-40 h-40 shrink-0">
+                      <svg className="w-full h-full -rotate-90" viewBox="0 0 120 120">
+                        <circle cx="60" cy="60" r="52" fill="none" stroke="hsl(var(--border))" strokeWidth="8" opacity="0.3" />
+                        <circle
+                          cx="60" cy="60" r="52" fill="none"
+                          stroke={recoveryScore.score >= 80 ? 'hsl(142, 71%, 45%)' : recoveryScore.score >= 65 ? 'hsl(230, 84%, 63%)' : recoveryScore.score >= 45 ? 'hsl(40, 90%, 55%)' : 'hsl(0, 84%, 63%)'}
+                          strokeWidth="8"
+                          strokeLinecap="round"
+                          strokeDasharray={`${(recoveryScore.score / 100) * 327} 327`}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className={cn("text-4xl font-bold", recoveryScore.color)}>{recoveryScore.score}</span>
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Recovery</span>
+                      </div>
+                    </div>
+
+                    {/* Breakdown */}
+                    <div className="flex-1 w-full space-y-4">
+                      <div>
+                        <h3 className="text-lg font-bold tracking-tight">Recovery Score</h3>
+                        <p className="text-sm text-muted-foreground">
+                          Récupération <span className={cn("font-bold", recoveryScore.color)}>{recoveryScore.label.toLowerCase()}</span> — basée sur les 3 derniers jours
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {([
+                          { key: 'hrv' as const, label: 'HRV', icon: Activity, iconColor: 'text-red-500' },
+                          { key: 'sleep' as const, label: 'Sommeil', icon: Moon, iconColor: 'text-indigo-500' },
+                          { key: 'rhr' as const, label: 'FC repos', icon: HeartPulse, iconColor: 'text-pink-500' },
+                          { key: 'mood' as const, label: 'Humeur', icon: Brain, iconColor: 'text-primary' },
+                        ]).map(({ key, label, icon: Icon, iconColor }) => {
+                          const comp = recoveryScore.components[key]
+                          return (
+                            <div key={key} className={cn("p-3 rounded-xl", comp.available ? "bg-secondary/40" : "bg-secondary/20 opacity-50")}>
+                              <div className="flex items-center gap-2 mb-2">
+                                <Icon className={cn("w-3.5 h-3.5", iconColor)} />
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{label}</span>
+                              </div>
+                              <div className="flex items-end justify-between">
+                                <span className="text-lg font-bold">{comp.available ? comp.score : '—'}</span>
+                                <span className="text-[10px] text-muted-foreground">{comp.weight}%</span>
+                              </div>
+                              <Progress value={comp.available ? comp.score : 0} className="h-1 mt-1.5" />
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                </Card>
+              )}
+
               {/* KPI Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {isLoading ? (
@@ -885,6 +1067,68 @@ export default function LifestylePage() {
                   ) : (
                     <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
                       Aucune donnée disponible pour la corrélation
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Scatter plot CTL vs HRV — sweet spot */}
+              <Card className="apple-card border-none p-8">
+                <CardHeader className="p-0 mb-6">
+                  <div>
+                    <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
+                      <Zap className="w-5 h-5 text-primary" /> Sweet Spot : Charge vs HRV
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Chaque point = 1 jour. Identifiez la charge optimale où votre HRV reste stable.
+                      <span className="ml-2 inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-green-500" /> Récupéré</span>
+                      <span className="ml-2 inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-blue-500" /> Normal</span>
+                      <span className="ml-2 inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-yellow-500" /> Attention</span>
+                      <span className="ml-2 inline-flex items-center gap-1"><span className="inline-block w-2 h-2 rounded-full bg-red-500" /> Fatigué</span>
+                    </p>
+                  </div>
+                </CardHeader>
+                <CardContent className="p-0 h-[320px]">
+                  {scatterData.length >= 3 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ScatterChart margin={{ top: 10, right: 10, bottom: 20, left: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis
+                          type="number" dataKey="ctl" name="CTL (Fitness)"
+                          stroke="#888888" fontSize={11} tickLine={false}
+                          label={{ value: 'CTL (Fitness)', position: 'insideBottom', offset: -10, fontSize: 11, fill: '#888888' }}
+                        />
+                        <YAxis
+                          type="number" dataKey="hrv" name="HRV (ms)"
+                          stroke="#888888" fontSize={11} tickLine={false}
+                          label={{ value: 'HRV (ms)', angle: -90, position: 'insideLeft', offset: 0, fontSize: 11, fill: '#888888' }}
+                        />
+                        <ZAxis range={[60, 60]} />
+                        <Tooltip
+                          content={({ payload }: { payload?: Array<{ payload: { date: string; ctl: number; hrv: number } }> }) => {
+                            if (!payload?.length) return null
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-card border border-border rounded-lg shadow-lg p-3 text-xs">
+                                <p className="font-bold">{d.date}</p>
+                                <p className="text-muted-foreground">CTL : {d.ctl} — HRV : {d.hrv} ms</p>
+                              </div>
+                            )
+                          }}
+                        />
+                        <Scatter data={scatterData}>
+                          {scatterData.map((entry, i) => (
+                            <Cell
+                              key={i}
+                              fill={scatterPointColor(entry.hrv, avg30Hrv ?? entry.hrv)}
+                            />
+                          ))}
+                        </Scatter>
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex items-center justify-center text-sm text-muted-foreground">
+                      Pas assez de données (minimum 3 jours avec CTL et HRV)
                     </div>
                   )}
                 </CardContent>
