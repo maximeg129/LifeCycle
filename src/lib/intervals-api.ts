@@ -6,6 +6,17 @@
 
 // ── Types ────────────────────────────────────────────────────────────
 
+/** Gear/bike entry from the Intervals.icu athlete profile */
+export interface IntervalsGear {
+  id: string;
+  name?: string;
+  brand_name?: string;
+  model_name?: string;
+  distance?: number; // total meters
+  primary?: boolean;
+  retired?: boolean;
+}
+
 /** Raw athlete profile from GET /api/v1/athlete/{id} */
 interface IntervalsAthleteRaw {
   id: string;
@@ -15,6 +26,7 @@ interface IntervalsAthleteRaw {
   weight?: number;
   icu_weight?: number;
   icu_resting_hr?: number;
+  bikes?: IntervalsGear[];
   sportSettings?: Array<{
     types?: string[];
     ftp?: number;
@@ -44,6 +56,7 @@ export interface IntervalsAthlete {
   tsb?: number;
   rampRate?: number;
   trainingLoad?: number;
+  bikes?: IntervalsGear[];
 }
 
 export interface IntervalsActivity {
@@ -55,6 +68,7 @@ export interface IntervalsActivity {
   moving_time?: number;
   elapsed_time?: number;
   distance?: number;
+  gear_id?: string;
   average_watts?: number | null;
   weighted_average_watts?: number | null;
   icu_intensity?: number | null;
@@ -174,6 +188,7 @@ export class IntervalsService {
       tsb: wellness?.ctl != null && wellness?.atl != null ? wellness.ctl - wellness.atl : undefined,
       rampRate: wellness?.rampRate,
       trainingLoad: wellness?.ctlLoad,
+      bikes: profile.bikes,
     };
   }
 
