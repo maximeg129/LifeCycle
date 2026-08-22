@@ -6,6 +6,20 @@ import { Toaster } from '@/components/ui/toaster';
 export const metadata: Metadata = {
   title: 'LifeCycle Pro',
   description: 'Votre coffre-fort personnel pour la performance et le style de vie.',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    title: 'LifeCycle',
+    statusBarStyle: 'black-translucent',
+  },
+  icons: {
+    icon: '/icon.svg',
+    apple: '/apple-touch-icon.png',
+  },
+};
+
+export const viewport = {
+  themeColor: '#007AFF',
 };
 
 export default function RootLayout({
@@ -20,6 +34,12 @@ export default function RootLayout({
         <script
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var t=localStorage.getItem('lifecycle-theme');if(t==='dark')document.documentElement.classList.add('dark');}catch(e){}})();`,
+          }}
+        />
+        {/* Register the app-shell service worker (offline resilience only — no data caching). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}`,
           }}
         />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

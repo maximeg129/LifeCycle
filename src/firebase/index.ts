@@ -1,9 +1,26 @@
 'use client';
 
 import { firebaseConfig } from '@/firebase/config';
-import { initializeApp, getApps, getApp, FirebaseApp } from 'firebase/app';
+import { initializeApp, getApps, FirebaseApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+
+/**
+ * Enables IndexedDB-backed offline persistence (data survives a reload, and
+ * writes queue while offline) so the app stays usable with a flaky
+ * connection. initializeFirestore() throws if a Firestore instance already
+ * exists for this app — which happens on HMR / React Strict Mode's double
+ * render in dev — so fall back to the already-initialized instance instead.
+ */
+function getPersistentFirestore(app: FirebaseApp) {
+  try {
+    return initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    });
+  } catch {
+    return getFirestore(app);
+  }
+}
 
 /**
  * Initialise Firebase de manière déterministe.
@@ -24,7 +41,7 @@ export function initializeFirebase() {
   return {
     firebaseApp: app,
     auth: getAuth(app),
-    firestore: getFirestore(app)
+    firestore: getPersistentFirestore(app)
   };
 }
 
