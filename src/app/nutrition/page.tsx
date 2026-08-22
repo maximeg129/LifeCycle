@@ -48,6 +48,7 @@ import { useNutritionData } from '@/components/nutrition/use-nutrition-data'
 import { LogMealDialog } from '@/components/nutrition/log-meal-dialog'
 import { NutritionGoalsDialog } from '@/components/nutrition/nutrition-goals-dialog'
 import { MEAL_TYPE_LABELS, progressPct } from '@/components/nutrition/nutrition-types'
+import { MealPlanWeekView } from '@/components/nutrition/meal-plan-week-view'
 
 export default function NutritionPage() {
   const { toast } = useToast()
@@ -220,6 +221,9 @@ export default function NutritionPage() {
             <TabsTrigger value="cookbook" className="px-8 py-2 rounded-full data-[state=active]:bg-background data-[state=active]:shadow-sm">
               <BookOpen className="w-4 h-4 mr-2" /> Livre de Recettes
             </TabsTrigger>
+            <TabsTrigger value="planning" className="px-8 py-2 rounded-full data-[state=active]:bg-background data-[state=active]:shadow-sm">
+              <Calendar className="w-4 h-4 mr-2" /> Planning
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="plan" className="space-y-8 animate-in fade-in duration-500">
@@ -378,6 +382,10 @@ export default function NutritionPage() {
                 ))
               )}
             </div>
+          </TabsContent>
+
+          <TabsContent value="planning" className="animate-in fade-in duration-500">
+            <MealPlanWeekView />
           </TabsContent>
         </Tabs>
       </main>

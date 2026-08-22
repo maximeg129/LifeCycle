@@ -268,6 +268,31 @@ service cloud.firestore {
       }
 
       /**
+       * @description Weekly meal plans imported from a JSON snippet
+       * (generated externally, e.g. in a Claude chat) — one doc per ISO
+       * week, with a subcollection of individual planned meals.
+       * @path /users/{userId}/mealPlans/{weekId}
+       */
+      match /mealPlans/{weekId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+
+        /**
+         * @description A single planned meal (day + type), editable and
+         * movable between days as the user adjusts the plan.
+         * @path /users/{userId}/mealPlans/{weekId}/meals/{mealId}
+         */
+        match /meals/{mealId} {
+          allow get, list: if isOwner(userId);
+          allow create: if isOwner(userId) && hasValidOwnerField(userId) && request.resource.data.weekId == weekId;
+          allow update: if isExistingOwner(userId) && isUnchanged('userId') && isUnchanged('weekId');
+          allow delete: if isExistingOwner(userId);
+        }
+      }
+
+      /**
        * @description Logged meals (from a recipe or a custom entry) for
        * daily calorie/macro tracking.
        * @path /users/{userId}/mealLogs/{mealLogId}
