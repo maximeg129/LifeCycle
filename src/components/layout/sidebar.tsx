@@ -6,7 +6,6 @@ import { usePathname } from 'next/navigation'
 import {
   Bike,
   CookingPot,
-  Leaf,
   CloudSun,
   Wallet,
   HeartPulse,
@@ -22,6 +21,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { useAuth } from '@/firebase'
 import { signOut } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
+import { useOverdueCounts } from './use-overdue-counts'
 
 const navItems = [
   { name: 'Cyclisme', href: '/cycling', icon: Bike },
@@ -33,10 +33,17 @@ const navItems = [
   { name: 'Finances', href: '/finance', icon: Wallet },
 ]
 
+function badgeForHref(href: string, overdueTasks: number, overduePlants: number): number {
+  if (href === '/home-management') return overdueTasks
+  if (href === '/botanica') return overduePlants
+  return 0
+}
+
 export function AppNavigation() {
   const pathname = usePathname()
   const auth = useAuth()
   const router = useRouter()
+  const { overdueTasks, overduePlants } = useOverdueCounts()
 
   const handleSignOut = async () => {
     await signOut(auth)
@@ -67,6 +74,7 @@ export function AppNavigation() {
           </p>
           {navItems.map((item) => {
             const isActive = pathname === item.href
+            const badge = badgeForHref(item.href, overdueTasks, overduePlants)
             return (
               <Link key={item.href} href={item.href}>
                 <div className={cn(
@@ -76,7 +84,12 @@ export function AppNavigation() {
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}>
                   <item.icon className={cn("w-[18px] h-[18px] shrink-0", isActive ? "text-primary" : "group-hover:text-foreground")} />
-                  <span className="text-[13.5px] font-medium">{item.name}</span>
+                  <span className="text-[13.5px] font-medium flex-1">{item.name}</span>
+                  {badge > 0 && (
+                    <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+                      {badge}
+                    </span>
+                  )}
                 </div>
               </Link>
             )
@@ -137,6 +150,7 @@ export function AppNavigation() {
               <nav className="px-3 pt-3 space-y-0.5">
                 {navItems.map((item) => {
                   const isActive = pathname === item.href
+                  const badge = badgeForHref(item.href, overdueTasks, overduePlants)
                   return (
                     <Link key={item.href} href={item.href}>
                       <div className={cn(
@@ -144,7 +158,12 @@ export function AppNavigation() {
                         isActive ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
                       )}>
                         <item.icon className="w-5 h-5 shrink-0" />
-                        <span className="text-[14px] font-medium">{item.name}</span>
+                        <span className="text-[14px] font-medium flex-1">{item.name}</span>
+                        {badge > 0 && (
+                          <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+                            {badge}
+                          </span>
+                        )}
                       </div>
                     </Link>
                   )
@@ -158,13 +177,17 @@ export function AppNavigation() {
         <nav className="fixed bottom-0 left-0 right-0 h-[72px] bg-background/90 backdrop-blur-2xl border-t border-border/50 z-40 flex items-center justify-around px-2 pb-2 safe-area-bottom">
           {[navItems[0], navItems[1], navItems[3], navItems[4], { name: 'Réglages', href: '/settings', icon: Settings }].map((item) => {
             const isActive = pathname === item.href
+            const badge = badgeForHref(item.href, overdueTasks, overduePlants)
             return (
               <Link key={item.href} href={item.href} className="flex flex-col items-center gap-1 min-w-[56px] py-1">
                 <div className={cn(
-                  "w-9 h-9 flex items-center justify-center rounded-[10px] transition-all duration-200",
+                  "relative w-9 h-9 flex items-center justify-center rounded-[10px] transition-all duration-200",
                   isActive ? "bg-primary/12 text-primary" : "text-muted-foreground"
                 )}>
                   <item.icon className="w-[20px] h-[20px]" />
+                  {badge > 0 && (
+                    <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-destructive" />
+                  )}
                 </div>
                 <span className={cn(
                   "text-[9px] font-medium tracking-tight",
