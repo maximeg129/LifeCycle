@@ -15,6 +15,10 @@ import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { useTheme } from '@/hooks/use-theme'
+import { ProfileCard } from '@/components/settings/profile-card'
+import { DataExportCard } from '@/components/settings/data-export-card'
+import { NotificationPrefsCard } from '@/components/settings/notification-prefs-card'
+import { DangerZoneCard } from '@/components/settings/danger-zone-card'
 
 export default function SettingsPage() {
   const { user } = useUser()
@@ -74,6 +78,9 @@ export default function SettingsPage() {
           <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Compte</h2>
           <h1 className="text-3xl font-bold">Réglages</h1>
         </header>
+
+        {/* ── Profil ───────────────────────────────────────────────── */}
+        <ProfileCard />
 
         {/* ── Apparence ────────────────────────────────────────────── */}
         <Card className="apple-card">
@@ -214,6 +221,15 @@ export default function SettingsPage() {
             </Button>
           </CardFooter>
         </Card>
+
+        {/* ── Rappels ──────────────────────────────────────────────── */}
+        <NotificationPrefsCard />
+
+        {/* ── Données ──────────────────────────────────────────────── */}
+        <DataExportCard />
+
+        {/* ── Zone dangereuse ──────────────────────────────────────── */}
+        <DangerZoneCard />
       </main>
     </div>
   )
