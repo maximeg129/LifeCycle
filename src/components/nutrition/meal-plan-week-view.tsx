@@ -71,7 +71,7 @@ export function MealPlanWeekView() {
     if (!user || !db || !meal.date?.seconds) return
     try {
       const mealLogId = await syncMealLog({
-        db, uid: user.uid, mealLogId: meal.mealLogId,
+        db, uid: user.uid, mealLogId: meal.mealLogId, recipeId: meal.recipeId,
         label: meal.recipeName, mealType: meal.mealType, date: new Date(meal.date.seconds * 1000),
         calories: meal.macros.calories, protein: meal.macros.protein, carbs: meal.macros.carbs,
       })

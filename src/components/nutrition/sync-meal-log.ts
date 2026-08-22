@@ -5,6 +5,7 @@ interface SyncArgs {
   db: Firestore
   uid: string
   mealLogId?: string
+  recipeId?: string | null
   label: string
   mealType: MealType
   date: Date
@@ -21,14 +22,14 @@ interface SyncArgs {
  * (new or reused) so the caller can store it back on the plan doc.
  */
 export async function syncMealLog(args: SyncArgs): Promise<string> {
-  const { db, uid, mealLogId, label, mealType, date, calories, protein, carbs } = args
+  const { db, uid, mealLogId, recipeId, label, mealType, date, calories, protein, carbs } = args
   const ref = mealLogId ? doc(db, `users/${uid}/mealLogs`, mealLogId) : doc(collection(db, `users/${uid}/mealLogs`))
 
   const data = {
     userId: uid,
     label,
     mealType,
-    recipeId: null,
+    recipeId: recipeId ?? null,
     calories,
     protein,
     carbs,

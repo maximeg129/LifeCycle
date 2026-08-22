@@ -8,6 +8,7 @@ import {
   normalizeMealType,
   normalizeMacros,
   parseMealPlanJson,
+  formatIngredientLine,
 } from './meal-plan-types'
 
 describe('getWeekStart', () => {
@@ -82,6 +83,15 @@ describe('normalizeMacros', () => {
   })
 })
 
+describe('formatIngredientLine', () => {
+  it('formats quantity + unit + name as a single free-text line', () => {
+    expect(formatIngredientLine({ name: 'Poulet', quantity: 150, unit: 'g' })).toBe('150g Poulet')
+  })
+  it('falls back to just the name when quantity/unit are missing', () => {
+    expect(formatIngredientLine({ name: 'Sel', quantity: 0, unit: '' })).toBe('Sel')
+  })
+})
+
 describe('parseMealPlanJson', () => {
   it('parses a well-formed weekly plan', () => {
     const json = JSON.stringify({
@@ -138,5 +148,55 @@ describe('parseMealPlanJson', () => {
     const result = parseMealPlanJson(JSON.stringify({ foo: 'bar' }))
     expect(result.meals).toEqual([])
     expect(result.errors.length).toBeGreaterThan(0)
+  })
+
+  it('links a repas entry to its fiche technique via `recette`, pulling ingredients/instructions/macros from there', () => {
+    const json = JSON.stringify({
+      recettes: [{
+        titre: 'Poulet Quinoa Brocoli',
+        ingredients: [{ nom: 'Poulet', quantite: 150, unite: 'g' }],
+        instructions: 'Cuire le quinoa...',
+        macros: { calories: 620, proteines: 45, glucides: 55, lipides: 18 },
+      }],
+      repas: [
+        // different casing/whitespace than the recette title, and no inline ingredients/macros of its own
+        { jour: 'lundi', type_repas: 'dejeuner', recette: ' poulet quinoa brocoli ' },
+      ],
+    })
+    const result = parseMealPlanJson(json)
+    expect(result.errors).toEqual([])
+    expect(result.recipes).toHaveLength(1)
+    expect(result.meals[0]).toMatchObject({
+      recipeName: 'Poulet Quinoa Brocoli', // canonical casing from the recette, not the repas reference
+      instructions: 'Cuire le quinoa...',
+      macros: { calories: 620, protein: 45, carbs: 55, fat: 18 },
+    })
+    expect(result.meals[0].ingredients).toEqual([{ name: 'Poulet', quantity: 150, unit: 'g' }])
+  })
+
+  it('falls back to inline ingredients/macros when a repas has no matching recette', () => {
+    const json = JSON.stringify({
+      recettes: [{ titre: 'Autre chose', ingredients: [], macros: {} }],
+      repas: [{
+        jour: 'mardi', type_repas: 'diner', recette: 'Saumon patate douce',
+        ingredients: [{ nom: 'Saumon', quantite: 120, unite: 'g' }],
+        macros: { calories: 400, proteines: 30, glucides: 20, lipides: 15 },
+      }],
+    })
+    const result = parseMealPlanJson(json)
+    expect(result.meals[0].recipeName).toBe('Saumon patate douce')
+    expect(result.meals[0].macros).toEqual({ calories: 400, protein: 30, carbs: 20, fat: 15 })
+  })
+
+  it('dedupes recettes by title within the same import', () => {
+    const json = JSON.stringify({
+      recettes: [
+        { titre: 'Poulet', macros: { calories: 500 } },
+        { titre: 'poulet', macros: { calories: 999 } }, // same title, different case -> last one wins, still one entry
+      ],
+      repas: [{ jour: 'lundi', type_repas: 'dejeuner', recette: 'Poulet' }],
+    })
+    const result = parseMealPlanJson(json)
+    expect(result.recipes).toHaveLength(1)
   })
 })

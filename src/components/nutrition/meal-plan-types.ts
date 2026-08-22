@@ -29,8 +29,11 @@ export interface PlannedMeal {
   mealType: MealType
   recipeName: string
   ingredients: PlannedIngredient[]
+  instructions?: string
   macros: PlannedMacros
   status: MealPlanStatus
+  /** Id of the matching users/{uid}/recipes doc, when the JSON's `recettes` was resolved/upserted at import time. */
+  recipeId?: string | null
   /** Id of the linked users/{uid}/mealLogs doc, set once confirmed/modifié so re-saving updates it in place. */
   mealLogId?: string
   confirmedAt?: unknown
@@ -139,19 +142,57 @@ export interface ParsedMeal {
   mealType: MealType
   recipeName: string
   ingredients: PlannedIngredient[]
+  instructions: string
+  macros: PlannedMacros
+}
+
+/** A reusable recipe "fiche technique" found in the JSON's `recettes` array. */
+export interface ParsedRecipe {
+  title: string
+  ingredients: PlannedIngredient[]
+  instructions: string
   macros: PlannedMacros
 }
 
 export interface ParseResult {
   meals: ParsedMeal[]
+  recipes: ParsedRecipe[]
   errors: string[]
 }
 
+function normalizeTitle(title: string): string {
+  return title.trim().toLowerCase()
+}
+
+/** Formats a structured ingredient as the free-text line the recipe book expects, e.g. "150g Poulet". */
+export function formatIngredientLine(ing: PlannedIngredient): string {
+  const qty = [ing.quantity || '', ing.unit].filter(Boolean).join('')
+  return qty ? `${qty} ${ing.name}` : ing.name
+}
+
+function parseIngredientsArray(raw: unknown): PlannedIngredient[] {
+  const list = Array.isArray(raw) ? raw : []
+  return list
+    .filter((ing): ing is Record<string, unknown> => !!ing && typeof ing === 'object')
+    .map((ing) => ({
+      name: typeof ing.nom === 'string' ? ing.nom : '',
+      quantity: typeof ing.quantite === 'number' ? ing.quantite : Number(ing.quantite) || 0,
+      unit: typeof ing.unite === 'string' ? ing.unite : '',
+    }))
+    .filter((ing) => ing.name !== '')
+}
+
 /**
- * Parses the JSON pasted from an external chat (semaine_du + repas[], or a
- * bare array of repas). Never throws — malformed entries are skipped and
- * reported in `errors` so the import UI can show what to fix, rather than
- * losing the whole paste over one bad line.
+ * Parses the JSON pasted from an external chat. Accepts either:
+ * - `{ semaine_du, recettes: [{titre, ingredients, instructions, macros}],
+ *    repas: [{jour, type_repas, recette /* references recettes[].titre * /}] }`
+ * - the legacy shape where each `repas[]` entry carries its own
+ *   `ingredients`/`macros` inline (no `recettes` array, or a repas entry
+ *   whose `recette`/`nom_recette` doesn't match any parsed recipe)
+ *
+ * Never throws — malformed entries are skipped and reported in `errors` so
+ * the import UI can show what to fix, rather than losing the whole paste
+ * over one bad line.
  */
 export function parseMealPlanJson(raw: string): ParseResult {
   const errors: string[] = []
@@ -159,18 +200,37 @@ export function parseMealPlanJson(raw: string): ParseResult {
   try {
     data = JSON.parse(raw)
   } catch {
-    return { meals: [], errors: ['JSON invalide — vérifiez la syntaxe.'] }
+    return { meals: [], recipes: [], errors: ['JSON invalide — vérifiez la syntaxe.'] }
   }
 
-  const repas: unknown[] = Array.isArray(data)
-    ? data
-    : Array.isArray((data as Record<string, unknown>)?.repas)
-      ? (data as Record<string, unknown>).repas as unknown[]
-      : []
+  const root = Array.isArray(data) ? {} : (data as Record<string, unknown>) ?? {}
+  const repas: unknown[] = Array.isArray(data) ? data : Array.isArray(root.repas) ? root.repas as unknown[] : []
+  const recettesRaw: unknown[] = Array.isArray(root.recettes) ? root.recettes as unknown[] : []
 
   if (repas.length === 0) {
-    return { meals: [], errors: ['Aucun repas trouvé (attendu: un tableau "repas", ou un tableau JSON direct).'] }
+    return { meals: [], recipes: [], errors: ['Aucun repas trouvé (attendu: un tableau "repas", ou un tableau JSON direct).'] }
   }
+
+  // Parse the recipe "fiches techniques", deduped by title within this import.
+  const recipesByTitle = new Map<string, ParsedRecipe>()
+  recettesRaw.forEach((entry, i) => {
+    if (!entry || typeof entry !== 'object') {
+      errors.push(`Recette #${i + 1}: entrée invalide.`)
+      return
+    }
+    const e = entry as Record<string, unknown>
+    const titre = typeof e.titre === 'string' ? e.titre.trim() : ''
+    if (!titre) {
+      errors.push(`Recette #${i + 1}: titre manquant.`)
+      return
+    }
+    recipesByTitle.set(normalizeTitle(titre), {
+      title: titre,
+      ingredients: parseIngredientsArray(e.ingredients),
+      instructions: typeof e.instructions === 'string' ? e.instructions : '',
+      macros: normalizeMacros(e.macros),
+    })
+  })
 
   const meals: ParsedMeal[] = []
   repas.forEach((entry, i) => {
@@ -181,7 +241,10 @@ export function parseMealPlanJson(raw: string): ParseResult {
     const e = entry as Record<string, unknown>
     const jour = typeof e.jour === 'string' ? e.jour : ''
     const typeRepas = typeof e.type_repas === 'string' ? e.type_repas : ''
-    const nomRecette = typeof e.nom_recette === 'string' ? e.nom_recette : ''
+    // `recette` references recettes[].titre; `nom_recette` is the legacy
+    // inline form, kept as a fallback name when there's no matching recette.
+    const recetteRef = typeof e.recette === 'string' ? e.recette : ''
+    const nomRecette = typeof e.nom_recette === 'string' ? e.nom_recette : recetteRef
 
     const dayIndex = dayNameToIndex(jour)
     const mealType = normalizeMealType(typeRepas)
@@ -199,24 +262,23 @@ export function parseMealPlanJson(raw: string): ParseResult {
       return
     }
 
-    const rawIngredients = Array.isArray(e.ingredients) ? e.ingredients : []
-    const ingredients: PlannedIngredient[] = rawIngredients
-      .filter((ing): ing is Record<string, unknown> => !!ing && typeof ing === 'object')
-      .map((ing) => ({
-        name: typeof ing.nom === 'string' ? ing.nom : '',
-        quantity: typeof ing.quantite === 'number' ? ing.quantite : Number(ing.quantite) || 0,
-        unit: typeof ing.unite === 'string' ? ing.unite : '',
-      }))
-      .filter((ing) => ing.name !== '')
-
-    meals.push({
+    const linkedRecipe = recipesByTitle.get(normalizeTitle(nomRecette))
+    meals.push(linkedRecipe ? {
+      dayIndex,
+      mealType,
+      recipeName: linkedRecipe.title,
+      ingredients: linkedRecipe.ingredients,
+      instructions: linkedRecipe.instructions,
+      macros: linkedRecipe.macros,
+    } : {
       dayIndex,
       mealType,
       recipeName: nomRecette,
-      ingredients,
+      ingredients: parseIngredientsArray(e.ingredients),
+      instructions: typeof e.instructions === 'string' ? e.instructions : '',
       macros: normalizeMacros(e.macros),
     })
   })
 
-  return { meals, errors }
+  return { meals, recipes: Array.from(recipesByTitle.values()), errors }
 }

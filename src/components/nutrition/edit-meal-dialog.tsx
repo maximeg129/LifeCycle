@@ -80,7 +80,7 @@ export function EditMealDialog({ meal, weekId, onOpenChange }: Props) {
 
     try {
       const mealLogId = await syncMealLog({
-        db, uid: user.uid, mealLogId: meal.mealLogId,
+        db, uid: user.uid, mealLogId: meal.mealLogId, recipeId: meal.recipeId,
         label: recipeName, mealType, date: mealDate,
         calories: macros.calories, protein: macros.protein, carbs: macros.carbs,
       })

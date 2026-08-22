@@ -15,11 +15,16 @@ import {
 } from '@/components/ui/dialog'
 import { Upload, Loader2, AlertTriangle, FileJson } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { useUser, useFirestore } from '@/firebase'
-import { collection, doc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
+import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
+import { collection, query, orderBy, doc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
-import { parseMealPlanJson, getIsoWeekId, getWeekDays } from './meal-plan-types'
+import { parseMealPlanJson, getIsoWeekId, getWeekDays, formatIngredientLine, type ParsedRecipe } from './meal-plan-types'
+
+interface ExistingRecipe {
+  id: string
+  title: string
+}
 
 export function ImportMealPlanDialog({ weekStart }: { weekStart: Date }) {
   const { toast } = useToast()
@@ -30,6 +35,12 @@ export function ImportMealPlanDialog({ weekStart }: { weekStart: Date }) {
   const [errors, setErrors] = useState<string[]>([])
   const [isImporting, setIsImporting] = useState(false)
 
+  const recipesQuery = useMemoFirebase(() => {
+    if (!user || !db) return null
+    return query(collection(db, `users/${user.uid}/recipes`), orderBy('title'))
+  }, [db, user])
+  const { data: existingRecipes } = useCollection<{ title: string }>(recipesQuery)
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -38,9 +49,30 @@ export function ImportMealPlanDialog({ weekStart }: { weekStart: Date }) {
     e.target.value = ''
   }
 
+  /** Reuses an existing recipe by title (case-insensitive) or creates one from the JSON's fiche technique. */
+  const upsertRecipe = async (recipe: ParsedRecipe, known: ExistingRecipe[]): Promise<string> => {
+    const normalized = recipe.title.trim().toLowerCase()
+    const existing = known.find((r) => r.title.trim().toLowerCase() === normalized)
+    if (existing) return existing.id
+
+    const recipeRef = doc(collection(db!, `users/${user!.uid}/recipes`))
+    await setDoc(recipeRef, {
+      title: recipe.title,
+      ingredients: recipe.ingredients.map(formatIngredientLine),
+      instructions: recipe.instructions,
+      calories: recipe.macros.calories,
+      protein: recipe.macros.protein,
+      carbs: recipe.macros.carbs,
+      imageHint: 'healthy food',
+      createdAt: serverTimestamp(),
+    })
+    known.push({ id: recipeRef.id, title: recipe.title }) // avoid re-creating on a duplicate title within the same import
+    return recipeRef.id
+  }
+
   const handleImport = async () => {
     if (!user || !db) return
-    const { meals, errors: parseErrors } = parseMealPlanJson(text)
+    const { meals, recipes, errors: parseErrors } = parseMealPlanJson(text)
     setErrors(parseErrors)
 
     if (meals.length === 0) {
@@ -58,6 +90,15 @@ export function ImportMealPlanDialog({ weekStart }: { weekStart: Date }) {
     try {
       await setDoc(weekRef, { userId: user.uid, weekStart: Timestamp.fromDate(weekStart), createdAt: serverTimestamp() }, { merge: true })
 
+      // Upsert every "fiche technique" first, sequentially, so within-import
+      // duplicate titles reuse the same freshly-created recipe.
+      const known: ExistingRecipe[] = (existingRecipes || []).map((r) => ({ id: r.id, title: r.title }))
+      const recipeIdByTitle = new Map<string, string>()
+      for (const recipe of recipes) {
+        const id = await upsertRecipe(recipe, known)
+        recipeIdByTitle.set(recipe.title.trim().toLowerCase(), id)
+      }
+
       await Promise.all(meals.map((meal) => {
         const mealRef = doc(collection(db, `users/${user.uid}/mealPlans/${weekId}/meals`))
         const mealData = {
@@ -66,7 +107,9 @@ export function ImportMealPlanDialog({ weekStart }: { weekStart: Date }) {
           date: Timestamp.fromDate(weekDays[meal.dayIndex]),
           mealType: meal.mealType,
           recipeName: meal.recipeName,
+          recipeId: recipeIdByTitle.get(meal.recipeName.trim().toLowerCase()) ?? null,
           ingredients: meal.ingredients,
+          instructions: meal.instructions,
           macros: meal.macros,
           status: 'propose' as const,
           createdAt: serverTimestamp(),
@@ -74,7 +117,8 @@ export function ImportMealPlanDialog({ weekStart }: { weekStart: Date }) {
         return setDoc(mealRef, mealData)
       }))
 
-      toast({ title: 'Plan importé', description: `${meals.length} repas ajoutés${parseErrors.length > 0 ? ` (${parseErrors.length} ignorés)` : ''}.` })
+      const recipeNote = recipes.length > 0 ? `, ${recipes.length} recette(s) dans le livre de cuisine` : ''
+      toast({ title: 'Plan importé', description: `${meals.length} repas ajoutés${recipeNote}${parseErrors.length > 0 ? ` (${parseErrors.length} ignorés)` : ''}.` })
       if (parseErrors.length === 0) {
         setOpen(false)
         setText('')
@@ -97,8 +141,9 @@ export function ImportMealPlanDialog({ weekStart }: { weekStart: Date }) {
         <DialogHeader>
           <DialogTitle>Importer un plan de repas</DialogTitle>
           <DialogDescription>
-            Collez le JSON généré par Claude chat, ou importez un fichier. Chaque import ajoute des repas —
-            supprimez les anciens d&apos;abord si vous réimportez la même semaine.
+            Collez le JSON généré par Claude chat, ou importez un fichier. Les recettes (bloc &quot;recettes&quot;)
+            sont ajoutées à votre livre de cuisine si elles n&apos;y sont pas déjà (par titre). Chaque import
+            ajoute des repas — supprimez les anciens d&apos;abord si vous réimportez la même semaine.
           </DialogDescription>
         </DialogHeader>
 
@@ -112,7 +157,7 @@ export function ImportMealPlanDialog({ weekStart }: { weekStart: Date }) {
           <Textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder='{"semaine_du": "2026-08-24", "repas": [...]}'
+            placeholder='{"semaine_du": "2026-08-24", "recettes": [...], "repas": [...]}'
             rows={10}
             className="font-mono text-xs"
           />
