@@ -268,6 +268,30 @@ service cloud.firestore {
       }
 
       /**
+       * @description Logged meals (from a recipe or a custom entry) for
+       * daily calorie/macro tracking.
+       * @path /users/{userId}/mealLogs/{mealLogId}
+       */
+      match /mealLogs/{mealLogId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Daily hydration total, one document per day (docId is
+       * the yyyy-MM-dd date so logging is a simple upsert).
+       * @path /users/{userId}/hydrationLogs/{dayId}
+       */
+      match /hydrationLogs/{dayId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
        * @description Personalized expense categories.
        * @path /users/{userId}/expenseCategories/{categoryId}
        */

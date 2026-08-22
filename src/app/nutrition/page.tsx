@@ -41,9 +41,13 @@ import Image from 'next/image'
 import { useToast } from '@/hooks/use-toast'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
-import { collection, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, setDoc, deleteDoc, serverTimestamp, increment } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
+import { useNutritionData } from '@/components/nutrition/use-nutrition-data'
+import { LogMealDialog } from '@/components/nutrition/log-meal-dialog'
+import { NutritionGoalsDialog } from '@/components/nutrition/nutrition-goals-dialog'
+import { MEAL_TYPE_LABELS, progressPct } from '@/components/nutrition/nutrition-types'
 
 export default function NutritionPage() {
   const { toast } = useToast()
@@ -63,6 +67,25 @@ export default function NutritionPage() {
     return collection(db, recipesPath)
   }, [db, recipesPath])
   const { data: recipes, isLoading: loadingRecipes } = useCollection(recipesRef)
+
+  // Today's nutrition log (meals, hydration, goals)
+  const { meals, totals, hydrationLiters, goals, isLoading: loadingNutrition, todayId } = useNutritionData()
+
+  const handleDeleteMeal = async (id: string) => {
+    if (!user || !db) return
+    const ref = doc(db, `users/${user.uid}/mealLogs`, id)
+    deleteDoc(ref).catch(() => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'delete' }))
+    })
+  }
+
+  const handleAddWater = async (liters: number) => {
+    if (!user || !db) return
+    const ref = doc(db, `users/${user.uid}/hydrationLogs/${todayId}`)
+    setDoc(ref, { userId: user.uid, liters: increment(liters), updatedAt: serverTimestamp() }, { merge: true }).catch(() => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update' }))
+    })
+  }
 
   const handleAddRecipe = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -138,6 +161,7 @@ export default function NutritionPage() {
             <h1 className="text-3xl font-bold">Plan & Livre de Cuisine</h1>
           </div>
           <div className="flex gap-2">
+            <NutritionGoalsDialog current={goals} />
             <Dialog open={isAddingRecipe} onOpenChange={setIsAddingRecipe}>
               <DialogTrigger asChild>
                 <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full px-6 shadow-lg shadow-primary/20">
@@ -207,8 +231,8 @@ export default function NutritionPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">1,840 / 2,600</div>
-                  <Progress value={70} className="h-1 mt-3" />
+                  <div className="text-2xl font-bold">{totals.calories} / {goals.calorieTarget}</div>
+                  <Progress value={progressPct(totals.calories, goals.calorieTarget)} className="h-1 mt-3" />
                 </CardContent>
               </Card>
               <Card className="apple-card border-none">
@@ -218,8 +242,8 @@ export default function NutritionPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">120g / 160g</div>
-                  <Progress value={75} className="h-1 mt-3 bg-red-500/10" />
+                  <div className="text-2xl font-bold">{totals.protein}g / {goals.proteinTarget}g</div>
+                  <Progress value={progressPct(totals.protein, goals.proteinTarget)} className="h-1 mt-3 bg-red-500/10" />
                 </CardContent>
               </Card>
               <Card className="apple-card border-none">
@@ -229,8 +253,8 @@ export default function NutritionPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">210g / 320g</div>
-                  <Progress value={65} className="h-1 mt-3 bg-yellow-500/10" />
+                  <div className="text-2xl font-bold">{totals.carbs}g / {goals.carbsTarget}g</div>
+                  <Progress value={progressPct(totals.carbs, goals.carbsTarget)} className="h-1 mt-3 bg-yellow-500/10" />
                 </CardContent>
               </Card>
               <Card className="apple-card border-none">
@@ -240,8 +264,12 @@ export default function NutritionPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">2.1 / 3.5 L</div>
-                  <Progress value={60} className="h-1 mt-3 bg-blue-500/10" />
+                  <div className="text-2xl font-bold">{hydrationLiters.toFixed(1)} / {goals.hydrationTargetLiters}L</div>
+                  <Progress value={progressPct(hydrationLiters, goals.hydrationTargetLiters)} className="h-1 mt-3 bg-blue-500/10" />
+                  <div className="flex gap-2 mt-3">
+                    <Button size="sm" variant="outline" className="h-7 px-2 text-[10px] rounded-full" onClick={() => handleAddWater(0.25)}>+250ml</Button>
+                    <Button size="sm" variant="outline" className="h-7 px-2 text-[10px] rounded-full" onClick={() => handleAddWater(0.5)}>+500ml</Button>
+                  </div>
                 </CardContent>
               </Card>
             </section>
@@ -252,34 +280,51 @@ export default function NutritionPage() {
                   <CardTitle className="text-xl">Journal du Jour</CardTitle>
                   <CardDescription>Optimisez votre fueling.</CardDescription>
                 </div>
+                <LogMealDialog recipes={(recipes || []).map((r: any) => ({ id: r.id, title: r.title, calories: r.calories, protein: r.protein, carbs: r.carbs }))} />
               </CardHeader>
               <CardContent className="p-0">
-                <div className="divide-y divide-border/40">
-                  {[
-                    { meal: 'Petit-déjeuner', items: 'Oatmeal, Myrtilles', cal: 450, time: '08:15' },
-                    { meal: 'Déjeuner', items: 'Poulet, Quinoa, Brocoli', cal: 620, time: '12:30' },
-                    { meal: 'Dîner', items: 'Saumon, Patate douce', cal: 560, time: '19:45' }
-                  ].map((entry, i) => (
-                    <div key={i} className="flex items-center justify-between p-6 hover:bg-muted/30 transition-colors cursor-pointer group">
-                      <div className="flex items-center gap-4">
-                        <div className="p-3 rounded-2xl bg-primary/5 text-primary">
-                          <Utensils className="w-5 h-5" />
+                {loadingNutrition ? (
+                  <div className="p-6 space-y-4">
+                    {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 rounded-xl bg-muted/20 animate-pulse" />)}
+                  </div>
+                ) : meals.length === 0 ? (
+                  <div className="py-16 text-center space-y-3">
+                    <Utensils className="w-10 h-10 text-muted-foreground/20 mx-auto" />
+                    <p className="text-sm text-muted-foreground">Aucun repas enregistré aujourd&apos;hui.</p>
+                  </div>
+                ) : (
+                  <div className="divide-y divide-border/40">
+                    {meals.map((entry) => (
+                      <div key={entry.id} className="flex items-center justify-between p-6 hover:bg-muted/30 transition-colors group">
+                        <div className="flex items-center gap-4">
+                          <div className="p-3 rounded-2xl bg-primary/5 text-primary">
+                            <Utensils className="w-5 h-5" />
+                          </div>
+                          <div>
+                            <div className="font-bold">{MEAL_TYPE_LABELS[entry.mealType]}</div>
+                            <div className="text-xs text-muted-foreground">{entry.label}</div>
+                          </div>
                         </div>
-                        <div>
-                          <div className="font-bold">{entry.meal}</div>
-                          <div className="text-xs text-muted-foreground">{entry.items}</div>
+                        <div className="text-right flex items-center gap-6">
+                          <div>
+                            <div className="font-bold">{entry.calories} kcal</div>
+                            <div className="text-[10px] text-muted-foreground">
+                              {entry.date?.seconds ? new Date(entry.date.seconds * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}
+                            </div>
+                          </div>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-8 w-8 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive"
+                            onClick={() => handleDeleteMeal(entry.id)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="text-right flex items-center gap-6">
-                        <div>
-                          <div className="font-bold">{entry.cal} kcal</div>
-                          <div className="text-[10px] text-muted-foreground">{entry.time}</div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-all" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
