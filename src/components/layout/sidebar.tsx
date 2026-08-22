@@ -13,7 +13,8 @@ import {
   Menu,
   LogOut,
   Home,
-  Flower2
+  Flower2,
+  Search
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -22,6 +23,7 @@ import { useAuth } from '@/firebase'
 import { signOut } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
 import { useOverdueCounts } from './use-overdue-counts'
+import { CommandPalette } from '@/components/search/command-palette'
 
 const navItems = [
   { name: 'Cyclisme', href: '/cycling', icon: Bike },
@@ -65,6 +67,18 @@ export function AppNavigation() {
               <span className="text-[10px] font-medium text-muted-foreground tracking-widest uppercase mt-0.5">Pro</span>
             </div>
           </Link>
+        </div>
+
+        {/* Search */}
+        <div className="px-3 pb-3">
+          <button
+            onClick={() => window.dispatchEvent(new Event('open-command-palette'))}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] bg-muted/60 text-muted-foreground hover:bg-muted transition-colors text-left"
+          >
+            <Search className="w-4 h-4 shrink-0" />
+            <span className="text-[13px] flex-1">Rechercher...</span>
+            <kbd className="text-[10px] font-mono bg-background/80 border border-border/60 rounded px-1.5 py-0.5">⌘K</kbd>
+          </button>
         </div>
 
         {/* Nav */}
@@ -129,48 +143,58 @@ export function AppNavigation() {
             </div>
             <span className="text-[15px] font-semibold tracking-tight">LifeCycle</span>
           </div>
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="w-9 h-9 rounded-[10px] hover:bg-muted">
-                <Menu className="w-5 h-5" />
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="bg-background w-64 p-0 border-r border-border/60">
-              <div className="px-6 pt-8 pb-6 border-b border-border/60">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-primary rounded-[10px] flex items-center justify-center shadow-md shadow-primary/25">
-                    <Bike className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <span className="text-[15px] font-semibold tracking-tight block">LifeCycle</span>
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Pro</span>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="w-9 h-9 rounded-[10px] hover:bg-muted"
+              onClick={() => window.dispatchEvent(new Event('open-command-palette'))}
+            >
+              <Search className="w-[18px] h-[18px]" />
+            </Button>
+            <Sheet>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="w-9 h-9 rounded-[10px] hover:bg-muted">
+                  <Menu className="w-5 h-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="bg-background w-64 p-0 border-r border-border/60">
+                <div className="px-6 pt-8 pb-6 border-b border-border/60">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-primary rounded-[10px] flex items-center justify-center shadow-md shadow-primary/25">
+                      <Bike className="w-5 h-5 text-white" />
+                    </div>
+                    <div>
+                      <span className="text-[15px] font-semibold tracking-tight block">LifeCycle</span>
+                      <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Pro</span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              <nav className="px-3 pt-3 space-y-0.5">
-                {navItems.map((item) => {
-                  const isActive = pathname === item.href
-                  const badge = badgeForHref(item.href, overdueTasks, overduePlants)
-                  return (
-                    <Link key={item.href} href={item.href}>
-                      <div className={cn(
-                        "flex items-center gap-3 px-3 py-3 rounded-[10px] transition-all",
-                        isActive ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
-                      )}>
-                        <item.icon className="w-5 h-5 shrink-0" />
-                        <span className="text-[14px] font-medium flex-1">{item.name}</span>
-                        {badge > 0 && (
-                          <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
-                            {badge}
-                          </span>
-                        )}
-                      </div>
-                    </Link>
-                  )
-                })}
-              </nav>
-            </SheetContent>
-          </Sheet>
+                <nav className="px-3 pt-3 space-y-0.5">
+                  {navItems.map((item) => {
+                    const isActive = pathname === item.href
+                    const badge = badgeForHref(item.href, overdueTasks, overduePlants)
+                    return (
+                      <Link key={item.href} href={item.href}>
+                        <div className={cn(
+                          "flex items-center gap-3 px-3 py-3 rounded-[10px] transition-all",
+                          isActive ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
+                        )}>
+                          <item.icon className="w-5 h-5 shrink-0" />
+                          <span className="text-[14px] font-medium flex-1">{item.name}</span>
+                          {badge > 0 && (
+                            <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+                              {badge}
+                            </span>
+                          )}
+                        </div>
+                      </Link>
+                    )
+                  })}
+                </nav>
+              </SheetContent>
+            </Sheet>
+          </div>
         </header>
 
         {/* Bottom nav */}
@@ -200,6 +224,8 @@ export function AppNavigation() {
           })}
         </nav>
       </div>
+
+      <CommandPalette />
     </>
   )
 }
