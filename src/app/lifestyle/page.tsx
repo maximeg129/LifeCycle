@@ -32,6 +32,7 @@ import { FirestorePermissionError } from '@/firebase/errors'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { LogMetricDialog } from '@/components/lifestyle/log-metric-dialog'
 import { AddGoalDialog } from '@/components/lifestyle/add-goal-dialog'
+import { RecoveryInsightPanel } from '@/components/lifestyle/recovery-insight-panel'
 import { average, trendPct, computeGoalProgress, type HealthGoal } from '@/components/lifestyle/lifestyle-types'
 
 type WithIdGoal = HealthGoal & { id: string }
@@ -352,31 +353,7 @@ export default function LifestylePage() {
                     {sleepValues.length > 0 && `, pour une moyenne de sommeil de ${avgSleep.toFixed(1)}h.`}
                   </p>
                 )}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="p-6 bg-green-500/5 border border-green-500/20 rounded-2xl space-y-2">
-                    <h5 className="font-bold text-sm flex items-center gap-2 text-green-600">
-                      <TrendingUp className="w-4 h-4" /> Points forts
-                    </h5>
-                    <ul className="text-xs space-y-1.5 text-muted-foreground list-disc pl-4">
-                      {qualityValues.length > 0 && avgQuality >= 80 && <li>Qualité de sommeil au-dessus de 80% en moyenne</li>}
-                      {hrvTrend > 0 && <li>HRV en tendance haussière</li>}
-                      {readiness !== null && readiness > 75 && <li>Readiness élevée sur la dernière mesure</li>}
-                      {(qualityValues.length === 0 || avgQuality < 80) && hrvTrend <= 0 && (readiness === null || readiness <= 75) && (
-                        <li>Continuez à logger vos mesures pour faire ressortir des tendances</li>
-                      )}
-                    </ul>
-                  </div>
-                  <div className="p-6 bg-primary/5 border border-primary/20 rounded-2xl space-y-2">
-                    <h5 className="font-bold text-sm flex items-center gap-2 text-primary">
-                      <Zap className="w-4 h-4" /> Axes d&apos;amélioration
-                    </h5>
-                    <ul className="text-xs space-y-1.5 text-muted-foreground list-disc pl-4">
-                      {qualityValues.length > 0 && avgQuality < 80 && <li>Qualité de sommeil sous 80% en moyenne — visez un coucher régulier</li>}
-                      {hrvTrend < 0 && <li>HRV en baisse — surveillez votre charge d&apos;entraînement</li>}
-                      <li>Hydratation : maintenez un apport régulier tout au long de la journée</li>
-                    </ul>
-                  </div>
-                </div>
+                <RecoveryInsightPanel dailySeries={dailySeries} goals={goals} />
               </CardContent>
             </Card>
           </TabsContent>
