@@ -29,20 +29,13 @@ import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { cyclingOutfitRecommendation, type CyclingOutfitRecommendationOutput } from '@/ai/flows/cycling-outfit-recommendation-flow'
 import { useToast } from '@/hooks/use-toast'
-
-// Mock Inventory Data
-const CLOTHING_INVENTORY = [
-  { name: "Maillot thermique Castelli", type: "jersey", temperatureRangeCelsius: "5-15°C", windproof: false, waterproof: false, layer: "mid" },
-  { name: "Gilet coupe-vent Rapha", type: "jacket", temperatureRangeCelsius: "8-18°C", windproof: true, waterproof: false, layer: "outer" },
-  { name: "Veste Gore-Tex Shakedry", type: "jacket", temperatureRangeCelsius: "5-12°C", windproof: true, waterproof: true, layer: "outer" },
-  { name: "Cuissard long hiver Specialized", type: "tights", temperatureRangeCelsius: "0-10°C", windproof: true, waterproof: false, layer: "outer" },
-  { name: "Base layer Mérinos", type: "baselayer", temperatureRangeCelsius: "-5-15°C", windproof: false, waterproof: false, layer: "base" },
-  { name: "Gants néoprène", type: "gloves", temperatureRangeCelsius: "2-10°C", windproof: true, waterproof: true, layer: "outer" },
-  { name: "Couvre-chaussures Castelli", type: "shoe covers", temperatureRangeCelsius: "0-10°C", windproof: true, waterproof: true, layer: "outer" }
-]
+import { useClothingInventory } from '@/components/weather/use-clothing-inventory'
+import { ManageClothingDialog } from '@/components/weather/manage-clothing-dialog'
+import { toFlowInventoryItem } from '@/components/weather/clothing-types'
 
 export default function WeatherAssistant() {
   const { toast } = useToast()
+  const { items: clothingItems } = useClothingInventory()
   const [loading, setLoading] = useState(false)
   const [geoLoading, setGeoLoading] = useState(false)
   const [result, setResult] = useState<CyclingOutfitRecommendationOutput | null>(null)
@@ -93,17 +86,25 @@ export default function WeatherAssistant() {
       })
       return
     }
+    if (clothingItems.length === 0) {
+      toast({
+        variant: "destructive",
+        title: "Garde-robe vide",
+        description: "Ajoutez au moins un vêtement à votre garde-robe pour obtenir une recommandation.",
+      })
+      return
+    }
 
     setLoading(true)
     try {
       // Combine date and time
       const dateTimeStr = format(date, 'yyyy-MM-dd') + 'T' + time + ':00'
-      
+
       const recommendation = await cyclingOutfitRecommendation({
         location: location,
         dateTime: dateTimeStr,
         durationHours: duration,
-        clothingInventory: CLOTHING_INVENTORY
+        clothingInventory: clothingItems.map(toFlowInventoryItem)
       })
       setResult(recommendation)
     } catch (error) {
@@ -123,14 +124,17 @@ export default function WeatherAssistant() {
       <AppNavigation />
       
       <main className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">
-        <header className="mt-16 md:mt-0 space-y-2">
-          <Badge variant="outline" className="text-accent border-accent/30 gap-1 bg-accent/5 px-3">
-            <Sparkles className="w-3 h-3" /> Assistant Prédictif
-          </Badge>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <CloudSun className="w-10 h-10 text-primary" /> Assistant Météo & Tenue
-          </h1>
-          <p className="text-muted-foreground">Prévoyez votre sortie et laissez l'IA déduire la météo et préparer votre équipement.</p>
+        <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
+          <div className="space-y-2">
+            <Badge variant="outline" className="text-accent border-accent/30 gap-1 bg-accent/5 px-3">
+              <Sparkles className="w-3 h-3" /> Assistant Prédictif
+            </Badge>
+            <h1 className="text-3xl font-bold flex items-center gap-3">
+              <CloudSun className="w-10 h-10 text-primary" /> Assistant Météo & Tenue
+            </h1>
+            <p className="text-muted-foreground">Prévoyez votre sortie et laissez l&apos;IA déduire la météo et préparer votre équipement.</p>
+          </div>
+          <ManageClothingDialog />
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
