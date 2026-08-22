@@ -17,7 +17,7 @@ import {
 import { Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useUser, useFirestore } from '@/firebase'
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc, updateDoc, type UpdateData } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { type BikeComponent, COMPONENT_CATEGORY_LABELS } from './gear-types'
@@ -70,7 +70,7 @@ export function EditComponentDialog({ component, open, onOpenChange }: Props) {
     else updates.status = 'active'
 
     const compRef = doc(db, `users/${user.uid}/components`, component.id)
-    updateDoc(compRef, updates)
+    updateDoc(compRef, updates as UpdateData<Record<string, unknown>>)
       .then(() => {
         onOpenChange(false)
         toast({ title: 'Composant mis a jour', description: COMPONENT_CATEGORY_LABELS[component.category] })
