@@ -68,6 +68,20 @@ service cloud.firestore {
       allow delete: if false; // Delete usually handled via Admin SDK/Functions
 
       /**
+       * @description Per-feature settings singletons (e.g. Intervals.icu
+       * credentials, finance preferences). Keyed by a fixed docId per
+       * feature rather than an arbitrary id, so ownership is enforced by
+       * the path alone — no userId field is required on the document.
+       * @path /users/{userId}/settings/{settingsId}
+       * @principle Path-based ownership.
+       */
+      match /settings/{settingsId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      /**
        * @description Records of bike rides, runs, or swims.
        * @path /users/{userId}/activities/{activityId}
        * @allow (create, list, get, update, delete) if user is owner.

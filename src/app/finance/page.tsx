@@ -1,66 +1,79 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Progress } from '@/components/ui/progress'
+import { Button } from '@/components/ui/button'
 import {
   Wallet,
-  TrendingUp,
-  TrendingDown,
   ArrowUpRight,
   ArrowDownRight,
   CreditCard,
   PiggyBank,
-  Bike,
-  CookingPot,
-  ShoppingCart,
   Target,
-  BarChart3
+  BarChart3,
+  Settings2,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Bar, BarChart, XAxis, YAxis, ResponsiveContainer, Area, AreaChart } from 'recharts'
+import { format } from 'date-fns'
+import { fr } from 'date-fns/locale'
+import { useFinanceData } from '@/components/finance/use-finance-data'
+import { AddExpenseDialog } from '@/components/finance/add-expense-dialog'
+import { AddCategoryDialog } from '@/components/finance/add-category-dialog'
+import { SetBudgetDialog } from '@/components/finance/set-budget-dialog'
+import { SavingsGoalDialog } from '@/components/finance/savings-goal-dialog'
+import { CATEGORY_ICONS, CATEGORY_COLORS, formatEuro, type ExpenseCategory, type BudgetAllocation } from '@/components/finance/finance-types'
 
-const monthlyData = [
-  { month: 'Oct', cyclisme: 180, nutrition: 380, divers: 220 },
-  { month: 'Nov', cyclisme: 145, nutrition: 410, divers: 190 },
-  { month: 'Déc', cyclisme: 320, nutrition: 450, divers: 350 },
-  { month: 'Jan', cyclisme: 95, nutrition: 390, divers: 180 },
-  { month: 'Fév', cyclisme: 210, nutrition: 420, divers: 200 },
-  { month: 'Mar', cyclisme: 145, nutrition: 405, divers: 175 },
-]
+type WithIdCategory = ExpenseCategory & { id: string }
+type WithIdAllocation = BudgetAllocation & { id: string }
 
-const savingsData = [
-  { month: 'Oct', total: 1200 },
-  { month: 'Nov', total: 1450 },
-  { month: 'Déc', total: 1100 },
-  { month: 'Jan', total: 1650 },
-  { month: 'Fév', total: 2050 },
-  { month: 'Mar', total: 2450 },
-]
-
-const recentTransactions = [
-  { label: "Chambre à air Continental", category: "Cyclisme", amount: -12.90, date: "15 Mar" },
-  { label: "Marché bio hebdo", category: "Nutrition", amount: -67.30, date: "14 Mar" },
-  { label: "Abonnement Intervals.icu", category: "Cyclisme", amount: -10.00, date: "12 Mar" },
-  { label: "Protéines whey (2kg)", category: "Nutrition", amount: -45.00, date: "10 Mar" },
-  { label: "Gants hiver Castelli", category: "Cyclisme", amount: -89.00, date: "8 Mar" },
-  { label: "Courses Leclerc", category: "Nutrition", amount: -98.50, date: "7 Mar" },
-]
-
-const budgets = [
-  { label: "Cyclisme", icon: Bike, spent: 145, limit: 200, color: "text-primary", bg: "bg-primary/10" },
-  { label: "Alimentation", icon: CookingPot, spent: 405, limit: 500, color: "text-orange-500", bg: "bg-orange-500/10" },
-  { label: "Shopping", icon: ShoppingCart, spent: 95, limit: 150, color: "text-pink-500", bg: "bg-pink-500/10" },
-]
+function monthLabel(monthId: string) {
+  const [y, m] = monthId.split('-').map(Number)
+  return format(new Date(y, m - 1, 1), 'MMM', { locale: fr })
+}
 
 export default function FinancePage() {
   const [activeTab, setActiveTab] = useState('overview')
+  const [budgetDialogCategory, setBudgetDialogCategory] = useState<WithIdCategory | null>(null)
 
-  const totalSpent = budgets.reduce((sum, b) => sum + b.spent, 0)
-  const totalLimit = budgets.reduce((sum, b) => sum + b.limit, 0)
+  const {
+    categories,
+    allocations,
+    financeSettings,
+    isLoading,
+    currentMonthId,
+    monthIds,
+    monthlySeries,
+    savingsSeries,
+    totalSavings,
+    currentMonthLimit,
+    totalSpentThisMonth,
+    spentByCategory,
+    recentTransactions,
+  } = useFinanceData()
+
+  const allocationByCategory = useMemo(() => {
+    const map: Record<string, WithIdAllocation> = {}
+    for (const a of allocations) map[a.categoryId] = a
+    return map
+  }, [allocations])
+
+  const seriesForChart = useMemo(
+    () => monthlySeries.map((point) => ({ month: monthLabel(point.month), ...point.byCategory })),
+    [monthlySeries]
+  )
+  const savingsForChart = useMemo(
+    () => savingsSeries.map((p) => ({ month: monthLabel(p.month), total: Math.round(p.cumulative) })),
+    [savingsSeries]
+  )
+
+  const remaining = currentMonthLimit - totalSpentThisMonth
+  const usedPct = currentMonthLimit > 0 ? Math.min(100, Math.round((totalSpentThisMonth / currentMonthLimit) * 100)) : 0
+  const goalPct = financeSettings?.savingsGoalAmount ? Math.min(100, Math.round((totalSavings / financeSettings.savingsGoalAmount) * 100)) : 0
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
@@ -72,15 +85,18 @@ export default function FinancePage() {
             <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Budget</h2>
             <h1 className="text-3xl font-bold">Finances Lifestyle</h1>
           </div>
-          <Badge variant="outline" className="w-fit rounded-full px-4 py-1.5 text-xs font-bold border-primary/20 text-primary bg-primary/5">
-            <Wallet className="w-3.5 h-3.5 mr-2" /> Mars 2026
-          </Badge>
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className="w-fit rounded-full px-4 py-1.5 text-xs font-bold border-primary/20 text-primary bg-primary/5">
+              <Wallet className="w-3.5 h-3.5 mr-2" /> {format(new Date(), 'MMMM yyyy', { locale: fr })}
+            </Badge>
+            <AddExpenseDialog categories={categories} />
+          </div>
         </header>
 
         <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           <TabsList className="bg-secondary/50 p-1.5 rounded-[20px] w-fit border border-border/40">
             <TabsTrigger value="overview" className="px-8 py-3 rounded-2xl data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-lg font-bold transition-all">
-              <BarChart3 className="w-4 h-4 mr-2" /> Vue d'ensemble
+              <BarChart3 className="w-4 h-4 mr-2" /> Vue d&apos;ensemble
             </TabsTrigger>
             <TabsTrigger value="budgets" className="px-8 py-3 rounded-2xl data-[state=active]:bg-card data-[state=active]:text-primary data-[state=active]:shadow-lg font-bold transition-all">
               <Target className="w-4 h-4 mr-2" /> Budgets
@@ -90,6 +106,12 @@ export default function FinancePage() {
             </TabsTrigger>
           </TabsList>
 
+          {isLoading ? (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-32 rounded-2xl bg-muted/20 animate-pulse" />)}
+            </div>
+          ) : (
+          <>
           <TabsContent value="overview" className="space-y-8 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <Card className="apple-card border-none p-6">
@@ -99,12 +121,14 @@ export default function FinancePage() {
                   </div>
                   <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Dépensé ce mois</span>
                 </div>
-                <div className="text-3xl font-bold tracking-tight">{totalSpent.toFixed(0)}€</div>
-                <div className="flex items-center text-xs text-muted-foreground mt-2">
-                  <ArrowDownRight className="w-3 h-3 mr-1 text-green-500" />
-                  <span className="text-green-500 font-bold">-8%</span>
-                  <span className="ml-1">vs février</span>
-                </div>
+                <div className="text-3xl font-bold tracking-tight">{formatEuro(totalSpentThisMonth)}</div>
+                {currentMonthLimit > 0 && (
+                  <div className="flex items-center text-xs text-muted-foreground mt-2">
+                    {remaining >= 0 ? <ArrowDownRight className="w-3 h-3 mr-1 text-green-500" /> : <ArrowUpRight className="w-3 h-3 mr-1 text-red-500" />}
+                    <span className={cn('font-bold', remaining >= 0 ? 'text-green-500' : 'text-red-500')}>{formatEuro(Math.abs(remaining))}</span>
+                    <span className="ml-1">{remaining >= 0 ? 'restant' : 'de dépassement'}</span>
+                  </div>
+                )}
               </Card>
 
               <Card className="apple-card border-none p-6">
@@ -112,14 +136,10 @@ export default function FinancePage() {
                   <div className="w-10 h-10 rounded-2xl bg-green-500/10 flex items-center justify-center">
                     <PiggyBank className="w-5 h-5 text-green-500" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Épargne totale</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Épargne cumulée</span>
                 </div>
-                <div className="text-3xl font-bold tracking-tight">2 450€</div>
-                <div className="flex items-center text-xs text-muted-foreground mt-2">
-                  <ArrowUpRight className="w-3 h-3 mr-1 text-green-500" />
-                  <span className="text-green-500 font-bold">+400€</span>
-                  <span className="ml-1">ce mois</span>
-                </div>
+                <div className="text-3xl font-bold tracking-tight">{formatEuro(totalSavings)}</div>
+                <p className="text-xs text-muted-foreground mt-2">sur les {monthIds.length} derniers mois</p>
               </Card>
 
               <Card className="apple-card border-none p-6">
@@ -127,11 +147,17 @@ export default function FinancePage() {
                   <div className="w-10 h-10 rounded-2xl bg-orange-500/10 flex items-center justify-center">
                     <Target className="w-5 h-5 text-orange-500" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Budget restant</span>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Budget mensuel</span>
                 </div>
-                <div className="text-3xl font-bold tracking-tight">{(totalLimit - totalSpent).toFixed(0)}€</div>
-                <Progress value={(totalSpent / totalLimit) * 100} className="h-1.5 mt-3" />
-                <p className="text-xs text-muted-foreground mt-2">{Math.round((totalSpent / totalLimit) * 100)}% utilisé</p>
+                {currentMonthLimit > 0 ? (
+                  <>
+                    <div className="text-3xl font-bold tracking-tight">{formatEuro(currentMonthLimit)}</div>
+                    <Progress value={usedPct} className="h-1.5 mt-3" />
+                    <p className="text-xs text-muted-foreground mt-2">{usedPct}% utilisé</p>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-1">Aucun budget défini — voir l&apos;onglet Budgets</p>
+                )}
               </Card>
             </div>
 
@@ -141,22 +167,30 @@ export default function FinancePage() {
                   <BarChart3 className="w-5 h-5 text-primary" /> Évolution des dépenses
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-0 h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={monthlyData}>
-                    <XAxis dataKey="month" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}€`} />
-                    <Bar dataKey="cyclisme" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} stackId="stack" />
-                    <Bar dataKey="nutrition" fill="hsl(25 95% 53%)" radius={[0, 0, 0, 0]} stackId="stack" />
-                    <Bar dataKey="divers" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} stackId="stack" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-              <div className="flex gap-6 mt-4 text-xs text-muted-foreground">
-                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-primary" /> Cyclisme</span>
-                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-orange-500" /> Nutrition</span>
-                <span className="flex items-center gap-2"><span className="w-3 h-3 rounded-sm bg-muted-foreground" /> Divers</span>
-              </div>
+              {categories.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Ajoutez des catégories et des dépenses pour voir apparaître ce graphique.</p>
+              ) : (
+                <>
+                  <CardContent className="p-0 h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={seriesForChart}>
+                        <XAxis dataKey="month" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                        <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}€`} />
+                        {categories.map((c) => (
+                          <Bar key={c.id} dataKey={c.name} fill={CATEGORY_COLORS[c.color].chart} radius={[4, 4, 0, 0]} stackId="stack" />
+                        ))}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                  <div className="flex flex-wrap gap-6 mt-4 text-xs text-muted-foreground">
+                    {categories.map((c) => (
+                      <span key={c.id} className="flex items-center gap-2">
+                        <span className={cn('w-3 h-3 rounded-sm', CATEGORY_COLORS[c.color].dot)} /> {c.name}
+                      </span>
+                    ))}
+                  </div>
+                </>
+              )}
             </Card>
 
             <Card className="apple-card border-none p-8">
@@ -164,77 +198,124 @@ export default function FinancePage() {
                 <CardTitle className="text-lg font-bold tracking-tight">Dernières transactions</CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="space-y-3">
-                  {recentTransactions.map((tx, i) => (
-                    <div key={i} className="flex items-center justify-between p-4 rounded-2xl bg-secondary/30">
-                      <div className="flex-1">
-                        <p className="text-sm font-bold">{tx.label}</p>
-                        <p className="text-xs text-muted-foreground">{tx.date}</p>
+                {recentTransactions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Aucune dépense enregistrée pour l&apos;instant.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {recentTransactions.map((tx) => (
+                      <div key={tx.id} className="flex items-center justify-between p-4 rounded-2xl bg-secondary/30">
+                        <div className="flex-1">
+                          <p className="text-sm font-bold">{tx.label}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {tx.date?.seconds ? format(new Date(tx.date.seconds * 1000), 'dd MMM', { locale: fr }) : ''}
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="rounded-full text-[10px] font-bold border-none bg-secondary px-3 mr-4">
+                          {tx.categoryName}
+                        </Badge>
+                        <span className="font-bold text-sm text-red-500">-{tx.amount.toFixed(2)}€</span>
                       </div>
-                      <Badge variant="outline" className="rounded-full text-[10px] font-bold border-none bg-secondary px-3 mr-4">
-                        {tx.category}
-                      </Badge>
-                      <span className={cn("font-bold text-sm", tx.amount < 0 ? "text-red-500" : "text-green-500")}>
-                        {tx.amount.toFixed(2)}€
-                      </span>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
 
           <TabsContent value="budgets" className="space-y-8 animate-in fade-in duration-500">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {budgets.map((budget) => {
-                const pct = Math.round((budget.spent / budget.limit) * 100)
-                const remaining = budget.limit - budget.spent
-                return (
-                  <Card key={budget.label} className="apple-card border-none p-8">
-                    <div className="flex items-center gap-3 mb-6">
-                      <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center", budget.bg)}>
-                        <budget.icon className={cn("w-6 h-6", budget.color)} />
-                      </div>
-                      <div>
-                        <h3 className="font-bold text-lg">{budget.label}</h3>
-                        <p className="text-xs text-muted-foreground">{budget.limit}€ / mois</p>
-                      </div>
-                    </div>
-                    <div className="space-y-4">
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-3xl font-bold tracking-tight">{budget.spent}€</span>
-                        <span className={cn("text-sm font-bold", pct > 90 ? "text-red-500" : pct > 70 ? "text-yellow-500" : "text-green-500")}>
-                          {pct}%
-                        </span>
-                      </div>
-                      <Progress value={pct} className="h-2" />
-                      <p className="text-xs text-muted-foreground">
-                        {remaining > 0 ? `${remaining}€ restant` : `${Math.abs(remaining)}€ de dépassement`}
-                      </p>
-                    </div>
-                  </Card>
-                )
-              })}
+            <div className="flex justify-end">
+              <AddCategoryDialog />
             </div>
 
-            <Card className="apple-card border-none p-8">
-              <CardHeader className="p-0 mb-4">
-                <CardTitle className="text-lg font-bold tracking-tight">Répartition globale</CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="space-y-4">
-                  {budgets.map((b) => (
-                    <div key={b.label} className="flex items-center gap-4">
-                      <span className="text-sm font-bold w-28">{b.label}</span>
-                      <div className="flex-1">
-                        <Progress value={(b.spent / totalSpent) * 100} className="h-3" />
-                      </div>
-                      <span className="text-sm font-bold w-16 text-right">{Math.round((b.spent / totalSpent) * 100)}%</span>
-                    </div>
-                  ))}
+            {categories.length === 0 ? (
+              <div className="py-24 text-center opacity-60 space-y-4">
+                <Target className="w-12 h-12 mx-auto" />
+                <p className="font-bold text-sm">Aucune catégorie de budget pour l&apos;instant</p>
+                <AddCategoryDialog />
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {categories.map((category) => {
+                    const Icon = CATEGORY_ICONS[category.icon]
+                    const colors = CATEGORY_COLORS[category.color]
+                    const allocation = allocationByCategory[category.id]
+                    const spent = spentByCategory[category.id] || 0
+                    const limitAmount = allocation?.limitAmount || 0
+                    const pct = limitAmount > 0 ? Math.round((spent / limitAmount) * 100) : 0
+                    const remainingCat = limitAmount - spent
+
+                    return (
+                      <Card key={category.id} className="apple-card border-none p-8">
+                        <div className="flex items-center justify-between mb-6">
+                          <div className="flex items-center gap-3">
+                            <div className={cn('w-12 h-12 rounded-2xl flex items-center justify-center', colors.bg)}>
+                              <Icon className={cn('w-6 h-6', colors.text)} />
+                            </div>
+                            <div>
+                              <h3 className="font-bold text-lg">{category.name}</h3>
+                              <p className="text-xs text-muted-foreground">{limitAmount > 0 ? `${limitAmount}€ / mois` : 'Aucun budget'}</p>
+                            </div>
+                          </div>
+                          <Button variant="ghost" size="icon" className="rounded-full" onClick={() => setBudgetDialogCategory(category)}>
+                            <Settings2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                        <div className="space-y-4">
+                          <div className="flex justify-between items-baseline">
+                            <span className="text-3xl font-bold tracking-tight">{formatEuro(spent)}</span>
+                            {limitAmount > 0 && (
+                              <span className={cn('text-sm font-bold', pct > 90 ? 'text-red-500' : pct > 70 ? 'text-yellow-500' : 'text-green-500')}>
+                                {pct}%
+                              </span>
+                            )}
+                          </div>
+                          {limitAmount > 0 && (
+                            <>
+                              <Progress value={Math.min(100, pct)} className="h-2" />
+                              <p className="text-xs text-muted-foreground">
+                                {remainingCat >= 0 ? `${formatEuro(remainingCat)} restant` : `${formatEuro(Math.abs(remainingCat))} de dépassement`}
+                              </p>
+                            </>
+                          )}
+                        </div>
+                      </Card>
+                    )
+                  })}
                 </div>
-              </CardContent>
-            </Card>
+
+                <SetBudgetDialog
+                  open={!!budgetDialogCategory}
+                  onOpenChange={(o) => !o && setBudgetDialogCategory(null)}
+                  category={budgetDialogCategory}
+                  monthId={currentMonthId}
+                  existingAllocation={budgetDialogCategory ? allocationByCategory[budgetDialogCategory.id] : undefined}
+                />
+
+                {totalSpentThisMonth > 0 && (
+                  <Card className="apple-card border-none p-8">
+                    <CardHeader className="p-0 mb-4">
+                      <CardTitle className="text-lg font-bold tracking-tight">Répartition globale</CardTitle>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="space-y-4">
+                        {categories.filter((c) => (spentByCategory[c.id] || 0) > 0).map((c) => (
+                          <div key={c.id} className="flex items-center gap-4">
+                            <span className="text-sm font-bold w-28 truncate">{c.name}</span>
+                            <div className="flex-1">
+                              <Progress value={((spentByCategory[c.id] || 0) / totalSpentThisMonth) * 100} className="h-3" />
+                            </div>
+                            <span className="text-sm font-bold w-16 text-right">
+                              {Math.round(((spentByCategory[c.id] || 0) / totalSpentThisMonth) * 100)}%
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="savings" className="space-y-8 animate-in fade-in duration-500">
@@ -246,52 +327,62 @@ export default function FinancePage() {
                   </div>
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Épargne cumulée</span>
-                    <div className="text-3xl font-bold tracking-tight">2 450€</div>
+                    <div className="text-3xl font-bold tracking-tight">{formatEuro(totalSavings)}</div>
                   </div>
                 </div>
-                <Progress value={49} className="h-2 mt-4" />
-                <p className="text-xs text-muted-foreground mt-2">49% de l'objectif (5 000€)</p>
+                {financeSettings?.savingsGoalAmount ? (
+                  <>
+                    <Progress value={goalPct} className="h-2 mt-4" />
+                    <p className="text-xs text-muted-foreground mt-2">{goalPct}% de l&apos;objectif ({formatEuro(financeSettings.savingsGoalAmount)})</p>
+                  </>
+                ) : (
+                  <p className="text-xs text-muted-foreground mt-2">Calculée à partir de vos budgets vs. dépenses réelles.</p>
+                )}
               </Card>
 
-              <Card className="apple-card border-none p-8">
+              <Card className="apple-card border-none p-8 flex flex-col justify-between">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-                    <Bike className="w-6 h-6 text-primary" />
+                    <Target className="w-6 h-6 text-primary" />
                   </div>
                   <div>
                     <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Objectif</span>
-                    <div className="text-3xl font-bold tracking-tight">Nouveau Vélo</div>
+                    <div className="text-2xl font-bold tracking-tight">{financeSettings?.savingsGoalLabel || 'Aucun objectif'}</div>
                   </div>
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">
-                  À ce rythme, objectif atteint en <span className="font-bold text-foreground">~6 mois</span>.
-                </p>
+                <SavingsGoalDialog current={financeSettings} />
               </Card>
             </div>
 
             <Card className="apple-card border-none p-8">
               <CardHeader className="p-0 mb-6">
                 <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
-                  <TrendingUp className="w-5 h-5 text-green-500" /> Évolution de l'épargne
+                  <ArrowUpRight className="w-5 h-5 text-green-500" /> Évolution de l&apos;épargne
                 </CardTitle>
               </CardHeader>
-              <CardContent className="p-0 h-[280px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={savingsData}>
-                    <defs>
-                      <linearGradient id="savingsGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(142 70% 45%)" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(142 70% 45%)" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis dataKey="month" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}€`} />
-                    <Area type="monotone" dataKey="total" stroke="hsl(142 70% 45%)" fill="url(#savingsGradient)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
+              {savingsForChart.every((p) => p.total === 0) ? (
+                <p className="text-sm text-muted-foreground">Définissez un budget mensuel par catégorie pour suivre votre épargne.</p>
+              ) : (
+                <CardContent className="p-0 h-[280px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={savingsForChart}>
+                      <defs>
+                        <linearGradient id="savingsGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(142 70% 45%)" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(142 70% 45%)" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="month" stroke="#888888" fontSize={12} tickLine={false} axisLine={false} />
+                      <YAxis stroke="#888888" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}€`} />
+                      <Area type="monotone" dataKey="total" stroke="hsl(142 70% 45%)" fill="url(#savingsGradient)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              )}
             </Card>
           </TabsContent>
+          </>
+          )}
         </Tabs>
       </main>
     </div>
