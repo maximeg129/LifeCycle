@@ -463,7 +463,7 @@ export default function NutritionPage() {
 
               {isEditingRecipe ? (
                 <form onSubmit={handleUpdateRecipe} key={selectedRecipe.id} className="flex flex-col flex-1 min-h-0">
-                  <ScrollArea className="flex-1 px-8 py-6">
+                  <ScrollArea className="flex-1 min-h-0 px-8 py-6">
                     <div className="grid gap-4 max-w-lg">
                       <div className="grid gap-2">
                         <Label htmlFor="title">Titre</Label>
@@ -505,7 +505,7 @@ export default function NutritionPage() {
                 </form>
               ) : (
                 <>
-                  <ScrollArea className="flex-1 px-8 py-6">
+                  <ScrollArea className="flex-1 min-h-0 px-8 py-6">
                     <div className="grid grid-cols-3 gap-6 mb-10">
                       <div className="space-y-1">
                         <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Calories</div>
