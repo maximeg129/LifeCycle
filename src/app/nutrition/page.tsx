@@ -41,7 +41,6 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import { useToast } from '@/hooks/use-toast'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, increment } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
@@ -435,7 +434,7 @@ export default function NutritionPage() {
       </main>
 
       <Dialog open={isDetailOpen} onOpenChange={(open) => { setIsDetailOpen(open); if (!open) setIsEditingRecipe(false); }}>
-        <DialogContent className="sm:max-w-[700px] h-[85vh] p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
+        <DialogContent className="sm:max-w-[700px] h-[85dvh] max-h-[85dvh] p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           {selectedRecipe && (
             <div className="flex flex-col h-full">
               <div className="h-64 relative shrink-0">
@@ -463,7 +462,10 @@ export default function NutritionPage() {
 
               {isEditingRecipe ? (
                 <form onSubmit={handleUpdateRecipe} key={selectedRecipe.id} className="flex flex-col flex-1 min-h-0">
-                  <ScrollArea className="flex-1 min-h-0 px-8 py-6">
+                  <div
+                    className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-8 py-6"
+                    style={{ WebkitOverflowScrolling: 'touch' }}
+                  >
                     <div className="grid gap-4 max-w-lg">
                       <div className="grid gap-2">
                         <Label htmlFor="title">Titre</Label>
@@ -492,7 +494,7 @@ export default function NutritionPage() {
                         <Textarea id="instructions" name="instructions" defaultValue={selectedRecipe.instructions} rows={4} />
                       </div>
                     </div>
-                  </ScrollArea>
+                  </div>
                   <div className="p-6 bg-muted/20 border-t border-border/40 flex justify-end gap-2">
                     <Button type="button" variant="outline" onClick={() => setIsEditingRecipe(false)} className="rounded-full px-6">
                       <X className="w-4 h-4 mr-2" /> Annuler
@@ -505,7 +507,10 @@ export default function NutritionPage() {
                 </form>
               ) : (
                 <>
-                  <ScrollArea className="flex-1 min-h-0 px-8 py-6">
+                  <div
+                    className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-8 py-6"
+                    style={{ WebkitOverflowScrolling: 'touch' }}
+                  >
                     <div className="grid grid-cols-3 gap-6 mb-10">
                       <div className="space-y-1">
                         <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Calories</div>
@@ -545,7 +550,7 @@ export default function NutritionPage() {
                         </div>
                       </div>
                     </div>
-                  </ScrollArea>
+                  </div>
 
                   <div className="p-6 bg-muted/20 border-t border-border/40 flex justify-end gap-2">
                     <Button variant="outline" onClick={() => setIsEditingRecipe(true)} className="rounded-full px-6">
