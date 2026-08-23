@@ -35,7 +35,9 @@ import {
   CheckCircle2,
   Clock,
   Loader2,
-  Trash2
+  Trash2,
+  Pencil,
+  X
 } from 'lucide-react'
 import Image from 'next/image'
 import { useToast } from '@/hooks/use-toast'
@@ -58,6 +60,7 @@ export default function NutritionPage() {
   const [activeTab, setActiveTab] = useState('plan')
   const [selectedRecipe, setSelectedRecipe] = useState<any>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [isEditingRecipe, setIsEditingRecipe] = useState(false)
   const [isAddingRecipe, setIsAddingRecipe] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
@@ -140,7 +143,7 @@ export default function NutritionPage() {
   const handleDeleteRecipe = async (id: string) => {
     if (!user || !db) return
     const recipeRef = doc(db, `users/${user.uid}/recipes`, id)
-    
+
     deleteDoc(recipeRef)
       .catch(async (err) => {
         const permissionError = new FirestorePermissionError({
@@ -149,6 +152,47 @@ export default function NutritionPage() {
         })
         errorEmitter.emit('permission-error', permissionError)
       })
+  }
+
+  const handleUpdateRecipe = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (!user || !db || !selectedRecipe) return
+
+    setIsSaving(true)
+    const formData = new FormData(e.currentTarget)
+    const title = formData.get('title')?.toString()
+    const ingredientsStr = formData.get('ingredients')?.toString() || ""
+    const instructions = formData.get('instructions')?.toString() || ""
+    const calories = Number(formData.get('calories')) || 0
+    const protein = Number(formData.get('protein')) || 0
+    const carbs = Number(formData.get('carbs')) || 0
+
+    if (!title) {
+      toast({ variant: "destructive", title: "Le titre est requis" })
+      setIsSaving(false)
+      return
+    }
+
+    const ingredients = ingredientsStr.split('\n').filter(i => i.trim() !== "")
+    const recipeData = { title, ingredients, instructions, calories, protein, carbs }
+
+    const recipeRef = doc(db, `users/${user.uid}/recipes`, selectedRecipe.id)
+
+    setDoc(recipeRef, recipeData, { merge: true })
+      .then(() => {
+        setSelectedRecipe((prev: any) => prev ? { ...prev, ...recipeData } : prev)
+        setIsEditingRecipe(false)
+        toast({ title: "Recette modifiée", description: "Les macros ont été mises à jour." })
+      })
+      .catch(async () => {
+        const permissionError = new FirestorePermissionError({
+          path: recipeRef.path,
+          operation: 'update',
+          requestResourceData: recipeData,
+        })
+        errorEmitter.emit('permission-error', permissionError)
+      })
+      .finally(() => setIsSaving(false))
   }
 
   return (
@@ -350,7 +394,7 @@ export default function NutritionPage() {
                   <Card 
                     key={recipe.id} 
                     className="apple-card border-none overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer"
-                    onClick={() => { setSelectedRecipe(recipe); setIsDetailOpen(true); }}
+                    onClick={() => { setSelectedRecipe(recipe); setIsEditingRecipe(false); setIsDetailOpen(true); }}
                   >
                     <div className="h-48 bg-muted relative">
                       <Image 
@@ -390,68 +434,127 @@ export default function NutritionPage() {
         </Tabs>
       </main>
 
-      <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
+      <Dialog open={isDetailOpen} onOpenChange={(open) => { setIsDetailOpen(open); if (!open) setIsEditingRecipe(false); }}>
         <DialogContent className="sm:max-w-[700px] h-[85vh] p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
           {selectedRecipe && (
             <div className="flex flex-col h-full">
               <div className="h-64 relative shrink-0">
-                <Image 
-                  src={`https://picsum.photos/seed/${selectedRecipe.id}/800/600`} 
-                  alt={selectedRecipe.title} 
-                  fill 
+                <Image
+                  src={`https://picsum.photos/seed/${selectedRecipe.id}/800/600`}
+                  alt={selectedRecipe.title}
+                  fill
                   className="object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
                 <div className="absolute bottom-6 left-8">
                   <h2 className="text-4xl font-bold tracking-tighter">{selectedRecipe.title}</h2>
                 </div>
+                {!isEditingRecipe && (
+                  <Button
+                    size="icon"
+                    variant="secondary"
+                    className="absolute top-4 right-14 h-9 w-9 rounded-full bg-white/80 backdrop-blur shadow-sm"
+                    onClick={() => setIsEditingRecipe(true)}
+                  >
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
 
-              <ScrollArea className="flex-1 px-8 py-6">
-                <div className="grid grid-cols-3 gap-6 mb-10">
-                  <div className="space-y-1">
-                    <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Calories</div>
-                    <div className="text-2xl font-bold">{selectedRecipe.calories}</div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest text-red-500">Protéines</div>
-                    <div className="text-2xl font-bold">{selectedRecipe.protein}g</div>
-                  </div>
-                  <div className="space-y-1">
-                    <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest text-yellow-500">Glucides</div>
-                    <div className="text-2xl font-bold">{selectedRecipe.carbs}g</div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                  <div className="space-y-6">
-                    <h3 className="font-bold text-xl flex items-center gap-3">
-                      <Utensils className="w-5 h-5 text-primary" /> Ingrédients
-                    </h3>
-                    <ul className="space-y-3">
-                      {selectedRecipe.ingredients?.map((ing: string, i: number) => (
-                        <li key={i} className="text-sm flex items-start gap-3 text-muted-foreground">
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                          {ing}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-
-                  <div className="space-y-6">
-                    <h3 className="font-bold text-xl flex items-center gap-3">
-                      <Clock className="w-5 h-5 text-primary" /> Préparation
-                    </h3>
-                    <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                      {selectedRecipe.instructions}
+              {isEditingRecipe ? (
+                <form onSubmit={handleUpdateRecipe} key={selectedRecipe.id} className="flex flex-col flex-1 min-h-0">
+                  <ScrollArea className="flex-1 px-8 py-6">
+                    <div className="grid gap-4 max-w-lg">
+                      <div className="grid gap-2">
+                        <Label htmlFor="title">Titre</Label>
+                        <Input id="title" name="title" defaultValue={selectedRecipe.title} required />
+                      </div>
+                      <div className="grid grid-cols-3 gap-4">
+                        <div className="grid gap-2">
+                          <Label htmlFor="calories">Calories</Label>
+                          <Input id="calories" name="calories" type="number" min={0} defaultValue={selectedRecipe.calories} />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="protein">Protéines (g)</Label>
+                          <Input id="protein" name="protein" type="number" min={0} defaultValue={selectedRecipe.protein} />
+                        </div>
+                        <div className="grid gap-2">
+                          <Label htmlFor="carbs">Glucides (g)</Label>
+                          <Input id="carbs" name="carbs" type="number" min={0} defaultValue={selectedRecipe.carbs} />
+                        </div>
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="ingredients">Ingrédients (un par ligne)</Label>
+                        <Textarea id="ingredients" name="ingredients" defaultValue={selectedRecipe.ingredients?.join('\n')} rows={6} />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="instructions">Instructions</Label>
+                        <Textarea id="instructions" name="instructions" defaultValue={selectedRecipe.instructions} rows={4} />
+                      </div>
                     </div>
+                  </ScrollArea>
+                  <div className="p-6 bg-muted/20 border-t border-border/40 flex justify-end gap-2">
+                    <Button type="button" variant="outline" onClick={() => setIsEditingRecipe(false)} className="rounded-full px-6">
+                      <X className="w-4 h-4 mr-2" /> Annuler
+                    </Button>
+                    <Button type="submit" disabled={isSaving} className="rounded-full px-8">
+                      {isSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                      Enregistrer
+                    </Button>
                   </div>
-                </div>
-              </ScrollArea>
-              
-              <div className="p-6 bg-muted/20 border-t border-border/40 flex justify-end">
-                <Button variant="secondary" onClick={() => setIsDetailOpen(false)} className="rounded-full px-8">Fermer</Button>
-              </div>
+                </form>
+              ) : (
+                <>
+                  <ScrollArea className="flex-1 px-8 py-6">
+                    <div className="grid grid-cols-3 gap-6 mb-10">
+                      <div className="space-y-1">
+                        <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Calories</div>
+                        <div className="text-2xl font-bold">{selectedRecipe.calories}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest text-red-500">Protéines</div>
+                        <div className="text-2xl font-bold">{selectedRecipe.protein}g</div>
+                      </div>
+                      <div className="space-y-1">
+                        <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest text-yellow-500">Glucides</div>
+                        <div className="text-2xl font-bold">{selectedRecipe.carbs}g</div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                      <div className="space-y-6">
+                        <h3 className="font-bold text-xl flex items-center gap-3">
+                          <Utensils className="w-5 h-5 text-primary" /> Ingrédients
+                        </h3>
+                        <ul className="space-y-3">
+                          {selectedRecipe.ingredients?.map((ing: string, i: number) => (
+                            <li key={i} className="text-sm flex items-start gap-3 text-muted-foreground">
+                              <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                              {ing}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+
+                      <div className="space-y-6">
+                        <h3 className="font-bold text-xl flex items-center gap-3">
+                          <Clock className="w-5 h-5 text-primary" /> Préparation
+                        </h3>
+                        <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
+                          {selectedRecipe.instructions}
+                        </div>
+                      </div>
+                    </div>
+                  </ScrollArea>
+
+                  <div className="p-6 bg-muted/20 border-t border-border/40 flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setIsEditingRecipe(true)} className="rounded-full px-6">
+                      <Pencil className="w-4 h-4 mr-2" /> Modifier
+                    </Button>
+                    <Button variant="secondary" onClick={() => setIsDetailOpen(false)} className="rounded-full px-8">Fermer</Button>
+                  </div>
+                </>
+              )}
             </div>
           )}
         </DialogContent>
