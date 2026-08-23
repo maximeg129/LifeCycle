@@ -52,6 +52,7 @@ import { ComponentRow, computeStatus } from './component-row'
 import { ReplacementHistory } from './replacement-history'
 import { TirePressureCard } from './tire-pressure-card'
 import { useGearSync } from './use-gear-sync'
+import { useChains } from './use-chains'
 
 // ── Main component ───────────────────────────────────────────────────
 
@@ -73,6 +74,8 @@ export function GearTab() {
   }, [db, user])
   const { data: components, isLoading: loadingComponents } = useCollection<BikeComponent>(componentsRef)
 
+  const { chains } = useChains()
+
   // Intervals.icu integration
   const athlete = useAthlete()
   const intervalsSettingsRef = useMemoFirebase(() => {
@@ -87,6 +90,7 @@ export function GearTab() {
   const { syncKm, linkBike, isSyncing } = useGearSync({
     bikes: (bikes || []) as BikeType[],
     components: (components || []) as BikeComponent[],
+    chains,
     athleteId: intervalsSettings?.intervalsAthleteId || null,
     apiKey: intervalsSettings?.intervalsApiKey || null,
     externalBikes,

@@ -24,10 +24,12 @@ import {
   Settings,
   Timer,
   Flame,
+  Droplets,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useAthlete, useActivities, useFitnessChart } from '@/hooks/use-intervals'
 import { GearTab } from '@/components/cycling/gear-tab'
+import { ChainsTab } from '@/components/cycling/chains-tab'
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -187,7 +189,7 @@ export default function CyclingHub() {
         </header>
 
         <Tabs defaultValue="training" className="space-y-6">
-          <TabsList className="bg-card/50 border border-border p-1 h-auto grid grid-cols-3 max-w-lg">
+          <TabsList className="bg-card/50 border border-border p-1 h-auto grid grid-cols-4 max-w-xl">
             <TabsTrigger value="training" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <Activity className="w-4 h-4 mr-2" /> Entraînement
             </TabsTrigger>
@@ -196,6 +198,9 @@ export default function CyclingHub() {
             </TabsTrigger>
             <TabsTrigger value="gear" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <Wrench className="w-4 h-4 mr-2" /> Matériel
+            </TabsTrigger>
+            <TabsTrigger value="chains" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
+              <Droplets className="w-4 h-4 mr-2" /> Chaînes
             </TabsTrigger>
           </TabsList>
 
@@ -443,6 +448,11 @@ export default function CyclingHub() {
           {/* ── Tab Matériel (Firestore-backed) ── */}
           <TabsContent value="gear" className="space-y-8">
             <GearTab />
+          </TabsContent>
+
+          {/* ── Tab Chaînes (hot wax rotation) ── */}
+          <TabsContent value="chains" className="space-y-8">
+            <ChainsTab />
           </TabsContent>
         </Tabs>
       </main>

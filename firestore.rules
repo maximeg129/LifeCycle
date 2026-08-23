@@ -134,18 +134,6 @@ service cloud.firestore {
         allow delete: if isExistingOwner(userId);
 
         /**
-         * @description Parts installed on a specific bike.
-         * @path /users/{userId}/bikes/{bikeId}/components/{componentId}
-         * @principle Ensures component is linked to the correct bike and user.
-         */
-        match /components/{componentId} {
-          allow get, list: if isOwner(userId);
-          allow create: if isOwner(userId) && hasValidOwnerField(userId) && request.resource.data.bikeId == bikeId;
-          allow update: if isExistingOwner(userId) && isUnchanged('userId') && isUnchanged('bikeId');
-          allow delete: if isExistingOwner(userId);
-        }
-
-        /**
          * @description Tire pressure settings for a bike and specific terrain.
          * @path /users/{userId}/bikes/{bikeId}/tirePressureSetups/{setupId}
          */
@@ -153,6 +141,43 @@ service cloud.firestore {
           allow get, list: if isOwner(userId);
           allow create: if isOwner(userId) && hasValidOwnerField(userId) && request.resource.data.bikeId == bikeId;
           allow update: if isExistingOwner(userId) && isUnchanged('userId') && isUnchanged('bikeId');
+          allow delete: if isExistingOwner(userId);
+        }
+      }
+
+      /**
+       * @description Parts installed on a bike. Flat top-level collection
+       * (not nested under bikes/{bikeId}) — every write in the app goes
+       * through users/{uid}/components with a bikeId field, never the
+       * nested path, so the rule has to live here to actually apply.
+       * @path /users/{userId}/components/{componentId}
+       */
+      match /components/{componentId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Hot-wax chain rotation tracking. Each chain is
+       * dedicated to one bike (bikeId set at creation, never reassigned).
+       * @path /users/{userId}/chains/{chainId}
+       */
+      match /chains/{chainId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId') && isUnchanged('bikeId');
+        allow delete: if isExistingOwner(userId);
+
+        /**
+         * @description Wax event log for a chain.
+         * @path /users/{userId}/chains/{chainId}/waxHistory/{eventId}
+         */
+        match /waxHistory/{eventId} {
+          allow get, list: if isOwner(userId);
+          allow create: if isOwner(userId) && hasValidOwnerField(userId) && request.resource.data.chainId == chainId;
+          allow update: if isExistingOwner(userId) && isUnchanged('userId') && isUnchanged('chainId');
           allow delete: if isExistingOwner(userId);
         }
       }

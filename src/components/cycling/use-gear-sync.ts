@@ -8,17 +8,19 @@ import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { useToast } from '@/hooks/use-toast'
 import type { Bike, BikeComponent } from './gear-types'
+import type { Chain } from './chain-types'
 import type { IntervalsGear } from '@/lib/intervals-api'
 
 interface UseGearSyncParams {
   bikes: Bike[]
   components: BikeComponent[]
+  chains?: Chain[]
   athleteId: string | null
   apiKey: string | null
   externalBikes: IntervalsGear[]
 }
 
-export function useGearSync({ bikes, components, athleteId, apiKey, externalBikes }: UseGearSyncParams) {
+export function useGearSync({ bikes, components, chains = [], athleteId, apiKey, externalBikes }: UseGearSyncParams) {
   const { user } = useUser()
   const db = useFirestore()
   const { toast } = useToast()
@@ -68,8 +70,23 @@ export function useGearSync({ bikes, components, athleteId, apiKey, externalBike
         bikesUpdated++
         totalNewKm += delta
 
+        // This bike has dedicated hot-wax rotation chains — track their km
+        // there instead of double-counting via a generic 'chain' component.
+        const bikeChains = chains.filter(c => c.bikeId === bike.id)
+        const hasRotationChains = bikeChains.length > 0
+        const mountedChain = bikeChains.find(c => c.status === 'montee')
+        if (mountedChain) {
+          const chainRef = doc(db, `users/${user.uid}/chains`, mountedChain.id)
+          await updateDoc(chainRef, {
+            kmSinceWax: mountedChain.kmSinceWax + delta,
+            totalKm: mountedChain.totalKm + delta,
+          }).catch(() => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: chainRef.path, operation: 'update' }))
+          })
+        }
+
         // Update all active components for this bike
-        const bikeComponents = components.filter(c => c.bikeId === bike.id && c.status !== 'retired')
+        const bikeComponents = components.filter(c => c.bikeId === bike.id && c.status !== 'retired' && !(hasRotationChains && c.category === 'chain'))
         for (const comp of bikeComponents) {
           const updatedCompKm = comp.currentKm + delta
           const status = updatedCompKm >= comp.thresholdKm
@@ -106,7 +123,7 @@ export function useGearSync({ bikes, components, athleteId, apiKey, externalBike
     } finally {
       setIsSyncing(false)
     }
-  }, [user, db, athleteId, apiKey, bikes, components, externalBikes, toast])
+  }, [user, db, athleteId, apiKey, bikes, components, chains, externalBikes, toast])
 
   // Link a local bike to an Intervals.icu gear ID
   const linkBike = useCallback(async (bikeId: string, externalGearId: string | null) => {
