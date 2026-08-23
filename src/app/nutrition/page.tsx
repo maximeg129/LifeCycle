@@ -441,10 +441,14 @@ export default function NutritionPage() {
       </main>
 
       <Dialog open={isDetailOpen} onOpenChange={(open) => { setIsDetailOpen(open); if (!open) setIsEditingRecipe(false); }}>
-        <DialogContent className="sm:max-w-[700px] h-[85dvh] max-h-[85dvh] p-0 overflow-hidden border-none shadow-2xl rounded-[32px]">
+        <DialogContent className="sm:max-w-[700px] h-[85dvh] max-h-[85dvh] p-0 border-none shadow-2xl rounded-[32px]">
           {selectedRecipe && (
             <div className="flex flex-col h-full">
-              <div className="h-64 relative shrink-0">
+              {/* Rounded corners are clipped per-section (header/footer) rather than on
+                  this whole flex column: an overflow-hidden + rounded-corner ANCESTOR of
+                  a scrollable child is a known WebKit bug that can block touch-scroll
+                  from ever reaching that child on iOS. */}
+              <div className="h-64 relative shrink-0 overflow-hidden rounded-t-[32px]">
                 <Image
                   src={`https://picsum.photos/seed/${selectedRecipe.id}/800/600`}
                   alt={selectedRecipe.title}
@@ -471,7 +475,7 @@ export default function NutritionPage() {
                 <form onSubmit={handleUpdateRecipe} key={selectedRecipe.id} className="flex flex-col flex-1 min-h-0">
                   <div
                     className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-8 py-6"
-                    style={{ WebkitOverflowScrolling: 'touch' }}
+                    style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', transform: 'translateZ(0)' }}
                   >
                     <div className="grid gap-4 max-w-lg">
                       <div className="grid gap-2">
@@ -502,7 +506,7 @@ export default function NutritionPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="p-6 bg-muted/20 border-t border-border/40 flex justify-end gap-2">
+                  <div className="p-6 bg-muted/20 border-t border-border/40 flex justify-end gap-2 rounded-b-[32px]">
                     <Button type="button" variant="outline" onClick={() => setIsEditingRecipe(false)} className="rounded-full px-6">
                       <X className="w-4 h-4 mr-2" /> Annuler
                     </Button>
@@ -516,7 +520,7 @@ export default function NutritionPage() {
                 <>
                   <div
                     className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-8 py-6"
-                    style={{ WebkitOverflowScrolling: 'touch' }}
+                    style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', transform: 'translateZ(0)' }}
                   >
                     <div className="grid grid-cols-3 gap-6 mb-10">
                       <div className="space-y-1">
@@ -559,7 +563,7 @@ export default function NutritionPage() {
                     </div>
                   </div>
 
-                  <div className="p-6 bg-muted/20 border-t border-border/40 flex justify-end gap-2">
+                  <div className="p-6 bg-muted/20 border-t border-border/40 flex justify-end gap-2 rounded-b-[32px]">
                     <Button variant="outline" onClick={() => setIsEditingRecipe(true)} className="rounded-full px-6">
                       <Pencil className="w-4 h-4 mr-2" /> Modifier
                     </Button>
