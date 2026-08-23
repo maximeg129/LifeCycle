@@ -19,8 +19,10 @@ export interface Chain {
 export interface WaxHistoryEntry {
   id: string
   chainId: string
-  date: string // ISO date
-  kmAtWax: number // km ridden since the previous wax
+  waxDate: string // ISO date — when the chain was waxed for this cycle
+  mountDate: string | null // ISO date — when it went on the bike, if known
+  unmountDate: string | null // ISO date — when it came back off, if known/finished
+  km: number // km ridden during this cycle
   notes: string
   createdAt: Timestamp
 }

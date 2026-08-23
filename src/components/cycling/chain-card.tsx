@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Droplets, Bike as BikeIcon, ArrowDownToLine, ArrowUpFromLine, History, Trash2, ChevronDown, AlertTriangle } from 'lucide-react'
+import { Droplets, Bike as BikeIcon, ArrowDownToLine, ArrowUpFromLine, History, Plus, Trash2, ChevronDown, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
@@ -20,6 +20,7 @@ import {
   computeWaxLevel, needsReplacementCheck, waxProgressPct,
 } from './chain-types'
 import { type Bike } from './gear-types'
+import { AddWaxHistoryDialog } from './add-wax-history-dialog'
 
 const WAX_LEVEL_STYLES = {
   ok: 'bg-green-500/10 text-green-600',
@@ -38,10 +39,11 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
   const { user } = useUser()
   const db = useFirestore()
   const [showHistory, setShowHistory] = useState(false)
+  const [addingHistory, setAddingHistory] = useState(false)
 
   const historyQuery = useMemoFirebase(() => {
     if (!user || !db || !showHistory) return null
-    return query(collection(db, `users/${user.uid}/chains/${chain.id}/waxHistory`), orderBy('date', 'desc'))
+    return query(collection(db, `users/${user.uid}/chains/${chain.id}/waxHistory`), orderBy('waxDate', 'desc'))
   }, [db, user, chain.id, showHistory])
   const { data: history } = useCollection<WaxHistoryEntry>(historyQuery)
 
@@ -59,8 +61,10 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
       await setDoc(historyRef, {
         userId: user.uid,
         chainId: chain.id,
-        date: today,
-        kmAtWax: chain.kmSinceWax,
+        waxDate: today,
+        mountDate: null,
+        unmountDate: null,
+        km: chain.kmSinceWax,
         notes: '',
         createdAt: serverTimestamp(),
       })
@@ -161,23 +165,42 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
       </div>
 
       <Collapsible open={showHistory} onOpenChange={setShowHistory}>
-        <CollapsibleTrigger asChild>
-          <button className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
-            <History className="w-3 h-3" /> Historique de fartage
-            <ChevronDown className={cn('w-3 h-3 transition-transform', showHistory && 'rotate-180')} />
+        <div className="flex items-center justify-between">
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+              <History className="w-3 h-3" /> Historique de fartage
+              <ChevronDown className={cn('w-3 h-3 transition-transform', showHistory && 'rotate-180')} />
+            </button>
+          </CollapsibleTrigger>
+          <button
+            className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+            onClick={() => { setAddingHistory(true); setShowHistory(true) }}
+          >
+            <Plus className="w-3 h-3" /> Ajouter
           </button>
-        </CollapsibleTrigger>
+        </div>
         <CollapsibleContent className="pt-3 space-y-1.5">
           {!history || history.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">Aucun fartage enregistré.</p>
           ) : history.map((h) => (
-            <div key={h.id} className="flex justify-between text-[11px] text-muted-foreground">
-              <span>{format(parseISO(h.date), 'dd MMM yyyy', { locale: fr })}</span>
-              <span>{h.kmAtWax} km parcourus</span>
+            <div key={h.id} className="flex flex-col gap-0.5 text-[11px] text-muted-foreground border-b border-border/30 pb-1.5 last:border-none">
+              <div className="flex justify-between">
+                <span className="font-medium text-foreground">Farté le {format(parseISO(h.waxDate), 'dd MMM yyyy', { locale: fr })}</span>
+                <span>{h.km} km</span>
+              </div>
+              {(h.mountDate || h.unmountDate) && (
+                <span>
+                  {h.mountDate && `Monté le ${format(parseISO(h.mountDate), 'dd MMM yyyy', { locale: fr })}`}
+                  {h.mountDate && h.unmountDate && ' — '}
+                  {h.unmountDate && `Démonté le ${format(parseISO(h.unmountDate), 'dd MMM yyyy', { locale: fr })}`}
+                </span>
+              )}
             </div>
           ))}
         </CollapsibleContent>
       </Collapsible>
+
+      <AddWaxHistoryDialog chain={chain} open={addingHistory} onOpenChange={setAddingHistory} />
     </Card>
   )
 }
