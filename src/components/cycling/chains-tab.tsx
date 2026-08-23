@@ -44,6 +44,9 @@ export function ChainsTab() {
             <Droplets className="w-5 h-5 text-primary" /> Rotation Hot Wax
           </h3>
           <p className="text-sm text-muted-foreground">Suivi des chaînes fartées, dédiées chacune à un vélo.</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">
+            La chaîne montée sur un vélo reçoit automatiquement les km à chaque synchro Intervals.icu (bouton &quot;Sync km&quot; dans l&apos;onglet Matériel).
+          </p>
         </div>
         <AddChainDialog bikes={activeBikes} />
       </div>

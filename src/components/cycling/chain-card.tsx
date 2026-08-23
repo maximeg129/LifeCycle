@@ -8,11 +8,11 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Droplets, Bike as BikeIcon, ArrowDownToLine, ArrowUpFromLine, History, Plus, Trash2, ChevronDown, AlertTriangle } from 'lucide-react'
+import { Droplets, Bike as BikeIcon, ArrowDownToLine, ArrowUpFromLine, History, Plus, Pencil, Trash2, ChevronDown, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
-import { collection, doc, deleteDoc, setDoc, updateDoc, serverTimestamp, query, orderBy, getDocs } from 'firebase/firestore'
+import { collection, doc, deleteDoc, setDoc, updateDoc, serverTimestamp, increment, query, orderBy, getDocs } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import {
@@ -21,6 +21,9 @@ import {
 } from './chain-types'
 import { type Bike } from './gear-types'
 import { AddWaxHistoryDialog } from './add-wax-history-dialog'
+import { EditChainDialog } from './edit-chain-dialog'
+
+type WithIdEntry = WaxHistoryEntry & { id: string }
 
 const WAX_LEVEL_STYLES = {
   ok: 'bg-green-500/10 text-green-600',
@@ -40,6 +43,8 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
   const db = useFirestore()
   const [showHistory, setShowHistory] = useState(false)
   const [addingHistory, setAddingHistory] = useState(false)
+  const [editingHistory, setEditingHistory] = useState<WithIdEntry | null>(null)
+  const [editingChain, setEditingChain] = useState(false)
 
   const historyQuery = useMemoFirebase(() => {
     if (!user || !db || !showHistory) return null
@@ -66,6 +71,9 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
         unmountDate: null,
         km: chain.kmSinceWax,
         notes: '',
+        // kmSinceWax already flows into totalKm live via Intervals sync, so
+        // this log entry doesn't need to add to it again.
+        countedInTotal: false,
         createdAt: serverTimestamp(),
       })
       await updateDoc(chainRef(), { kmSinceWax: 0, lastWaxDate: today })
@@ -104,6 +112,17 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
       await deleteDoc(chainRef())
     } catch {
       errorEmitter.emit('permission-error', new FirestorePermissionError({ path: chainRef().path, operation: 'delete' }))
+    }
+  }
+
+  const handleDeleteHistoryEntry = async (entry: WithIdEntry) => {
+    if (!user || !db) return
+    const entryRef = doc(db, `users/${user.uid}/chains/${chain.id}/waxHistory`, entry.id)
+    try {
+      if (entry.countedInTotal) await updateDoc(chainRef(), { totalKm: increment(-entry.km) })
+      await deleteDoc(entryRef)
+    } catch {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: entryRef.path, operation: 'delete' }))
     }
   }
 
@@ -159,6 +178,9 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
             <ArrowDownToLine className="w-3.5 h-3.5" /> Monter
           </Button>
         )}
+        <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" onClick={() => setEditingChain(true)} title="Modifier">
+          <Pencil className="w-3.5 h-3.5" />
+        </Button>
         <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-destructive" onClick={handleDelete} title="Supprimer">
           <Trash2 className="w-3.5 h-3.5" />
         </Button>
@@ -183,24 +205,38 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
           {!history || history.length === 0 ? (
             <p className="text-[11px] text-muted-foreground">Aucun fartage enregistré.</p>
           ) : history.map((h) => (
-            <div key={h.id} className="flex flex-col gap-0.5 text-[11px] text-muted-foreground border-b border-border/30 pb-1.5 last:border-none">
-              <div className="flex justify-between">
-                <span className="font-medium text-foreground">Farté le {format(parseISO(h.waxDate), 'dd MMM yyyy', { locale: fr })}</span>
-                <span>{h.km} km</span>
+            <div key={h.id} className="flex items-start justify-between gap-2 text-[11px] text-muted-foreground border-b border-border/30 pb-1.5 last:border-none group">
+              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                <div className="flex justify-between">
+                  <span className="font-medium text-foreground">Farté le {format(parseISO(h.waxDate), 'dd MMM yyyy', { locale: fr })}</span>
+                  <span>{h.km} km</span>
+                </div>
+                {(h.mountDate || h.unmountDate) && (
+                  <span>
+                    {h.mountDate && `Monté le ${format(parseISO(h.mountDate), 'dd MMM yyyy', { locale: fr })}`}
+                    {h.mountDate && h.unmountDate && ' — '}
+                    {h.unmountDate && `Démonté le ${format(parseISO(h.unmountDate), 'dd MMM yyyy', { locale: fr })}`}
+                  </span>
+                )}
               </div>
-              {(h.mountDate || h.unmountDate) && (
-                <span>
-                  {h.mountDate && `Monté le ${format(parseISO(h.mountDate), 'dd MMM yyyy', { locale: fr })}`}
-                  {h.mountDate && h.unmountDate && ' — '}
-                  {h.unmountDate && `Démonté le ${format(parseISO(h.unmountDate), 'dd MMM yyyy', { locale: fr })}`}
-                </span>
-              )}
+              <div className="flex gap-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button className="p-1 hover:text-foreground" onClick={() => setEditingHistory(h)} title="Modifier">
+                  <Pencil className="w-3 h-3" />
+                </button>
+                <button className="p-1 hover:text-destructive" onClick={() => handleDeleteHistoryEntry(h)} title="Supprimer">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
             </div>
           ))}
         </CollapsibleContent>
       </Collapsible>
 
       <AddWaxHistoryDialog chain={chain} open={addingHistory} onOpenChange={setAddingHistory} />
+      {editingHistory && (
+        <AddWaxHistoryDialog chain={chain} open={!!editingHistory} onOpenChange={(o) => !o && setEditingHistory(null)} entry={editingHistory} />
+      )}
+      {editingChain && <EditChainDialog chain={chain} onOpenChange={(o) => !o && setEditingChain(false)} />}
     </Card>
   )
 }

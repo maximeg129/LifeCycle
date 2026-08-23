@@ -24,6 +24,8 @@ export interface WaxHistoryEntry {
   unmountDate: string | null // ISO date — when it came back off, if known/finished
   km: number // km ridden during this cycle
   notes: string
+  /** Whether this entry's km were folded into the chain's totalKm, so edits/deletes can reverse it correctly. */
+  countedInTotal: boolean
   createdAt: Timestamp
 }
 
