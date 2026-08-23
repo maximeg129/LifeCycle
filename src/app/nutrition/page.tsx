@@ -41,6 +41,7 @@ import {
 } from 'lucide-react'
 import Image from 'next/image'
 import { useToast } from '@/hooks/use-toast'
+import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock'
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
 import { collection, doc, setDoc, deleteDoc, serverTimestamp, increment } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
@@ -62,6 +63,12 @@ export default function NutritionPage() {
   const [isEditingRecipe, setIsEditingRecipe] = useState(false)
   const [isAddingRecipe, setIsAddingRecipe] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+
+  // Belt-and-suspenders on top of Radix's own scroll lock — see the hook's
+  // doc comment for why (iOS Chrome doesn't reliably honor Radix's JS-based
+  // touchmove interception, and the page behind the modal ends up scrolling
+  // instead of the modal's own content).
+  useBodyScrollLock(isDetailOpen)
 
   // Firestore Recipes
   const recipesPath = user ? `users/${user.uid}/recipes` : null
