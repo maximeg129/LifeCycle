@@ -47,6 +47,7 @@ import { collection, doc, setDoc, deleteDoc, serverTimestamp, increment } from '
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { useNutritionData } from '@/components/nutrition/use-nutrition-data'
+import { FuelingWidget } from '@/components/nutrition/fueling-widget'
 import { LogMealDialog } from '@/components/nutrition/log-meal-dialog'
 import { NutritionGoalsDialog } from '@/components/nutrition/nutrition-goals-dialog'
 import { MEAL_TYPE_LABELS, progressPct } from '@/components/nutrition/nutrition-types'
@@ -438,6 +439,8 @@ export default function NutritionPage() {
             <MealPlanWeekView />
           </TabsContent>
         </Tabs>
+
+        <FuelingWidget />
       </main>
 
       <Dialog open={isDetailOpen} onOpenChange={(open) => { setIsDetailOpen(open); if (!open) setIsEditingRecipe(false); }}>
