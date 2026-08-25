@@ -10,8 +10,8 @@ runConfig:
 # exist in Secret Manager (see `firebase apphosting:secrets:set`) and be
 # granted access to this backend before it will actually reach the app.
 env:
-  - variable: GEMINI_API_KEY
-    secret: gemini-api-key
+  - variable: ANTHROPIC_API_KEY
+    secret: anthropic-api-key
     availability:
       - BUILD
       - RUNTIME

@@ -12,7 +12,7 @@
 | UI | React 19 + Tailwind CSS + shadcn/ui (Radix UI) |
 | Icônes | lucide-react |
 | Backend | Firebase (Auth + Firestore) |
-| IA | Google Genkit (`genkit` + `@genkit-ai/google-genai`) |
+| IA | Claude (`@anthropic-ai/sdk`, modèle `claude-haiku-4-5`) |
 | Charts | Recharts |
 | Dates | date-fns avec locale `fr` |
 | Validation | Zod + react-hook-form |
@@ -29,7 +29,7 @@ src/
 │   ├── register/page.tsx         # Inscription (email + Google)
 │   ├── cycling/page.tsx          # Hub cyclisme (entraînement CTL/ATL + matériel)
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
-│   ├── weather/page.tsx          # Assistant météo IA (Genkit flow)
+│   ├── weather/page.tsx          # Assistant météo IA (flow Claude)
 │   ├── home-management/page.tsx  # Tâches récurrentes + plantes (Firestore)
 │   ├── lifestyle/page.tsx        # Sommeil, HRV, stress, récupération
 │   ├── finance/page.tsx          # Budgets et dépenses lifestyle
@@ -55,11 +55,11 @@ src/
 │   └── non-blocking-login.tsx    # Wrapper pour login non-bloquant
 │
 ├── ai/
-│   ├── genkit.ts                 # Instance Genkit configurée avec Google GenAI
-│   ├── dev.ts                    # Entrée pour `genkit:dev`
+│   ├── anthropic.ts               # Client Claude (Anthropic SDK) + helper generateJson()
 │   └── flows/
-│       ├── cycling-outfit-recommendation-flow.ts  # Recommandation tenue cycliste
-│       └── identify-plant-flow.ts                 # Identification de plante par photo
+│       ├── cycling-outfit-recommendation-flow.ts  # Recommandation tenue cycliste (tool use)
+│       ├── identify-plant-flow.ts                 # Identification de plante par photo (vision)
+│       └── recovery-insight-flow.ts               # Analyse récupération (texte)
 │
 ├── hooks/
 │   ├── use-toast.ts              # Hook toast (shadcn)
@@ -168,38 +168,54 @@ setDoc(ref, data).catch(async () => {
 })
 ```
 
-## Flows IA (Genkit)
+## Flows IA (Claude)
 
-Les flows sont dans `src/ai/flows/` et s'appellent côté client via des Server Actions Next.js.
+Les flows sont dans `src/ai/flows/` et s'appellent côté client via des Server Actions Next.js
+(fonctions `'use server'` important directement, pas d'abstraction Genkit). Chaque flow appelle
+`@anthropic-ai/sdk` via le client partagé `src/ai/anthropic.ts` (modèle `claude-haiku-4-5`,
+suffisant et peu coûteux pour ces usages perso). Le helper `generateJson(schema, { system, messages })`
+demande une réponse JSON pure à Claude et la valide avec Zod — pattern uniforme utilisé par les
+3 flows plutôt que `output_config.format` (plus simple à garder cohérent avec l'appel d'outil du
+premier flow).
 
 ### Flow existant : `cyclingOutfitRecommendation`
 - Input : `{ location, dateTime, durationHours, clothingInventory[] }`
 - Output : `{ predictedWeather, recommendation, recommendedItems[] }`
 - Usage : `src/app/weather/page.tsx`
+- Utilise le tool use de Claude (`get_weather_forecast`, appelle Open-Meteo) avant de produire le JSON final.
 
 ### Flow existant : `identifyPlant`
 - Input : `{ photoDataUri }` (base64 data URI)
 - Output : identification botanique + conseils de soin
-- Usage : `src/app/home-management/page.tsx`
+- Usage : `src/app/botanica/page.tsx`
+- Envoie l'image comme content block `{ type: 'image', source: { type: 'base64', ... } }` (vision Claude).
+
+### Flow existant : `recoveryInsight`
+- Input : `{ dailyMetrics[], goals[], training }`
+- Output : `{ summary, recommendation, highlights[], watchouts[] }`
+- Usage : `src/app/lifestyle/page.tsx` (bouton "Analyser" dans l'onglet Récupération)
 
 ### Créer un nouveau flow
 
 ```ts
 // src/ai/flows/mon-flow.ts
 'use server'
-import { ai } from '@/ai/genkit'
-import { z } from 'genkit'
+import { z } from 'zod'
+import { generateJson } from '@/ai/anthropic'
 
-const InputSchema = z.object({ ... })
 const OutputSchema = z.object({ ... })
 
-export async function monFlow(input: z.infer<typeof InputSchema>) {
-  return ai.generate({
-    prompt: `...`,
-    output: { schema: OutputSchema },
+export async function monFlow(input: MonInput) {
+  const system = `Instructions... Réponds UNIQUEMENT avec un objet JSON de cette forme : {...}`
+  return generateJson(OutputSchema, {
+    system,
+    messages: [{ role: 'user', content: '...' }],
   })
 }
 ```
+
+Variable d'environnement requise : `ANTHROPIC_API_KEY` (déclarée dans `apphosting.yaml`, secret
+`anthropic-api-key` à créer dans Secret Manager via `firebase apphosting:secrets:set`).
 
 ## Design System
 
@@ -242,7 +258,7 @@ npm run dev          # Serveur Next.js dev (port 9002, Turbopack)
 npm run build        # Build production
 npm run lint         # ESLint
 npm run typecheck    # tsc --noEmit
-npm run genkit:dev   # Serveur Genkit (flows IA)
+npm run test          # Vitest (tests unitaires)
 ```
 
 ## Règles de développement

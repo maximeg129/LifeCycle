@@ -4,8 +4,9 @@
  * Supporte également le suivi d'évolution en acceptant un contexte d'analyse précédente.
  */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
+import type Anthropic from '@anthropic-ai/sdk';
+import { generateJson } from '@/ai/anthropic';
 
 const PlantContextSchema = z.object({
   name: z.string().optional(),
@@ -37,24 +38,28 @@ const IdentifyPlantOutputSchema = z.object({
 export type IdentifyPlantInput = z.infer<typeof IdentifyPlantInputSchema>;
 export type IdentifyPlantOutput = z.infer<typeof IdentifyPlantOutputSchema>;
 
-export async function identifyPlant(input: IdentifyPlantInput): Promise<IdentifyPlantOutput> {
-  return identifyPlantFlow(input);
+/** Splits a `data:image/jpeg;base64,...` URI into the parts Claude's vision input needs. */
+function parseDataUri(dataUri: string): { mediaType: string; data: string } {
+  const match = dataUri.match(/^data:(image\/[a-zA-Z+.-]+);base64,(.+)$/);
+  if (!match) throw new Error('photoDataUri must be a base64 image data URI (data:image/...;base64,...)');
+  return { mediaType: match[1], data: match[2] };
 }
 
-const prompt = ai.definePrompt({
-  name: 'identifyPlantPrompt',
-  input: { schema: IdentifyPlantInputSchema },
-  output: { schema: IdentifyPlantOutputSchema },
-  prompt: `Tu es un expert en botanique et phytopathologie. Analyse cette photo de plante :
-{{media url=photoDataUri}}
+export async function identifyPlant(input: IdentifyPlantInput): Promise<IdentifyPlantOutput> {
+  const parsedInput = IdentifyPlantInputSchema.parse(input);
+  const { mediaType, data } = parseDataUri(parsedInput.photoDataUri);
 
-{{#if plantContext}}
-SUIVI EN COURS — Plante connue : {{plantContext.name}} ({{plantContext.species}}).
-{{#if plantContext.previousHealthAnalysis}}
-Analyse précédente (il y a {{plantContext.daysSinceLastAnalysis}} jours) : {{plantContext.previousHealthAnalysis}}
-Compare l'évolution, note les améliorations ou dégradations, et personnalise tes recommandations en conséquence.
-{{/if}}
-{{/if}}
+  let followUpText = '';
+  if (parsedInput.plantContext) {
+    const ctx = parsedInput.plantContext;
+    followUpText = `\nSUIVI EN COURS — Plante connue : ${ctx.name ?? '?'} (${ctx.species ?? '?'}).`;
+    if (ctx.previousHealthAnalysis) {
+      followUpText += `\nAnalyse précédente (il y a ${ctx.daysSinceLastAnalysis ?? '?'} jours) : ${ctx.previousHealthAnalysis}\nCompare l'évolution, note les améliorations ou dégradations, et personnalise tes recommandations en conséquence.`;
+    }
+  }
+
+  const system = `Tu es un expert en botanique et phytopathologie. Analyse la photo de plante fournie.
+${followUpText}
 
 Fournis :
 1. Identification précise (nom commun + espèce scientifique)
@@ -64,18 +69,26 @@ Fournis :
 5. Plan d'hydratation précis : fréquence en jours (ex: "tous les 7 jours"), quantité d'eau en ml adaptée à la taille réelle du pot/plante visible sur la photo (petit pot <15cm → 100-150ml, pot moyen 15-25cm → 200-350ml, grand pot >25cm → 400-700ml), et conseils spécifiques
 6. Conseils généraux d'entretien (lumière, température, rempotage, engrais…)
 
-Contexte lieu : {{{locationContext}}}`
-});
+Contexte lieu : ${parsedInput.locationContext ?? 'non précisé'}
 
-const identifyPlantFlow = ai.defineFlow(
-  {
-    name: 'identifyPlantFlow',
-    inputSchema: IdentifyPlantInputSchema,
-    outputSchema: IdentifyPlantOutputSchema,
-  },
-  async (input) => {
-    const { output } = await prompt(input);
-    if (!output) throw new Error("IA analysis failed");
-    return output;
-  }
-);
+Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas de texte autour) de cette forme exacte :
+{
+  "name": "nom commun",
+  "species": "nom scientifique",
+  "healthAnalysis": "analyse détaillée",
+  "healthScore": 0-100,
+  "alerts": ["alerte 1", ...],
+  "hydrationPlan": { "frequency": "...", "amount": "... ml", "tips": "..." },
+  "generalCare": ["conseil 1", ...]
+}`;
+
+  const content: Anthropic.ContentBlockParam[] = [
+    { type: 'image', source: { type: 'base64', media_type: mediaType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp', data } },
+    { type: 'text', text: 'Voici la photo à analyser.' },
+  ];
+
+  return generateJson(IdentifyPlantOutputSchema, {
+    system,
+    messages: [{ role: 'user', content }],
+  });
+}

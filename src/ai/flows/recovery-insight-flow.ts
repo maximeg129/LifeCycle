@@ -8,8 +8,8 @@
  * - RecoveryInsightInput / RecoveryInsightOutput - Types for the above.
  */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
+import { generateJson } from '@/ai/anthropic';
 
 const RecoveryInsightInputSchema = z.object({
   dailyMetrics: z.array(z.object({
@@ -45,11 +45,39 @@ const RecoveryInsightOutputSchema = z.object({
 
 export type RecoveryInsightOutput = z.infer<typeof RecoveryInsightOutputSchema>;
 
-const prompt = ai.definePrompt({
-  name: 'recoveryInsightPrompt',
-  input: { schema: RecoveryInsightInputSchema },
-  output: { schema: RecoveryInsightOutputSchema },
-  prompt: `You are an expert endurance coach and sleep/recovery specialist speaking to a cyclist who also
+function formatMetricsLog(dailyMetrics: RecoveryInsightInput['dailyMetrics']): string {
+  return dailyMetrics.map((m) => {
+    const sleep = m.sleepHours ? `${m.sleepHours}h${m.sleepQuality ? ` (${m.sleepQuality}% qualité)` : ''}` : 'n/a';
+    const hrv = m.hrv ? `${m.hrv}ms` : 'n/a';
+    const stress = m.stressScore !== undefined ? `${m.stressScore}/100` : 'n/a';
+    const mood = m.mood !== undefined ? `${m.mood}/10` : 'n/a';
+    return `- ${m.date}: sommeil ${sleep}, HRV ${hrv}, stress ${stress}, humeur ${mood}`;
+  }).join('\n');
+}
+
+export async function recoveryInsight(input: RecoveryInsightInput): Promise<RecoveryInsightOutput> {
+  const parsedInput = RecoveryInsightInputSchema.parse(input);
+
+  const sections: string[] = [`WELLNESS LOG (oldest first):\n${formatMetricsLog(parsedInput.dailyMetrics)}`];
+
+  if (parsedInput.goals && parsedInput.goals.length > 0) {
+    const goalsText = parsedInput.goals
+      .map((g) => `- ${g.label}: ${g.metric}, target ${g.target}, direction ${g.direction}`)
+      .join('\n');
+    sections.push(`GOALS (direction "min" = target is a minimum to reach, "max" = target is a ceiling not to exceed):\n${goalsText}`);
+  }
+
+  if (parsedInput.training) {
+    const t = parsedInput.training;
+    sections.push([
+      'CYCLING TRAINING LOAD:',
+      `CTL (fitness): ${t.ctl ?? 'n/a'}`,
+      `ATL (fatigue): ${t.atl ?? 'n/a'}`,
+      `TSB (form): ${t.tsb ?? 'n/a'}`,
+    ].join('\n'));
+  }
+
+  const system = `You are an expert endurance coach and sleep/recovery specialist speaking to a cyclist who also
 tracks their sleep, HRV, stress and mood daily. Write your entire response in French.
 
 Analyze the data below and produce a short, encouraging but honest recovery insight. Be specific and
@@ -57,40 +85,16 @@ reference actual numbers from the data when you can (e.g. "votre HRV moyen est d
 missing across the board, don't invent it — just work with what's there. If dailyMetrics is mostly empty,
 say so briefly and recommend logging a few more days rather than fabricating trends.
 
-WELLNESS LOG (oldest first):
-{{#each dailyMetrics}}
-- {{{this.date}}}: sommeil {{#if this.sleepHours}}{{this.sleepHours}}h{{else}}n/a{{/if}}{{#if this.sleepQuality}} ({{this.sleepQuality}}% qualité){{/if}}, HRV {{#if this.hrv}}{{this.hrv}}ms{{else}}n/a{{/if}}, stress {{#if this.stressScore}}{{this.stressScore}}/100{{else}}n/a{{/if}}, humeur {{#if this.mood}}{{this.mood}}/10{{else}}n/a{{/if}}
-{{/each}}
+Respond with ONLY a JSON object (no markdown fences, no other text) matching exactly this shape:
+{
+  "summary": "one or two sentence overview",
+  "recommendation": "one concrete, actionable suggestion",
+  "highlights": ["up to 3 short positive observations, empty array if none"],
+  "watchouts": ["up to 3 short points worth watching, empty array if none"]
+}`;
 
-{{#if goals}}
-GOALS (direction "min" = target is a minimum to reach, "max" = target is a ceiling not to exceed):
-{{#each goals}}
-- {{{this.label}}}: {{{this.metric}}}, target {{this.target}}, direction {{{this.direction}}}
-{{/each}}
-{{/if}}
-
-{{#if training}}
-CYCLING TRAINING LOAD:
-CTL (fitness): {{#if training.ctl}}{{training.ctl}}{{else}}n/a{{/if}}
-ATL (fatigue): {{#if training.atl}}{{training.atl}}{{else}}n/a{{/if}}
-TSB (form): {{#if training.tsb}}{{training.tsb}}{{else}}n/a{{/if}}
-{{/if}}
-
-Respond with: a short summary, one concrete recommendation, up to 3 highlights, up to 3 watchouts.`,
-});
-
-export async function recoveryInsight(input: RecoveryInsightInput): Promise<RecoveryInsightOutput> {
-  return recoveryInsightFlow(input);
+  return generateJson(RecoveryInsightOutputSchema, {
+    system,
+    messages: [{ role: 'user', content: sections.join('\n\n') }],
+  });
 }
-
-const recoveryInsightFlow = ai.defineFlow(
-  {
-    name: 'recoveryInsightFlow',
-    inputSchema: RecoveryInsightInputSchema,
-    outputSchema: RecoveryInsightOutputSchema,
-  },
-  async (input) => {
-    const { output } = await prompt(input);
-    return output!;
-  }
-);

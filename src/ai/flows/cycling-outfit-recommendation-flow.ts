@@ -7,8 +7,9 @@
  * - CyclingOutfitRecommendationOutput - The return type for the cyclingOutfitRecommendation function.
  */
 
-import { ai } from '@/ai/genkit';
-import { z } from 'genkit';
+import { z } from 'zod';
+import type Anthropic from '@anthropic-ai/sdk';
+import { anthropic, CLAUDE_MODEL } from '@/ai/anthropic';
 
 const CyclingOutfitRecommendationInputSchema = z.object({
   location: z.string().describe('The name of the location (city, region, or coordinates).'),
@@ -39,127 +40,158 @@ const CyclingOutfitRecommendationOutputSchema = z.object({
 
 export type CyclingOutfitRecommendationOutput = z.infer<typeof CyclingOutfitRecommendationOutputSchema>;
 
-/**
- * Tool to fetch real weather data using Open-Meteo API.
- */
-const getWeatherForecast = ai.defineTool(
-  {
-    name: 'getWeatherForecast',
-    description: 'Fetches real weather forecast for a given location and date/time.',
-    inputSchema: z.object({
-      location: z.string().describe('City name or coordinates (lat,lon).'),
-      dateTime: z.string().describe('ISO date-time string.'),
-    }),
-    outputSchema: z.object({
-      temperature: z.number(),
-      windSpeed: z.number(),
-      weatherDescription: z.string(),
-      error: z.string().optional(),
-    }),
-  },
-  async (input) => {
-    try {
-      let lat, lon;
-      
-      // 1. Geocoding
-      const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(input.location)}&count=1&language=fr&format=json`;
-      const geoRes = await fetch(geoUrl);
-      const geoData = await geoRes.json();
-      
-      if (!geoData.results || geoData.results.length === 0) {
-        // Fallback if coordinates are provided directly
-        const coords = input.location.split(',').map(c => parseFloat(c.trim()));
-        if (coords.length === 2 && !isNaN(coords[0])) {
-          lat = coords[0];
-          lon = coords[1];
-        } else {
-          throw new Error('Location not found');
-        }
+interface WeatherToolResult {
+  temperature: number;
+  windSpeed: number;
+  weatherDescription: string;
+  error?: string;
+}
+
+/** Fetches real weather forecast for a given location and date/time via Open-Meteo (no API key needed). */
+async function getWeatherForecast(location: string, dateTime: string): Promise<WeatherToolResult> {
+  try {
+    let lat: number, lon: number;
+
+    // 1. Geocoding
+    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=fr&format=json`;
+    const geoRes = await fetch(geoUrl);
+    const geoData = await geoRes.json();
+
+    if (!geoData.results || geoData.results.length === 0) {
+      // Fallback if coordinates are provided directly
+      const coords = location.split(',').map((c: string) => parseFloat(c.trim()));
+      if (coords.length === 2 && !isNaN(coords[0])) {
+        [lat, lon] = coords;
       } else {
-        lat = geoData.results[0].latitude;
-        lon = geoData.results[0].longitude;
+        throw new Error('Location not found');
       }
-
-      // 2. Weather Forecast
-      const date = new Date(input.dateTime);
-      const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,weathercode,windspeed_10m&forecast_days=14`;
-      const weatherRes = await fetch(forecastUrl);
-      const weatherData = await weatherRes.json();
-
-      // Find the closest hour
-      const targetTime = date.toISOString().slice(0, 13) + ':00';
-      const timeIndex = weatherData.hourly.time.findIndex((t: string) => t.startsWith(targetTime.slice(0, 13)));
-      
-      const safeIndex = timeIndex === -1 ? 0 : timeIndex;
-
-      // Weather codes mapping (simplified)
-      const weatherCodes: Record<number, string> = {
-        0: 'Ciel dégagé',
-        1: 'Principalement dégagé', 2: 'Partiellement nuageux', 3: 'Couvert',
-        45: 'Brouillard', 48: 'Brouillard givrant',
-        51: 'Bruine légère', 53: 'Bruine modérée', 55: 'Bruine dense',
-        61: 'Pluie faible', 63: 'Pluie modérée', 65: 'Pluie forte',
-        71: 'Neige faible', 73: 'Neige modérée', 75: 'Neige forte',
-        80: 'Averses légères', 81: 'Averses modérées', 82: 'Averses violentes',
-        95: 'Orage léger', 96: 'Orage avec grêle', 99: 'Orage violent'
-      };
-
-      return {
-        temperature: weatherData.hourly.temperature_2m[safeIndex],
-        windSpeed: weatherData.hourly.windspeed_10m[safeIndex],
-        weatherDescription: weatherCodes[weatherData.hourly.weathercode[safeIndex]] || 'Conditions variables',
-      };
-    } catch (e: any) {
-      return { temperature: 15, windSpeed: 10, weatherDescription: 'Erreur lors de la récupération des données réelles', error: e.message };
+    } else {
+      lat = geoData.results[0].latitude;
+      lon = geoData.results[0].longitude;
     }
+
+    // 2. Weather Forecast
+    const date = new Date(dateTime);
+    const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,weathercode,windspeed_10m&forecast_days=14`;
+    const weatherRes = await fetch(forecastUrl);
+    const weatherData = await weatherRes.json();
+
+    // Find the closest hour
+    const targetTime = date.toISOString().slice(0, 13) + ':00';
+    const timeIndex = weatherData.hourly.time.findIndex((t: string) => t.startsWith(targetTime.slice(0, 13)));
+
+    const safeIndex = timeIndex === -1 ? 0 : timeIndex;
+
+    // Weather codes mapping (simplified)
+    const weatherCodes: Record<number, string> = {
+      0: 'Ciel dégagé',
+      1: 'Principalement dégagé', 2: 'Partiellement nuageux', 3: 'Couvert',
+      45: 'Brouillard', 48: 'Brouillard givrant',
+      51: 'Bruine légère', 53: 'Bruine modérée', 55: 'Bruine dense',
+      61: 'Pluie faible', 63: 'Pluie modérée', 65: 'Pluie forte',
+      71: 'Neige faible', 73: 'Neige modérée', 75: 'Neige forte',
+      80: 'Averses légères', 81: 'Averses modérées', 82: 'Averses violentes',
+      95: 'Orage léger', 96: 'Orage avec grêle', 99: 'Orage violent'
+    };
+
+    return {
+      temperature: weatherData.hourly.temperature_2m[safeIndex],
+      windSpeed: weatherData.hourly.windspeed_10m[safeIndex],
+      weatherDescription: weatherCodes[weatherData.hourly.weathercode[safeIndex]] || 'Conditions variables',
+    };
+  } catch (e) {
+    return { temperature: 15, windSpeed: 10, weatherDescription: 'Erreur lors de la récupération des données réelles', error: e instanceof Error ? e.message : String(e) };
   }
-);
+}
 
-const prompt = ai.definePrompt({
-  name: 'cyclingOutfitRecommendationPrompt',
-  input: { schema: CyclingOutfitRecommendationInputSchema },
-  output: { schema: CyclingOutfitRecommendationOutputSchema },
-  tools: [getWeatherForecast],
-  prompt: `You are an expert cycling coach. 
+const weatherTool: Anthropic.Tool = {
+  name: 'get_weather_forecast',
+  description: 'Fetches the real weather forecast for a given location and date/time.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      location: { type: 'string', description: 'City name or coordinates (lat,lon).' },
+      dateTime: { type: 'string', description: 'ISO date-time string.' },
+    },
+    required: ['location', 'dateTime'],
+  },
+};
 
-First, use the 'getWeatherForecast' tool to fetch the actual weather conditions for the provided location and time. 
+export async function cyclingOutfitRecommendation(input: CyclingOutfitRecommendationInput): Promise<CyclingOutfitRecommendationOutput> {
+  const parsedInput = CyclingOutfitRecommendationInputSchema.parse(input);
+
+  const inventoryText = parsedInput.clothingInventory.map((item) =>
+    `- Name: ${item.name}\n  Type: ${item.type}\n  Temp Range: ${item.temperatureRangeCelsius}\n  Windproof: ${item.windproof ? 'Yes' : 'No'}\n  Waterproof: ${item.waterproof ? 'Yes' : 'No'}\n  Layer: ${item.layer}`
+  ).join('\n');
+
+  const system = `You are an expert cycling coach.
+
+First, use the 'get_weather_forecast' tool to fetch the actual weather conditions for the provided location and time.
 
 Once you have the weather data:
 1. Summarize the conditions (temp, wind, sky).
-2. Recommend the perfect cycling outfit using ONLY items from the 'clothingInventory'.
+2. Recommend the perfect cycling outfit using ONLY items from the clothing inventory.
 3. Explain your choice based on the real weather data (e.g., "It's 12°C with wind, so the windproof jacket is essential").
 
-RIDE CONTEXT:
-Location: {{{location}}}
-Start Date/Time: {{{dateTime}}}
-Expected Duration: {{{durationHours}}} hours
+When you have everything you need, respond with ONLY a JSON object (no markdown fences, no other text, no tool call) matching exactly this shape:
+{
+  "predictedWeather": { "temperatureCelsius": number, "windSpeedKmh": number, "conditions": "string", "summary": "string" },
+  "recommendation": "detailed textual recommendation",
+  "recommendedItems": ["item name from inventory", ...]
+}`;
+
+  const userPrompt = `RIDE CONTEXT:
+Location: ${parsedInput.location}
+Start Date/Time: ${parsedInput.dateTime}
+Expected Duration: ${parsedInput.durationHours} hours
 
 ---
 CLOTHING INVENTORY:
-{{#each clothingInventory}}
-- Name: {{{this.name}}}
-  Type: {{{this.type}}}
-  Temp Range: {{{this.temperatureRangeCelsius}}}
-  Windproof: {{#if this.windproof}}Yes{{else}}No{{/if}}
-  Waterproof: {{#if this.waterproof}}Yes{{else}}No{{/if}}
-  Layer: {{{this.layer}}}
-{{/each}}
+${inventoryText}`;
 
-Recommendation:`
-});
+  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userPrompt }];
 
-export async function cyclingOutfitRecommendation(input: CyclingOutfitRecommendationInput): Promise<CyclingOutfitRecommendationOutput> {
-  return cyclingOutfitRecommendationFlow(input);
-}
+  let response = await anthropic.messages.create({
+    model: CLAUDE_MODEL,
+    max_tokens: 4096,
+    system,
+    tools: [weatherTool],
+    messages,
+  });
 
-const cyclingOutfitRecommendationFlow = ai.defineFlow(
-  {
-    name: 'cyclingOutfitRecommendationFlow',
-    inputSchema: CyclingOutfitRecommendationInputSchema,
-    outputSchema: CyclingOutfitRecommendationOutputSchema
-  },
-  async (input) => {
-    const { output } = await prompt(input);
-    return output!;
+  // Manual tool-use loop — the model calls get_weather_forecast at most once in practice.
+  let toolRounds = 0;
+  while (response.stop_reason === 'tool_use' && toolRounds < 3) {
+    toolRounds++;
+    const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
+    messages.push({ role: 'assistant', content: response.content });
+
+    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    for (const block of toolUseBlocks) {
+      if (block.name === 'get_weather_forecast') {
+        const toolInput = block.input as { location: string; dateTime: string };
+        const result = await getWeatherForecast(toolInput.location, toolInput.dateTime);
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
+      } else {
+        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: 'Unknown tool', is_error: true });
+      }
+    }
+    messages.push({ role: 'user', content: toolResults });
+
+    response = await anthropic.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 4096,
+      system,
+      tools: [weatherTool],
+      messages,
+    });
   }
-);
+
+  const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
+  if (!textBlock) throw new Error('Claude did not return a final text response');
+
+  const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error(`No JSON object found in Claude response: ${textBlock.text.slice(0, 200)}`);
+
+  return CyclingOutfitRecommendationOutputSchema.parse(JSON.parse(jsonMatch[0]));
+}
