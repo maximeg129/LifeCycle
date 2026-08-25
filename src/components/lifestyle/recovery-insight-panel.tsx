@@ -7,6 +7,11 @@ import { useToast } from '@/hooks/use-toast'
 import { useAthlete } from '@/hooks/use-intervals'
 import { recoveryInsight, type RecoveryInsightOutput } from '@/ai/flows/recovery-insight-flow'
 import { type HealthGoal, type HealthMetric } from './lifestyle-types'
+import { useCoachMemory } from '@/components/cycling/use-coach-memory'
+import { useKJBudget } from '@/components/cycling/use-kj-budget'
+import { buildCoachContext } from '@/components/cycling/coach-context'
+// TODO(governor): swap for the real computed status once the internal load governor is wired in.
+const GOVERNOR_STATUS_PLACEHOLDER = 'insufficient_data' as const
 
 type WithIdMetric = HealthMetric & { id: string; dayId: string }
 type WithIdGoal = HealthGoal & { id: string }
@@ -19,12 +24,22 @@ interface Props {
 export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
   const { toast } = useToast()
   const athlete = useAthlete()
+  const memory = useCoachMemory()
+  const budget = useKJBudget(GOVERNOR_STATUS_PLACEHOLDER)
   const [result, setResult] = useState<RecoveryInsightOutput | null>(null)
   const [loading, setLoading] = useState(false)
 
   const handleGenerate = async () => {
     setLoading(true)
     try {
+      const coachContext = buildCoachContext({
+        injuries: memory.injuries,
+        lifestyle: memory.lifestyle,
+        goals: memory.goals,
+        rememberedFacts: memory.rememberedFacts,
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
+        governorStatus: GOVERNOR_STATUS_PLACEHOLDER,
+      })
       const output = await recoveryInsight({
         dailyMetrics: dailySeries.map((d) => ({
           date: d.dayId,
@@ -41,6 +56,7 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
           tsb: athlete.data.tsb,
           rampRate: athlete.data.rampRate,
         } : undefined,
+        coachContext,
       })
       setResult(output)
     } catch {

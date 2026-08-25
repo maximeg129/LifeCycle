@@ -183,6 +183,55 @@ service cloud.firestore {
       }
 
       /**
+       * @description Coach Memory — free-form singleton docs (lifestyle
+       * notes, remembered facts) injected into the AI coach's context.
+       * Mirrors the /settings/{settingsId} pattern: fixed docIds
+       * ("lifestyle", "facts"), ownership by path alone.
+       * @path /users/{userId}/coachMemory/{docId}
+       */
+      match /coachMemory/{docId} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId);
+        allow delete: if isOwner(userId);
+      }
+
+      /**
+       * @description Injury log feeding the AI coach's context.
+       * @path /users/{userId}/coachInjuries/{injuryId}
+       */
+      match /coachInjuries/{injuryId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Event/performance goals feeding the AI coach's context.
+       * @path /users/{userId}/coachGoals/{goalId}
+       */
+      match /coachGoals/{goalId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
+       * @description Per-session RPE / feelings / motivation quick capture,
+       * feeding the internal load governor. Keyed by the Intervals.icu
+       * activity id when tied to a session, or `daily-{yyyy-MM-dd}` for a
+       * standalone daily check-in.
+       * @path /users/{userId}/sessionFeedback/{feedbackId}
+       */
+      match /sessionFeedback/{feedbackId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
        * @description Logs of maintenance performed.
        * @path /users/{userId}/maintenanceRecords/{recordId}
        */

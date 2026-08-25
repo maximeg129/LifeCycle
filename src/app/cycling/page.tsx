@@ -30,6 +30,11 @@ import Link from 'next/link'
 import { useAthlete, useActivities, useFitnessChart } from '@/hooks/use-intervals'
 import { GearTab } from '@/components/cycling/gear-tab'
 import { ChainsTab } from '@/components/cycling/chains-tab'
+import { KJBudgetWidget } from '@/components/cycling/kj-budget-widget'
+import { CoachMemoryTab } from '@/components/cycling/coach-memory-tab'
+import { BrainCircuit } from 'lucide-react'
+// TODO(governor): swap for the real computed status once the internal load governor is wired in.
+const GOVERNOR_STATUS_PLACEHOLDER = 'insufficient_data' as const
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -189,12 +194,15 @@ export default function CyclingHub() {
         </header>
 
         <Tabs defaultValue="training" className="space-y-6">
-          <TabsList className="bg-card/50 border border-border p-1 h-auto grid grid-cols-4 max-w-xl">
+          <TabsList className="bg-card/50 border border-border p-1 h-auto flex flex-wrap gap-1">
             <TabsTrigger value="training" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <Activity className="w-4 h-4 mr-2" /> Entraînement
             </TabsTrigger>
             <TabsTrigger value="pmc" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <TrendingUp className="w-4 h-4 mr-2" /> PMC
+            </TabsTrigger>
+            <TabsTrigger value="coach" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
+              <BrainCircuit className="w-4 h-4 mr-2" /> Mémoire coach
             </TabsTrigger>
             <TabsTrigger value="gear" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <Wrench className="w-4 h-4 mr-2" /> Matériel
@@ -285,6 +293,11 @@ export default function CyclingHub() {
                       </CardContent>
                     </Card>
                   ) : null}
+                </section>
+
+                {/* kJ budget — real mechanical work, not TSS */}
+                <section>
+                  <KJBudgetWidget governorStatus={GOVERNOR_STATUS_PLACEHOLDER} />
                 </section>
 
                 {/* Activity log */}
@@ -443,6 +456,11 @@ export default function CyclingHub() {
                 </Card>
               </>
             )}
+          </TabsContent>
+
+          {/* ── Tab Mémoire coach (Firestore-backed) ── */}
+          <TabsContent value="coach" className="space-y-8">
+            <CoachMemoryTab governorStatus={GOVERNOR_STATUS_PLACEHOLDER} />
           </TabsContent>
 
           {/* ── Tab Matériel (Firestore-backed) ── */}

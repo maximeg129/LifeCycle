@@ -32,6 +32,7 @@ const RecoveryInsightInputSchema = z.object({
     tsb: z.number().optional().describe('Training Stress Balance (form) = ctl - atl'),
     rampRate: z.number().optional(),
   }).optional().describe('Cycling training load from Intervals.icu, if the user connected it.'),
+  coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, lifestyle, goals, remembered facts, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
 }).describe('Input for the recovery insight flow.');
 
 export type RecoveryInsightInput = z.infer<typeof RecoveryInsightInputSchema>;
@@ -77,7 +78,9 @@ export async function recoveryInsight(input: RecoveryInsightInput): Promise<Reco
     ].join('\n'));
   }
 
-  const system = `You are an expert endurance coach and sleep/recovery specialist speaking to a cyclist who also
+  const coachContextBlock = parsedInput.coachContext ? `${parsedInput.coachContext}\n\n` : '';
+
+  const system = `${coachContextBlock}You are an expert endurance coach and sleep/recovery specialist speaking to a cyclist who also
 tracks their sleep, HRV, stress and mood daily. Write your entire response in French.
 
 Analyze the data below and produce a short, encouraging but honest recovery insight. Be specific and
