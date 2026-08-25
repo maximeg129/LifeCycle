@@ -5,3 +5,13 @@ runConfig:
   # Increase this value if you'd like to automatically spin up
   # more instances in response to increased traffic.
   maxInstances: 1
+
+# Environment variables and secrets. A secret referenced here must already
+# exist in Secret Manager (see `firebase apphosting:secrets:set`) and be
+# granted access to this backend before it will actually reach the app.
+env:
+  - variable: GEMINI_API_KEY
+    secret: gemini-api-key
+    availability:
+      - BUILD
+      - RUNTIME
