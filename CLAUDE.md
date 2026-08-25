@@ -27,7 +27,7 @@ src/
 │   ├── globals.css               # Variables CSS + classes utilitaires (.apple-card, .text-gradient)
 │   ├── login/page.tsx            # Authentification (email + Google)
 │   ├── register/page.tsx         # Inscription (email + Google)
-│   ├── cycling/page.tsx          # Hub cyclisme (entraînement CTL/ATL + matériel)
+│   ├── cycling/page.tsx          # Hub cyclisme (CTL/ATL/TSB + budget kJ, gouverneur de charge, coach mémoire, matériel, chaînes)
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
 │   ├── weather/page.tsx          # Assistant météo IA (flow Claude)
 │   ├── home-management/page.tsx  # Tâches récurrentes + plantes (Firestore)
@@ -130,6 +130,11 @@ Toutes les données utilisateur sont sous `users/{uid}/` :
 | `users/{uid}/recipes` | `{recipeId}` | Recettes : title, ingredients[], instructions, calories, protein, carbs |
 | `users/{uid}/tasks` | `{taskId}` | Tâches : name, room, priority, recurrenceDays, nextDueDate (Timestamp), isActive |
 | `users/{uid}/settings/intervals` | (singleton) | intervalsAthleteId, intervalsApiKey |
+| `users/{uid}/settings/powerCurve` | (singleton) | shortRecord/mediumRecord/longRecord `{seconds, watts}` — records perso pour l'indice d'endurance de Riegel |
+| `users/{uid}/coachInjuries` | `{injuryId}` | Blessures : bodyRegion, severity (1-5), status, startDate, description, physioInstructions |
+| `users/{uid}/coachGoals` | `{goalId}` | Objectifs coach IA : eventName, eventDate, targetOutcome, priority |
+| `users/{uid}/coachMemory` | `lifestyle` / `facts` (singletons) | Style de vie (texte libre) et faits retenus (`items: string[]`) |
+| `users/{uid}/sessionFeedback` | `{activityId}` ou `daily-{yyyy-MM-dd}` | RPE (1-10), feeling, motivation par séance — alimente le gouverneur de charge interne |
 
 ### Hooks Firebase
 
@@ -241,6 +246,10 @@ Variable d'environnement requise : `ANTHROPIC_API_KEY` (déclarée dans `apphost
 
 Tous dans `src/components/ui/` (shadcn/ui) :
 `Button`, `Card`, `Badge`, `Tabs`, `Dialog`, `Input`, `Label`, `Textarea`, `Select`, `Progress`, `Skeleton`, `Avatar`, `Calendar`, `Popover`, `Sheet`, `ScrollArea`, `Separator`, `Slider`, `Switch`, `Table`, `Tooltip`, `Checkbox`, `Toast`
+
+`MetricCard` (`src/components/ui/metric-card.tsx`) : wrapper pour tout widget dépendant d'une donnée optionnelle
+(puissance, HRV, poids…). Props `isAvailable`, `requiredInputs: string[]`, `ctaLabel`/`ctaHref`/`ctaAction` — affiche
+un état "métrique indisponible" explicite plutôt qu'un graphique vide ou une valeur par défaut trompeuse.
 
 Charts via Recharts : `BarChart`, `LineChart`, etc. avec wrapper `ChartContainer`.
 
