@@ -10,6 +10,8 @@ import { type HealthGoal, type HealthMetric } from './lifestyle-types'
 import { useCoachMemory } from '@/components/cycling/use-coach-memory'
 import { useKJBudget } from '@/components/cycling/use-kj-budget'
 import { useGovernor } from '@/components/cycling/use-governor'
+import { usePowerCurve } from '@/components/cycling/use-power-curve'
+import { fitPowerDurationCurve, type PowerRecord } from '@/components/cycling/riegel-types'
 import { buildCoachContext } from '@/components/cycling/coach-context'
 
 type WithIdMetric = HealthMetric & { id: string; dayId: string }
@@ -26,6 +28,10 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
   const memory = useCoachMemory()
   const governor = useGovernor()
   const budget = useKJBudget(governor.status)
+  const powerCurve = usePowerCurve()
+  const enduranceIndex = fitPowerDurationCurve(
+    [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
+  )?.enduranceIndex ?? null
   const [result, setResult] = useState<RecoveryInsightOutput | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -39,6 +45,7 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
         rememberedFacts: memory.rememberedFacts,
         kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
         governorStatus: governor.status,
+        enduranceIndex,
       })
       const output = await recoveryInsight({
         dailyMetrics: dailySeries.map((d) => ({

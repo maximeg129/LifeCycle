@@ -35,6 +35,7 @@ import { CoachMemoryTab } from '@/components/cycling/coach-memory-tab'
 import { GovernorWidget } from '@/components/cycling/governor-widget'
 import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
 import { useGovernor } from '@/components/cycling/use-governor'
+import { PowerCurveCard } from '@/components/cycling/power-curve-card'
 import { BrainCircuit } from 'lucide-react'
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -399,6 +400,9 @@ export default function CyclingHub() {
 
           {/* ── Tab PMC (Performance Management Chart) ────────────── */}
           <TabsContent value="pmc" className="space-y-8">
+            {/* Riegel power-duration curve — independent of Intervals.icu, always available */}
+            <PowerCurveCard />
+
             {!isConfigured && !athlete.isLoading ? (
               <NotConfiguredBanner />
             ) : (
