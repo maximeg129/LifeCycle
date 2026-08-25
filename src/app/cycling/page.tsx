@@ -32,9 +32,10 @@ import { GearTab } from '@/components/cycling/gear-tab'
 import { ChainsTab } from '@/components/cycling/chains-tab'
 import { KJBudgetWidget } from '@/components/cycling/kj-budget-widget'
 import { CoachMemoryTab } from '@/components/cycling/coach-memory-tab'
+import { GovernorWidget } from '@/components/cycling/governor-widget'
+import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
+import { useGovernor } from '@/components/cycling/use-governor'
 import { BrainCircuit } from 'lucide-react'
-// TODO(governor): swap for the real computed status once the internal load governor is wired in.
-const GOVERNOR_STATUS_PLACEHOLDER = 'insufficient_data' as const
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -128,6 +129,7 @@ export default function CyclingHub() {
   const athlete = useAthlete()
   const activities = useActivities(activitiesOldest, newest)
   const fitness = useFitnessChart(fitnessOldest, newest)
+  const governor = useGovernor()
 
   // Map date → daily training load from fitness data
   const dailyLoad = useMemo(() => {
@@ -295,9 +297,10 @@ export default function CyclingHub() {
                   ) : null}
                 </section>
 
-                {/* kJ budget — real mechanical work, not TSS */}
-                <section>
-                  <KJBudgetWidget governorStatus={GOVERNOR_STATUS_PLACEHOLDER} />
+                {/* kJ budget + internal load governor — real mechanical work, not TSS/rigid plan */}
+                <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <KJBudgetWidget governorStatus={governor.status} />
+                  <GovernorWidget />
                 </section>
 
                 {/* Activity log */}
@@ -380,6 +383,7 @@ export default function CyclingHub() {
                                     <span className="text-[10px] text-muted-foreground">Charge</span>
                                   </div>
                                 )}
+                                <QuickFeedbackButton activityId={ride.id} date={dateStr ?? format(new Date(), 'yyyy-MM-dd')} />
                                 <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                               </div>
                             </a>
@@ -460,7 +464,7 @@ export default function CyclingHub() {
 
           {/* ── Tab Mémoire coach (Firestore-backed) ── */}
           <TabsContent value="coach" className="space-y-8">
-            <CoachMemoryTab governorStatus={GOVERNOR_STATUS_PLACEHOLDER} />
+            <CoachMemoryTab governorStatus={governor.status} />
           </TabsContent>
 
           {/* ── Tab Matériel (Firestore-backed) ── */}
