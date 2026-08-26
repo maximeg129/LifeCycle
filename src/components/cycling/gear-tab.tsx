@@ -53,6 +53,7 @@ import { ReplacementHistory } from './replacement-history'
 import { TirePressureCard } from './tire-pressure-card'
 import { useGearSync } from './use-gear-sync'
 import { useChains } from './use-chains'
+import { applyKmDeltaToBikeDependents } from './km-sync'
 
 // ── Main component ───────────────────────────────────────────────────
 
@@ -191,13 +192,13 @@ export function GearTab() {
     const delta = newKm - bike.totalKm
     if (delta <= 0) return
 
-    for (const comp of bikeComponents) {
-      const compRef = doc(db, `users/${user.uid}/components`, comp.id)
-      const updatedKm = comp.currentKm + delta
-      const status = updatedKm >= comp.thresholdKm ? 'critical' : updatedKm >= comp.thresholdKm * 0.8 ? 'warning' : 'active'
-      updateDoc(compRef, { currentKm: updatedKm, status })
-        .catch(() => errorEmitter.emit('permission-error', new FirestorePermissionError({ path: compRef.path, operation: 'update' })))
-    }
+    applyKmDeltaToBikeDependents({
+      db,
+      uid: user.uid,
+      bikeComponents,
+      bikeChains: chains.filter(c => c.bikeId === bikeId),
+      delta,
+    })
   }
 
   if (!user) return null

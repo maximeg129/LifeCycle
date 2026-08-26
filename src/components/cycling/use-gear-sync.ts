@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast'
 import type { Bike, BikeComponent } from './gear-types'
 import type { Chain } from './chain-types'
 import type { IntervalsGear } from '@/lib/intervals-api'
+import { applyKmDeltaToBikeDependents } from './km-sync'
 
 interface UseGearSyncParams {
   bikes: Bike[]
@@ -70,37 +71,15 @@ export function useGearSync({ bikes, components, chains = [], athleteId, apiKey,
         bikesUpdated++
         totalNewKm += delta
 
-        // This bike has dedicated hot-wax rotation chains — track their km
-        // there instead of double-counting via a generic 'chain' component.
-        const bikeChains = chains.filter(c => c.bikeId === bike.id)
-        const hasRotationChains = bikeChains.length > 0
-        const mountedChain = bikeChains.find(c => c.status === 'montee')
-        if (mountedChain) {
-          const chainRef = doc(db, `users/${user.uid}/chains`, mountedChain.id)
-          await updateDoc(chainRef, {
-            kmSinceWax: mountedChain.kmSinceWax + delta,
-            totalKm: mountedChain.totalKm + delta,
-          }).catch(() => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: chainRef.path, operation: 'update' }))
-          })
-        }
-
-        // Update all active components for this bike
-        const bikeComponents = components.filter(c => c.bikeId === bike.id && c.status !== 'retired' && !(hasRotationChains && c.category === 'chain'))
-        for (const comp of bikeComponents) {
-          const updatedCompKm = comp.currentKm + delta
-          const status = updatedCompKm >= comp.thresholdKm
-            ? 'critical'
-            : updatedCompKm >= comp.thresholdKm * 0.8
-              ? 'warning'
-              : 'active'
-
-          const compRef = doc(db, `users/${user.uid}/components`, comp.id)
-          await updateDoc(compRef, { currentKm: updatedCompKm, status }).catch(() => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: compRef.path, operation: 'update' }))
-          })
-          componentsUpdated++
-        }
+        const bikeComponents = components.filter(c => c.bikeId === bike.id && c.status !== 'retired')
+        const result = await applyKmDeltaToBikeDependents({
+          db,
+          uid: user.uid,
+          bikeComponents,
+          bikeChains: chains.filter(c => c.bikeId === bike.id),
+          delta,
+        })
+        componentsUpdated += result.componentsUpdated
       }
 
       if (totalNewKm > 0) {
