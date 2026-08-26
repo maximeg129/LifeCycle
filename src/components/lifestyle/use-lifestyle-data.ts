@@ -3,12 +3,15 @@
 import { useMemo } from 'react'
 import { collection, query, orderBy, where, Timestamp } from 'firebase/firestore'
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
+import { useWellness } from '@/hooks/use-intervals'
 import {
   type HealthMetric,
   type HealthGoal,
+  type WellnessLike,
   getLastDayIds,
-  buildDailySeries,
-  computeReadiness,
+  buildMergedDailySeries,
+  pickLatestWithData,
+  resolveReadiness,
 } from './lifestyle-types'
 
 const HISTORY_DAYS = 7
@@ -19,6 +22,8 @@ export function useLifestyleData() {
   const uid = user?.uid ?? null
 
   const dayIds = useMemo(() => getLastDayIds(HISTORY_DAYS), [])
+  const oldestDayId = dayIds[0]
+  const newestDayId = dayIds[dayIds.length - 1]
 
   const metricsQuery = useMemoFirebase(() => {
     if (!uid || !db) return null
@@ -39,13 +44,20 @@ export function useLifestyleData() {
   }, [db, uid])
   const { data: goals, isLoading: loadingGoals } = useCollection<HealthGoal>(goalsQuery)
 
+  // Auto-synced wellness (WHOOP or any device feeding Intervals.icu) — a
+  // no-op with empty data when Intervals.icu isn't connected, so this hook
+  // degrades gracefully to manual-only entries exactly like before.
+  const wellness = useWellness(oldestDayId, newestDayId)
+
   const derived = useMemo(() => {
     const list = metrics || []
-    const dailySeries = buildDailySeries(list, dayIds)
-    const latest = [...list].sort((a, b) => (b.date?.seconds || 0) - (a.date?.seconds || 0))[0]
-    const readiness = computeReadiness(latest)
+    const wellnessByDay = new Map<string, WellnessLike>(wellness.data.map((w) => [w.id, w]))
+    const dailySeries = buildMergedDailySeries(list, wellnessByDay, dayIds)
+    const latest = pickLatestWithData(dailySeries)
+    const latestWellness = latest ? wellnessByDay.get(latest.dayId) : undefined
+    const readiness = resolveReadiness(latest, latestWellness?.readiness)
     return { dailySeries, latest, readiness }
-  }, [metrics, dayIds])
+  }, [metrics, dayIds, wellness.data])
 
   return {
     uid,
@@ -53,7 +65,7 @@ export function useLifestyleData() {
     dayIds,
     metrics: metrics || [],
     goals: goals || [],
-    isLoading: loadingMetrics || loadingGoals,
+    isLoading: loadingMetrics || loadingGoals || wellness.isLoading,
     ...derived,
   }
 }

@@ -6,7 +6,7 @@ import { Sparkles, Loader2, TrendingUp, Zap } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useAthlete } from '@/hooks/use-intervals'
 import { recoveryInsight, type RecoveryInsightOutput } from '@/ai/flows/recovery-insight-flow'
-import { type HealthGoal, type HealthMetric } from './lifestyle-types'
+import { type HealthGoal, type HealthMetricLike } from './lifestyle-types'
 import { useCoachMemory } from '@/components/cycling/use-coach-memory'
 import { useKJBudget } from '@/components/cycling/use-kj-budget'
 import { useGovernor } from '@/components/cycling/use-governor'
@@ -14,11 +14,11 @@ import { usePowerCurve } from '@/components/cycling/use-power-curve'
 import { fitPowerDurationCurve, type PowerRecord } from '@/components/cycling/riegel-types'
 import { buildCoachContext } from '@/components/cycling/coach-context'
 
-type WithIdMetric = HealthMetric & { id: string; dayId: string }
+type DailyMetric = HealthMetricLike & { dayId: string }
 type WithIdGoal = HealthGoal & { id: string }
 
 interface Props {
-  dailySeries: WithIdMetric[]
+  dailySeries: DailyMetric[]
   goals: WithIdGoal[]
 }
 

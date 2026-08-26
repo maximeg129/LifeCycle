@@ -43,6 +43,12 @@ export function getDayId(date: Date): string {
   return `${y}-${m}-${d}`
 }
 
+/** Inverse of getDayId — local midnight for a 'yyyy-MM-dd' id, as epoch seconds. */
+export function dayIdToSeconds(dayId: string): number {
+  const [y, m, d] = dayId.split('-').map(Number)
+  return Math.floor(new Date(y, m - 1, d).getTime() / 1000)
+}
+
 /** Returns the last `count` day ids ending with `from`, oldest first. */
 export function getLastDayIds(count: number, from: Date = new Date()): string[] {
   const ids: string[] = []
@@ -89,6 +95,74 @@ export function buildDailySeries<T extends HealthMetricLike>(metrics: T[], dayId
   return dayIds.map((dayId) => ({ ...(byDay.get(dayId) as T), dayId }))
 }
 
+/**
+ * A day's auto-synced Intervals.icu wellness reading (WHOOP or any other
+ * connected device that feeds Intervals.icu) — the fields this app can
+ * meaningfully fold into the manually-logged journal.
+ */
+export interface WellnessLike {
+  sleepSecs?: number
+  sleepScore?: number
+  sleepQuality?: number
+  hrv?: number
+  mood?: number
+  readiness?: number
+}
+
+/**
+ * Fills gaps in a manually-logged day with the matching auto-synced
+ * wellness reading — the manual entry always wins field-by-field when
+ * present, so a correction the user typed in is never silently overwritten,
+ * but a day nobody logged by hand still shows real data instead of "—".
+ */
+export function mergeDailyWellness(manual: HealthMetricLike | undefined, wellness: WellnessLike | undefined): HealthMetricLike | undefined {
+  if (!wellness) return manual
+  const sleepHoursFromWellness = wellness.sleepSecs != null ? Math.round((wellness.sleepSecs / 3600) * 10) / 10 : undefined
+  const sleepQualityFromWellness = wellness.sleepQuality ?? wellness.sleepScore
+  return {
+    date: manual?.date ?? null,
+    sleepHours: manual?.sleepHours ?? sleepHoursFromWellness,
+    sleepQuality: manual?.sleepQuality ?? sleepQualityFromWellness,
+    hrv: manual?.hrv ?? wellness.hrv,
+    stressScore: manual?.stressScore, // no reliable auto-synced equivalent — manual only
+    mood: manual?.mood ?? wellness.mood,
+  }
+}
+
+/**
+ * Builds the daily series by merging manually-logged metrics with
+ * auto-synced wellness readings (matched by dayId — Intervals.icu wellness
+ * rows are already keyed by their date string). This is what makes Vie &
+ * Santé reflect a connected WHOOP/Intervals.icu account without requiring
+ * the user to re-type numbers the device already captured.
+ */
+export function buildMergedDailySeries(manualMetrics: HealthMetricLike[], wellnessByDay: Map<string, WellnessLike>, dayIds: string[]): (HealthMetricLike & { dayId: string })[] {
+  const manualByDay = new Map<string, HealthMetricLike>()
+  for (const m of manualMetrics) {
+    const id = dayIdFromMetric(m)
+    if (id) manualByDay.set(id, m)
+  }
+  return dayIds.map((dayId) => {
+    const merged = mergeDailyWellness(manualByDay.get(dayId), wellnessByDay.get(dayId)) ?? { date: null }
+    // The day's date always reflects dayId, not just whatever the manual doc's
+    // Timestamp happened to carry — so a wellness-only day (no manual entry)
+    // still displays correctly as "last measured" once it has any data.
+    const date = merged.date ?? { seconds: dayIdToSeconds(dayId) }
+    return { ...merged, date, dayId }
+  })
+}
+
+/** Most recent day in `series` (oldest-first) that has at least one field set — "latest" should reflect the newest real data point, not just today's empty slot. */
+export function pickLatestWithData<T extends HealthMetricLike>(series: (T & { dayId: string })[]): (T & { dayId: string }) | undefined {
+  for (let i = series.length - 1; i >= 0; i--) {
+    const d = series[i]
+    if (d.sleepHours !== undefined || d.sleepQuality !== undefined || d.hrv !== undefined || d.stressScore !== undefined || d.mood !== undefined) {
+      return d
+    }
+  }
+  return undefined
+}
+
 /** Lightweight 0-100 readiness heuristic from the most recent entry — not a medical score. */
 export function computeReadiness(latest: HealthMetricLike | undefined): number | null {
   if (!latest) return null
@@ -98,6 +172,12 @@ export function computeReadiness(latest: HealthMetricLike | undefined): number |
   if (latest.mood !== undefined) parts.push(latest.mood * 10)
   if (parts.length === 0) return null
   return Math.round(average(parts))
+}
+
+/** Prefers the device's own 0-100 recovery/readiness score (WHOOP via Intervals.icu) over the local sleep/stress/mood heuristic — it's a more authoritative measurement when available. */
+export function resolveReadiness(latest: HealthMetricLike | undefined, deviceReadiness: number | undefined): number | null {
+  if (deviceReadiness != null) return Math.round(deviceReadiness)
+  return computeReadiness(latest)
 }
 
 export interface GoalProgress {

@@ -2,11 +2,16 @@ import { describe, it, expect } from 'vitest'
 import {
   getDayId,
   getLastDayIds,
+  dayIdToSeconds,
   average,
   trendPct,
   buildDailySeries,
   computeReadiness,
+  resolveReadiness,
   computeGoalProgress,
+  mergeDailyWellness,
+  buildMergedDailySeries,
+  pickLatestWithData,
   type HealthMetricLike,
 } from './lifestyle-types'
 
@@ -122,5 +127,77 @@ describe('computeGoalProgress', () => {
     const progress = computeGoalProgress({ metric: 'hrv', target: 60, direction: 'min' }, [{ date: null, sleepHours: 7 }])
     expect(progress.pct).toBe(0)
     expect(progress.met).toBe(false)
+  })
+})
+
+describe('mergeDailyWellness', () => {
+  it('fills every field from wellness when nothing was manually logged', () => {
+    const merged = mergeDailyWellness(undefined, { sleepSecs: 27000, sleepQuality: 88, hrv: 62, mood: 7 })
+    expect(merged).toEqual({ date: null, sleepHours: 7.5, sleepQuality: 88, hrv: 62, stressScore: undefined, mood: 7 })
+  })
+
+  it('falls back to sleepScore when sleepQuality is absent', () => {
+    const merged = mergeDailyWellness(undefined, { sleepSecs: 3600, sleepScore: 75 })
+    expect(merged?.sleepQuality).toBe(75)
+  })
+
+  it('lets a manual entry win field-by-field over the auto-synced reading', () => {
+    const manual: HealthMetricLike = { date: ts(100), sleepHours: 6, stressScore: 40 }
+    const merged = mergeDailyWellness(manual, { sleepSecs: 27000, hrv: 62, mood: 7 })
+    expect(merged).toEqual({ date: ts(100), sleepHours: 6, sleepQuality: undefined, hrv: 62, stressScore: 40, mood: 7 })
+  })
+
+  it('returns the manual entry untouched when there is no wellness reading for that day', () => {
+    const manual: HealthMetricLike = { date: ts(100), sleepHours: 6 }
+    expect(mergeDailyWellness(manual, undefined)).toBe(manual)
+  })
+
+  it('is undefined when neither source has data for the day', () => {
+    expect(mergeDailyWellness(undefined, undefined)).toBeUndefined()
+  })
+})
+
+describe('buildMergedDailySeries', () => {
+  it('matches wellness rows to manual entries by dayId, manual winning on overlap', () => {
+    const manual: HealthMetricLike[] = [{ date: ts(dateSeconds(2026, 3, 9)), sleepHours: 6 }]
+    const wellnessByDay = new Map([
+      ['2026-03-08', { hrv: 55 }],
+      ['2026-03-09', { sleepSecs: 30600, hrv: 60 }], // manual sleepHours should win here
+    ])
+    const series = buildMergedDailySeries(manual, wellnessByDay, ['2026-03-08', '2026-03-09'])
+    expect(series[0]).toMatchObject({ dayId: '2026-03-08', hrv: 55 })
+    expect(series[1]).toMatchObject({ dayId: '2026-03-09', sleepHours: 6, hrv: 60 })
+    // Regression: a wellness-only day (no manual entry) must still carry a
+    // real date, or the "last measured" badge wrongly reads "no data".
+    expect(series[0].date?.seconds).toBe(dayIdToSeconds('2026-03-08'))
+  })
+
+  it('still dates an empty day from its dayId, even with no data from either source', () => {
+    const series = buildMergedDailySeries([], new Map(), ['2026-03-08'])
+    expect(series).toEqual([{ date: { seconds: dayIdToSeconds('2026-03-08') }, dayId: '2026-03-08' }])
+  })
+})
+
+describe('pickLatestWithData', () => {
+  it('picks the most recent day (series is oldest-first) that has any field set', () => {
+    const series = [
+      { date: null, dayId: '2026-03-08' },
+      { date: null, dayId: '2026-03-09', hrv: 60 },
+      { date: null, dayId: '2026-03-10' }, // today, nothing logged yet
+    ]
+    expect(pickLatestWithData(series)?.dayId).toBe('2026-03-09')
+  })
+
+  it('is undefined when no day in the series has any data', () => {
+    expect(pickLatestWithData([{ date: null, dayId: '2026-03-08' }])).toBeUndefined()
+  })
+})
+
+describe('resolveReadiness', () => {
+  it('prefers the device readiness score over the local heuristic', () => {
+    expect(resolveReadiness({ date: null, sleepQuality: 10, mood: 1 }, 82)).toBe(82)
+  })
+  it('falls back to the local heuristic without a device score', () => {
+    expect(resolveReadiness({ date: null, sleepQuality: 80, mood: 8 }, undefined)).toBe(computeReadiness({ date: null, sleepQuality: 80, mood: 8 }))
   })
 })
