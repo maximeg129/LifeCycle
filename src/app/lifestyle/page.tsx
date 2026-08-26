@@ -19,7 +19,11 @@ import {
   ThermometerSun,
   Target,
   X,
+  Wifi,
+  WifiOff,
+  AlertTriangle,
 } from 'lucide-react'
+import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { Line, LineChart, XAxis, YAxis, ResponsiveContainer, Area, AreaChart } from 'recharts'
 import { format } from 'date-fns'
@@ -48,7 +52,7 @@ export default function LifestylePage() {
   const db = useFirestore()
   const { toast } = useToast()
 
-  const { dailySeries, latest, readiness, goals, isLoading } = useLifestyleData()
+  const { dailySeries, latest, readiness, goals, isLoading, wellnessStatus } = useLifestyleData()
 
   const sleepSeries = dailySeries.map((d) => ({ day: dayLabel(d.dayId), hours: d.sleepHours ?? null, quality: d.sleepQuality ?? null }))
   const hrvSeries = dailySeries.map((d) => ({ day: dayLabel(d.dayId), hrv: d.hrv ?? null }))
@@ -98,6 +102,28 @@ export default function LifestylePage() {
             <LogMetricDialog />
           </div>
         </header>
+
+        {!isLoading && (
+          !wellnessStatus.isConfigured ? (
+            <div className="flex items-center justify-between gap-3 p-4 rounded-2xl bg-secondary/30 text-sm">
+              <span className="flex items-center gap-2 text-muted-foreground">
+                <WifiOff className="w-4 h-4 shrink-0" />
+                Intervals.icu non connecté — les mesures ci-dessous sont 100&nbsp;% manuelles. Connectez-le pour remonter automatiquement sommeil, HRV et humeur (WHOOP ou tout autre appareil synchronisé).
+              </span>
+              <Link href="/settings" className="shrink-0 font-medium text-primary hover:underline">Configurer</Link>
+            </div>
+          ) : wellnessStatus.error ? (
+            <div className="flex items-center gap-2 p-4 rounded-2xl bg-destructive/5 text-sm text-destructive">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              Erreur de synchronisation Intervals.icu : {wellnessStatus.error}
+            </div>
+          ) : !wellnessStatus.hasAnyEntry ? (
+            <div className="flex items-center gap-2 p-4 rounded-2xl bg-secondary/30 text-sm text-muted-foreground">
+              <Wifi className="w-4 h-4 shrink-0" />
+              Intervals.icu connecté, mais aucune donnée wellness (sommeil/HRV) synchronisée sur les 7 derniers jours.
+            </div>
+          ) : null
+        )}
 
         <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           <TabsList className="bg-secondary/50 p-1.5 rounded-[20px] w-fit border border-border/40">

@@ -66,6 +66,14 @@ export function useLifestyleData() {
     metrics: metrics || [],
     goals: goals || [],
     isLoading: loadingMetrics || loadingGoals || wellness.isLoading,
+    // Surfaced so the page can say *why* it's empty (not connected, connected
+    // but nothing synced yet, or a fetch error) instead of just showing "—"
+    // everywhere and leaving the user to guess.
+    wellnessStatus: {
+      isConfigured: wellness.isConfigured,
+      error: wellness.error,
+      hasAnyEntry: wellness.data.length > 0,
+    },
     ...derived,
   }
 }
