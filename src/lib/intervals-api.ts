@@ -69,6 +69,12 @@ export interface IntervalsActivity {
   elapsed_time?: number;
   distance?: number;
   gear_id?: string;
+  // Intervals.icu computes power fields itself (icu_-prefixed) — more
+  // reliably populated than the Strava-mirrored average_watts/
+  // weighted_average_watts, which the API doesn't always carry through.
+  // Keep both and prefer the icu_ ones (see bestAverageWatts() below).
+  icu_average_watts?: number | null;
+  icu_weighted_avg_watts?: number | null;
   average_watts?: number | null;
   weighted_average_watts?: number | null;
   icu_intensity?: number | null;
@@ -138,6 +144,31 @@ export interface IntervalsPowerZone {
   color: string;
 }
 
+/** Explicit field list for GET /activities — see IntervalsActivity for why. */
+const ACTIVITY_FIELDS = [
+  'id', 'name', 'type', 'source', 'start_date_local', 'moving_time', 'elapsed_time',
+  'distance', 'gear_id', 'icu_average_watts', 'icu_weighted_avg_watts',
+  'average_watts', 'weighted_average_watts', 'icu_intensity', 'icu_training_load',
+  'icu_ftp', 'icu_weight', 'average_heartrate', 'max_heartrate',
+  'total_elevation_gain', 'average_speed', 'max_speed', 'calories',
+  'icu_ctl', 'icu_atl', 'icu_tsb',
+].join(',');
+
+// ── Pure helpers ─────────────────────────────────────────────────────
+
+export interface PowerFieldsLike {
+  icu_average_watts?: number | null;
+  icu_weighted_avg_watts?: number | null;
+  average_watts?: number | null;
+  weighted_average_watts?: number | null;
+}
+
+/** Best available average-power reading, preferring Intervals.icu's own computation over the Strava-mirrored fields. Null if none present or non-positive. */
+export function bestAverageWatts(activity: PowerFieldsLike): number | null {
+  const watts = activity.icu_weighted_avg_watts ?? activity.weighted_average_watts ?? activity.icu_average_watts ?? activity.average_watts;
+  return watts != null && watts > 0 ? watts : null;
+}
+
 // ── Service ──────────────────────────────────────────────────────────
 
 export class IntervalsService {
@@ -192,9 +223,15 @@ export class IntervalsService {
     };
   }
 
-  /** Activités entre deux dates (YYYY-MM-DD) */
+  /**
+   * Activités entre deux dates (YYYY-MM-DD).
+   * The list endpoint returns a lean default field set that silently
+   * excludes power data unless requested explicitly via `fields` — without
+   * it, average_watts/icu_average_watts/etc. come back undefined even on
+   * activities that do have a power meter.
+   */
   async getActivities(oldest: string, newest?: string): Promise<IntervalsActivity[]> {
-    const params = new URLSearchParams({ oldest });
+    const params = new URLSearchParams({ oldest, fields: ACTIVITY_FIELDS });
     if (newest) params.set('newest', newest);
     return this.fetchIntervals<IntervalsActivity[]>(`/activities?${params}`);
   }

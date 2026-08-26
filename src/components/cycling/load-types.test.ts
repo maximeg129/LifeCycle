@@ -23,6 +23,12 @@ describe('sessionKJ', () => {
   it('returns null without duration', () => {
     expect(sessionKJ({ average_watts: 200 })).toBeNull()
   })
+  it('uses the icu_-prefixed power fields (the ones Intervals.icu actually populates)', () => {
+    // Regression: the app previously only read average_watts/weighted_average_watts,
+    // which the /activities endpoint often leaves empty even on power-meter rides.
+    expect(sessionKJ({ icu_average_watts: 200, moving_time: 3600 })).toBe(720)
+    expect(sessionKJ({ icu_weighted_avg_watts: 210, average_watts: 200, moving_time: 3600 })).toBe(756)
+  })
 })
 
 describe('mondayOf', () => {

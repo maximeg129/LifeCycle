@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { IntervalsService } from './intervals-api'
+import { IntervalsService, bestAverageWatts } from './intervals-api'
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -78,6 +78,43 @@ describe('IntervalsService.getAthlete', () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(null, false, 401)))
     const service = new IntervalsService('i1', 'bad-key')
     await expect(service.getActivities('2026-01-01')).rejects.toThrow(/401/)
+  })
+})
+
+describe('IntervalsService.getActivities', () => {
+  it('requests an explicit fields list including the icu_-prefixed power fields', async () => {
+    const fetchMock = vi.fn(async (_url: string) => jsonResponse([]))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const service = new IntervalsService('i1', 'k')
+    await service.getActivities('2026-01-01', '2026-01-31')
+
+    const [url] = fetchMock.mock.calls[0]
+    const params = new URL(url).searchParams
+    expect(params.get('oldest')).toBe('2026-01-01')
+    expect(params.get('newest')).toBe('2026-01-31')
+    const fields = params.get('fields')?.split(',') ?? []
+    expect(fields).toEqual(expect.arrayContaining(['icu_average_watts', 'icu_weighted_avg_watts', 'average_watts', 'weighted_average_watts', 'average_heartrate']))
+  })
+})
+
+describe('bestAverageWatts', () => {
+  it('prefers icu_weighted_avg_watts over every other field', () => {
+    expect(bestAverageWatts({
+      icu_weighted_avg_watts: 210,
+      weighted_average_watts: 200,
+      icu_average_watts: 190,
+      average_watts: 180,
+    })).toBe(210)
+  })
+  it('falls back down the chain when preferred fields are absent', () => {
+    expect(bestAverageWatts({ icu_average_watts: 190, average_watts: 180 })).toBe(190)
+    expect(bestAverageWatts({ average_watts: 180 })).toBe(180)
+  })
+  it('is null when no power field is present or positive', () => {
+    expect(bestAverageWatts({})).toBeNull()
+    expect(bestAverageWatts({ average_watts: 0 })).toBeNull()
+    expect(bestAverageWatts({ average_watts: null })).toBeNull()
   })
 })
 

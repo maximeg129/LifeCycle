@@ -4,9 +4,9 @@
 // real mechanical work when power data exists) vs. energy eaten, plus a
 // protein target range scaled to bodyweight.
 
-export interface FuelingActivityLike {
-  average_watts?: number | null
-  weighted_average_watts?: number | null
+import { bestAverageWatts, type PowerFieldsLike } from '@/lib/intervals-api'
+
+export interface FuelingActivityLike extends PowerFieldsLike {
   moving_time?: number
   icu_intensity?: number | null
 }
@@ -28,8 +28,8 @@ function estimateMET(intensity?: number | null): number {
  * needs a known bodyweight.
  */
 export function sessionEnergyBurnedKcal(activity: FuelingActivityLike, weightKg?: number | null): number | null {
-  const watts = activity.weighted_average_watts ?? activity.average_watts
-  if (watts && watts > 0 && activity.moving_time) {
+  const watts = bestAverageWatts(activity)
+  if (watts && activity.moving_time) {
     const kJ = (watts * activity.moving_time) / 1000
     return Math.round(kJ)
   }

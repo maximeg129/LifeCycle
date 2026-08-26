@@ -82,6 +82,8 @@ export interface GovernorSignals {
   effortHrDrift: Signal
   rpe: Signal
   feelings: Signal
+  /** Trend of the Vie & Santé readiness score (sommeil/stress/humeur) — cross-references recovery tracking with training load rather than treating them as separate worlds. */
+  sleepRecovery: Signal
 }
 
 /** Aggregates the available signals into a single status. Needs at least 2 non-null signals to call it — otherwise it's honestly "insufficient_data", not a guess. */

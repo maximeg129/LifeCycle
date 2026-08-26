@@ -79,17 +79,23 @@ describe('feelingsSignal', () => {
   })
 })
 
+const NO_SIGNALS = { restingHR: null, hrvTrend: null, effortHrDrift: null, rpe: null, feelings: null, sleepRecovery: null }
+
 describe('computeInternalLoadStatus', () => {
   it('is insufficient_data with fewer than 2 signals', () => {
-    expect(computeInternalLoadStatus({ restingHR: 1, hrvTrend: null, effortHrDrift: null, rpe: null, feelings: null })).toBe('insufficient_data')
+    expect(computeInternalLoadStatus({ ...NO_SIGNALS, restingHR: 1 })).toBe('insufficient_data')
   })
   it('is vert when signals net favorable', () => {
-    expect(computeInternalLoadStatus({ restingHR: 1, hrvTrend: 1, effortHrDrift: 0, rpe: null, feelings: null })).toBe('vert')
+    expect(computeInternalLoadStatus({ ...NO_SIGNALS, restingHR: 1, hrvTrend: 1, effortHrDrift: 0 })).toBe('vert')
   })
   it('is rouge when signals net unfavorable', () => {
-    expect(computeInternalLoadStatus({ restingHR: -1, hrvTrend: -1, effortHrDrift: 0, rpe: null, feelings: null })).toBe('rouge')
+    expect(computeInternalLoadStatus({ ...NO_SIGNALS, restingHR: -1, hrvTrend: -1, effortHrDrift: 0 })).toBe('rouge')
   })
   it('is orange when signals balance out', () => {
-    expect(computeInternalLoadStatus({ restingHR: 1, hrvTrend: -1, effortHrDrift: null, rpe: null, feelings: null })).toBe('orange')
+    expect(computeInternalLoadStatus({ ...NO_SIGNALS, restingHR: 1, hrvTrend: -1 })).toBe('orange')
+  })
+  it('folds the sleep/recovery signal from Vie & Santé into the aggregate', () => {
+    expect(computeInternalLoadStatus({ ...NO_SIGNALS, restingHR: 1, sleepRecovery: 1 })).toBe('vert')
+    expect(computeInternalLoadStatus({ ...NO_SIGNALS, restingHR: 1, sleepRecovery: -1 })).toBe('orange')
   })
 })

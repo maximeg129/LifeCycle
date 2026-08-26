@@ -4,19 +4,19 @@
 // mechanical work: watts × seconds) as the unit of external training load,
 // aggregated into a rolling weekly budget rather than a rigid long-term plan.
 
+import { bestAverageWatts, type PowerFieldsLike } from '@/lib/intervals-api'
+
 export type GovernorStatus = 'vert' | 'orange' | 'rouge' | 'insufficient_data'
 
-export interface KJActivityLike {
+export interface KJActivityLike extends PowerFieldsLike {
   start_date_local?: string
   moving_time?: number
-  average_watts?: number | null
-  weighted_average_watts?: number | null
 }
 
 /** kJ of mechanical work for one session, or null when no power data was recorded. */
 export function sessionKJ(activity: KJActivityLike): number | null {
-  const watts = activity.weighted_average_watts ?? activity.average_watts
-  if (!watts || watts <= 0 || !activity.moving_time || activity.moving_time <= 0) return null
+  const watts = bestAverageWatts(activity)
+  if (!watts || !activity.moving_time || activity.moving_time <= 0) return null
   return (watts * activity.moving_time) / 1000
 }
 

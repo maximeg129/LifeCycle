@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { HeartPulse, Activity, Gauge, MessageCircle, Smile } from 'lucide-react'
+import { HeartPulse, Activity, Gauge, MessageCircle, Smile, Moon } from 'lucide-react'
 import { useGovernor } from './use-governor'
 import type { Signal } from './governor-types'
 import type { GovernorStatus } from './load-types'
@@ -20,6 +20,7 @@ const SIGNAL_ROWS: { key: keyof ReturnType<typeof useGovernor>['signals']; label
   { key: 'effortHrDrift', label: 'Dérive FC à l’effort', icon: Gauge },
   { key: 'rpe', label: 'RPE moyen (tendance)', icon: MessageCircle },
   { key: 'feelings', label: 'Sensations & motivation', icon: Smile },
+  { key: 'sleepRecovery', label: 'Sommeil & récup. (Vie & Santé)', icon: Moon },
 ]
 
 function signalDot(signal: Signal): string {
