@@ -33,6 +33,42 @@ export interface ApplyKmDeltaResult {
   componentsUpdated: number
 }
 
+export interface ActivityKmLike {
+  gear_id?: string
+  start_date_local?: string
+  distance?: number // meters
+}
+
+/**
+ * Ground-truth km delta for one bike since its last sync: sums the real
+ * distance of activities tagged with its linked gear_id, rather than
+ * trusting Intervals.icu's own /athlete `bikes[].distance` rollup.
+ *
+ * Confirmed via a live debug dump: that rollup field undercounts bikes with
+ * activities synced directly from Wahoo (bypassing Strava) — one bike
+ * matched Intervals.icu's own website exactly, two others were tens of
+ * thousands of km behind it. Individual activities (which do carry gear_id
+ * regardless of sync source) are the reliable ground truth.
+ *
+ * On a bike's first-ever sync (sinceDateExclusive is null), sums every
+ * matching activity in the fetched window — bounded by that window, so it
+ * can't retroactively double-count years of history. On every sync after
+ * that, only activities strictly after the last sync date count.
+ */
+export function computeGearKmFromActivities(activities: ActivityKmLike[], externalGearId: string, sinceDateExclusive: string | null): number {
+  const totalMeters = activities
+    .filter((a) => {
+      if (a.gear_id !== externalGearId) return false
+      if (!a.distance || a.distance <= 0) return false
+      if (sinceDateExclusive && a.start_date_local) {
+        return a.start_date_local.slice(0, 10) > sinceDateExclusive
+      }
+      return true
+    })
+    .reduce((sum, a) => sum + (a.distance || 0), 0)
+  return Math.round(totalMeters / 1000)
+}
+
 export interface KmDeltaPlan<TComponent, TChain> {
   /** The currently-mounted chain for this bike, or null if none/no rotation chains configured. */
   chainToUpdate: TChain | null

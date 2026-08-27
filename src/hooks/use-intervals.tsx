@@ -31,7 +31,7 @@ import { FirestorePermissionError } from '@/firebase/errors'
 import type { IntervalsAthlete, IntervalsActivity, IntervalsWellness, IntervalsFitnessDay } from '@/lib/intervals-api'
 import type { Bike, BikeComponent } from '@/components/cycling/gear-types'
 import type { Chain } from '@/components/cycling/chain-types'
-import { applyKmDeltaToBikeDependents } from '@/components/cycling/km-sync'
+import { applyKmDeltaToBikeDependents, computeGearKmFromActivities } from '@/components/cycling/km-sync'
 
 // ── Credentials ──────────────────────────────────────────────────────
 
@@ -150,7 +150,7 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
     setActivities(activitiesData)
     setWellness(wellnessData)
     setFitness(fitnessData)
-    return athleteData
+    return { athleteData, activitiesData }
   }, [])
 
   // Initial/background load: reads only, never writes — km deltas are only
@@ -171,7 +171,7 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
 
     setIsSyncing(true)
     try {
-      const athleteData = await fetchReads(creds.athleteId, creds.apiKey)
+      const { activitiesData } = await fetchReads(creds.athleteId, creds.apiKey)
       setError(null)
 
       // Apply km deltas to bikes/components/chains — the write side of
@@ -181,7 +181,6 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
       let totalNewKm = 0
 
       if (user && db) {
-        const externalBikes = (athleteData.bikes || []).filter((b) => !b.retired)
         const [bikesSnap, componentsSnap, chainsSnap] = await Promise.all([
           getDocs(collection(db, `users/${user.uid}/bikes`)),
           getDocs(collection(db, `users/${user.uid}/components`)),
@@ -194,15 +193,17 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
 
         for (const bike of bikes) {
           if (!bike.externalGearId) continue
-          const externalGear = externalBikes.find((g) => g.id === bike.externalGearId)
-          if (!externalGear || externalGear.distance == null) continue
 
-          const externalTotalKm = Math.round(externalGear.distance / 1000)
-          const delta = externalTotalKm - bike.totalKm
+          // Ground truth: sum real activity distances tagged with this
+          // gear_id, not Intervals.icu's own gear.distance rollup — that
+          // field has been confirmed (via live debug data) to undercount
+          // gear whose rides sync directly from Wahoo, bypassing Strava.
+          const delta = computeGearKmFromActivities(activitiesData, bike.externalGearId, bike.lastSyncDate)
           if (delta <= 0) continue
 
+          const newTotalKm = bike.totalKm + delta
           const bikeRef = doc(db, `users/${user.uid}/bikes`, bike.id)
-          await updateDoc(bikeRef, { totalKm: externalTotalKm, lastSyncDate: todayStr }).catch(() => {
+          await updateDoc(bikeRef, { totalKm: newTotalKm, lastSyncDate: todayStr }).catch(() => {
             errorEmitter.emit('permission-error', new FirestorePermissionError({ path: bikeRef.path, operation: 'update' }))
           })
           bikesUpdated++
