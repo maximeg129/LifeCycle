@@ -94,7 +94,6 @@ export function GearTab() {
     chains,
     athleteId: intervalsSettings?.intervalsAthleteId || null,
     apiKey: intervalsSettings?.intervalsApiKey || null,
-    externalBikes,
   })
 
   // Local state

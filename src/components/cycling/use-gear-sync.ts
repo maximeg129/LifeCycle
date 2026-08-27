@@ -9,7 +9,7 @@ import { FirestorePermissionError } from '@/firebase/errors'
 import { useToast } from '@/hooks/use-toast'
 import type { Bike, BikeComponent } from './gear-types'
 import type { Chain } from './chain-types'
-import type { IntervalsGear } from '@/lib/intervals-api'
+import { fetchFreshAthlete } from '@/hooks/use-intervals'
 import { applyKmDeltaToBikeDependents } from './km-sync'
 
 interface UseGearSyncParams {
@@ -18,10 +18,9 @@ interface UseGearSyncParams {
   chains?: Chain[]
   athleteId: string | null
   apiKey: string | null
-  externalBikes: IntervalsGear[]
 }
 
-export function useGearSync({ bikes, components, chains = [], athleteId, apiKey, externalBikes }: UseGearSyncParams) {
+export function useGearSync({ bikes, components, chains = [], athleteId, apiKey }: UseGearSyncParams) {
   const { user } = useUser()
   const db = useFirestore()
   const { toast } = useToast()
@@ -33,16 +32,25 @@ export function useGearSync({ bikes, components, chains = [], athleteId, apiKey,
    *   newTotalKm = externalGear.distance (meters -> km)
    *   delta = newTotalKm - bike.totalKm
    *   if delta > 0 -> update bike + all active components by delta
+   *
+   * Fetches the athlete profile itself at click time rather than trusting a
+   * prop from the caller — the caller's own useAthlete() instance is easily
+   * stale (e.g. a sibling "Synchroniser" button elsewhere on the page
+   * refreshes a *different* useAthlete() call entirely), which used to make
+   * this silently sync against outdated gear distances.
    */
   const syncKm = useCallback(async () => {
     if (!user || !db || !athleteId || !apiKey) return null
-    if (externalBikes.length === 0) {
-      toast({ title: 'Aucun velo externe', description: 'Rechargez la page pour recuperer les velos Intervals.icu.' })
-      return null
-    }
 
     setIsSyncing(true)
     try {
+      const athlete = await fetchFreshAthlete(athleteId, apiKey)
+      const externalBikes = (athlete.bikes || []).filter(b => !b.retired)
+      if (externalBikes.length === 0) {
+        toast({ title: 'Aucun velo externe', description: 'Aucun velo actif trouve sur Intervals.icu.' })
+        return null
+      }
+
       const today = format(new Date(), 'yyyy-MM-dd')
       let bikesUpdated = 0
       let componentsUpdated = 0
@@ -102,7 +110,7 @@ export function useGearSync({ bikes, components, chains = [], athleteId, apiKey,
     } finally {
       setIsSyncing(false)
     }
-  }, [user, db, athleteId, apiKey, bikes, components, chains, externalBikes, toast])
+  }, [user, db, athleteId, apiKey, bikes, components, chains, toast])
 
   // Link a local bike to an Intervals.icu gear ID
   const linkBike = useCallback(async (bikeId: string, externalGearId: string | null) => {

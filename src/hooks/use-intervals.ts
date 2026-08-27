@@ -47,6 +47,16 @@ async function fetchProxy<T>(path: string, athleteId: string, apiKey: string): P
   return res.json()
 }
 
+/**
+ * One-shot athlete fetch for call sites that need guaranteed-fresh data at
+ * the moment of the call (e.g. useGearSync.syncKm), rather than whatever a
+ * `useAthlete()` instance elsewhere in the tree happens to have cached.
+ * Exported so features don't each grow their own ad-hoc fetch — reuse this.
+ */
+export async function fetchFreshAthlete(athleteId: string, apiKey: string): Promise<IntervalsAthlete> {
+  return fetchProxy<IntervalsAthlete>('/api/intervals/athlete', athleteId, apiKey)
+}
+
 // ── Hook : Profil athlète (CTL/ATL/TSB/FTP) ─────────────────────────
 
 export function useAthlete() {
