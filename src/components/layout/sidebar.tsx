@@ -24,6 +24,7 @@ import { signOut } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
 import { useOverdueCounts } from './use-overdue-counts'
 import { CommandPalette } from '@/components/search/command-palette'
+import { APP_VERSION, formatVersionLabel } from '@/lib/version'
 
 const navItems = [
   { name: 'Cyclisme', href: '/cycling', icon: Bike },
@@ -130,6 +131,9 @@ export function AppNavigation() {
             <LogOut className="w-[18px] h-[18px] shrink-0" />
             <span className="text-[13.5px] font-medium">Déconnexion</span>
           </button>
+          <p className="px-3 pt-2 text-[10px] font-mono text-muted-foreground/40 select-text">
+            {formatVersionLabel(APP_VERSION.gitSha, APP_VERSION.buildTime)}
+          </p>
         </div>
       </aside>
 
@@ -192,6 +196,9 @@ export function AppNavigation() {
                     )
                   })}
                 </nav>
+                <p className="px-6 pt-4 text-[10px] font-mono text-muted-foreground/40 select-text">
+                  {formatVersionLabel(APP_VERSION.gitSha, APP_VERSION.buildTime)}
+                </p>
               </SheetContent>
             </Sheet>
           </div>
