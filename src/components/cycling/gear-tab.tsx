@@ -307,13 +307,14 @@ export function GearTab() {
                                 {externalBikes.map(g => (
                                   <SelectItem key={g.id} value={g.id}>
                                     {g.name || `${g.brand_name} ${g.model_name}`}
-                                    {g.distance ? ` (${Math.round(g.distance / 1000)} km)` : ''}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                             {bike.lastSyncDate && (
-                              <span className="text-[10px] text-muted-foreground">Sync : {bike.lastSyncDate}</span>
+                              <span className="text-[10px] text-muted-foreground" title="Date du dernier clic sur Synchroniser — n'indique pas si les km ont bougé ce jour-là">
+                                Dernier sync : {bike.lastSyncDate}
+                              </span>
                             )}
                           </div>
                         )}
