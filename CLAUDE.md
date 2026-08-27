@@ -15,7 +15,7 @@
 | IA | Claude (`@anthropic-ai/sdk`, modèle `claude-haiku-4-5`) |
 | Charts | Recharts |
 | Dates | date-fns avec locale `fr` |
-| Validation | Zod + react-hook-form |
+| Validation | Zod (schémas des flows IA) — les formulaires de dialogue utilisent `FormData` brut + validation manuelle, pas react-hook-form (dépendance présente, câblée uniquement dans le primitif shadcn `ui/form.tsx`, jamais importée ailleurs — voir AUDIT.md) |
 
 ## Structure des Fichiers
 
@@ -172,6 +172,44 @@ setDoc(ref, data).catch(async () => {
   errorEmitter.emit('permission-error', permissionError)
 })
 ```
+
+### Dialogues CRUD ("add X" / "edit X")
+
+Pattern partagé pour tout dialogue d'ajout/édition (voir AUDIT.md/PLAN.md section 2.2 — 19 dialogues
+répétaient ce squelette avant cette extraction) :
+
+```tsx
+import { CrudDialogShell } from '@/components/ui/crud-dialog-shell'
+import { useCrudSubmit } from '@/hooks/use-crud-submit'
+
+const [open, setOpen] = useState(false)
+const { isSaving, submit } = useCrudSubmit()
+
+const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  e.preventDefault()
+  const fd = new FormData(e.currentTarget)
+  // ... validation manuelle + construction de `data` ...
+  const ref = doc(collection(db, path))
+  const ok = await submit(() => setDoc(ref, data), { path: ref.path, operation: 'create', requestResourceData: data })
+  if (ok) { setOpen(false); toast({ title: '...' }) }
+}
+
+return (
+  <CrudDialogShell title="..." trigger={<Button>...</Button>} open={open} onOpenChange={setOpen} isSaving={isSaving} onSubmit={handleSubmit}>
+    {/* champs du formulaire */}
+  </CrudDialogShell>
+)
+```
+
+`useCrudSubmit` absorbe le `setIsSaving(true)/try/catch { errorEmitter... }/finally` identique
+partout — il ne fait AUCUNE hypothèse sur ce que fait `action()` (un seul `setDoc`, plusieurs
+écritures sur des collections différentes, calcul d'un agrégat...). `CrudDialogShell` absorbe le
+chrome `Dialog/Header/Footer` + boutons Annuler/Enregistrer, avec `trigger` optionnel (omis si un
+parent contrôle `open` lui-même, ex. un dialogue d'édition ouvert depuis un item de liste) et
+`disableSubmit` pour désactiver la soumission sans toucher au bouton Annuler (ex. données externes
+requises absentes). Les champs du formulaire et l'écriture Firestore elle-même restent propres à
+chaque dialogue — c'est justement ce qui varie trop pour être généralisé sans forcer une forme qui
+ne colle pas partout.
 
 ## Flows IA (Claude)
 
