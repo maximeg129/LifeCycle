@@ -43,6 +43,7 @@ export interface CrudDialogShellProps {
   onOpenChange: (open: boolean) => void
   isSaving: boolean
   submitLabel?: string
+  cancelLabel?: string
   /** Disables the submit button without affecting Annuler — e.g. a required external list (bikes...) is empty. */
   disableSubmit?: boolean
   onSubmit: (e: FormEvent<HTMLFormElement>) => void
@@ -58,6 +59,7 @@ export function CrudDialogShell({
   onOpenChange,
   isSaving,
   submitLabel = 'Enregistrer',
+  cancelLabel = 'Annuler',
   disableSubmit,
   onSubmit,
   children,
@@ -74,7 +76,7 @@ export function CrudDialogShell({
         <form onSubmit={onSubmit} className="space-y-4">
           {children}
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>{cancelLabel}</Button>
             <Button type="submit" disabled={isSaving || disableSubmit}>
               {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               {submitLabel}

@@ -7,14 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger
-} from '@/components/ui/dialog'
-import { CheckCircle2, Plus, Clock, Loader2, Calendar } from 'lucide-react'
+import { CrudDialogShell } from '@/components/ui/crud-dialog-shell'
+import { CheckCircle2, Plus, Clock, Calendar } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -65,51 +59,51 @@ export function TasksTab() {
   return (
     <div className="space-y-8">
       <div className="flex justify-end">
-        <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-          <DialogTrigger asChild>
+        <CrudDialogShell
+          title="Nouvelle routine"
+          trigger={
             <Button className="rounded-full h-12 px-6 bg-primary text-primary-foreground font-bold shadow-lg shadow-primary/20 transition-all hover:scale-105">
               <Plus className="w-5 h-5 mr-2" /> Nouvelle tâche
             </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[480px] rounded-3xl p-8 border-none shadow-3xl">
-            <DialogHeader><DialogTitle className="text-2xl font-bold">Nouvelle routine</DialogTitle></DialogHeader>
-            <form onSubmit={handleAddTask} className="space-y-6 pt-4">
-              <div className="space-y-2">
-                <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Tâche</Label>
-                <Input name="taskName" placeholder="ex: Nettoyer la machine à café..." className="rounded-2xl bg-secondary/50 border-none h-14 px-5" required />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Pièce</Label>
-                  <Select value={room} onValueChange={setRoom}>
-                    <SelectTrigger className="rounded-2xl h-14"><SelectValue /></SelectTrigger>
-                    <SelectContent>{ROOMS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Priorité</Label>
-                  <Select value={priority} onValueChange={(v) => setPriority(v as Task['priority'])}>
-                    <SelectTrigger className="rounded-2xl h-14"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="low">Basse</SelectItem><SelectItem value="medium">Moyenne</SelectItem><SelectItem value="high">Haute</SelectItem></SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Durée (min)</Label>
-                  <Input name="duration" type="number" defaultValue={15} className="rounded-2xl h-14" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Récurrence (jours)</Label>
-                  <Input name="recurrenceDays" type="number" defaultValue={7} className="rounded-2xl h-14" />
-                </div>
-              </div>
-              <Button type="submit" className="w-full h-14 rounded-2xl font-bold bg-primary text-white" disabled={isSaving}>
-                {isSaving ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : 'Planifier'}
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+          }
+          open={isAddOpen}
+          onOpenChange={setIsAddOpen}
+          isSaving={isSaving}
+          submitLabel="Planifier"
+          onSubmit={handleAddTask}
+          contentClassName="sm:max-w-[480px] rounded-3xl p-8 border-none shadow-3xl"
+        >
+          <div className="space-y-2">
+            <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Tâche</Label>
+            <Input name="taskName" placeholder="ex: Nettoyer la machine à café..." className="rounded-2xl bg-secondary/50 border-none h-14 px-5" required />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Pièce</Label>
+              <Select value={room} onValueChange={setRoom}>
+                <SelectTrigger className="rounded-2xl h-14"><SelectValue /></SelectTrigger>
+                <SelectContent>{ROOMS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Priorité</Label>
+              <Select value={priority} onValueChange={(v) => setPriority(v as Task['priority'])}>
+                <SelectTrigger className="rounded-2xl h-14"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="low">Basse</SelectItem><SelectItem value="medium">Moyenne</SelectItem><SelectItem value="high">Haute</SelectItem></SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Durée (min)</Label>
+              <Input name="duration" type="number" defaultValue={15} className="rounded-2xl h-14" />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Récurrence (jours)</Label>
+              <Input name="recurrenceDays" type="number" defaultValue={7} className="rounded-2xl h-14" />
+            </div>
+          </div>
+        </CrudDialogShell>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

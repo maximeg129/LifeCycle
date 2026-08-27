@@ -5,21 +5,12 @@ import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog'
-import { Plus, Loader2 } from 'lucide-react'
+import { CrudDialogShell } from '@/components/ui/crud-dialog-shell'
+import { Plus } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useUser, useFirestore } from '@/firebase'
 import { doc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
-import { errorEmitter } from '@/firebase/error-emitter'
-import { FirestorePermissionError } from '@/firebase/errors'
+import { useCrudSubmit } from '@/hooks/use-crud-submit'
 import { getDayId } from './lifestyle-types'
 
 export function LogMetricDialog() {
@@ -27,7 +18,7 @@ export function LogMetricDialog() {
   const { user } = useUser()
   const db = useFirestore()
   const [open, setOpen] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
+  const { isSaving, submit } = useCrudSubmit()
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -54,7 +45,6 @@ export function LogMetricDialog() {
       return
     }
 
-    setIsSaving(true)
     const dayId = getDayId(date)
     const metricData: Record<string, unknown> = {
       userId: user.uid,
@@ -70,76 +60,65 @@ export function LogMetricDialog() {
 
     const ref = doc(db, `users/${user.uid}/healthMetrics/${dayId}`)
 
-    try {
-      await setDoc(ref, metricData, { merge: true })
+    const ok = await submit(
+      () => setDoc(ref, metricData, { merge: true }),
+      { path: ref.path, operation: 'update', requestResourceData: metricData }
+    )
+    if (ok) {
       setOpen(false)
       toast({ title: 'Mesures enregistrées', description: format(date, 'dd/MM/yyyy') })
-    } catch {
-      errorEmitter.emit(
-        'permission-error',
-        new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: metricData })
-      )
-    } finally {
-      setIsSaving(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
+    <CrudDialogShell
+      title="Journal du jour"
+      description="Toutes les mesures sont optionnelles — renseignez ce que vous avez."
+      trigger={
         <Button className="rounded-full h-11 px-6 font-bold gap-2">
           <Plus className="w-4 h-4" /> Enregistrer mes mesures
         </Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Journal du jour</DialogTitle>
-          <DialogDescription>Toutes les mesures sont optionnelles — renseignez ce que vous avez.</DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="metric-date">Date</Label>
-            <Input id="metric-date" name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="sleepHours">Sommeil (h)</Label>
-              <Input id="sleepHours" name="sleepHours" type="number" min={0} max={24} step={0.1} placeholder="7.5" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="sleepQuality">Qualité (%)</Label>
-              <Input id="sleepQuality" name="sleepQuality" type="number" min={0} max={100} placeholder="85" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="hrv">HRV (ms)</Label>
-              <Input id="hrv" name="hrv" type="number" min={0} placeholder="65" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="stressScore">Stress (0-100)</Label>
-              <Input id="stressScore" name="stressScore" type="number" min={0} max={100} placeholder="25" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="mood">Humeur (0-10)</Label>
-              <Input id="mood" name="mood" type="number" min={0} max={10} placeholder="8" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="bedTime">Heure de coucher</Label>
-              <Input id="bedTime" name="bedTime" type="time" />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>Annuler</Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Enregistrer
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+      }
+      open={open}
+      onOpenChange={setOpen}
+      isSaving={isSaving}
+      onSubmit={handleSubmit}
+      contentClassName="max-w-md"
+    >
+      <div className="space-y-2">
+        <Label htmlFor="metric-date">Date</Label>
+        <Input id="metric-date" name="date" type="date" defaultValue={format(new Date(), 'yyyy-MM-dd')} />
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="sleepHours">Sommeil (h)</Label>
+          <Input id="sleepHours" name="sleepHours" type="number" min={0} max={24} step={0.1} placeholder="7.5" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="sleepQuality">Qualité (%)</Label>
+          <Input id="sleepQuality" name="sleepQuality" type="number" min={0} max={100} placeholder="85" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="hrv">HRV (ms)</Label>
+          <Input id="hrv" name="hrv" type="number" min={0} placeholder="65" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="stressScore">Stress (0-100)</Label>
+          <Input id="stressScore" name="stressScore" type="number" min={0} max={100} placeholder="25" />
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="mood">Humeur (0-10)</Label>
+          <Input id="mood" name="mood" type="number" min={0} max={10} placeholder="8" />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="bedTime">Heure de coucher</Label>
+          <Input id="bedTime" name="bedTime" type="time" />
+        </div>
+      </div>
+    </CrudDialogShell>
   )
 }

@@ -2,18 +2,10 @@
 
 import React, { useState } from 'react'
 import { format } from 'date-fns'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogDescription,
-} from '@/components/ui/dialog'
+import { CrudDialogShell } from '@/components/ui/crud-dialog-shell'
 import {
   Select,
   SelectContent,
@@ -21,12 +13,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useUser, useFirestore } from '@/firebase'
 import { collection, doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
-import { errorEmitter } from '@/firebase/error-emitter'
-import { FirestorePermissionError } from '@/firebase/errors'
+import { useCrudSubmit } from '@/hooks/use-crud-submit'
 import {
   type BikeComponent,
   COMPONENT_CATEGORY_LABELS,
@@ -51,14 +41,13 @@ export function ReplaceComponentDialog({ component, open, onOpenChange }: Props)
   const { toast } = useToast()
   const { user } = useUser()
   const db = useFirestore()
-  const [isSaving, setIsSaving] = useState(false)
+  const { isSaving, submit } = useCrudSubmit()
   const [retireReason, setRetireReason] = useState('worn')
 
-  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!user || !db) return
 
-    setIsSaving(true)
     const fd = new FormData(e.currentTarget)
     const today = format(new Date(), 'yyyy-MM-dd')
 
@@ -99,126 +88,113 @@ export function ReplaceComponentDialog({ component, open, onOpenChange }: Props)
 
     const newRef = doc(collection(db, `users/${user.uid}/components`))
 
-    Promise.all([
-      updateDoc(oldRef, retireData),
-      setDoc(newRef, newCompData),
-    ])
-      .then(() => {
-        onOpenChange(false)
-        toast({
-          title: 'Composant remplace',
-          description: `${COMPONENT_CATEGORY_LABELS[component.category]} : ancien retire, nouveau installe.`,
-        })
+    const ok = await submit(
+      () => Promise.all([
+        updateDoc(oldRef, retireData),
+        setDoc(newRef, newCompData),
+      ]).then(() => {}),
+      { path: newRef.path, operation: 'create', requestResourceData: newCompData }
+    )
+    if (ok) {
+      onOpenChange(false)
+      toast({
+        title: 'Composant remplace',
+        description: `${COMPONENT_CATEGORY_LABELS[component.category]} : ancien retire, nouveau installe.`,
       })
-      .catch(() => {
-        errorEmitter.emit(
-          'permission-error',
-          new FirestorePermissionError({ path: newRef.path, operation: 'create', requestResourceData: newCompData })
-        )
-      })
-      .finally(() => setIsSaving(false))
+    }
   }
 
   const today = format(new Date(), 'yyyy-MM-dd')
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Remplacer : {COMPONENT_CATEGORY_LABELS[component.category]}</DialogTitle>
-          <DialogDescription>
-            L&apos;ancien composant ({component.brand} {component.model}, {component.currentKm} km) sera retire.
-          </DialogDescription>
-        </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Retire reason */}
+    <CrudDialogShell
+      title={`Remplacer : ${COMPONENT_CATEGORY_LABELS[component.category]}`}
+      description={`L'ancien composant (${component.brand} ${component.model}, ${component.currentKm} km) sera retire.`}
+      open={open}
+      onOpenChange={onOpenChange}
+      isSaving={isSaving}
+      submitLabel="Remplacer"
+      onSubmit={handleSubmit}
+      contentClassName="max-w-lg max-h-[90vh] overflow-y-auto"
+    >
+      {/* Retire reason */}
+      <div className="space-y-2">
+        <Label>Raison du remplacement</Label>
+        <Select value={retireReason} onValueChange={setRetireReason}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {RETIRE_REASONS.map(r => (
+              <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="border-t border-border pt-4">
+        <h4 className="text-sm font-semibold mb-3">Nouveau composant</h4>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="replace-brand">Marque</Label>
+          <Input id="replace-brand" name="brand" defaultValue={component.brand} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="replace-model">Modele</Label>
+          <Input id="replace-model" name="model" defaultValue={component.model} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="replace-threshold">Seuil remplacement (km)</Label>
+          <Input
+            id="replace-threshold"
+            name="thresholdKm"
+            type="number"
+            min={0}
+            defaultValue={component.thresholdKm}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="replace-price">Prix</Label>
+          <Input id="replace-price" name="purchasePrice" type="number" min={0} step={0.01} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="replace-purchase-date">Date d&apos;achat</Label>
+          <Input id="replace-purchase-date" name="purchaseDate" type="date" defaultValue={today} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="replace-retailer">Revendeur</Label>
+          <Input id="replace-retailer" name="retailer" />
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="replace-url">Lien produit</Label>
+        <Input id="replace-url" name="productUrl" type="url" placeholder="https://..." />
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label htmlFor="replace-warranty">Garantie (mois)</Label>
+          <Input id="replace-warranty" name="warrantyMonths" type="number" min={0} />
+        </div>
+        {(component.category === 'tire_front' || component.category === 'tire_rear') && (
           <div className="space-y-2">
-            <Label>Raison du remplacement</Label>
-            <Select value={retireReason} onValueChange={setRetireReason}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {RETIRE_REASONS.map(r => (
-                  <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="replace-tire-width">Largeur pneu (mm)</Label>
+            <Input id="replace-tire-width" name="tireWidth" type="number" min={20} max={80} defaultValue={component.tireWidth || 28} />
           </div>
+        )}
+      </div>
 
-          <div className="border-t border-border pt-4">
-            <h4 className="text-sm font-semibold mb-3">Nouveau composant</h4>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="replace-brand">Marque</Label>
-              <Input id="replace-brand" name="brand" defaultValue={component.brand} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="replace-model">Modele</Label>
-              <Input id="replace-model" name="model" defaultValue={component.model} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="replace-threshold">Seuil remplacement (km)</Label>
-              <Input
-                id="replace-threshold"
-                name="thresholdKm"
-                type="number"
-                min={0}
-                defaultValue={component.thresholdKm}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="replace-price">Prix</Label>
-              <Input id="replace-price" name="purchasePrice" type="number" min={0} step={0.01} />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="replace-purchase-date">Date d&apos;achat</Label>
-              <Input id="replace-purchase-date" name="purchaseDate" type="date" defaultValue={today} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="replace-retailer">Revendeur</Label>
-              <Input id="replace-retailer" name="retailer" />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="replace-url">Lien produit</Label>
-            <Input id="replace-url" name="productUrl" type="url" placeholder="https://..." />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="replace-warranty">Garantie (mois)</Label>
-              <Input id="replace-warranty" name="warrantyMonths" type="number" min={0} />
-            </div>
-            {(component.category === 'tire_front' || component.category === 'tire_rear') && (
-              <div className="space-y-2">
-                <Label htmlFor="replace-tire-width">Largeur pneu (mm)</Label>
-                <Input id="replace-tire-width" name="tireWidth" type="number" min={20} max={80} defaultValue={component.tireWidth || 28} />
-              </div>
-            )}
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="replace-notes">Notes</Label>
-            <Textarea id="replace-notes" name="notes" rows={2} />
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-            <Button type="submit" disabled={isSaving}>
-              {isSaving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              Remplacer
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+      <div className="space-y-2">
+        <Label htmlFor="replace-notes">Notes</Label>
+        <Textarea id="replace-notes" name="notes" rows={2} />
+      </div>
+    </CrudDialogShell>
   )
 }
