@@ -241,6 +241,25 @@ export class IntervalsService {
     return this.fetchIntervals<IntervalsActivity[]>(`/activities?${params}`);
   }
 
+  /**
+   * Same as getActivities, but WITHOUT the `fields=` sparse-fieldset param.
+   * The `gear_id` mixup earlier proved this API silently drops any field
+   * name it doesn't recognize from a `fields=` list rather than erroring —
+   * so a nested field like `gear` may not survive that sparse-fieldset path
+   * even under its correct name (unverified, and expensive to re-verify
+   * live). This method sidesteps the guesswork entirely for the one caller
+   * that actually needs `gear.id`: it requests the full, unfiltered
+   * response shape, which is the exact shape a live debug dump already
+   * confirmed does carry `gear: { id, ... }` correctly. Costs a heavier
+   * payload — acceptable since it's only called once per explicit sync
+   * click, not on every page load.
+   */
+  async getActivitiesRaw(oldest: string, newest?: string): Promise<IntervalsActivity[]> {
+    const params = new URLSearchParams({ oldest });
+    if (newest) params.set('newest', newest);
+    return this.fetchIntervals<IntervalsActivity[]>(`/activities?${params}`);
+  }
+
 
 
   /** Données wellness entre deux dates */

@@ -24,7 +24,10 @@ export async function GET(request: NextRequest) {
       fetch(baseUrl, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
       fetch(`${baseUrl}/wellness/${today}`, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
       fetch(`${baseUrl}/activities?oldest=${oldest30}&newest=${today}`, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
-      fetch(`${baseUrl}/activities?oldest=${fullHistoryOldest}&newest=${today}&fields=id,gear,distance,start_date_local`, { headers })
+      // No `fields=` param, deliberately — mirrors syncAll()'s raw=1 fetch
+      // exactly, after the sparse-fieldset param was caught silently
+      // dropping both `gear_id` and (unverified) `gear`.
+      fetch(`${baseUrl}/activities?oldest=${fullHistoryOldest}&newest=${today}`, { headers })
         .then(async r => ({ _status: r.status, _ok: r.ok, _body: await r.json().catch(() => null) }))
         .catch(e => ({ _error: e.message })),
     ])
@@ -78,6 +81,9 @@ export async function GET(request: NextRequest) {
         _requestOldest: fullHistoryOldest,
         _httpStatus: (fullHistoryRes as { _status?: number })?._status ?? null,
         _length: Array.isArray((fullHistoryRes as { _body?: unknown })._body) ? (fullHistoryRes as { _body: unknown[] })._body.length : null,
+        _firstGear: Array.isArray((fullHistoryRes as { _body?: unknown })._body) && ((fullHistoryRes as { _body: Array<{ gear?: unknown }> })._body.length > 0)
+          ? (fullHistoryRes as { _body: Array<{ gear?: unknown }> })._body[0].gear
+          : null,
         dateRangeReturned: dateRange,
         gearTotals,
       },

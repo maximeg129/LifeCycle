@@ -12,6 +12,8 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const oldest = searchParams.get('oldest')
   const newest = searchParams.get('newest')
+  // Used only by the gear-km reconciliation fetch — see getActivitiesRaw().
+  const raw = searchParams.get('raw') === '1'
 
   if (!oldest) {
     return NextResponse.json({ error: 'Missing oldest parameter' }, { status: 400 })
@@ -19,7 +21,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const service = new IntervalsService(athleteId, apiKey)
-    const data = await service.getActivities(oldest, newest ?? undefined)
+    const data = raw
+      ? await service.getActivitiesRaw(oldest, newest ?? undefined)
+      : await service.getActivities(oldest, newest ?? undefined)
     return NextResponse.json(data)
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'

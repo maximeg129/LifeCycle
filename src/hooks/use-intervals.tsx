@@ -213,8 +213,14 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
           // means the value always matches what Intervals.icu's own site
           // shows, and self-heals any drift instead of requiring a manual
           // one-time correction.
+          // `raw=1` skips the `fields=` sparse-fieldset param entirely — the
+          // API has already been caught silently dropping a field name it
+          // doesn't recognize from that param (the gear_id/gear mixup), so
+          // this fetch asks for the full, unfiltered shape instead of
+          // trusting an unverified sparse selector for the one field this
+          // computation actually depends on.
           const fullHistory = await fetchProxy<IntervalsActivity[]>(
-            `/api/intervals/activities?oldest=${GEAR_HISTORY_OLDEST}&newest=${todayStr}`,
+            `/api/intervals/activities?oldest=${GEAR_HISTORY_OLDEST}&newest=${todayStr}&raw=1`,
             creds.athleteId,
             creds.apiKey
           )
