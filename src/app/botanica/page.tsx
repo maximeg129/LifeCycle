@@ -402,7 +402,7 @@ export default function BotanicaPage() {
       <main className="p-6 md:p-12 max-w-7xl mx-auto space-y-12">
         <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div className="space-y-1">
-            <h2 className="text-sm font-bold text-primary uppercase tracking-widest opacity-70">Botanica</h2>
+            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Botanica</h2>
             <h1 className="text-4xl md:text-5xl font-bold tracking-tighter text-gradient">Votre jardin d'hiver</h1>
           </div>
           <Button

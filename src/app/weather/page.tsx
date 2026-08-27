@@ -126,6 +126,7 @@ export default function WeatherAssistant() {
       <main className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">
         <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div className="space-y-2">
+            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Météo AI</h2>
             <Badge variant="outline" className="text-accent border-accent/30 gap-1 bg-accent/5 px-3">
               <Sparkles className="w-3 h-3" /> Assistant Prédictif
             </Badge>

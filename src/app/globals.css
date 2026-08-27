@@ -71,6 +71,18 @@
   }
 }
 
+/* ── Échelle de rayons ──────────────────────────────────────────────
+   Convention pour tout nouveau composant (pas une réécriture rétroactive —
+   voir AUDIT.md section 3 pour l'inventaire des valeurs arbitraires
+   existantes) :
+     rounded-lg   (8px)  → éléments interactifs inline (badges, inputs, boutons compacts)
+     rounded-xl   (12px) → boutons pleine taille, petits panneaux
+     rounded-2xl  (16px) → cartes (voir .apple-card, qui utilise 18px pour son cas précis)
+     rounded-3xl  (24px) → dialogues / feuilles modales plein écran
+   Éviter les valeurs arbitraires ad hoc (rounded-[Npx]) sauf besoin réel
+   non couvert par cette échelle.
+   ────────────────────────────────────────────────────────────────── */
+
 /* ── Apple-style card ───────────────────────────────────────────── */
 .apple-card {
   @apply bg-card rounded-[18px] border border-border/60

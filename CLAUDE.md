@@ -110,14 +110,19 @@ Définie dans `src/components/layout/sidebar.tsx`. La nav items list :
 
 ```ts
 const navItems = [
-  { name: 'Cyclisme',       href: '/cycling',          icon: Bike },
-  { name: 'Nutrition',      href: '/nutrition',         icon: CookingPot },
-  { name: 'Météo AI',       href: '/weather',           icon: CloudSun },
-  { name: 'Maison & Plantes', href: '/home-management', icon: Leaf },
-  { name: 'Vie & Santé',    href: '/lifestyle',         icon: HeartPulse },
-  { name: 'Finances',       href: '/finance',           icon: Wallet },
+  { name: 'Cyclisme',    href: '/cycling',         icon: Bike },
+  { name: 'Nutrition',   href: '/nutrition',        icon: CookingPot },
+  { name: 'Météo AI',    href: '/weather',          icon: CloudSun },
+  { name: 'Maison',      href: '/home-management',  icon: Home },
+  { name: 'Botanica',    href: '/botanica',         icon: Flower2 },
+  { name: 'Vie & Santé', href: '/lifestyle',        icon: HeartPulse },
+  { name: 'Finances',    href: '/finance',          icon: Wallet },
 ]
 ```
+
+Note : Maison (tâches récurrentes) et Botanica (plantes) sont deux entrées de nav séparées,
+malgré leur proximité de domaine — voir `AUDIT.md`/`PLAN.md` pour l'analyse de cette scission
+et la recommandation de fusion.
 
 Pour ajouter un module : ajouter une entrée ici + créer `src/app/<route>/page.tsx`.
 
@@ -232,15 +237,27 @@ Variable d'environnement requise : `ANTHROPIC_API_KEY` (déclarée dans `apphost
 .text-gradient     /* Dégradé foreground → foreground/50 */
 ```
 
-### Tokens CSS (dark mode par défaut, `<html class="dark">`)
+### Tokens CSS (thème clair par défaut, bascule sombre via `useTheme()`)
 
-| Token | Valeur dark |
-|-------|-------------|
-| `--background` | Bleu très sombre (#0B0F1A) |
-| `--primary` | Bleu électrique (HSL 230 84% 63%) |
-| `--accent` | Bleu électrique (identique à primary) |
-| `--card` | Identique background |
-| `--border` | Bleu-gris sombre |
+Le thème par défaut d'un nouveau visiteur est **clair** — la classe `.dark` n'est ajoutée à
+`<html>` que si `localStorage['lifecycle-theme'] === 'dark'` (voir le script anti-FOUC dans
+`src/app/layout.tsx` et le hook `src/hooks/use-theme.ts`, basculé depuis `/settings`).
+
+| Token | Valeur claire | Valeur sombre |
+|-------|----------------|----------------|
+| `--background` | #F5F5F7 (gris très clair) | #000000 |
+| `--primary` / `--accent` | #007AFF (bleu système iOS) | #0A84FF |
+| `--card` | #FFFFFF | #1C1C1E |
+| `--border` | #E5E5EA | #3A3A3C |
+
+Palette "Apple HIG" (`src/app/globals.css`), pas la palette bleu-électrique documentée dans une
+version antérieure de ce fichier.
+
+### Échelle de rayons (convention, pas encore appliquée partout — voir AUDIT.md)
+
+`rounded-lg` (interactif inline) → `rounded-xl` (boutons/panneaux) → `rounded-2xl` (cartes) →
+`rounded-3xl` (dialogues plein écran). Éviter les valeurs arbitraires `rounded-[Npx]` pour tout
+nouveau composant.
 
 ### Composants UI disponibles
 
@@ -257,7 +274,7 @@ Charts via Recharts : `BarChart`, `LineChart`, etc. avec wrapper `ChartContainer
 
 - Firebase Auth avec email/password et Google OAuth
 - Après connexion : redirect vers `/home-management`
-- Pages publiques : `/`, `/login`, `/register`, `/pricing`
+- Pages publiques : `/`, `/login`, `/register`
 - Pages protégées : toutes les autres (accès conditionné à `useUser().user`)
 
 ## Commandes

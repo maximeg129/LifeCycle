@@ -53,7 +53,6 @@ export default function LandingPage() {
 
         <div className="hidden md:flex items-center gap-10 text-[13px] font-semibold tracking-wide opacity-70">
           <Link href="#features" className="hover:opacity-100 transition-opacity">Univers</Link>
-          <Link href="/pricing" className="hover:opacity-100 transition-opacity">Tarifs</Link>
           <Link href="/login" className="hover:opacity-100 transition-opacity">Connexion</Link>
           <Button asChild className="rounded-full px-7 bg-foreground text-background hover:bg-foreground/90 font-bold shadow-xl shadow-black/5">
             <Link href="/register">Essai Gratuit</Link>
@@ -111,15 +110,12 @@ export default function LandingPage() {
         <ShieldCheck className="w-16 h-16 mx-auto text-primary/20 mb-12" />
         <h2 className="text-5xl md:text-[80px] font-bold tracking-tighter mb-12 leading-none">Prêt pour le prochain niveau ?</h2>
         <p className="text-xl text-muted-foreground mb-16 max-w-2xl mx-auto leading-relaxed opacity-70">
-          Rejoignez ceux qui ne laissent rien au hasard. LifeCycle est gratuit pour commencer, exceptionnel pour performer.
+          Rejoignez ceux qui ne laissent rien au hasard.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
           <Button asChild size="lg" className="rounded-full h-20 px-16 text-xl font-bold shadow-2xl bg-foreground text-background transition-all hover:scale-[1.03]">
             <Link href="/register">Créer mon compte</Link>
           </Button>
-          <Link href="/pricing" className="text-sm font-bold opacity-60 hover:opacity-100 transition-opacity border-b-2 border-transparent hover:border-foreground pb-1">
-            Voir les offres Premium
-          </Link>
         </div>
       </section>
 
