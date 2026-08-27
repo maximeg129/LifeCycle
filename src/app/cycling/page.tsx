@@ -1,17 +1,15 @@
 "use client"
 
 import React, { useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import { format, subDays, formatDistanceToNow, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar } from 'recharts'
 import {
   Bike,
   Wrench,
@@ -19,25 +17,38 @@ import {
   TrendingUp,
   TrendingDown,
   Activity,
-  AlertTriangle,
-  Settings,
   Timer,
   Flame,
   Droplets,
 } from 'lucide-react'
-import Link from 'next/link'
 import { useAthlete, useActivities, useFitnessChart } from '@/hooks/use-intervals'
-import { GearTab } from '@/components/cycling/gear-tab'
-import { ChainsTab } from '@/components/cycling/chains-tab'
+import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
 import { KJBudgetWidget } from '@/components/cycling/kj-budget-widget'
-import { CoachMemoryTab } from '@/components/cycling/coach-memory-tab'
 import { GovernorWidget } from '@/components/cycling/governor-widget'
 import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
 import { useGovernor } from '@/components/cycling/use-governor'
-import { PowerCurveCard } from '@/components/cycling/power-curve-card'
 import { SyncButton } from '@/components/cycling/sync-button'
 import { PageHeader } from '@/components/ui/page-header'
 import { BrainCircuit } from 'lucide-react'
+
+// Code-split: only the Entraînement tab (the default) ships in the main
+// cycling bundle. The other four tabs — each a self-contained, Firestore-
+// or Recharts-heavy component — load on demand when actually opened. See
+// PLAN.md 2.4 (cycling was the single heaviest page in the app: 459 kB
+// first load, ~4x most other modules, because none of its 5 tabs were
+// split out).
+const PmcTab = dynamic(() => import('@/components/cycling/pmc-tab').then(m => m.PmcTab), {
+  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
+})
+const CoachMemoryTab = dynamic(() => import('@/components/cycling/coach-memory-tab').then(m => m.CoachMemoryTab), {
+  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
+})
+const GearTab = dynamic(() => import('@/components/cycling/gear-tab').then(m => m.GearTab), {
+  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
+})
+const ChainsTab = dynamic(() => import('@/components/cycling/chains-tab').then(m => m.ChainsTab), {
+  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
+})
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
@@ -74,41 +85,6 @@ const newest = format(today, 'yyyy-MM-dd')
 const activitiesOldest = format(subDays(today, 30), 'yyyy-MM-dd')
 const fitnessOldest = format(subDays(today, 84), 'yyyy-MM-dd') // 12 semaines
 
-// ── Chart config ─────────────────────────────────────────────────────
-
-const fitnessChartConfig: ChartConfig = {
-  ctl: { label: 'Fitness (CTL)', color: 'hsl(230, 84%, 63%)' },
-  atl: { label: 'Fatigue (ATL)', color: 'hsl(0, 84%, 63%)' },
-  tsb: { label: 'Forme (TSB)', color: 'hsl(142, 71%, 45%)' },
-}
-
-const loadChartConfig: ChartConfig = {
-  trainingLoad: { label: 'Charge (TSS)', color: 'hsl(230, 84%, 63%)' },
-}
-
-// ── Banner "Non configuré" ───────────────────────────────────────────
-
-function NotConfiguredBanner() {
-  return (
-    <Card className="bg-card/40 border-border border-dashed">
-      <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-        <div className="p-3 rounded-full bg-primary/10 mb-4">
-          <AlertTriangle className="w-8 h-8 text-primary" />
-        </div>
-        <h3 className="text-lg font-semibold mb-2">Intervals.icu non connecté</h3>
-        <p className="text-sm text-muted-foreground mb-4 max-w-md">
-          Configurez votre ID Athlète et clé API dans les réglages pour synchroniser vos données de performance.
-        </p>
-        <Link href="/settings">
-          <Button variant="outline" className="gap-2">
-            <Settings className="w-4 h-4" /> Configurer Intervals.icu
-          </Button>
-        </Link>
-      </CardContent>
-    </Card>
-  )
-}
-
 // ── Loading skeleton ─────────────────────────────────────────────────
 
 function FitnessCardSkeleton() {
@@ -143,35 +119,6 @@ export default function CyclingHub() {
   }, [fitness.data])
 
   const isConfigured = athlete.isConfigured
-
-  // Aggregate weekly load from fitness data
-  const weeklyLoad = useMemo(() => {
-    if (!fitness.data.length) return []
-    const weeks: Record<string, number> = {}
-    for (const day of fitness.data) {
-      // Get Monday of the week
-      const d = parseISO(day.date)
-      const dayOfWeek = d.getDay()
-      const monday = new Date(d)
-      monday.setDate(d.getDate() - ((dayOfWeek + 6) % 7))
-      const key = format(monday, 'dd/MM')
-      weeks[key] = (weeks[key] || 0) + (day.trainingLoad || 0)
-    }
-    return Object.entries(weeks).map(([week, load]) => ({ week, trainingLoad: Math.round(load) }))
-  }, [fitness.data])
-
-  // Chart data for PMC (sample every 3rd day for readability)
-  const fitnessChartData = useMemo(() => {
-    if (!fitness.data.length) return []
-    return fitness.data
-      .filter((_, i) => i % 3 === 0 || i === fitness.data.length - 1)
-      .map(d => ({
-        date: format(parseISO(d.date), 'dd/MM'),
-        ctl: Math.round(d.ctl),
-        atl: Math.round(d.atl),
-        tsb: Math.round(d.tsb),
-      }))
-  }, [fitness.data])
 
   return (
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
@@ -382,72 +329,9 @@ export default function CyclingHub() {
             )}
           </TabsContent>
 
-          {/* ── Tab PMC (Performance Management Chart) ────────────── */}
+          {/* ── Tab PMC (Performance Management Chart) — code-split ── */}
           <TabsContent value="pmc" className="space-y-8">
-            {/* Riegel power-duration curve — independent of Intervals.icu, always available */}
-            <PowerCurveCard />
-
-            {!isConfigured && !athlete.isLoading ? (
-              <NotConfiguredBanner />
-            ) : (
-              <>
-                {/* PMC Line Chart */}
-                <Card className="bg-card/40 border-border">
-                  <CardHeader>
-                    <CardTitle>Courbe de Performance (12 semaines)</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {fitness.isLoading ? (
-                      <Skeleton className="h-[300px] w-full rounded-lg" />
-                    ) : fitnessChartData.length > 0 ? (
-                      <ChartContainer config={fitnessChartConfig} className="h-[300px] w-full">
-                        <LineChart data={fitnessChartData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                          <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                          <ChartTooltip content={<ChartTooltipContent />} />
-                          <Line type="monotone" dataKey="ctl" stroke="var(--color-ctl)" strokeWidth={2} dot={false} name="CTL" />
-                          <Line type="monotone" dataKey="atl" stroke="var(--color-atl)" strokeWidth={2} dot={false} name="ATL" />
-                          <Line type="monotone" dataKey="tsb" stroke="var(--color-tsb)" strokeWidth={2} dot={false} name="TSB" />
-                        </LineChart>
-                      </ChartContainer>
-                    ) : (
-                      <div className="h-[300px] flex items-center justify-center text-sm text-muted-foreground">
-                        Aucune donnée fitness disponible
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* Weekly Load Bar Chart */}
-                <Card className="bg-card/40 border-border">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Flame className="w-5 h-5 text-orange-400" /> Charge hebdomadaire (TSS)
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {fitness.isLoading ? (
-                      <Skeleton className="h-[200px] w-full rounded-lg" />
-                    ) : weeklyLoad.length > 0 ? (
-                      <ChartContainer config={loadChartConfig} className="h-[200px] w-full">
-                        <BarChart data={weeklyLoad}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="week" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                          <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" />
-                          <ChartTooltip content={<ChartTooltipContent />} />
-                          <Bar dataKey="trainingLoad" fill="var(--color-trainingLoad)" radius={[4, 4, 0, 0]} name="TSS" />
-                        </BarChart>
-                      </ChartContainer>
-                    ) : (
-                      <div className="h-[200px] flex items-center justify-center text-sm text-muted-foreground">
-                        Aucune donnée de charge disponible
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </>
-            )}
+            <PmcTab isConfigured={isConfigured} athleteLoading={athlete.isLoading} fitness={fitness} />
           </TabsContent>
 
           {/* ── Tab Mémoire coach (Firestore-backed) ── */}
