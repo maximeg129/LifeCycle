@@ -308,10 +308,15 @@ service cloud.firestore {
         allow delete: if isExistingOwner(userId);
 
         /**
-         * @description Logs for watering/care actions.
-         * @path /users/{userId}/plants/{plantId}/plantActions/{actionId}
+         * @description AI health-analysis history (score, alerts, hydration plan) per scan.
+         * @path /users/{userId}/plants/{plantId}/analyses/{analysisId}
+         *
+         * Renamed from the never-implemented `plantActions` (the app has always
+         * written here as `analyses`, which had no rule at all — every write/read
+         * was silently denied by Firestore's default-deny until this was added;
+         * see AUDIT.md/PLAN.md for the Maison/Botanica merge this was found during).
          */
-        match /plantActions/{actionId} {
+        match /analyses/{analysisId} {
           allow get, list: if isOwner(userId);
           allow create: if isOwner(userId) && hasValidOwnerField(userId) && request.resource.data.plantId == plantId;
           allow update: if isExistingOwner(userId) && isUnchanged('userId') && isUnchanged('plantId');

@@ -13,7 +13,6 @@ import {
   Menu,
   LogOut,
   Home,
-  Flower2,
   Search
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -31,14 +30,15 @@ const navItems = [
   { name: 'Nutrition', href: '/nutrition', icon: CookingPot },
   { name: 'Météo AI', href: '/weather', icon: CloudSun },
   { name: 'Maison', href: '/home-management', icon: Home },
-  { name: 'Botanica', href: '/botanica', icon: Flower2 },
   { name: 'Vie & Santé', href: '/lifestyle', icon: HeartPulse },
   { name: 'Finances', href: '/finance', icon: Wallet },
 ]
 
+// Maison covers both tabs (Tâches / Plantes — see AUDIT.md/PLAN.md section
+// 3.2 for why they were merged back into one module), so its nav badge
+// combines both overdue counts rather than picking one.
 function badgeForHref(href: string, overdueTasks: number, overduePlants: number): number {
-  if (href === '/home-management') return overdueTasks
-  if (href === '/botanica') return overduePlants
+  if (href === '/home-management') return overdueTasks + overduePlants
   return 0
 }
 
@@ -204,9 +204,17 @@ export function AppNavigation() {
           </div>
         </header>
 
-        {/* Bottom nav */}
+        {/* Bottom nav — 4 core destinations (thumb-reach budget) + Réglages.
+            Cyclisme, Nutrition, Maison, Vie & Santé; Météo AI and Finances
+            stay reachable via the "Menu" sheet above. */}
         <nav className="fixed bottom-0 left-0 right-0 h-[72px] bg-background/90 backdrop-blur-2xl border-t border-border/50 z-40 flex items-center justify-around px-2 pb-2 safe-area-bottom">
-          {[navItems[0], navItems[1], navItems[3], navItems[4], { name: 'Réglages', href: '/settings', icon: Settings }].map((item) => {
+          {[
+            navItems.find(i => i.href === '/cycling')!,
+            navItems.find(i => i.href === '/nutrition')!,
+            navItems.find(i => i.href === '/home-management')!,
+            navItems.find(i => i.href === '/lifestyle')!,
+            { name: 'Réglages', href: '/settings', icon: Settings },
+          ].map((item) => {
             const isActive = pathname === item.href
             const badge = badgeForHref(item.href, overdueTasks, overduePlants)
             return (

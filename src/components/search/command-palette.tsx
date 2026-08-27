@@ -7,7 +7,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebas
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
-  Search, Bike, CookingPot, Home, Flower2, HeartPulse, Wallet, CloudSun, Settings, CornerDownLeft,
+  Search, Bike, CookingPot, Home, HeartPulse, Wallet, CloudSun, Settings, CornerDownLeft,
 } from 'lucide-react'
 
 interface ResultItem {
@@ -24,7 +24,6 @@ const PAGES: ResultItem[] = [
   { id: 'page-nutrition', label: 'Nutrition', href: '/nutrition', icon: CookingPot, group: 'Pages' },
   { id: 'page-weather', label: 'Météo AI', href: '/weather', icon: CloudSun, group: 'Pages' },
   { id: 'page-home', label: 'Maison', href: '/home-management', icon: Home, group: 'Pages' },
-  { id: 'page-botanica', label: 'Botanica', href: '/botanica', icon: Flower2, group: 'Pages' },
   { id: 'page-lifestyle', label: 'Vie & Santé', href: '/lifestyle', icon: HeartPulse, group: 'Pages' },
   { id: 'page-finance', label: 'Finances', href: '/finance', icon: Wallet, group: 'Pages' },
   { id: 'page-settings', label: 'Réglages', href: '/settings', icon: Settings, group: 'Pages' },
@@ -33,7 +32,7 @@ const PAGES: ResultItem[] = [
 interface RecipeDoc { title?: string }
 interface TaskDoc { name?: string; room?: string }
 interface BikeDoc { name?: string; brand?: string; model?: string }
-interface PlantDoc { name?: string; species?: string }
+interface PlantDoc { nickname?: string; species?: string }
 
 export function CommandPalette() {
   const router = useRouter()
@@ -100,7 +99,10 @@ export function CommandPalette() {
       if (label) items.push({ id: `bike-${b.id}`, label, sublabel: 'Vélo', href: '/cycling', icon: Bike, group: 'Cyclisme' })
     }
     for (const p of plants || []) {
-      if (p.name) items.push({ id: `plant-${p.id}`, label: p.name, sublabel: p.species || 'Plante', href: '/botanica', icon: Flower2, group: 'Botanica' })
+      // Regression: this used to check/read p.name, but plant documents
+      // store the field as `nickname` — plants never actually showed up
+      // in search results.
+      if (p.nickname) items.push({ id: `plant-${p.id}`, label: p.nickname, sublabel: p.species || 'Plante', href: '/home-management', icon: Home, group: 'Maison' })
     }
     return items
   }, [recipes, tasks, bikes, plants])

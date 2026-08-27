@@ -20,6 +20,14 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_GIT_SHA: gitShortSha(),
     NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
   },
+  // Botanica (plants) merged into Maison as its "Plantes" tab — see
+  // AUDIT.md/PLAN.md section 3.2. Redirect old bookmarks/PWA shortcuts
+  // instead of leaving them 404.
+  async redirects() {
+    return [
+      { source: '/botanica', destination: '/home-management', permanent: true },
+    ];
+  },
   images: {
     remotePatterns: [
       {

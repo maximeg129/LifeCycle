@@ -1,7 +1,6 @@
 "use client"
 
 import React, { useState, useMemo, useRef } from 'react'
-import { AppNavigation } from '@/components/layout/sidebar'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
@@ -10,41 +9,23 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
-  Leaf,
-  Droplets,
-  Plus,
-  Camera,
-  Loader2,
-  Sparkles,
-  Trash2,
-  Calendar,
-  ShoppingBag,
-  AlertTriangle,
-  CheckCircle2,
-  MapPin,
-  Info,
-  Flower2,
-  History,
+  Leaf, Droplets, Plus, Camera, Loader2, Sparkles, Trash2, Calendar,
+  ShoppingBag, AlertTriangle, CheckCircle2, MapPin, Info, Flower2, History,
 } from 'lucide-react'
 import { Line, LineChart, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts'
 import Image from 'next/image'
 import { useToast } from '@/hooks/use-toast'
 import { identifyPlant } from '@/ai/flows/identify-plant-flow'
 import type { IdentifyPlantOutput } from '@/ai/flows/identify-plant-flow'
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
-import { collection, doc, setDoc, deleteDoc, serverTimestamp, Timestamp, query, orderBy } from 'firebase/firestore'
-import { format, differenceInDays, addDays } from 'date-fns'
+import { format, differenceInDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
+import { usePlants, usePlantAnalyses, type Plant } from './use-plants'
+import { getDaysUntilWatering, getHealthColor, getHealthLabel, isAnalysisOverdue } from './plant-types'
 
-// --- Utilities ---
+const LOCATIONS = ['Salon', 'Cuisine', 'Chambre', 'Salle de bain', 'Bureau', 'Balcon', 'Jardin']
 
 function compressImage(dataUri: string, maxSize = 400, quality = 0.65): Promise<string> {
   return new Promise((resolve) => {
@@ -62,48 +43,10 @@ function compressImage(dataUri: string, maxSize = 400, quality = 0.65): Promise<
   })
 }
 
-function getDaysUntilWatering(plant: any): number {
-  if (!plant.lastWateringDate?.seconds) return -(plant.wateringFrequencyDays || 7)
-  const lastWatered = new Date(plant.lastWateringDate.seconds * 1000)
-  const nextWatering = addDays(lastWatered, plant.wateringFrequencyDays || 7)
-  return differenceInDays(nextWatering, new Date())
-}
-
-function getHealthColor(score: number): string {
-  if (score >= 75) return 'text-green-500'
-  if (score >= 50) return 'text-orange-400'
-  return 'text-red-500'
-}
-
-function getHealthLabel(score: number): string {
-  if (score >= 75) return 'Saine'
-  if (score >= 50) return 'Surveiller'
-  return 'Critique'
-}
-
-function getHealthStatus(score: number): string {
-  if (score >= 75) return 'green'
-  if (score >= 50) return 'yellow'
-  return 'red'
-}
-
-const ANALYSIS_FREQUENCY_DAYS = 30
-
-function isAnalysisOverdue(plant: any): boolean {
-  if (!plant.lastAnalysisDate?.seconds) return true // never analyzed
-  const lastAnalysis = new Date(plant.lastAnalysisDate.seconds * 1000)
-  return differenceInDays(new Date(), lastAnalysis) >= ANALYSIS_FREQUENCY_DAYS
-}
-
-// --- Component ---
-
-export default function BotanicaPage() {
+export function PlantsTab() {
   const { toast } = useToast()
-  const { user } = useUser()
-  const db = useFirestore()
+  const { plants, isLoading: loadingPlants, addPlant, updatePlant, waterPlant, deletePlant } = usePlants()
 
-  // --- States declared FIRST to avoid ReferenceErrors ---
-  
   // Add plant dialog state
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isAddOpen, setIsAddOpen] = useState(false)
@@ -112,7 +55,7 @@ export default function BotanicaPage() {
   const [scanResult, setScanResult] = useState<IdentifyPlantOutput | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [nickname, setNickname] = useState('')
-  const [location, setLocation] = useState('Salon')
+  const [location, setLocation] = useState(LOCATIONS[0])
   const [wateringDays, setWateringDays] = useState(7)
   const [wateringAmount, setWateringAmount] = useState(200)
   const [lastWateringDate, setLastWateringDate] = useState(() => new Date().toISOString().split('T')[0])
@@ -121,10 +64,10 @@ export default function BotanicaPage() {
 
   // Detail dialog state
   const detailFileInputRef = useRef<HTMLInputElement>(null)
-  const [selectedPlant, setSelectedPlant] = useState<any>(null)
+  const [selectedPlant, setSelectedPlant] = useState<Plant | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [editNickname, setEditNickname] = useState('')
-  const [editLocation, setEditLocation] = useState('Salon')
+  const [editLocation, setEditLocation] = useState(LOCATIONS[0])
   const [editWateringDays, setEditWateringDays] = useState(7)
   const [editWateringAmount, setEditWateringAmount] = useState(200)
   const [editNotes, setEditNotes] = useState('')
@@ -134,50 +77,29 @@ export default function BotanicaPage() {
   const [isDetailScanning, setIsDetailScanning] = useState(false)
   const [detailScanResult, setDetailScanResult] = useState<IdentifyPlantOutput | null>(null)
 
-  // Delete state
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // --- Firestore Data Subscriptions ---
-
-  const plantsPath = user ? `users/${user.uid}/plants` : null
-  const plantsQuery = useMemoFirebase(() => {
-    if (!plantsPath || !db) return null
-    return collection(db, plantsPath)
-  }, [db, plantsPath])
-  const { data: plants, isLoading: loadingPlants } = useCollection(plantsQuery)
-
-  // Analyses history for selected plant
-  const analysesQuery = useMemoFirebase(() => {
-    if (!db || !user || !selectedPlant) return null
-    return query(
-      collection(db, `users/${user.uid}/plants/${selectedPlant.id}/analyses`),
-      orderBy('createdAt', 'asc')
-    )
-  }, [db, user, selectedPlant])
-  const { data: analyses } = useCollection(analysesQuery)
+  const { analyses } = usePlantAnalyses(selectedPlant?.id ?? null)
 
   const chartData = useMemo(() => {
     if (!analyses || analyses.length === 0) return []
-    return (analyses as any[]).map((a) => ({
-      date: a.createdAt?.seconds
-        ? format(new Date(a.createdAt.seconds * 1000), 'dd/MM', { locale: fr })
-        : '?',
+    return analyses.map((a) => ({
+      date: a.createdAt?.seconds ? format(new Date(a.createdAt.seconds * 1000), 'dd/MM', { locale: fr }) : '?',
       score: a.healthScore ?? 0,
     }))
   }, [analyses])
 
   const overdueCount = useMemo(
-    () => plants?.filter((p: any) => getDaysUntilWatering(p) < 0).length ?? 0,
+    () => plants.filter((p) => getDaysUntilWatering(p) < 0).length,
     [plants]
   )
 
-  // --- Handlers ---
   const resetDialog = () => {
     setPreviewUrl(null)
     setScanResult(null)
     setNickname('')
     setNotes('')
-    setLocation('Salon')
+    setLocation(LOCATIONS[0])
     setWateringDays(7)
     setWateringAmount(200)
     setPurchaseDate('')
@@ -205,73 +127,42 @@ export default function BotanicaPage() {
   }
 
   const handleSave = async () => {
-    if (!user || !db) return
     if (!nickname.trim()) {
       toast({ variant: 'destructive', title: 'Un surnom est requis' })
       return
     }
     setIsSaving(true)
     try {
-      const thumbnail = previewUrl ? await compressImage(previewUrl) : null
-      const plantRef = doc(collection(db, `users/${user.uid}/plants`))
-      await setDoc(plantRef, {
+      const thumbnailUrl = previewUrl ? await compressImage(previewUrl) : null
+      await addPlant({
         nickname,
-        species: scanResult?.species ?? '',
+        species: scanResult?.species,
         location,
         wateringFrequencyDays: wateringDays,
         wateringAmountMl: wateringAmount,
-        lastWateringDate: lastWateringDate
-          ? Timestamp.fromDate(new Date(lastWateringDate + 'T12:00:00'))
-          : serverTimestamp(),
-        purchaseDate: purchaseDate
-          ? Timestamp.fromDate(new Date(purchaseDate + 'T12:00:00'))
-          : null,
-        healthScore: scanResult?.healthScore ?? 75,
-        healthStatus: getHealthStatus(scanResult?.healthScore ?? 75),
-        lastAnalysisAlerts: scanResult?.alerts ?? [],
-        lastHealthAnalysis: scanResult?.healthAnalysis ?? '',
-        lastHydrationPlan: scanResult?.hydrationPlan ?? null,
-        lastGeneralCare: scanResult?.generalCare ?? [],
-        lastAnalysisDate: scanResult ? serverTimestamp() : null,
-        thumbnailUrl: thumbnail,
+        lastWateringDate,
+        purchaseDate: purchaseDate || null,
         notes,
-        userId: user.uid,
-        createdAt: serverTimestamp(),
+        thumbnailUrl,
+        scan: scanResult ? { result: scanResult, thumbnailUrl } : undefined,
       })
-      // Save first analysis to history sub-collection
-      if (scanResult) {
-        const analysisRef = doc(collection(db, `users/${user.uid}/plants/${plantRef.id}/analyses`))
-        await setDoc(analysisRef, {
-          healthScore: scanResult.healthScore,
-          healthAnalysis: scanResult.healthAnalysis,
-          alerts: scanResult.alerts,
-          hydrationPlan: scanResult.hydrationPlan,
-          generalCare: scanResult.generalCare,
-          thumbnailUrl: thumbnail,
-          createdAt: serverTimestamp(),
-        })
-      }
       setIsAddOpen(false)
       toast({ title: 'Plante ajoutée', description: `${nickname} rejoint votre jardin.` })
     } catch {
-      toast({ variant: 'destructive', title: "Erreur lors de l'enregistrement" })
+      // errorEmitter already surfaced the permission dialog
     } finally {
       setIsSaving(false)
     }
   }
 
-  const handleOpenDetail = (plant: any) => {
+  const handleOpenDetail = (plant: Plant) => {
     setSelectedPlant(plant)
     setEditNickname(plant.nickname || '')
-    setEditLocation(plant.location || 'Salon')
+    setEditLocation(plant.location || LOCATIONS[0])
     setEditWateringDays(plant.wateringFrequencyDays || 7)
     setEditWateringAmount(plant.wateringAmountMl || 200)
     setEditNotes(plant.notes || '')
-    setEditPurchaseDate(
-      plant.purchaseDate?.seconds
-        ? format(new Date(plant.purchaseDate.seconds * 1000), 'yyyy-MM-dd')
-        : ''
-    )
+    setEditPurchaseDate(plant.purchaseDate?.seconds ? format(new Date(plant.purchaseDate.seconds * 1000), 'yyyy-MM-dd') : '')
     setDetailPreviewUrl(null)
     setDetailScanResult(null)
     if (detailFileInputRef.current) detailFileInputRef.current.value = ''
@@ -304,85 +195,53 @@ export default function BotanicaPage() {
   }
 
   const handleSaveDetail = async () => {
-    if (!user || !db || !selectedPlant) return
+    if (!selectedPlant) return
     if (!editNickname.trim()) {
       toast({ variant: 'destructive', title: 'Un surnom est requis' })
       return
     }
     setIsDetailSaving(true)
     try {
-      const ref = doc(db, `users/${user.uid}/plants`, selectedPlant.id)
-      const updateData: any = {
+      const newThumbnail = detailScanResult && detailPreviewUrl ? await compressImage(detailPreviewUrl) : null
+      await updatePlant(selectedPlant.id, {
         nickname: editNickname,
         location: editLocation,
         wateringFrequencyDays: editWateringDays,
         wateringAmountMl: editWateringAmount,
         notes: editNotes,
-        purchaseDate: editPurchaseDate
-          ? Timestamp.fromDate(new Date(editPurchaseDate + 'T12:00:00'))
-          : null,
-      }
-
-      // If a new scan was done, update plant + save analysis to history
-      if (detailScanResult) {
-        const newThumbnail = detailPreviewUrl ? await compressImage(detailPreviewUrl) : null
-        if (newThumbnail) updateData.thumbnailUrl = newThumbnail
-        updateData.healthScore = detailScanResult.healthScore
-        updateData.healthStatus = getHealthStatus(detailScanResult.healthScore)
-        updateData.lastAnalysisAlerts = detailScanResult.alerts
-        updateData.lastHealthAnalysis = detailScanResult.healthAnalysis
-        updateData.lastHydrationPlan = detailScanResult.hydrationPlan
-        updateData.lastGeneralCare = detailScanResult.generalCare
-        updateData.lastAnalysisDate = serverTimestamp()
-
-        // Save to analyses sub-collection
-        const analysisRef = doc(collection(db, `users/${user.uid}/plants/${selectedPlant.id}/analyses`))
-        await setDoc(analysisRef, {
-          healthScore: detailScanResult.healthScore,
-          healthAnalysis: detailScanResult.healthAnalysis,
-          alerts: detailScanResult.alerts,
-          hydrationPlan: detailScanResult.hydrationPlan,
-          generalCare: detailScanResult.generalCare,
-          thumbnailUrl: newThumbnail,
-          createdAt: serverTimestamp(),
-        })
-      }
-
-      await setDoc(ref, updateData, { merge: true })
+        purchaseDate: editPurchaseDate || null,
+        scan: detailScanResult ? { result: detailScanResult, thumbnailUrl: newThumbnail } : undefined,
+      })
       setIsDetailOpen(false)
       toast({ title: 'Plante mise à jour' })
     } catch {
-      toast({ variant: 'destructive', title: 'Erreur lors de la mise à jour' })
+      // errorEmitter already surfaced the permission dialog
     } finally {
       setIsDetailSaving(false)
     }
   }
 
-  const handleWater = async (plant: any, e: React.MouseEvent) => {
+  const handleWater = async (plant: Plant, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!user || !db) return
-    await setDoc(doc(db, `users/${user.uid}/plants`, plant.id), { lastWateringDate: serverTimestamp() }, { merge: true })
+    await waterPlant(plant.id).catch(() => null)
     toast({ title: 'Arrosage enregistré' })
   }
 
-  const handleDelete = async (plant: any, e: React.MouseEvent) => {
+  const handleDelete = async (plant: Plant, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!user || !db) return
     setDeletingId(plant.id)
     try {
-      await deleteDoc(doc(db, `users/${user.uid}/plants`, plant.id))
+      await deletePlant(plant.id)
       toast({ title: 'Plante supprimée' })
     } catch {
-      toast({ variant: 'destructive', title: 'Erreur lors de la suppression' })
+      // errorEmitter already surfaced the permission dialog
     } finally {
       setDeletingId(null)
     }
   }
 
   return (
-    <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
-      <AppNavigation />
-
+    <div className="space-y-8">
       <input
         ref={fileInputRef}
         type="file"
@@ -399,166 +258,152 @@ export default function BotanicaPage() {
         }}
       />
 
-      <main className="p-6 md:p-12 max-w-7xl mx-auto space-y-12">
-        <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-6">
-          <div className="space-y-1">
-            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Botanica</h2>
-            <h1 className="text-4xl md:text-5xl font-bold tracking-tighter text-gradient">Votre jardin d'hiver</h1>
-          </div>
-          <Button
-            onClick={() => { resetDialog(); setIsAddOpen(true) }}
-            className="rounded-full h-14 px-8 bg-green-500 text-white font-bold shadow-xl shadow-green-500/20 hover:bg-green-600 hover:scale-105 transition-all"
-          >
-            <Plus className="w-5 h-5 mr-2" /> Ajouter une plante
-            {overdueCount > 0 && (
-              <span className="ml-3 w-5 h-5 rounded-full bg-orange-400 text-white text-[10px] flex items-center justify-center font-bold">{overdueCount}</span>
-            )}
-          </Button>
-        </header>
+      <div className="flex justify-end">
+        <Button
+          onClick={() => { resetDialog(); setIsAddOpen(true) }}
+          className="rounded-full h-12 px-6 bg-green-500 text-white font-bold shadow-lg shadow-green-500/20 hover:bg-green-600 hover:scale-105 transition-all"
+        >
+          <Plus className="w-5 h-5 mr-2" /> Ajouter une plante
+          {overdueCount > 0 && (
+            <span className="ml-3 w-5 h-5 rounded-full bg-orange-400 text-white text-[10px] flex items-center justify-center font-bold">{overdueCount}</span>
+          )}
+        </Button>
+      </div>
 
-        {/* Plant grid */}
-        {loadingPlants ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="h-80 rounded-[32px] bg-muted/20 animate-pulse" />
-            ))}
-          </div>
-        ) : !plants || plants.length === 0 ? (
-          <div className="py-32 text-center flex flex-col items-center gap-4 opacity-40">
-            <Flower2 className="w-16 h-16 text-muted-foreground/30" />
-            <p className="font-bold uppercase tracking-widest text-xs">Votre jardin est vide</p>
-            <p className="text-sm text-muted-foreground">Ajoutez votre première plante</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-            {(plants as any[]).map((plant) => {
-              const daysUntil = getDaysUntilWatering(plant)
-              const needsWater = daysUntil < 0
-              const score = plant.healthScore ?? 75
-              const acquisitionDate = plant.purchaseDate?.seconds
-                ? new Date(plant.purchaseDate.seconds * 1000)
-                : null
-              const lastWatered = plant.lastWateringDate?.seconds
-                ? new Date(plant.lastWateringDate.seconds * 1000)
-                : null
+      {/* Plant grid */}
+      {loadingPlants ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-80 rounded-2xl bg-muted/20 animate-pulse" />
+          ))}
+        </div>
+      ) : plants.length === 0 ? (
+        <div className="py-24 text-center flex flex-col items-center gap-4 opacity-40">
+          <Flower2 className="w-16 h-16 text-muted-foreground/30" />
+          <p className="font-bold uppercase tracking-widest text-xs">Votre jardin est vide</p>
+          <p className="text-sm text-muted-foreground">Ajoutez votre première plante</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+          {plants.map((plant) => {
+            const daysUntil = getDaysUntilWatering(plant)
+            const needsWater = daysUntil < 0
+            const score = plant.healthScore ?? 75
+            const acquisitionDate = plant.purchaseDate?.seconds ? new Date(plant.purchaseDate.seconds * 1000) : null
+            const lastWatered = plant.lastWateringDate?.seconds ? new Date(plant.lastWateringDate.seconds * 1000) : null
 
-              return (
-                <div key={plant.id} onClick={() => handleOpenDetail(plant)} className="apple-card border-none overflow-hidden group flex flex-col cursor-pointer">
-                  <div className="h-52 relative bg-green-900/20 flex-shrink-0">
-                    {plant.thumbnailUrl ? (
-                      <Image src={plant.thumbnailUrl} alt={plant.nickname || plant.name} fill className="object-cover transition-transform duration-1000 group-hover:scale-105" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Leaf className="w-16 h-16 text-green-500/30" />
-                      </div>
-                    )}
-                    <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2">
-                      <Badge className="rounded-full bg-black/40 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5 shrink-0">
-                        <MapPin className="w-3 h-3 shrink-0" /> <span className="truncate max-w-[80px]">{plant.location || 'Non défini'}</span>
-                      </Badge>
-                      <Badge className={cn(
-                        "rounded-full backdrop-blur shadow-sm font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5 shrink-0",
-                        needsWater ? "bg-orange-500/90 text-white" : "bg-white/95 text-green-600"
-                      )}>
-                        {needsWater
-                          ? <><AlertTriangle className="w-3 h-3" /> {Math.abs(daysUntil)}j</>
-                          : <><CheckCircle2 className="w-3 h-3" /> {getHealthLabel(score)}</>
-                        }
+            return (
+              <div key={plant.id} onClick={() => handleOpenDetail(plant)} className="apple-card border-none overflow-hidden group flex flex-col cursor-pointer">
+                <div className="h-52 relative bg-green-900/20 flex-shrink-0">
+                  {plant.thumbnailUrl ? (
+                    <Image src={plant.thumbnailUrl} alt={plant.nickname} fill className="object-cover transition-transform duration-1000 group-hover:scale-105" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <Leaf className="w-16 h-16 text-green-500/30" />
+                    </div>
+                  )}
+                  <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2">
+                    <Badge className="rounded-full bg-black/40 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5 shrink-0">
+                      <MapPin className="w-3 h-3 shrink-0" /> <span className="truncate max-w-[80px]">{plant.location || 'Non défini'}</span>
+                    </Badge>
+                    <Badge className={cn(
+                      "rounded-full backdrop-blur shadow-sm font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5 shrink-0",
+                      needsWater ? "bg-orange-500/90 text-white" : "bg-white/95 text-green-600"
+                    )}>
+                      {needsWater
+                        ? <><AlertTriangle className="w-3 h-3" /> {Math.abs(daysUntil)}j</>
+                        : <><CheckCircle2 className="w-3 h-3" /> {getHealthLabel(score)}</>
+                      }
+                    </Badge>
+                  </div>
+                  {isAnalysisOverdue(plant) && (
+                    <div className="absolute bottom-3 left-3">
+                      <Badge className="rounded-full bg-purple-500/90 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5">
+                        <Camera className="w-3 h-3" /> Analyse recommandée
                       </Badge>
                     </div>
-                    {isAnalysisOverdue(plant) && (
-                      <div className="absolute bottom-3 left-3">
-                        <Badge className="rounded-full bg-purple-500/90 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5">
-                          <Camera className="w-3 h-3" /> Analyse recommandée
-                        </Badge>
+                  )}
+                </div>
+
+                <div className="p-6 space-y-4 flex flex-col flex-1">
+                  <div>
+                    <h3 className="font-bold text-xl tracking-tight leading-none">{plant.nickname}</h3>
+                    {plant.species && <p className="text-xs text-muted-foreground italic mt-1">{plant.species}</p>}
+                  </div>
+
+                  <div className="space-y-1.5">
+                    {acquisitionDate && (
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <ShoppingBag className="w-3.5 h-3.5 text-primary/60 shrink-0" />
+                        <span className="font-medium">Acquis le</span>
+                        <span className="ml-auto font-bold text-foreground/70">{format(acquisitionDate, 'dd MMM yyyy', { locale: fr })}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <Droplets className={cn("w-3.5 h-3.5 shrink-0", needsWater ? "text-orange-400" : "text-blue-400")} />
+                      <span className="font-medium">Dernier arrosage</span>
+                      <span className={cn("ml-auto font-bold", needsWater ? "text-orange-400" : "text-foreground/70")}>
+                        {lastWatered ? format(lastWatered, 'dd MMM yyyy', { locale: fr }) : 'Jamais'}
+                      </span>
+                    </div>
+                    {!needsWater && (
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <Calendar className="w-3.5 h-3.5 text-primary/60 shrink-0" />
+                        <span className="font-medium">Prochain arrosage</span>
+                        <span className="ml-auto font-bold text-foreground/70">dans {daysUntil}j</span>
                       </div>
                     )}
                   </div>
 
-                  <div className="p-6 space-y-4 flex flex-col flex-1">
-                    <div>
-                      <h3 className="font-bold text-xl tracking-tight leading-none">{plant.nickname || plant.name}</h3>
-                      {plant.species && <p className="text-xs text-muted-foreground italic mt-1">{plant.species}</p>}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest opacity-40">
+                      <span>Santé</span>
+                      <span className={getHealthColor(score)}>{score}%</span>
                     </div>
+                    <Progress value={score} className="h-1 bg-secondary" />
+                  </div>
 
-                    <div className="space-y-1.5">
-                      {acquisitionDate && (
-                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                          <ShoppingBag className="w-3.5 h-3.5 text-primary/60 shrink-0" />
-                          <span className="font-medium">Acquis le</span>
-                          <span className="ml-auto font-bold text-foreground/70">{format(acquisitionDate, 'dd MMM yyyy', { locale: fr })}</span>
-                        </div>
+                  <div className="flex gap-2 mt-auto pt-2">
+                    <Button
+                      onClick={(e) => handleWater(plant, e)}
+                      className={cn(
+                        "flex-1 h-12 rounded-2xl font-bold border-none shadow-none transition-all",
+                        needsWater
+                          ? "bg-orange-500/15 text-orange-400 hover:bg-orange-500 hover:text-white"
+                          : "bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white"
                       )}
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                        <Droplets className={cn("w-3.5 h-3.5 shrink-0", needsWater ? "text-orange-400" : "text-blue-400")} />
-                        <span className="font-medium">Dernier arrosage</span>
-                        <span className={cn("ml-auto font-bold", needsWater ? "text-orange-400" : "text-foreground/70")}>
-                          {lastWatered ? format(lastWatered, 'dd MMM yyyy', { locale: fr }) : 'Jamais'}
-                        </span>
-                      </div>
-                      {!needsWater && (
-                        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                          <Calendar className="w-3.5 h-3.5 text-primary/60 shrink-0" />
-                          <span className="font-medium">Prochain arrosage</span>
-                          <span className="ml-auto font-bold text-foreground/70">dans {daysUntil}j</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest opacity-40">
-                        <span>Santé</span>
-                        <span className={getHealthColor(score)}>{score}%</span>
-                      </div>
-                      <Progress value={score} className="h-1 bg-secondary" />
-                    </div>
-
-                    <div className="flex gap-2 mt-auto pt-2">
-                      <Button
-                        onClick={(e) => handleWater(plant, e)}
-                        className={cn(
-                          "flex-1 h-12 rounded-2xl font-bold border-none shadow-none transition-all",
-                          needsWater
-                            ? "bg-orange-500/15 text-orange-400 hover:bg-orange-500 hover:text-white"
-                            : "bg-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white"
-                        )}
-                      >
-                        <Droplets className="w-4 h-4 mr-2" /> Arroser
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={(e) => handleDelete(plant, e)}
-                        disabled={deletingId === plant.id}
-                        className="w-12 h-12 rounded-2xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
-                      >
-                        {deletingId === plant.id
-                          ? <Loader2 className="w-4 h-4 animate-spin" />
-                          : <Trash2 className="w-4 h-4" />}
-                      </Button>
-                    </div>
+                    >
+                      <Droplets className="w-4 h-4 mr-2" /> Arroser
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(e) => handleDelete(plant, e)}
+                      disabled={deletingId === plant.id}
+                      className="w-12 h-12 rounded-2xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+                    >
+                      {deletingId === plant.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                    </Button>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        )}
-      </main>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Unified add plant dialog */}
       <Dialog open={isAddOpen} onOpenChange={(open) => { setIsAddOpen(open); if (!open) resetDialog() }}>
-        <DialogContent className="sm:max-w-[540px] rounded-[32px] p-0 border-none shadow-3xl overflow-hidden max-h-[90vh] flex flex-col">
+        <DialogContent className="sm:max-w-[540px] rounded-3xl p-0 border-none shadow-3xl overflow-hidden max-h-[90vh] flex flex-col">
           <DialogHeader className="px-8 pt-8 pb-4 shrink-0">
             <DialogTitle className="text-2xl font-bold">Ajouter une plante</DialogTitle>
           </DialogHeader>
 
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="px-8 pb-8 space-y-6">
-
-              {/* Photo + AI zone */}
               <div className="space-y-3">
                 <div
-                  className="w-full h-52 bg-secondary/30 rounded-[24px] flex items-center justify-center overflow-hidden relative border-2 border-dashed border-border cursor-pointer transition-all hover:bg-secondary/50 group"
+                  className="w-full h-52 bg-secondary/30 rounded-2xl flex items-center justify-center overflow-hidden relative border-2 border-dashed border-border cursor-pointer transition-all hover:bg-secondary/50 group"
                   onClick={() => fileInputRef.current?.click()}
                 >
                   {previewUrl ? (
@@ -597,7 +442,6 @@ export default function BotanicaPage() {
                 )}
               </div>
 
-              {/* AI Results */}
               {scanResult && (
                 <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-400">
                   <div className="bg-green-500/8 border border-green-500/20 rounded-[20px] p-5 space-y-4">
@@ -657,18 +501,12 @@ export default function BotanicaPage() {
 
               <Separator className="opacity-20" />
 
-              {/* Plant details form */}
               <div className="space-y-4">
                 <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Détails de la plante</p>
 
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Surnom *</Label>
-                  <Input
-                    value={nickname}
-                    onChange={e => setNickname(e.target.value)}
-                    placeholder="ex: Mon Monstera, Ficus du salon…"
-                    className="h-12 rounded-2xl bg-secondary/50 border-none px-5"
-                  />
+                  <Input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="ex: Mon Monstera, Ficus du salon…" className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
@@ -676,62 +514,34 @@ export default function BotanicaPage() {
                     <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Emplacement</Label>
                     <Select value={location} onValueChange={setLocation}>
                       <SelectTrigger className="h-12 rounded-2xl bg-secondary/50 border-none px-5"><SelectValue /></SelectTrigger>
-                      <SelectContent>{['Salon', 'Cuisine', 'Chambre', 'Salle de bain', 'Bureau', 'Balcon', 'Jardin'].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+                      <SelectContent>{LOCATIONS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Fréquence (jours)</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={wateringDays}
-                      onChange={e => setWateringDays(Number(e.target.value))}
-                      className="h-12 rounded-2xl bg-secondary/50 border-none px-5"
-                    />
+                    <Input type="number" min={1} value={wateringDays} onChange={e => setWateringDays(Number(e.target.value))} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Quantité (ml)</Label>
-                    <Input
-                      type="number"
-                      min={10}
-                      step={10}
-                      value={wateringAmount}
-                      onChange={e => setWateringAmount(Number(e.target.value))}
-                      className="h-12 rounded-2xl bg-secondary/50 border-none px-5"
-                    />
+                    <Input type="number" min={10} step={10} value={wateringAmount} onChange={e => setWateringAmount(Number(e.target.value))} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Dernier arrosage</Label>
-                    <Input
-                      type="date"
-                      value={lastWateringDate}
-                      onChange={e => setLastWateringDate(e.target.value)}
-                      className="h-12 rounded-2xl bg-secondary/50 border-none px-5"
-                    />
+                    <Input type="date" value={lastWateringDate} onChange={e => setLastWateringDate(e.target.value)} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Date d'acquisition</Label>
-                  <Input
-                    type="date"
-                    value={purchaseDate}
-                    onChange={e => setPurchaseDate(e.target.value)}
-                    className="h-12 rounded-2xl bg-secondary/50 border-none px-5"
-                  />
+                  <Input type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                 </div>
 
                 <div className="space-y-1.5">
                   <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Notes</Label>
-                  <Textarea
-                    value={notes}
-                    onChange={e => setNotes(e.target.value)}
-                    placeholder="Observations, emplacement précis…"
-                    className="rounded-2xl bg-secondary/50 border-none px-5 py-3 min-h-[80px] resize-none"
-                  />
+                  <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Observations, emplacement précis…" className="rounded-2xl bg-secondary/50 border-none px-5 py-3 min-h-[80px] resize-none" />
                 </div>
               </div>
 
@@ -767,17 +577,16 @@ export default function BotanicaPage() {
 
       {/* Plant detail dialog */}
       <Dialog open={isDetailOpen} onOpenChange={setIsDetailOpen}>
-        <DialogContent className="sm:max-w-[540px] rounded-[32px] p-0 border-none shadow-3xl overflow-hidden max-h-[90vh] flex flex-col">
+        <DialogContent className="sm:max-w-[540px] rounded-3xl p-0 border-none shadow-3xl overflow-hidden max-h-[90vh] flex flex-col">
           <DialogHeader className="px-8 pt-8 pb-4 shrink-0">
             <DialogTitle className="text-2xl font-bold">{selectedPlant?.nickname || 'Détail'}</DialogTitle>
           </DialogHeader>
 
           <div className="flex-1 min-h-0 overflow-y-auto">
             <div className="px-8 pb-8 space-y-6">
-              {/* Photo with re-upload */}
               <div className="space-y-3">
                 <div
-                  className="w-full h-52 rounded-[24px] overflow-hidden relative bg-secondary/30 flex items-center justify-center cursor-pointer group"
+                  className="w-full h-52 rounded-2xl overflow-hidden relative bg-secondary/30 flex items-center justify-center cursor-pointer group"
                   onClick={() => detailFileInputRef.current?.click()}
                 >
                   {detailPreviewUrl ? (
@@ -809,7 +618,6 @@ export default function BotanicaPage() {
                 )}
               </div>
 
-              {/* Detail scan results */}
               {detailScanResult && (
                 <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-400">
                   <div className="bg-green-500/8 border border-green-500/20 rounded-[20px] p-5 space-y-4">
@@ -839,7 +647,6 @@ export default function BotanicaPage() {
                 </div>
               )}
 
-              {/* Health summary */}
               {selectedPlant && (
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest opacity-40">
@@ -853,7 +660,6 @@ export default function BotanicaPage() {
                 </div>
               )}
 
-              {/* Last AI scan results */}
               {selectedPlant?.lastHealthAnalysis && !detailScanResult && (
                 <div className="space-y-3">
                   <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest flex items-center gap-2">
@@ -862,9 +668,9 @@ export default function BotanicaPage() {
                   <div className="bg-green-500/8 border border-green-500/20 rounded-[20px] p-5 space-y-4">
                     <p className="text-sm leading-relaxed text-muted-foreground">{selectedPlant.lastHealthAnalysis}</p>
 
-                    {selectedPlant.lastAnalysisAlerts?.length > 0 && (
+                    {(selectedPlant.lastAnalysisAlerts?.length ?? 0) > 0 && (
                       <div className="space-y-1.5">
-                        {selectedPlant.lastAnalysisAlerts.map((alert: string, i: number) => (
+                        {selectedPlant.lastAnalysisAlerts!.map((alert, i) => (
                           <div key={i} className="flex items-start gap-2 text-orange-400 text-xs font-medium">
                             <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                             <span>{alert}</span>
@@ -890,10 +696,10 @@ export default function BotanicaPage() {
                       </>
                     )}
 
-                    {selectedPlant.lastGeneralCare?.length > 0 && (
+                    {(selectedPlant.lastGeneralCare?.length ?? 0) > 0 && (
                       <div className="space-y-1.5">
                         <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Entretien</p>
-                        {selectedPlant.lastGeneralCare.map((tip: string, i: number) => (
+                        {selectedPlant.lastGeneralCare!.map((tip, i) => (
                           <div key={i} className="flex items-start gap-2 text-muted-foreground text-xs">
                             <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary/60" />
                             <span>{tip}</span>
@@ -913,7 +719,6 @@ export default function BotanicaPage() {
 
               <Separator className="opacity-20" />
 
-              {/* Editable fields */}
               <div className="space-y-4">
                 <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Modifier les informations</p>
 
@@ -927,7 +732,7 @@ export default function BotanicaPage() {
                     <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Emplacement</Label>
                     <Select value={editLocation} onValueChange={setEditLocation}>
                       <SelectTrigger className="h-12 rounded-2xl bg-secondary/50 border-none px-5"><SelectValue /></SelectTrigger>
-                      <SelectContent>{['Salon', 'Cuisine', 'Chambre', 'Salle de bain', 'Bureau', 'Balcon', 'Jardin'].map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
+                      <SelectContent>{LOCATIONS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
@@ -953,8 +758,7 @@ export default function BotanicaPage() {
                 </div>
               </div>
 
-              {/* Analysis history */}
-              {analyses && (analyses as any[]).length > 0 && (
+              {analyses.length > 0 && (
                 <>
                   <Separator className="opacity-20" />
                   <div className="space-y-4">
@@ -962,9 +766,8 @@ export default function BotanicaPage() {
                       <History className="w-3.5 h-3.5" /> Historique des analyses
                     </p>
 
-                    {/* Chart */}
                     {chartData.length >= 2 && (
-                      <div className="bg-secondary/30 rounded-[20px] p-4">
+                      <div className="bg-secondary/30 rounded-2xl p-4">
                         <ResponsiveContainer width="100%" height={120}>
                           <LineChart data={chartData}>
                             <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.3} />
@@ -979,15 +782,12 @@ export default function BotanicaPage() {
                       </div>
                     )}
 
-                    {/* Timeline */}
                     <div className="space-y-3">
-                      {([...(analyses as any[])].reverse()).map((analysis, i) => (
+                      {[...analyses].reverse().map((analysis, i) => (
                         <div key={analysis.id || i} className="bg-secondary/20 rounded-2xl p-4 space-y-2">
                           <div className="flex items-center justify-between">
                             <span className="text-xs text-muted-foreground font-medium">
-                              {analysis.createdAt?.seconds
-                                ? format(new Date(analysis.createdAt.seconds * 1000), 'dd MMMM yyyy', { locale: fr })
-                                : 'Date inconnue'}
+                              {analysis.createdAt?.seconds ? format(new Date(analysis.createdAt.seconds * 1000), 'dd MMMM yyyy', { locale: fr }) : 'Date inconnue'}
                             </span>
                             <span className={cn("text-sm font-bold", getHealthColor(analysis.healthScore))}>
                               {analysis.healthScore}%
@@ -996,7 +796,7 @@ export default function BotanicaPage() {
                           <p className="text-xs text-muted-foreground leading-relaxed">{analysis.healthAnalysis}</p>
                           {analysis.alerts?.length > 0 && (
                             <div className="flex flex-wrap gap-1.5">
-                              {analysis.alerts.map((alert: string, j: number) => (
+                              {analysis.alerts.map((alert, j) => (
                                 <Badge key={j} variant="outline" className="text-[10px] text-orange-400 border-orange-400/30">{alert}</Badge>
                               ))}
                             </div>

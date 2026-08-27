@@ -114,15 +114,15 @@ const navItems = [
   { name: 'Nutrition',   href: '/nutrition',        icon: CookingPot },
   { name: 'Météo AI',    href: '/weather',          icon: CloudSun },
   { name: 'Maison',      href: '/home-management',  icon: Home },
-  { name: 'Botanica',    href: '/botanica',         icon: Flower2 },
   { name: 'Vie & Santé', href: '/lifestyle',        icon: HeartPulse },
   { name: 'Finances',    href: '/finance',          icon: Wallet },
 ]
 ```
 
-Note : Maison (tâches récurrentes) et Botanica (plantes) sont deux entrées de nav séparées,
-malgré leur proximité de domaine — voir `AUDIT.md`/`PLAN.md` pour l'analyse de cette scission
-et la recommandation de fusion.
+Maison regroupe les tâches récurrentes et les plantes sous deux onglets (`TasksTab`/`PlantsTab`
+dans `src/components/home-management/`) — anciennement deux modules de nav séparés (Maison +
+Botanica), fusionnés suite à l'audit (voir `AUDIT.md`/`PLAN.md` section 3.2). L'ancienne route
+`/botanica` redirige vers `/home-management` (`next.config.ts`).
 
 Pour ajouter un module : ajouter une entrée ici + créer `src/app/<route>/page.tsx`.
 
@@ -197,7 +197,7 @@ premier flow).
 ### Flow existant : `identifyPlant`
 - Input : `{ photoDataUri }` (base64 data URI)
 - Output : identification botanique + conseils de soin
-- Usage : `src/app/botanica/page.tsx`
+- Usage : `src/components/home-management/plants-tab.tsx` (onglet Plantes de Maison)
 - Envoie l'image comme content block `{ type: 'image', source: { type: 'base64', ... } }` (vision Claude).
 
 ### Flow existant : `recoveryInsight`

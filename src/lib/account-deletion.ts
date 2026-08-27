@@ -11,7 +11,7 @@ const TOP_LEVEL_COLLECTIONS = [
 const NESTED_SUBCOLLECTIONS: Record<string, string[]> = {
   bikes: ['components', 'tirePressureSetups'],
   recipes: ['recipeIngredients'],
-  plants: ['plantActions'],
+  plants: ['analyses'],
   trainingPlans: ['trainingSessions'],
   monthlyBudgets: ['budgetAllocations'],
 }
