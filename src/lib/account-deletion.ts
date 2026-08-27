@@ -1,6 +1,9 @@
 import { collection, doc, getDocs, deleteDoc, type Firestore } from 'firebase/firestore'
 
-const TOP_LEVEL_COLLECTIONS = [
+// Also used by data-export-card.tsx (personal data export) — kept as the
+// single source of truth so the deletion sweep and the export can't drift
+// apart silently as new top-level collections get added.
+export const TOP_LEVEL_COLLECTIONS = [
   'activities', 'trainingPlans', 'bikes', 'maintenanceRecords', 'recipes',
   'tags', 'ingredients', 'cyclingClothingItems', 'plants', 'pantryItems',
   'shoppingListItems', 'expenseCategories', 'monthlyBudgets', 'expenses',

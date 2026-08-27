@@ -10,6 +10,7 @@ import { User, Save, Loader2 } from 'lucide-react'
 import { useUser, useAuth } from '@/firebase'
 import { updateProfile } from 'firebase/auth'
 import { useToast } from '@/hooks/use-toast'
+import { getProfileInitials } from './profile-types'
 
 export function ProfileCard() {
   const { user } = useUser()
@@ -22,7 +23,7 @@ export function ProfileCard() {
     setDisplayName(user?.displayName || '')
   }, [user?.displayName])
 
-  const initials = (displayName || user?.email || '?').slice(0, 2).toUpperCase()
+  const initials = getProfileInitials(displayName, user?.email)
 
   const handleSave = async () => {
     if (!auth.currentUser) return

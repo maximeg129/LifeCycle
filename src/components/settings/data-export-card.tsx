@@ -7,17 +7,11 @@ import { Download, Loader2 } from 'lucide-react'
 import { collection, getDocs } from 'firebase/firestore'
 import { useUser, useFirestore } from '@/firebase'
 import { useToast } from '@/hooks/use-toast'
-import { format } from 'date-fns'
+import { TOP_LEVEL_COLLECTIONS, buildExportPayload, buildExportFilename } from './data-export-types'
 
-// Top-level collections under users/{uid}/. Nested subcollections (bike
-// components, recipe ingredients, plant actions, budget allocations...)
-// aren't walked here — this is a personal data export, not a full backup.
-const TOP_LEVEL_COLLECTIONS = [
-  'activities', 'trainingPlans', 'bikes', 'maintenanceRecords', 'recipes',
-  'tags', 'ingredients', 'cyclingClothingItems', 'plants', 'pantryItems',
-  'shoppingListItems', 'expenseCategories', 'monthlyBudgets', 'expenses',
-  'tasks', 'healthMetrics', 'healthGoals',
-]
+// Nested subcollections (bike components, recipe ingredients, plant
+// actions, budget allocations...) aren't walked here — this is a personal
+// data export, not a full backup.
 
 export function DataExportCard() {
   const { user } = useUser()
@@ -35,11 +29,11 @@ export function DataExportCard() {
         result[name] = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
       }))
 
-      const blob = new Blob([JSON.stringify({ exportedAt: new Date().toISOString(), uid: user.uid, data: result }, null, 2)], { type: 'application/json' })
+      const blob = new Blob([JSON.stringify(buildExportPayload(user.uid, result), null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `lifecycle-export-${format(new Date(), 'yyyy-MM-dd')}.json`
+      a.download = buildExportFilename(new Date())
       document.body.appendChild(a)
       a.click()
       a.remove()

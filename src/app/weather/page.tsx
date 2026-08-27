@@ -32,7 +32,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useClothingInventory } from '@/components/weather/use-clothing-inventory'
 import { ManageClothingDialog } from '@/components/weather/manage-clothing-dialog'
 import { PageHeader } from '@/components/ui/page-header'
-import { toFlowInventoryItem } from '@/components/weather/clothing-types'
+import { toFlowInventoryItem, buildOutfitDateTime } from '@/components/weather/clothing-types'
 
 export default function WeatherAssistant() {
   const { toast } = useToast()
@@ -98,12 +98,9 @@ export default function WeatherAssistant() {
 
     setLoading(true)
     try {
-      // Combine date and time
-      const dateTimeStr = format(date, 'yyyy-MM-dd') + 'T' + time + ':00'
-
       const recommendation = await cyclingOutfitRecommendation({
         location: location,
-        dateTime: dateTimeStr,
+        dateTime: buildOutfitDateTime(date, time),
         durationHours: duration,
         clothingInventory: clothingItems.map(toFlowInventoryItem)
       })

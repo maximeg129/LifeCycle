@@ -20,8 +20,7 @@ import { deleteUser } from 'firebase/auth'
 import { useUser, useAuth, useFirestore } from '@/firebase'
 import { useToast } from '@/hooks/use-toast'
 import { deleteAllUserData } from '@/lib/account-deletion'
-
-const CONFIRM_WORD = 'SUPPRIMER'
+import { DELETE_CONFIRM_WORD, isDeleteConfirmed, getDeleteAccountErrorMessage } from './danger-zone-types'
 
 export function DangerZoneCard() {
   const { user } = useUser()
@@ -44,15 +43,8 @@ export function DangerZoneCard() {
       router.push('/')
     } catch (e: unknown) {
       const code = (e as { code?: string })?.code
-      if (code === 'auth/requires-recent-login') {
-        toast({
-          variant: 'destructive',
-          title: 'Reconnexion requise',
-          description: 'Par sécurité, déconnectez-vous puis reconnectez-vous avant de supprimer votre compte.',
-        })
-      } else {
-        toast({ variant: 'destructive', title: 'Erreur', description: "La suppression a échoué. Réessayez." })
-      }
+      const { title, description } = getDeleteAccountErrorMessage(code)
+      toast({ variant: 'destructive', title, description })
     } finally {
       setIsDeleting(false)
       setOpen(false)
@@ -88,7 +80,7 @@ export function DangerZoneCard() {
             </AlertDialogHeader>
             <div className="space-y-2">
               <Label htmlFor="confirm-delete" className="text-xs text-muted-foreground">
-                Tapez <span className="font-bold text-foreground">{CONFIRM_WORD}</span> pour confirmer
+                Tapez <span className="font-bold text-foreground">{DELETE_CONFIRM_WORD}</span> pour confirmer
               </Label>
               <Input id="confirm-delete" value={confirmText} onChange={(e) => setConfirmText(e.target.value)} autoComplete="off" />
             </div>
@@ -96,7 +88,7 @@ export function DangerZoneCard() {
               <AlertDialogCancel onClick={() => setConfirmText('')}>Annuler</AlertDialogCancel>
               <Button
                 variant="destructive"
-                disabled={confirmText !== CONFIRM_WORD || isDeleting}
+                disabled={!isDeleteConfirmed(confirmText) || isDeleting}
                 onClick={handleDelete}
                 className="gap-2"
               >

@@ -1,3 +1,5 @@
+import { format } from 'date-fns'
+
 export interface ClothingItem {
   userId: string
   name: string
@@ -51,4 +53,9 @@ export function toFlowInventoryItem(item: ClothingItem): ClothingInventoryItem {
     waterproof: item.waterproof,
     layer: item.layer,
   }
+}
+
+/** Combines the outing's date and time inputs into the ISO-ish dateTime string the AI flow expects. */
+export function buildOutfitDateTime(date: Date, time: string): string {
+  return `${format(date, 'yyyy-MM-dd')}T${time}:00`
 }
