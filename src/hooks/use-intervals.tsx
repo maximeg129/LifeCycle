@@ -86,6 +86,16 @@ const ACTIVITIES_WINDOW_DAYS = 90
 const WELLNESS_WINDOW_DAYS = 90
 const FITNESS_WINDOW_DAYS = 90
 
+// Gear totals need the bike's *entire* riding history, not just the 90-day
+// window above (that window is sized for training-load metrics, and a bike
+// linked after months of riding would otherwise only ever catch up a few
+// days at a time — which is exactly why "Synchroniser" kept showing a
+// stale km value: the old delta was bounded by bike.lastSyncDate, so it
+// could never make up years of pre-existing distance in one click). This
+// date is a generous floor — no realistic activity history predates it —
+// so the fetch stays a single bounded call, not truly unbounded.
+const GEAR_HISTORY_OLDEST = '2000-01-01'
+
 function inRange(dateStr: string | undefined, oldest: string, newest?: string): boolean {
   if (!dateStr) return false
   const d = dateStr.slice(0, 10)
@@ -171,7 +181,7 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
 
     setIsSyncing(true)
     try {
-      const { activitiesData } = await fetchReads(creds.athleteId, creds.apiKey)
+      await fetchReads(creds.athleteId, creds.apiKey)
       setError(null)
 
       // Apply km deltas to bikes/components/chains — the write side of
@@ -190,34 +200,47 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
         const components = componentsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as BikeComponent[]
         const chains = chainsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Chain[]
         const todayStr = format(new Date(), 'yyyy-MM-dd')
+        const linkedBikes = bikes.filter((b): b is Bike & { externalGearId: string } => !!b.externalGearId)
 
-        for (const bike of bikes) {
-          if (!bike.externalGearId) continue
+        if (linkedBikes.length > 0) {
+          // Ground truth for gear totals: the bike's *entire* real riding
+          // history tagged with its gear_id — not Intervals.icu's own
+          // /athlete bikes[].distance rollup (confirmed via live debug data
+          // to undercount gear whose rides sync directly from Wahoo,
+          // bypassing Strava), and not just the 90-day training window
+          // above. Recomputing the absolute total from scratch every sync
+          // (rather than an incremental delta since the last sync date)
+          // means the value always matches what Intervals.icu's own site
+          // shows, and self-heals any drift instead of requiring a manual
+          // one-time correction.
+          const fullHistory = await fetchProxy<IntervalsActivity[]>(
+            `/api/intervals/activities?oldest=${GEAR_HISTORY_OLDEST}&newest=${todayStr}`,
+            creds.athleteId,
+            creds.apiKey
+          )
 
-          // Ground truth: sum real activity distances tagged with this
-          // gear_id, not Intervals.icu's own gear.distance rollup — that
-          // field has been confirmed (via live debug data) to undercount
-          // gear whose rides sync directly from Wahoo, bypassing Strava.
-          const delta = computeGearKmFromActivities(activitiesData, bike.externalGearId, bike.lastSyncDate)
-          if (delta <= 0) continue
+          for (const bike of linkedBikes) {
+            const trueTotalKm = computeGearKmFromActivities(fullHistory, bike.externalGearId, null)
+            const delta = trueTotalKm - bike.totalKm
+            if (delta <= 0) continue
 
-          const newTotalKm = bike.totalKm + delta
-          const bikeRef = doc(db, `users/${user.uid}/bikes`, bike.id)
-          await updateDoc(bikeRef, { totalKm: newTotalKm, lastSyncDate: todayStr }).catch(() => {
-            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: bikeRef.path, operation: 'update' }))
-          })
-          bikesUpdated++
-          totalNewKm += delta
+            const bikeRef = doc(db, `users/${user.uid}/bikes`, bike.id)
+            await updateDoc(bikeRef, { totalKm: trueTotalKm, lastSyncDate: todayStr }).catch(() => {
+              errorEmitter.emit('permission-error', new FirestorePermissionError({ path: bikeRef.path, operation: 'update' }))
+            })
+            bikesUpdated++
+            totalNewKm += delta
 
-          const bikeComponents = components.filter((c) => c.bikeId === bike.id && c.status !== 'retired')
-          const result = await applyKmDeltaToBikeDependents({
-            db,
-            uid: user.uid,
-            bikeComponents,
-            bikeChains: chains.filter((c) => c.bikeId === bike.id),
-            delta,
-          })
-          componentsUpdated += result.componentsUpdated
+            const bikeComponents = components.filter((c) => c.bikeId === bike.id && c.status !== 'retired')
+            const result = await applyKmDeltaToBikeDependents({
+              db,
+              uid: user.uid,
+              bikeComponents,
+              bikeChains: chains.filter((c) => c.bikeId === bike.id),
+              delta,
+            })
+            componentsUpdated += result.componentsUpdated
+          }
         }
       }
 
