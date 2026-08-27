@@ -10,6 +10,7 @@ import { type Chain } from './chain-types'
 import { useChains } from './use-chains'
 import { AddChainDialog } from './add-chain-dialog'
 import { ChainCard } from './chain-card'
+import { EmptyState } from '@/components/ui/empty-state'
 
 export function ChainsTab() {
   const { user } = useUser()
@@ -56,10 +57,7 @@ export function ChainsTab() {
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-64 rounded-2xl" />)}
         </div>
       ) : chains.length === 0 ? (
-        <div className="py-20 text-center space-y-4">
-          <Droplets className="w-12 h-12 text-muted-foreground/20 mx-auto" />
-          <p className="text-sm text-muted-foreground">Aucune chaîne suivie pour l&apos;instant.</p>
-        </div>
+        <EmptyState icon={Droplets} title="Aucune chaîne suivie pour l'instant." />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {chains.map((chain) => (

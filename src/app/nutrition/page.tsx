@@ -50,6 +50,8 @@ import { useNutritionData } from '@/components/nutrition/use-nutrition-data'
 import { FuelingWidget } from '@/components/nutrition/fueling-widget'
 import { LogMealDialog } from '@/components/nutrition/log-meal-dialog'
 import { NutritionGoalsDialog } from '@/components/nutrition/nutrition-goals-dialog'
+import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/empty-state'
 import { MEAL_TYPE_LABELS, progressPct } from '@/components/nutrition/nutrition-types'
 import { MealPlanWeekView } from '@/components/nutrition/meal-plan-week-view'
 
@@ -207,62 +209,62 @@ export default function NutritionPage() {
       <AppNavigation />
       
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Nutrition & Fueling</h2>
-            <h1 className="text-3xl font-bold">Plan & Livre de Cuisine</h1>
-          </div>
-          <div className="flex gap-2">
-            <NutritionGoalsDialog current={goals} />
-            <Dialog open={isAddingRecipe} onOpenChange={setIsAddingRecipe}>
-              <DialogTrigger asChild>
-                <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full px-6 shadow-lg shadow-primary/20">
-                  <Plus className="w-4 h-4 mr-2" /> Ajouter une Recette
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[600px]">
-                <DialogHeader>
-                  <DialogTitle>Nouvelle Recette</DialogTitle>
-                  <DialogDescription>Enregistrez vos créations culinaires dans votre coffre-fort personnel.</DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleAddRecipe} className="grid gap-4 py-4">
-                  <div className="grid gap-2">
-                    <Label htmlFor="title">Titre</Label>
-                    <Input id="title" name="title" placeholder="ex: Risotto de Quinoa" required />
-                  </div>
-                  <div className="grid grid-cols-3 gap-4">
+        <PageHeader
+          category="Nutrition & Fueling"
+          title="Plan & Livre de Cuisine"
+          actions={
+            <>
+              <NutritionGoalsDialog current={goals} />
+              <Dialog open={isAddingRecipe} onOpenChange={setIsAddingRecipe}>
+                <DialogTrigger asChild>
+                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full px-6 shadow-lg shadow-primary/20">
+                    <Plus className="w-4 h-4 mr-2" /> Ajouter une Recette
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[600px]">
+                  <DialogHeader>
+                    <DialogTitle>Nouvelle Recette</DialogTitle>
+                    <DialogDescription>Enregistrez vos créations culinaires dans votre coffre-fort personnel.</DialogDescription>
+                  </DialogHeader>
+                  <form onSubmit={handleAddRecipe} className="grid gap-4 py-4">
                     <div className="grid gap-2">
-                      <Label htmlFor="calories">Calories</Label>
-                      <Input id="calories" name="calories" type="number" placeholder="450" />
+                      <Label htmlFor="title">Titre</Label>
+                      <Input id="title" name="title" placeholder="ex: Risotto de Quinoa" required />
+                    </div>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="grid gap-2">
+                        <Label htmlFor="calories">Calories</Label>
+                        <Input id="calories" name="calories" type="number" placeholder="450" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="protein">Protéines (g)</Label>
+                        <Input id="protein" name="protein" type="number" placeholder="25" />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="carbs">Glucides (g)</Label>
+                        <Input id="carbs" name="carbs" type="number" placeholder="60" />
+                      </div>
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="protein">Protéines (g)</Label>
-                      <Input id="protein" name="protein" type="number" placeholder="25" />
+                      <Label htmlFor="ingredients">Ingrédients (un par ligne)</Label>
+                      <Textarea id="ingredients" name="ingredients" placeholder="100g Quinoa..." rows={4} />
                     </div>
                     <div className="grid gap-2">
-                      <Label htmlFor="carbs">Glucides (g)</Label>
-                      <Input id="carbs" name="carbs" type="number" placeholder="60" />
+                      <Label htmlFor="instructions">Instructions</Label>
+                      <Textarea id="instructions" name="instructions" placeholder="1. Cuire..." rows={4} />
                     </div>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="ingredients">Ingrédients (un par ligne)</Label>
-                    <Textarea id="ingredients" name="ingredients" placeholder="100g Quinoa..." rows={4} />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="instructions">Instructions</Label>
-                    <Textarea id="instructions" name="instructions" placeholder="1. Cuire..." rows={4} />
-                  </div>
-                  <DialogFooter>
-                    <Button type="submit" disabled={isSaving}>
-                      {isSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                      Sauvegarder
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-          </div>
-        </header>
+                    <DialogFooter>
+                      <Button type="submit" disabled={isSaving}>
+                        {isSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
+                        Sauvegarder
+                      </Button>
+                    </DialogFooter>
+                  </form>
+                </DialogContent>
+              </Dialog>
+            </>
+          }
+        />
 
         <Tabs defaultValue="plan" onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-muted/50 border border-border/40 p-1 rounded-full w-fit mx-auto md:mx-0">
@@ -343,10 +345,7 @@ export default function NutritionPage() {
                     {Array.from({ length: 3 }).map((_, i) => <div key={i} className="h-14 rounded-xl bg-muted/20 animate-pulse" />)}
                   </div>
                 ) : meals.length === 0 ? (
-                  <div className="py-16 text-center space-y-3">
-                    <Utensils className="w-10 h-10 text-muted-foreground/20 mx-auto" />
-                    <p className="text-sm text-muted-foreground">Aucun repas enregistré aujourd&apos;hui.</p>
-                  </div>
+                  <EmptyState size="compact" icon={Utensils} title="Aucun repas enregistré aujourd'hui." />
                 ) : (
                   <div className="divide-y divide-border/40">
                     {meals.map((entry) => (

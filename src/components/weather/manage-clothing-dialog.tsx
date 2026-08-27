@@ -21,6 +21,7 @@ import { collection, doc, setDoc, deleteDoc, serverTimestamp } from 'firebase/fi
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { useClothingInventory } from './use-clothing-inventory'
+import { EmptyState } from '@/components/ui/empty-state'
 import {
   CLOTHING_TYPE_LABELS,
   CLOTHING_LAYER_LABELS,
@@ -100,7 +101,7 @@ export function ManageClothingDialog() {
           {isLoading ? (
             <p className="text-sm text-muted-foreground">Chargement...</p>
           ) : items.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Aucun vêtement enregistré — ajoutez-en ci-dessous.</p>
+            <EmptyState size="compact" title="Aucun vêtement enregistré — ajoutez-en ci-dessous." className="py-0" />
           ) : (
             items.map((item) => (
               <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-secondary/40">

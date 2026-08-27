@@ -23,6 +23,8 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { useFinanceData } from '@/components/finance/use-finance-data'
 import { AddExpenseDialog } from '@/components/finance/add-expense-dialog'
+import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/empty-state'
 import { AddCategoryDialog } from '@/components/finance/add-category-dialog'
 import { SetBudgetDialog } from '@/components/finance/set-budget-dialog'
 import { SavingsGoalDialog } from '@/components/finance/savings-goal-dialog'
@@ -80,18 +82,18 @@ export default function FinancePage() {
       <AppNavigation />
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Budget</h2>
-            <h1 className="text-3xl font-bold">Finances Lifestyle</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="w-fit rounded-full px-4 py-1.5 text-xs font-bold border-primary/20 text-primary bg-primary/5">
-              <Wallet className="w-3.5 h-3.5 mr-2" /> {format(new Date(), 'MMMM yyyy', { locale: fr })}
-            </Badge>
-            <AddExpenseDialog categories={categories} />
-          </div>
-        </header>
+        <PageHeader
+          category="Budget"
+          title="Finances Lifestyle"
+          actions={
+            <>
+              <Badge variant="outline" className="w-fit rounded-full px-4 py-1.5 text-xs font-bold border-primary/20 text-primary bg-primary/5">
+                <Wallet className="w-3.5 h-3.5 mr-2" /> {format(new Date(), 'MMMM yyyy', { locale: fr })}
+              </Badge>
+              <AddExpenseDialog categories={categories} />
+            </>
+          }
+        />
 
         <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab} className="space-y-8">
           <TabsList className="bg-secondary/50 p-1.5 rounded-[20px] w-fit border border-border/40">
@@ -199,7 +201,7 @@ export default function FinancePage() {
               </CardHeader>
               <CardContent className="p-0">
                 {recentTransactions.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Aucune dépense enregistrée pour l&apos;instant.</p>
+                  <EmptyState size="compact" title="Aucune dépense enregistrée pour l'instant." />
                 ) : (
                   <div className="space-y-3">
                     {recentTransactions.map((tx) => (
@@ -228,11 +230,7 @@ export default function FinancePage() {
             </div>
 
             {categories.length === 0 ? (
-              <div className="py-24 text-center opacity-60 space-y-4">
-                <Target className="w-12 h-12 mx-auto" />
-                <p className="font-bold text-sm">Aucune catégorie de budget pour l&apos;instant</p>
-                <AddCategoryDialog />
-              </div>
+              <EmptyState icon={Target} title="Aucune catégorie de budget pour l'instant" cta={<AddCategoryDialog />} />
             ) : (
               <>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

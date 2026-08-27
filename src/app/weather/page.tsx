@@ -31,6 +31,7 @@ import { cyclingOutfitRecommendation, type CyclingOutfitRecommendationOutput } f
 import { useToast } from '@/hooks/use-toast'
 import { useClothingInventory } from '@/components/weather/use-clothing-inventory'
 import { ManageClothingDialog } from '@/components/weather/manage-clothing-dialog'
+import { PageHeader } from '@/components/ui/page-header'
 import { toFlowInventoryItem } from '@/components/weather/clothing-types'
 
 export default function WeatherAssistant() {
@@ -124,19 +125,17 @@ export default function WeatherAssistant() {
       <AppNavigation />
       
       <main className="p-4 md:p-8 max-w-5xl mx-auto space-y-8">
-        <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div className="space-y-2">
-            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Météo AI</h2>
+        <PageHeader
+          category="Météo AI"
+          badge={
             <Badge variant="outline" className="text-accent border-accent/30 gap-1 bg-accent/5 px-3">
               <Sparkles className="w-3 h-3" /> Assistant Prédictif
             </Badge>
-            <h1 className="text-3xl font-bold flex items-center gap-3">
-              <CloudSun className="w-10 h-10 text-primary" /> Assistant Météo & Tenue
-            </h1>
-            <p className="text-muted-foreground">Prévoyez votre sortie et laissez l&apos;IA déduire la météo et préparer votre équipement.</p>
-          </div>
-          <ManageClothingDialog />
-        </header>
+          }
+          title={<span className="flex items-center gap-3"><CloudSun className="w-10 h-10 text-primary" /> Assistant Météo & Tenue</span>}
+          description="Prévoyez votre sortie et laissez l'IA déduire la météo et préparer votre équipement."
+          actions={<ManageClothingDialog />}
+        />
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
           <Card className="lg:col-span-4 bg-card/40 border-border h-fit">

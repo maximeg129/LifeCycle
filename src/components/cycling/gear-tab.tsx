@@ -55,6 +55,7 @@ import { useGearSync } from './use-gear-sync'
 import { useChains } from './use-chains'
 import { applyKmDeltaToBikeDependents } from './km-sync'
 import { SyncButton } from './sync-button'
+import { EmptyState } from '@/components/ui/empty-state'
 
 // ── Main component ───────────────────────────────────────────────────
 
@@ -222,8 +223,8 @@ export function GearTab() {
             </div>
           ) : activeBikes.length === 0 ? (
             <Card className="bg-card/40 border-border border-dashed">
-              <CardContent className="py-8 text-center text-sm text-muted-foreground">
-                Aucun velo. Ajoutez votre premier velo pour commencer le suivi.
+              <CardContent className="p-0">
+                <EmptyState size="compact" title="Aucun vélo. Ajoutez votre premier vélo pour commencer le suivi." />
               </CardContent>
             </Card>
           ) : (
@@ -321,9 +322,7 @@ export function GearTab() {
 
                         {/* Components list */}
                         {bikeComps.length === 0 ? (
-                          <div className="p-4 text-center text-sm text-muted-foreground">
-                            Aucun composant. Ajoutez-en pour suivre l&apos;usure.
-                          </div>
+                          <EmptyState size="compact" title="Aucun composant. Ajoutez-en pour suivre l'usure." className="py-4" />
                         ) : (
                           <div className="divide-y divide-border">
                             {COMPONENT_GROUPS.map(group => {
@@ -478,7 +477,7 @@ export function GearTab() {
           </CardHeader>
           <CardContent className="space-y-3">
             {recentCosts.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-2">Aucun achat enregistre</p>
+              <EmptyState size="compact" title="Aucun achat enregistré" className="py-2" />
             ) : (
               recentCosts.map(cost => (
                 <div key={cost.id} className="flex justify-between items-center py-2 border-b border-border last:border-0">

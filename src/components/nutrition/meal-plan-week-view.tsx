@@ -22,6 +22,7 @@ import { type PlannedMeal, getWeekStart, getWeekDays, indexToDayName } from './m
 import { ImportMealPlanDialog } from './import-meal-plan-dialog'
 import { EditMealDialog } from './edit-meal-dialog'
 import { syncMealLog } from './sync-meal-log'
+import { EmptyState } from '@/components/ui/empty-state'
 
 type WithIdMeal = PlannedMeal & { id: string }
 
@@ -143,10 +144,7 @@ export function MealPlanWeekView() {
           {Array.from({ length: 7 }).map((_, i) => <div key={i} className="h-80 w-56 shrink-0 rounded-2xl bg-muted/20 animate-pulse" />)}
         </div>
       ) : meals.length === 0 ? (
-        <div className="py-20 text-center space-y-4">
-          <CalendarDays className="w-12 h-12 text-muted-foreground/20 mx-auto" />
-          <p className="text-sm text-muted-foreground">Aucun plan pour cette semaine. Importez-en un pour commencer.</p>
-        </div>
+        <EmptyState icon={CalendarDays} title="Aucun plan pour cette semaine" description="Importez-en un pour commencer." />
       ) : (
         <div className="flex gap-4 overflow-x-auto pb-2">
           {weekDays.map((day, dayIndex) => (

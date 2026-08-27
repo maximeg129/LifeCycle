@@ -39,6 +39,8 @@ import { SyncButton } from '@/components/cycling/sync-button'
 import { AddGoalDialog } from '@/components/lifestyle/add-goal-dialog'
 import { RecoveryInsightPanel } from '@/components/lifestyle/recovery-insight-panel'
 import { average, trendPct, computeGoalProgress, type HealthGoal } from '@/components/lifestyle/lifestyle-types'
+import { PageHeader } from '@/components/ui/page-header'
+import { EmptyState } from '@/components/ui/empty-state'
 
 type WithIdGoal = HealthGoal & { id: string }
 
@@ -90,20 +92,20 @@ export default function LifestylePage() {
       <AppNavigation />
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Bien-être</h2>
-            <h1 className="text-3xl font-bold">Vie & Santé</h1>
-          </div>
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="w-fit rounded-full px-4 py-1.5 text-xs font-bold border-primary/20 text-primary bg-primary/5">
-              <HeartPulse className="w-3.5 h-3.5 mr-2" />
-              {latest?.date?.seconds ? `Dernière mesure : ${format(new Date(latest.date.seconds * 1000), 'dd MMM', { locale: fr })}` : 'Aucune mesure'}
-            </Badge>
-            <SyncButton />
-            <LogMetricDialog />
-          </div>
-        </header>
+        <PageHeader
+          category="Bien-être"
+          title="Vie & Santé"
+          actions={
+            <>
+              <Badge variant="outline" className="w-fit rounded-full px-4 py-1.5 text-xs font-bold border-primary/20 text-primary bg-primary/5">
+                <HeartPulse className="w-3.5 h-3.5 mr-2" />
+                {latest?.date?.seconds ? `Dernière mesure : ${format(new Date(latest.date.seconds * 1000), 'dd MMM', { locale: fr })}` : 'Aucune mesure'}
+              </Badge>
+              <SyncButton />
+              <LogMetricDialog />
+            </>
+          }
+        />
 
         {!isLoading && (
           !wellnessStatus.isConfigured ? (
@@ -172,7 +174,7 @@ export default function LifestylePage() {
               </CardHeader>
               <CardContent className="p-0">
                 {goals.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Aucun objectif pour l&apos;instant — créez-en un pour suivre vos progrès sur 7 jours.</p>
+                  <EmptyState size="compact" title="Aucun objectif pour l'instant" description="Créez-en un pour suivre vos progrès sur 7 jours." />
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {goals.map((goal) => {
@@ -316,7 +318,7 @@ export default function LifestylePage() {
               <CardContent className="p-0">
                 <div className="space-y-3">
                   {dailySeries.filter((d) => d.sleepHours !== undefined).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Aucune nuit enregistrée pour l&apos;instant.</p>
+                    <EmptyState size="compact" title="Aucune nuit enregistrée pour l'instant." />
                   ) : dailySeries.filter((d) => d.sleepHours !== undefined).map((night) => (
                     <div key={night.dayId} className="flex items-center justify-between p-4 rounded-2xl bg-secondary/30">
                       <span className="font-bold text-sm w-12">{dayLabel(night.dayId)}</span>

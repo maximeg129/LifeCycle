@@ -24,6 +24,7 @@ import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { usePlants, usePlantAnalyses, type Plant } from './use-plants'
 import { getDaysUntilWatering, getHealthColor, getHealthLabel, isAnalysisOverdue } from './plant-types'
+import { EmptyState } from '@/components/ui/empty-state'
 
 const LOCATIONS = ['Salon', 'Cuisine', 'Chambre', 'Salle de bain', 'Bureau', 'Balcon', 'Jardin']
 
@@ -278,11 +279,7 @@ export function PlantsTab() {
           ))}
         </div>
       ) : plants.length === 0 ? (
-        <div className="py-24 text-center flex flex-col items-center gap-4 opacity-40">
-          <Flower2 className="w-16 h-16 text-muted-foreground/30" />
-          <p className="font-bold uppercase tracking-widest text-xs">Votre jardin est vide</p>
-          <p className="text-sm text-muted-foreground">Ajoutez votre première plante</p>
-        </div>
+        <EmptyState icon={Flower2} title="Votre jardin est vide" description="Ajoutez votre première plante" />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
           {plants.map((plant) => {

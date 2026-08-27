@@ -2,6 +2,7 @@
 
 import { AppNavigation } from '@/components/layout/sidebar'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { PageHeader } from '@/components/ui/page-header'
 import { ListChecks, Flower2 } from 'lucide-react'
 import { TasksTab } from '@/components/home-management/tasks-tab'
 import { PlantsTab } from '@/components/home-management/plants-tab'
@@ -12,12 +13,7 @@ export default function HomeManagementPage() {
       <AppNavigation />
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Gestion Maison</h2>
-            <h1 className="text-3xl font-bold">Votre routine</h1>
-          </div>
-        </header>
+        <PageHeader category="Gestion Maison" title="Votre routine" />
 
         <Tabs defaultValue="tasks" className="space-y-6">
           <TabsList className="bg-card/50 border border-border p-1 h-auto flex flex-wrap gap-1">

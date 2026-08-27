@@ -77,6 +77,7 @@ Toutes les pages de l'application authentifiée suivent ce patron exact :
 "use client"
 
 import { AppNavigation } from '@/components/layout/sidebar'
+import { PageHeader } from '@/components/ui/page-header'
 
 export default function MyPage() {
   return (
@@ -84,13 +85,7 @@ export default function MyPage() {
       <AppNavigation />
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Catégorie</h2>
-            <h1 className="text-3xl font-bold">Titre de la Page</h1>
-          </div>
-          {/* Actions header optionnelles */}
-        </header>
+        <PageHeader category="Catégorie" title="Titre de la Page" actions={<Button>...</Button>} />
 
         {/* Contenu avec Tabs ou sections */}
       </main>
@@ -102,7 +97,7 @@ export default function MyPage() {
 Points clés :
 - `pb-20 md:pb-0` : espace pour la bottom nav mobile
 - `md:pl-64` : espace pour la sidebar desktop (largeur 256px)
-- `mt-16 md:mt-0` dans le header : compense le header mobile fixe
+- `mt-16 md:mt-0` (baked into `PageHeader`) : compense le header mobile fixe
 
 ## Navigation (`AppNavigation`)
 
@@ -267,6 +262,15 @@ Tous dans `src/components/ui/` (shadcn/ui) :
 `MetricCard` (`src/components/ui/metric-card.tsx`) : wrapper pour tout widget dépendant d'une donnée optionnelle
 (puissance, HRV, poids…). Props `isAvailable`, `requiredInputs: string[]`, `ctaLabel`/`ctaHref`/`ctaAction` — affiche
 un état "métrique indisponible" explicite plutôt qu'un graphique vide ou une valeur par défaut trompeuse.
+
+`PageHeader` (`src/components/ui/page-header.tsx`) : le bloc titre canonique de chaque page —
+`category` (eyebrow), `title`, `description?`/`badge?` optionnels, `actions?` pour les boutons/dialogues
+à droite. Toutes les pages authentifiées l'utilisent désormais ; ne pas ré-écrire `<header>` à la main.
+
+`EmptyState` (`src/components/ui/empty-state.tsx`) : le bloc "aucune donnée" partagé — `icon?`, `title`,
+`description?`, `cta?`, `size: 'default' | 'compact'` (section/onglet entier vide vs. sous-liste vide dans
+une page déjà peuplée). Ne s'applique pas aux placeholders de graphique à hauteur fixe (ceux-ci gardent
+leur propre bloc centré, la hauteur fixe évite un saut de layout) ni aux hints inline très compacts (<12px).
 
 Charts via Recharts : `BarChart`, `LineChart`, etc. avec wrapper `ChartContainer`.
 

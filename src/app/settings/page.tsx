@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
+import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -74,10 +75,7 @@ export default function SettingsPage() {
       <AppNavigation />
 
       <main className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-        <header className="mt-16 md:mt-0">
-          <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Compte</h2>
-          <h1 className="text-3xl font-bold">Réglages</h1>
-        </header>
+        <PageHeader category="Compte" title="Réglages" />
 
         {/* ── Profil ───────────────────────────────────────────────── */}
         <ProfileCard />

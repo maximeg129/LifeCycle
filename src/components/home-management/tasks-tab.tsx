@@ -20,6 +20,7 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { useTasks, type Task } from './use-tasks'
+import { EmptyState } from '@/components/ui/empty-state'
 
 const ROOMS = ['Cuisine', 'Salon', 'Chambre', 'SdB', 'Extérieur', 'Général']
 
@@ -117,10 +118,7 @@ export function TasksTab() {
             <div key={i} className="h-56 rounded-2xl bg-muted/20 animate-pulse" />
           ))
         ) : tasks.length === 0 ? (
-          <div className="col-span-full py-24 text-center opacity-40">
-            <CheckCircle2 className="w-16 h-16 mx-auto mb-4" />
-            <p className="font-bold uppercase text-xs tracking-widest">Tout est sous contrôle</p>
-          </div>
+          <EmptyState className="col-span-full" icon={CheckCircle2} title="Tout est sous contrôle" />
         ) : tasks.map((task) => (
           <Card key={task.id} className="apple-card border-none p-6 flex flex-col justify-between h-full">
             <div className="space-y-5">

@@ -19,6 +19,7 @@ import { AddInjuryDialog } from './add-injury-dialog'
 import { AddCoachGoalDialog } from './add-coach-goal-dialog'
 import { INJURY_STATUS_LABELS, GOAL_PRIORITY_LABELS, countActiveInjuries, type CoachLifestyle } from './coach-memory-types'
 import type { GovernorStatus } from './load-types'
+import { EmptyState } from '@/components/ui/empty-state'
 
 const GOVERNOR_BADGE: Record<GovernorStatus, { emoji: string; label: string }> = {
   vert: { emoji: '🟢', label: 'Favorable' },
@@ -103,7 +104,7 @@ function InjuriesPanel() {
         {memory.isLoading ? (
           <Skeleton className="h-16 w-full" />
         ) : memory.injuries.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">Aucune blessure enregistrée.</p>
+          <EmptyState size="compact" title="Aucune blessure enregistrée." className="py-4" />
         ) : (
           memory.injuries.map((i) => (
             <div key={i.id} className="p-4 rounded-lg border border-border bg-background/40 space-y-1">
@@ -225,7 +226,7 @@ function GoalsPanel() {
         {memory.isLoading ? (
           <Skeleton className="h-16 w-full" />
         ) : memory.goals.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-4 text-center">Aucun objectif enregistré.</p>
+          <EmptyState size="compact" title="Aucun objectif enregistré." className="py-4" />
         ) : (
           [...memory.goals].sort((a, b) => a.eventDate.localeCompare(b.eventDate)).map((g) => (
             <div key={g.id} className="p-4 rounded-lg border border-border bg-background/40 flex items-start justify-between gap-2">

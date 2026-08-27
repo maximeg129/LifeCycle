@@ -36,6 +36,7 @@ import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
 import { useGovernor } from '@/components/cycling/use-governor'
 import { PowerCurveCard } from '@/components/cycling/power-curve-card'
 import { SyncButton } from '@/components/cycling/sync-button'
+import { PageHeader } from '@/components/ui/page-header'
 import { BrainCircuit } from 'lucide-react'
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -177,13 +178,7 @@ export default function CyclingHub() {
       <AppNavigation />
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        <header className="mt-16 md:mt-0 flex flex-col md:flex-row md:items-end justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Performance</h2>
-            <h1 className="text-3xl font-bold">LifeCycle Vault</h1>
-          </div>
-          <SyncButton />
-        </header>
+        <PageHeader category="Performance" title="LifeCycle Vault" actions={<SyncButton />} />
 
         <Tabs defaultValue="training" className="space-y-6">
           <TabsList className="bg-card/50 border border-border p-1 h-auto flex flex-wrap gap-1">
