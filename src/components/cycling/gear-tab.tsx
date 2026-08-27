@@ -54,6 +54,7 @@ import { TirePressureCard } from './tire-pressure-card'
 import { useGearSync } from './use-gear-sync'
 import { useChains } from './use-chains'
 import { applyKmDeltaToBikeDependents } from './km-sync'
+import { SyncButton } from './sync-button'
 
 // ── Main component ───────────────────────────────────────────────────
 
@@ -88,13 +89,7 @@ export function GearTab() {
   const externalBikes: IntervalsGear[] = athlete.data?.bikes?.filter(b => !b.retired) || []
   const isIntervalsConfigured = !!intervalsSettings?.intervalsAthleteId
 
-  const { syncKm, linkBike, isSyncing } = useGearSync({
-    bikes: (bikes || []) as BikeType[],
-    components: (components || []) as BikeComponent[],
-    chains,
-    athleteId: intervalsSettings?.intervalsAthleteId || null,
-    apiKey: intervalsSettings?.intervalsApiKey || null,
-  })
+  const { linkBike } = useGearSync()
 
   // Local state
   const [expandedBike, setExpandedBike] = useState<string | null>(null)
@@ -214,12 +209,7 @@ export function GearTab() {
               <Bike className="w-6 h-6 text-primary" /> Vos Velos
             </h3>
             <div className="flex gap-2">
-              {isIntervalsConfigured && (
-                <Button size="sm" variant="outline" className="gap-2" onClick={syncKm} disabled={isSyncing}>
-                  <RefreshCw className={`w-4 h-4 ${isSyncing ? 'animate-spin' : ''}`} />
-                  {isSyncing ? 'Sync...' : 'Sync km'}
-                </Button>
-              )}
+              <SyncButton />
               <AddComponentDialog bikes={activeBikes} />
               <AddBikeDialog />
             </div>

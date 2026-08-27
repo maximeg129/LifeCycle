@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { FirebaseClientProvider } from '@/firebase';
 import { Toaster } from '@/components/ui/toaster';
+import { IntervalsProvider } from '@/hooks/use-intervals';
 
 export const metadata: Metadata = {
   title: 'LifeCycle Pro',
@@ -48,8 +49,10 @@ export default function RootLayout({
       </head>
       <body className="font-body">
         <FirebaseClientProvider>
-          {children}
-          <Toaster />
+          <IntervalsProvider>
+            {children}
+            <Toaster />
+          </IntervalsProvider>
         </FirebaseClientProvider>
       </body>
     </html>

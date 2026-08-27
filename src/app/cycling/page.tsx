@@ -20,7 +20,6 @@ import {
   TrendingDown,
   Activity,
   AlertTriangle,
-  RefreshCw,
   Settings,
   Timer,
   Flame,
@@ -36,6 +35,7 @@ import { GovernorWidget } from '@/components/cycling/governor-widget'
 import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
 import { useGovernor } from '@/components/cycling/use-governor'
 import { PowerCurveCard } from '@/components/cycling/power-curve-card'
+import { SyncButton } from '@/components/cycling/sync-button'
 import { BrainCircuit } from 'lucide-react'
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -182,18 +182,7 @@ export default function CyclingHub() {
             <h2 className="text-sm font-medium text-primary uppercase tracking-wider">Performance</h2>
             <h1 className="text-3xl font-bold">LifeCycle Vault</h1>
           </div>
-          {isConfigured && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="border-border hover:bg-muted gap-2"
-              onClick={() => { athlete.refresh(); activities.refresh(); fitness.refresh() }}
-              disabled={athlete.isLoading || activities.isLoading}
-            >
-              <RefreshCw className={`w-4 h-4 ${athlete.isLoading ? 'animate-spin' : ''}`} />
-              Synchroniser
-            </Button>
-          )}
+          <SyncButton />
         </header>
 
         <Tabs defaultValue="training" className="space-y-6">

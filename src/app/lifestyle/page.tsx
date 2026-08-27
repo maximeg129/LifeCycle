@@ -35,6 +35,7 @@ import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { LogMetricDialog } from '@/components/lifestyle/log-metric-dialog'
+import { SyncButton } from '@/components/cycling/sync-button'
 import { AddGoalDialog } from '@/components/lifestyle/add-goal-dialog'
 import { RecoveryInsightPanel } from '@/components/lifestyle/recovery-insight-panel'
 import { average, trendPct, computeGoalProgress, type HealthGoal } from '@/components/lifestyle/lifestyle-types'
@@ -99,6 +100,7 @@ export default function LifestylePage() {
               <HeartPulse className="w-3.5 h-3.5 mr-2" />
               {latest?.date?.seconds ? `Dernière mesure : ${format(new Date(latest.date.seconds * 1000), 'dd MMM', { locale: fr })}` : 'Aucune mesure'}
             </Badge>
+            <SyncButton />
             <LogMetricDialog />
           </div>
         </header>
