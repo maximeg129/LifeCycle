@@ -204,7 +204,7 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
 
         if (linkedBikes.length > 0) {
           // Ground truth for gear totals: the bike's *entire* real riding
-          // history tagged with its gear_id — not Intervals.icu's own
+          // history tagged with its gear.id — not Intervals.icu's own
           // /athlete bikes[].distance rollup (confirmed via live debug data
           // to undercount gear whose rides sync directly from Wahoo,
           // bypassing Strava), and not just the 90-day training window

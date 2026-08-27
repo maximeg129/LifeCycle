@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       fetch(baseUrl, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
       fetch(`${baseUrl}/wellness/${today}`, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
       fetch(`${baseUrl}/activities?oldest=${oldest30}&newest=${today}`, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
-      fetch(`${baseUrl}/activities?oldest=${fullHistoryOldest}&newest=${today}&fields=id,gear_id,distance,start_date_local`, { headers })
+      fetch(`${baseUrl}/activities?oldest=${fullHistoryOldest}&newest=${today}&fields=id,gear,distance,start_date_local`, { headers })
         .then(async r => ({ _status: r.status, _ok: r.ok, _body: await r.json().catch(() => null) }))
         .catch(e => ({ _error: e.message })),
     ])
@@ -35,16 +35,17 @@ export async function GET(request: NextRequest) {
     let gearTotals: Record<string, { activityCount: number; totalKm: number }> | null = null
     let dateRange: { earliest: string | null; latest: string | null } | null = null
     if (fullHistoryRes && typeof fullHistoryRes === 'object' && Array.isArray((fullHistoryRes as { _body?: unknown })._body)) {
-      const list = (fullHistoryRes as { _body: Array<{ gear_id?: string; distance?: number; start_date_local?: string }> })._body
+      const list = (fullHistoryRes as { _body: Array<{ gear?: { id?: string } | null; distance?: number; start_date_local?: string }> })._body
       gearTotals = {}
       let earliest: string | null = null
       let latest: string | null = null
       for (const a of list) {
-        if (a.gear_id) {
-          const entry = gearTotals[a.gear_id] ?? { activityCount: 0, totalKm: 0 }
+        const gearId = a.gear?.id
+        if (gearId) {
+          const entry = gearTotals[gearId] ?? { activityCount: 0, totalKm: 0 }
           entry.activityCount++
           entry.totalKm += (a.distance ?? 0) / 1000
-          gearTotals[a.gear_id] = entry
+          gearTotals[gearId] = entry
         }
         const d = a.start_date_local?.slice(0, 10)
         if (d && (!earliest || d < earliest)) earliest = d

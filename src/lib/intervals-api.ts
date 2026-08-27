@@ -68,7 +68,12 @@ export interface IntervalsActivity {
   moving_time?: number;
   elapsed_time?: number;
   distance?: number;
-  gear_id?: string;
+  // Confirmed via a live debug dump: the API has no top-level `gear_id`
+  // field at all (requesting it via `fields=` is silently ignored) — the
+  // bike/shoe ridden is nested under `gear.id` instead. Getting this
+  // wrong made every gear-km computation see 0 activities for any gear,
+  // regardless of date range.
+  gear?: { id?: string; name?: string | null; distance?: number | null; primary?: boolean | null } | null;
   // Intervals.icu computes power fields itself (icu_-prefixed) — more
   // reliably populated than the Strava-mirrored average_watts/
   // weighted_average_watts, which the API doesn't always carry through.
@@ -147,7 +152,7 @@ export interface IntervalsPowerZone {
 /** Explicit field list for GET /activities — see IntervalsActivity for why. */
 const ACTIVITY_FIELDS = [
   'id', 'name', 'type', 'source', 'start_date_local', 'moving_time', 'elapsed_time',
-  'distance', 'gear_id', 'icu_average_watts', 'icu_weighted_avg_watts',
+  'distance', 'gear', 'icu_average_watts', 'icu_weighted_avg_watts',
   'average_watts', 'weighted_average_watts', 'icu_intensity', 'icu_training_load',
   'icu_ftp', 'icu_weight', 'average_heartrate', 'max_heartrate',
   'total_elevation_gain', 'average_speed', 'max_speed', 'calories',

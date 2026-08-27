@@ -34,7 +34,11 @@ export interface ApplyKmDeltaResult {
 }
 
 export interface ActivityKmLike {
-  gear_id?: string
+  // Nested, not a flat gear_id — Intervals.icu's API has no top-level
+  // gear_id field at all; the linked bike/shoe is under gear.id (confirmed
+  // via a live debug dump after gearTotals came back empty despite a full
+  // activity history being fetched correctly).
+  gear?: { id?: string } | null
   start_date_local?: string
   distance?: number // meters
 }
@@ -58,7 +62,7 @@ export interface ActivityKmLike {
 export function computeGearKmFromActivities(activities: ActivityKmLike[], externalGearId: string, sinceDateExclusive: string | null): number {
   const totalMeters = activities
     .filter((a) => {
-      if (a.gear_id !== externalGearId) return false
+      if (a.gear?.id !== externalGearId) return false
       if (!a.distance || a.distance <= 0) return false
       if (sinceDateExclusive && a.start_date_local) {
         return a.start_date_local.slice(0, 10) > sinceDateExclusive
