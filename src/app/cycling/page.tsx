@@ -21,6 +21,7 @@ import {
   Flame,
   Droplets,
   Sparkles,
+  Target,
 } from 'lucide-react'
 import { useAthlete, useActivities, useFitnessChart } from '@/hooks/use-intervals'
 import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
@@ -51,6 +52,9 @@ const ChainsTab = dynamic(() => import('@/components/cycling/chains-tab').then(m
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 const DailyWorkoutTab = dynamic(() => import('@/components/cycling/daily-workout-tab').then(m => m.DailyWorkoutTab), {
+  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
+})
+const TrainingPlanTab = dynamic(() => import('@/components/cycling/training-plan-tab').then(m => m.TrainingPlanTab), {
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 
@@ -138,6 +142,9 @@ export default function CyclingHub() {
             </TabsTrigger>
             <TabsTrigger value="pmc" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <TrendingUp className="w-4 h-4 mr-2" /> PMC
+            </TabsTrigger>
+            <TabsTrigger value="plan" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
+              <Target className="w-4 h-4 mr-2" /> Plan
             </TabsTrigger>
             <TabsTrigger value="daily-workout" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <Sparkles className="w-4 h-4 mr-2" /> Proposition du jour
@@ -339,6 +346,11 @@ export default function CyclingHub() {
           {/* ── Tab PMC (Performance Management Chart) — code-split ── */}
           <TabsContent value="pmc" className="space-y-8">
             <PmcTab isConfigured={isConfigured} athleteLoading={athlete.isLoading} fitness={fitness} />
+          </TabsContent>
+
+          {/* ── Tab Plan (AI flow + Firestore) ── */}
+          <TabsContent value="plan" className="space-y-8">
+            <TrainingPlanTab />
           </TabsContent>
 
           {/* ── Tab Proposition du jour (AI flow + Firestore) ── */}

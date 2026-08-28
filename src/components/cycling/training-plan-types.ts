@@ -1,0 +1,97 @@
+// ── Pure logic for the mid/long-term periodized training plan ──────────
+//
+// Design choice: the AI is asked for the *content* of each week (phase,
+// focus, target weekly volume) but never for calendar dates — date
+// arithmetic is exactly the kind of thing LLMs get subtly wrong, and it's
+// fully deterministic anyway. buildPlanWeekSkeleton() computes the real
+// Monday-aligned week boundaries; mergePlanWeeks() zips the AI's per-week
+// content onto that skeleton by index. Same separation of concerns as
+// daily-workout-types.ts (AI content vs. deterministic mechanics).
+
+import { addDays, format } from 'date-fns'
+import { mondayOf } from './load-types'
+
+export type PlanPhase = 'base' | 'build' | 'peak' | 'taper' | 'recovery'
+
+const MIN_WEEKLY_MINUTES = 60
+const MAX_WEEKLY_MINUTES = 1500 // 25h/week
+
+const MIN_PLAN_WEEKS = 2
+const MAX_PLAN_WEEKS = 24 // ~6 months — beyond that, regenerating closer to the event is more accurate than a single long-range call.
+
+/** Sanitizes the user-entered weekly-availability input (in minutes). */
+export function clampWeeklyMinutes(minutes: number): number {
+  if (!Number.isFinite(minutes)) return MIN_WEEKLY_MINUTES
+  const rounded = Math.round(minutes)
+  return Math.min(MAX_WEEKLY_MINUTES, Math.max(MIN_WEEKLY_MINUTES, rounded))
+}
+
+/** Whole weeks between today and the event date (may be 0 or negative for a past/too-close event). */
+export function weeksUntilEvent(todayIso: string, eventDateIso: string): number {
+  const today = new Date(`${todayIso}T00:00:00`)
+  const event = new Date(`${eventDateIso}T00:00:00`)
+  const diffDays = Math.round((event.getTime() - today.getTime()) / 86400000)
+  return Math.floor(diffDays / 7)
+}
+
+/** Clamps a raw week count to the range a single plan generation can sensibly cover. */
+export function clampPlanWeeks(weeks: number): number {
+  if (!Number.isFinite(weeks)) return MIN_PLAN_WEEKS
+  return Math.min(MAX_PLAN_WEEKS, Math.max(MIN_PLAN_WEEKS, Math.round(weeks)))
+}
+
+export interface PlanWeekSkeleton {
+  weekNumber: number
+  startDate: string
+  endDate: string
+}
+
+/** Deterministic Monday-aligned week boundaries for a plan starting on (the Monday of) startDateIso. */
+export function buildPlanWeekSkeleton(startDateIso: string, numWeeks: number): PlanWeekSkeleton[] {
+  const start = new Date(`${mondayOf(startDateIso)}T00:00:00`)
+  const weeks: PlanWeekSkeleton[] = []
+  for (let i = 0; i < numWeeks; i++) {
+    const weekStart = addDays(start, i * 7)
+    const weekEnd = addDays(weekStart, 6)
+    weeks.push({
+      weekNumber: i + 1,
+      startDate: format(weekStart, 'yyyy-MM-dd'),
+      endDate: format(weekEnd, 'yyyy-MM-dd'),
+    })
+  }
+  return weeks
+}
+
+export interface PlanWeekContent {
+  phase: PlanPhase
+  focus: string
+  targetWeeklyMinutes: number
+  notes?: string
+}
+
+export interface PlanWeek extends PlanWeekSkeleton, PlanWeekContent {}
+
+/**
+ * Zips the AI-generated per-week content onto the deterministic date
+ * skeleton, by index. The skeleton's length is authoritative — if the
+ * model returned a different number of weeks than asked, extra content is
+ * dropped and any missing week falls back to a safe default rather than
+ * crashing the UI.
+ */
+export function mergePlanWeeks(skeleton: PlanWeekSkeleton[], content: PlanWeekContent[]): PlanWeek[] {
+  return skeleton.map((week, i) => {
+    const c = content[i]
+    return {
+      ...week,
+      phase: c?.phase ?? 'base',
+      focus: c?.focus ?? '',
+      targetWeeklyMinutes: c?.targetWeeklyMinutes ?? 0,
+      notes: c?.notes,
+    }
+  })
+}
+
+/** The week containing todayIso, or null if today falls before the plan starts or after it ends. */
+export function currentPlanWeek(weeks: PlanWeek[], todayIso: string): PlanWeek | null {
+  return weeks.find((w) => todayIso >= w.startDate && todayIso <= w.endDate) ?? null
+}

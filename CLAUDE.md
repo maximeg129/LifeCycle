@@ -27,7 +27,7 @@ src/
 │   ├── globals.css               # Variables CSS + classes utilitaires (.apple-card, .text-gradient)
 │   ├── login/page.tsx            # Authentification (email + Google)
 │   ├── register/page.tsx         # Inscription (email + Google)
-│   ├── cycling/page.tsx          # Hub cyclisme (CTL/ATL/TSB + budget kJ, gouverneur de charge, proposition du jour IA, coach mémoire, matériel, chaînes)
+│   ├── cycling/page.tsx          # Hub cyclisme (CTL/ATL/TSB + budget kJ, gouverneur de charge, plan IA, proposition du jour IA, coach mémoire, matériel, chaînes)
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
 │   ├── weather/page.tsx          # Assistant météo IA (flow Claude)
 │   ├── home-management/page.tsx  # Tâches récurrentes + plantes (Firestore)
@@ -136,6 +136,7 @@ Toutes les données utilisateur sont sous `users/{uid}/` :
 | `users/{uid}/coachMemory` | `lifestyle` / `facts` (singletons) | Style de vie (texte libre) et faits retenus (`items: string[]`) |
 | `users/{uid}/sessionFeedback` | `{activityId}` ou `daily-{yyyy-MM-dd}` | RPE (1-10), feeling, motivation par séance — alimente le gouverneur de charge interne |
 | `users/{uid}/workoutProposals` | `{yyyy-MM-dd}` | Proposition du jour IA : availableMinutes, proposal (sortie `dailyWorkoutRecommendation`), sentToIntervals — un doc par jour, écrasé à la régénération |
+| `users/{uid}/trainingPlans` | `{planId}` | Plan structuré moyen/long terme IA : name, status (`active`/`archived` — un seul actif à la fois), eventName/eventDate, weeklyAvailableMinutes, weeks[] (phase/focus/targetWeeklyMinutes par semaine, sortie `trainingPlanGeneration`) — collection préexistante dans le schéma d'origine (jamais utilisée avant), réutilisée telle quelle |
 
 ### Hooks Firebase
 
@@ -252,6 +253,23 @@ premier flow).
   calendrier Intervals.icu via `IntervalsService.createPlannedWorkout()` → `POST /api/intervals/events`
   (`upsertOnUid=true` : ré-envoyer la même journée met à jour l'événement au lieu de le dupliquer, voir
   `dailyWorkoutExternalId`). Stocké dans `users/{uid}/workoutProposals/{yyyy-MM-dd}`.
+- Si un plan d'entraînement actif existe (voir `trainingPlanGeneration` ci-dessous), reçoit en plus
+  `planWeek` (phase/focus/volume cible de la semaine en cours, via `currentPlanWeek` dans
+  `training-plan-types.ts`) — la séance du jour doit alors coller à la phase du plan plutôt qu'être
+  générée dans le vide.
+
+### Flow existant : `trainingPlanGeneration`
+- Input : `{ today, goal, weekCount, weeklyAvailableMinutes, training?, coachContext? }`
+- Output : `{ planName, weeks[] (phase/focus/targetWeeklyMinutes/notes — exactement `weekCount` éléments),
+  warnings[] }`
+- Usage : `src/components/cycling/training-plan-tab.tsx` (onglet "Plan" de Cyclisme)
+- Périodisation classique (base → build → peak → taper, semaines recovery tous les 3-4 semaines) vers un
+  objectif choisi parmi `coachGoals`. Le flow ne génère QUE le contenu de chaque semaine — jamais les
+  dates elles-mêmes : `buildPlanWeekSkeleton`/`mergePlanWeeks` (`training-plan-types.ts`) calculent les
+  bornes de semaine (alignées sur lundi) de façon déterministe et zippent le contenu IA dessus par index,
+  pour éviter de faire faire de l'arithmétique de dates à l'IA. Un seul plan `active` à la fois par
+  utilisateur (`status: 'active'|'archived'` sur `users/{uid}/trainingPlans/{planId}`) — en générer un
+  nouveau archive l'ancien plutôt que de l'écraser.
 
 ### Créer un nouveau flow
 

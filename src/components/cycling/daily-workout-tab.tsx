@@ -20,6 +20,7 @@ export function DailyWorkoutTab() {
     stored,
     storedAvailableMinutes,
     sentToIntervals,
+    planWeek,
     isLoadingStored,
     isGenerating,
     isSending,
@@ -75,6 +76,11 @@ export function DailyWorkoutTab() {
             Indiquez le temps dont vous disposez aujourd&apos;hui — l&apos;IA propose une séance adaptée à votre forme actuelle
             (charge interne, TSB, blessures, objectifs), que vous pouvez ajuster avant de l&apos;envoyer sur Intervals.icu.
           </CardDescription>
+          {planWeek && (
+            <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
+              Semaine {planWeek.weekNumber} du plan · {planWeek.focus}
+            </Badge>
+          )}
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-4">
           <div className="space-y-2">

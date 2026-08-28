@@ -11,9 +11,9 @@
 // — not a second, disconnected notion of readiness.
 
 import { useCallback, useMemo, useState } from 'react'
-import { doc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, query, setDoc, updateDoc, where, serverTimestamp } from 'firebase/firestore'
 import { format, subDays } from 'date-fns'
-import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
+import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase'
 import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -24,6 +24,7 @@ import { useKJBudget } from './use-kj-budget'
 import { buildCoachContext } from './coach-context'
 import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload } from './daily-workout-types'
+import { currentPlanWeek, type PlanWeek } from './training-plan-types'
 
 interface IntervalsCredentialsDoc {
   intervalsAthleteId?: string
@@ -57,6 +58,19 @@ export function useDailyWorkout() {
     return doc(db, `users/${user.uid}/workoutProposals/${todayId}`)
   }, [db, user, todayId])
   const { data: stored, isLoading: loadingStored } = useDoc<StoredWorkoutProposal>(proposalRef)
+
+  // The active mid/long-term plan, if any — so today's proposal fits the
+  // current phase/focus instead of being generated in a vacuum (see
+  // training-plan-types.ts / training-plan-generation-flow.ts).
+  const activePlanQuery = useMemoFirebase(() => {
+    if (!user || !db) return null
+    return query(collection(db, `users/${user.uid}/trainingPlans`), where('status', '==', 'active'))
+  }, [db, user])
+  const { data: activePlans } = useCollection<{ weeks: PlanWeek[] }>(activePlanQuery)
+  const planWeek = useMemo(() => {
+    const plan = activePlans?.[0]
+    return plan ? currentPlanWeek(plan.weeks, todayId) : null
+  }, [activePlans, todayId])
 
   // Intervals credentials — read directly rather than through IntervalsProvider,
   // which deliberately doesn't expose the raw athleteId/apiKey past its own
@@ -95,6 +109,12 @@ export function useDailyWorkout() {
           rampRate: athlete.data.rampRate,
         } : undefined,
         recentSessions: summarizeRecentSessions(recentActivities.data, todayId, SESSIONS_WINDOW_DAYS),
+        planWeek: planWeek ? {
+          weekNumber: planWeek.weekNumber,
+          phase: planWeek.phase,
+          focus: planWeek.focus,
+          targetWeeklyMinutes: planWeek.targetWeeklyMinutes,
+        } : undefined,
         coachContext,
       })
 
@@ -119,7 +139,7 @@ export function useDailyWorkout() {
     } finally {
       setIsGenerating(false)
     }
-  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, todayId, athlete.isConfigured, athlete.data, recentActivities.data, toast])
+  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, todayId, athlete.isConfigured, athlete.data, recentActivities.data, planWeek, toast])
 
   const sendToIntervals = useCallback(async (proposal: DailyWorkoutRecommendationOutput): Promise<boolean> => {
     if (!creds?.intervalsAthleteId || !creds?.intervalsApiKey) {
@@ -165,6 +185,7 @@ export function useDailyWorkout() {
     stored: stored?.proposal ?? null,
     storedAvailableMinutes: stored?.availableMinutes ?? null,
     sentToIntervals: stored?.sentToIntervals ?? false,
+    planWeek,
     isLoadingStored: loadingStored,
     isGenerating,
     isSending,

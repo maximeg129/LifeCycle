@@ -30,6 +30,12 @@ const DailyWorkoutRecommendationInputSchema = z.object({
     durationMinutes: z.number().optional(),
     trainingLoad: z.number().optional(),
   })).describe('Last ~7 days of completed sessions, oldest first. Empty array if none.'),
+  planWeek: z.object({
+    weekNumber: z.number(),
+    phase: z.enum(['base', 'build', 'peak', 'taper', 'recovery']),
+    focus: z.string(),
+    targetWeeklyMinutes: z.number(),
+  }).optional().describe('The current week of the athlete\'s active mid/long-term training plan, if one exists — today\'s session should fit this week\'s phase and focus rather than being generated in a vacuum.'),
   coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, lifestyle, goals, remembered facts, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
 }).describe('Input for the daily workout recommendation flow.');
 
@@ -79,6 +85,15 @@ export async function dailyWorkoutRecommendation(input: DailyWorkoutRecommendati
 
   sections.push(`SÉANCES RÉCENTES (7 derniers jours, du plus ancien au plus récent) :\n${formatRecentSessions(parsedInput.recentSessions)}`);
 
+  if (parsedInput.planWeek) {
+    const w = parsedInput.planWeek;
+    sections.push([
+      `PLAN D'ENTRAÎNEMENT EN COURS — semaine ${w.weekNumber} (phase ${w.phase}) :`,
+      `Focus de la semaine : ${w.focus}`,
+      `Volume cible cette semaine : ${w.targetWeeklyMinutes} minutes`,
+    ].join('\n'));
+  }
+
   const coachContextBlock = parsedInput.coachContext ? `${parsedInput.coachContext}\n\n` : '';
 
   const system = `${coachContextBlock}Tu es un coach cycliste expert. À partir du contexte fourni (forme actuelle, charge d'entraînement,
@@ -93,6 +108,10 @@ Règles impératives :
 - S'il y a une blessure active, adapte ou évite ce qui pourrait l'aggraver, et mentionne l'adaptation dans warnings.
 - S'il y a un objectif proche avec une priorité haute, oriente le contenu de la séance vers sa spécificité
   (ex: un objectif "grimpeur" appelle du travail en côte ou en seuil, pas uniquement de l'endurance plate).
+- Si un plan d'entraînement en cours est fourni, la séance du jour DOIT correspondre à la phase et au focus
+  de la semaine en cours (ex: en phase "base", privilégie l'endurance même si le temps disponible permettrait
+  une séance plus intense ; en phase "taper", réduis délibérément l'intensité et le volume). Le plan prime
+  sur une proposition générique.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
 
 Format du script structuré (structuredWorkout), en syntaxe Intervals.icu — c'est le format texte du
