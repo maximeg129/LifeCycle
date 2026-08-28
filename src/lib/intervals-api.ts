@@ -149,6 +149,30 @@ export interface IntervalsPowerZone {
   color: string;
 }
 
+/**
+ * A planned-workout event to push to the athlete's Intervals.icu calendar.
+ * `externalId` drives upsertOnUid=true — sending the same id again (e.g. the
+ * user edits and re-sends today's proposal) updates the existing calendar
+ * entry instead of creating a duplicate, mirroring how `getActivitiesRaw`
+ * already treats the API's own gotchas as things to design around rather
+ * than trust blindly.
+ */
+export interface PlannedWorkoutEvent {
+  externalId: string;
+  name: string;
+  /** Intervals.icu's own type vocabulary — "Ride", "VirtualRide", "Run"... */
+  sportType: string;
+  /** yyyy-MM-dd — Intervals.icu schedules the event on this local date. */
+  startDateLocal: string;
+  /** Structured workout text in Intervals.icu's step syntax (e.g. "- 10m 60-70% Warmup"). */
+  description: string;
+  durationSeconds?: number;
+}
+
+export interface PlannedWorkoutResult {
+  id: string;
+}
+
 /** Explicit field list for GET /activities — see IntervalsActivity for why. */
 const ACTIVITY_FIELDS = [
   'id', 'name', 'type', 'source', 'start_date_local', 'moving_time', 'elapsed_time',
@@ -303,5 +327,44 @@ export class IntervalsService {
   /** Zones de puissance */
   async getPowerZones(): Promise<IntervalsPowerZone[]> {
     return this.fetchIntervals<IntervalsPowerZone[]>(`/power-zones`);
+  }
+
+  private async postIntervals<T = unknown>(endpoint: string, body: unknown): Promise<T> {
+    const response = await fetch(`${this.baseUrl}/${this.athleteId}${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': this.authHeader,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      throw new Error(`Intervals.icu API Error ${response.status}: ${response.statusText}${text ? ` — ${text.slice(0, 300)}` : ''}`);
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Pushes (or upserts, via `externalId`) a single planned workout onto the
+   * athlete's calendar — see PlannedWorkoutEvent for why the upsert id
+   * matters. `upsertOnUid=true` makes Intervals.icu update the existing
+   * calendar entry instead of creating a duplicate when the same
+   * externalId is sent again (e.g. the user edits and re-sends today's
+   * proposal).
+   */
+  async createPlannedWorkout(event: PlannedWorkoutEvent): Promise<PlannedWorkoutResult> {
+    const body = {
+      category: 'WORKOUT',
+      external_id: event.externalId,
+      name: event.name,
+      type: event.sportType,
+      start_date_local: `${event.startDateLocal}T00:00:00`,
+      description: event.description,
+      ...(event.durationSeconds != null ? { moving_time: event.durationSeconds } : {}),
+    };
+    return this.postIntervals<PlannedWorkoutResult>('/events?upsertOnUid=true', body);
   }
 }

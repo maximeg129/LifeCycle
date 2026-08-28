@@ -20,6 +20,7 @@ import {
   Timer,
   Flame,
   Droplets,
+  Sparkles,
 } from 'lucide-react'
 import { useAthlete, useActivities, useFitnessChart } from '@/hooks/use-intervals'
 import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
@@ -47,6 +48,9 @@ const GearTab = dynamic(() => import('@/components/cycling/gear-tab').then(m => 
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 const ChainsTab = dynamic(() => import('@/components/cycling/chains-tab').then(m => m.ChainsTab), {
+  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
+})
+const DailyWorkoutTab = dynamic(() => import('@/components/cycling/daily-workout-tab').then(m => m.DailyWorkoutTab), {
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 
@@ -134,6 +138,9 @@ export default function CyclingHub() {
             </TabsTrigger>
             <TabsTrigger value="pmc" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <TrendingUp className="w-4 h-4 mr-2" /> PMC
+            </TabsTrigger>
+            <TabsTrigger value="daily-workout" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
+              <Sparkles className="w-4 h-4 mr-2" /> Proposition du jour
             </TabsTrigger>
             <TabsTrigger value="coach" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <BrainCircuit className="w-4 h-4 mr-2" /> Mémoire coach
@@ -332,6 +339,11 @@ export default function CyclingHub() {
           {/* ── Tab PMC (Performance Management Chart) — code-split ── */}
           <TabsContent value="pmc" className="space-y-8">
             <PmcTab isConfigured={isConfigured} athleteLoading={athlete.isLoading} fitness={fitness} />
+          </TabsContent>
+
+          {/* ── Tab Proposition du jour (AI flow + Firestore) ── */}
+          <TabsContent value="daily-workout" className="space-y-8">
+            <DailyWorkoutTab />
           </TabsContent>
 
           {/* ── Tab Mémoire coach (Firestore-backed) ── */}

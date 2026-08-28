@@ -27,7 +27,7 @@ src/
 │   ├── globals.css               # Variables CSS + classes utilitaires (.apple-card, .text-gradient)
 │   ├── login/page.tsx            # Authentification (email + Google)
 │   ├── register/page.tsx         # Inscription (email + Google)
-│   ├── cycling/page.tsx          # Hub cyclisme (CTL/ATL/TSB + budget kJ, gouverneur de charge, coach mémoire, matériel, chaînes)
+│   ├── cycling/page.tsx          # Hub cyclisme (CTL/ATL/TSB + budget kJ, gouverneur de charge, proposition du jour IA, coach mémoire, matériel, chaînes)
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
 │   ├── weather/page.tsx          # Assistant météo IA (flow Claude)
 │   ├── home-management/page.tsx  # Tâches récurrentes + plantes (Firestore)
@@ -135,6 +135,7 @@ Toutes les données utilisateur sont sous `users/{uid}/` :
 | `users/{uid}/coachGoals` | `{goalId}` | Objectifs coach IA : eventName, eventDate, targetOutcome, priority |
 | `users/{uid}/coachMemory` | `lifestyle` / `facts` (singletons) | Style de vie (texte libre) et faits retenus (`items: string[]`) |
 | `users/{uid}/sessionFeedback` | `{activityId}` ou `daily-{yyyy-MM-dd}` | RPE (1-10), feeling, motivation par séance — alimente le gouverneur de charge interne |
+| `users/{uid}/workoutProposals` | `{yyyy-MM-dd}` | Proposition du jour IA : availableMinutes, proposal (sortie `dailyWorkoutRecommendation`), sentToIntervals — un doc par jour, écrasé à la régénération |
 
 ### Hooks Firebase
 
@@ -237,6 +238,18 @@ premier flow).
 - Input : `{ dailyMetrics[], goals[], training }`
 - Output : `{ summary, recommendation, highlights[], watchouts[] }`
 - Usage : `src/app/lifestyle/page.tsx` (bouton "Analyser" dans l'onglet Récupération)
+
+### Flow existant : `dailyWorkoutRecommendation`
+- Input : `{ date, availableMinutes, sportType?, training?, recentSessions[], coachContext? }`
+- Output : `{ title, sportType, durationMinutes, intensityLabel, rationale, structuredWorkout, warnings[] }`
+  — `structuredWorkout` est un script en syntaxe Intervals.icu (étapes en `%FTP`, blocs répétés `NxN (../..)`).
+- Usage : `src/components/cycling/daily-workout-tab.tsx` (onglet "Proposition du jour" de Cyclisme)
+- Réutilise `buildCoachContext` (blessures/objectifs/style de vie/faits retenus/gouverneur/budget kJ) comme
+  `recoveryInsight`, plus le CTL/ATL/TSB courant et les séances des 7 derniers jours (`summarizeRecentSessions`
+  dans `daily-workout-types.ts`). L'utilisateur peut éditer le titre/durée/script avant envoi. Poussée sur le
+  calendrier Intervals.icu via `IntervalsService.createPlannedWorkout()` → `POST /api/intervals/events`
+  (`upsertOnUid=true` : ré-envoyer la même journée met à jour l'événement au lieu de le dupliquer, voir
+  `dailyWorkoutExternalId`). Stocké dans `users/{uid}/workoutProposals/{yyyy-MM-dd}`.
 
 ### Créer un nouveau flow
 

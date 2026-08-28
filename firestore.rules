@@ -232,6 +232,18 @@ service cloud.firestore {
       }
 
       /**
+       * @description Daily AI workout proposals ("Proposition du jour"),
+       * keyed by `{yyyy-MM-dd}` — one per day, overwritten on regenerate.
+       * @path /users/{userId}/workoutProposals/{dateId}
+       */
+      match /workoutProposals/{dateId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
        * @description Logs of maintenance performed.
        * @path /users/{userId}/maintenanceRecords/{recordId}
        */

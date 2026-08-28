@@ -7,7 +7,7 @@ export const TOP_LEVEL_COLLECTIONS = [
   'activities', 'trainingPlans', 'bikes', 'maintenanceRecords', 'recipes',
   'tags', 'ingredients', 'cyclingClothingItems', 'plants', 'pantryItems',
   'shoppingListItems', 'expenseCategories', 'monthlyBudgets', 'expenses',
-  'tasks', 'healthMetrics', 'healthGoals',
+  'tasks', 'healthMetrics', 'healthGoals', 'workoutProposals',
 ]
 
 // parent collection -> its nested subcollection name(s), deleted before the parent doc.
