@@ -164,7 +164,24 @@ export interface PlannedWorkoutEvent {
   sportType: string;
   /** yyyy-MM-dd — Intervals.icu schedules the event on this local date. */
   startDateLocal: string;
-  /** Structured workout text in Intervals.icu's step syntax (e.g. "- 10m 60-70% Warmup"). */
+  /**
+   * Structured workout text in Intervals.icu's workout-builder syntax —
+   * section header lines (plain text, optionally suffixed "Nx" for a
+   * repeat), each followed by one or more "- <duration> <target>" step
+   * lines, e.g.:
+   *   Warmup
+   *   - 15m ramp 55-65%
+   *
+   *   Main Set 4x
+   *   - 5m 95-105%
+   *   - 3m 50%
+   * This is what Intervals.icu itself parses into structured steps when
+   * the event is saved — an inline "4x (5m 95% / 3m 50%)" one-liner looks
+   * plausible but is NOT recognized and silently produces a workout with
+   * no steps (confirmed against community reports of the same failure —
+   * see daily-workout-recommendation-flow.ts's system prompt for the
+   * generation rules).
+   */
   description: string;
   durationSeconds?: number;
 }

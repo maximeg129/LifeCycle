@@ -242,7 +242,9 @@ premier flow).
 ### Flow existant : `dailyWorkoutRecommendation`
 - Input : `{ date, availableMinutes, sportType?, training?, recentSessions[], coachContext? }`
 - Output : `{ title, sportType, durationMinutes, intensityLabel, rationale, structuredWorkout, warnings[] }`
-  — `structuredWorkout` est un script en syntaxe Intervals.icu (étapes en `%FTP`, blocs répétés `NxN (../..)`).
+  — `structuredWorkout` est le script texte du "workout builder" Intervals.icu que le site parse lui-même :
+  en-têtes de section (optionnellement suffixés `Nx` pour une répétition) suivis de lignes `- <durée> <cible%>`.
+  Le format inline `Nx (étape / étape)` n'est PAS reconnu par le parseur — voir le prompt du flow.
 - Usage : `src/components/cycling/daily-workout-tab.tsx` (onglet "Proposition du jour" de Cyclisme)
 - Réutilise `buildCoachContext` (blessures/objectifs/style de vie/faits retenus/gouverneur/budget kJ) comme
   `recoveryInsight`, plus le CTL/ATL/TSB courant et les séances des 7 derniers jours (`summarizeRecentSessions`

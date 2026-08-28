@@ -41,7 +41,7 @@ const DailyWorkoutRecommendationOutputSchema = z.object({
   durationMinutes: z.number().describe('Total planned duration including warmup/cooldown — must not exceed availableMinutes.'),
   intensityLabel: z.string().describe('One or two words describing the session, e.g. "Endurance", "Seuil", "Récupération active".'),
   rationale: z.string().describe('2-4 sentences in French explaining why this session fits today, grounded in the actual form/context data provided — not generic advice.'),
-  structuredWorkout: z.string().describe('Intervals.icu workout-builder step script, one instruction per line (see system prompt for the exact syntax).'),
+  structuredWorkout: z.string().describe('Intervals.icu workout-builder text script — section headers (optionally suffixed "Nx" for a repeat) each followed by "- " step lines. See system prompt for the exact syntax.'),
   warnings: z.array(z.string()).describe('0-3 short things the athlete should know before starting (injury caution, heavy week, etc). Empty array if nothing stands out.'),
 }).describe('Output of the daily workout recommendation flow.');
 
@@ -95,11 +95,31 @@ Règles impératives :
   (ex: un objectif "grimpeur" appelle du travail en côte ou en seuil, pas uniquement de l'endurance plate).
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
 
-Format du script structuré (structuredWorkout), en syntaxe Intervals.icu (une instruction par ligne) :
-- Une étape simple : "<durée> <cible>% <nom optionnel>", ex. "15m 55-65% Échauffement"
-- Un bloc répété : "<N>x (<durée> <cible>% / <durée> <cible>%)", ex. "4x (5m 95-105% / 3m 50%)"
-- Les cibles sont exprimées en % de la FTP (puissance seuil), jamais en watts absolus.
-- Termine toujours par un retour au calme.
+Format du script structuré (structuredWorkout), en syntaxe Intervals.icu — c'est le format texte du
+"workout builder" que le site parse lui-même pour générer les étapes, respecte-le EXACTEMENT :
+- Le script est organisé en sections. Chaque section commence par une ligne d'en-tête en texte libre
+  (ex. "Échauffement", "Corps de séance", "Retour au calme"), suivie d'une ligne vide avant la section
+  suivante.
+- Sous chaque en-tête, une ou plusieurs lignes d'étape commençant par "- ", format :
+  "- <durée><unité> [ramp] <cible>[%|w] [<cadence>rpm]"
+  - Durée : nombre suivi de "s" (secondes), "m" (minutes — PAS des mètres) ou "h" (heures), ex. "15m", "30s".
+  - Cible : % de la FTP (ex. "55-65%", "95-105%") — jamais en watts absolus sauf cas particulier.
+  - "ramp" (optionnel, avant la cible) : montée/descente progressive sur la durée de l'étape, ex. "ramp 55-65%".
+  - Cadence (optionnel, en fin de ligne) : ex. "90rpm".
+- Pour un bloc répété (ex. 4 fois 5min effort / 3min récup), mets le nombre de répétitions en suffixe de
+  l'en-tête de section ("Corps de séance 4x"), puis liste les étapes du bloc à répéter en dessous.
+- N'utilise JAMAIS la syntaxe "Nx (étape / étape)" sur une seule ligne — elle n'est pas reconnue par le parseur.
+
+Exemple complet pour un échauffement en rampe + 4x(5min seuil / 3min récup) + retour au calme :
+Échauffement
+- 15m ramp 55-65%
+
+Corps de séance 4x
+- 5m 95-105%
+- 3m 50%
+
+Retour au calme
+- 10m 55%
 
 Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme :
 {
@@ -108,7 +128,7 @@ Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, p
   "durationMinutes": nombre,
   "intensityLabel": "un ou deux mots",
   "rationale": "2 à 4 phrases justifiant ce choix à partir du contexte réel fourni",
-  "structuredWorkout": "script structuré, une instruction par ligne",
+  "structuredWorkout": "script structuré en sections + étapes, voir le format ci-dessus",
   "warnings": ["0 à 3 points d'attention courts, tableau vide si rien à signaler"]
 }`;
 
