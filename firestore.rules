@@ -244,6 +244,18 @@ service cloud.firestore {
       }
 
       /**
+       * @description Messages of the "Stella" coach chat — a flat,
+       * append-only log (no update rule: a chat message is never edited
+       * after the fact, only created or deleted as part of clearing history).
+       * @path /users/{userId}/coachChatMessages/{messageId}
+       */
+      match /coachChatMessages/{messageId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
        * @description Logs of maintenance performed.
        * @path /users/{userId}/maintenanceRecords/{recordId}
        */

@@ -22,6 +22,7 @@ import {
   Droplets,
   Sparkles,
   Target,
+  MessageCircle,
 } from 'lucide-react'
 import { useAthlete, useActivities, useFitnessChart } from '@/hooks/use-intervals'
 import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
@@ -55,6 +56,9 @@ const DailyWorkoutTab = dynamic(() => import('@/components/cycling/daily-workout
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 const TrainingPlanTab = dynamic(() => import('@/components/cycling/training-plan-tab').then(m => m.TrainingPlanTab), {
+  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
+})
+const StellaChatTab = dynamic(() => import('@/components/cycling/stella-chat-tab').then(m => m.StellaChatTab), {
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 
@@ -148,6 +152,9 @@ export default function CyclingHub() {
             </TabsTrigger>
             <TabsTrigger value="daily-workout" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <Sparkles className="w-4 h-4 mr-2" /> Proposition du jour
+            </TabsTrigger>
+            <TabsTrigger value="stella" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
+              <MessageCircle className="w-4 h-4 mr-2" /> Stella
             </TabsTrigger>
             <TabsTrigger value="coach" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <BrainCircuit className="w-4 h-4 mr-2" /> Mémoire coach
@@ -356,6 +363,11 @@ export default function CyclingHub() {
           {/* ── Tab Proposition du jour (AI flow + Firestore) ── */}
           <TabsContent value="daily-workout" className="space-y-8">
             <DailyWorkoutTab />
+          </TabsContent>
+
+          {/* ── Tab Stella (chat conversationnel, AI flow + Firestore) ── */}
+          <TabsContent value="stella" className="space-y-8">
+            <StellaChatTab />
           </TabsContent>
 
           {/* ── Tab Mémoire coach (Firestore-backed) ── */}

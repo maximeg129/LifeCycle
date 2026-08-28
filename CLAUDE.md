@@ -27,7 +27,7 @@ src/
 │   ├── globals.css               # Variables CSS + classes utilitaires (.apple-card, .text-gradient)
 │   ├── login/page.tsx            # Authentification (email + Google)
 │   ├── register/page.tsx         # Inscription (email + Google)
-│   ├── cycling/page.tsx          # Hub cyclisme (CTL/ATL/TSB + budget kJ, gouverneur de charge, plan IA, proposition du jour IA, coach mémoire, matériel, chaînes)
+│   ├── cycling/page.tsx          # Hub cyclisme (CTL/ATL/TSB + budget kJ, gouverneur de charge, plan IA, proposition du jour IA, coach mémoire, chat Stella, matériel, chaînes)
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
 │   ├── weather/page.tsx          # Assistant météo IA (flow Claude)
 │   ├── home-management/page.tsx  # Tâches récurrentes + plantes (Firestore)
@@ -137,6 +137,7 @@ Toutes les données utilisateur sont sous `users/{uid}/` :
 | `users/{uid}/sessionFeedback` | `{activityId}` ou `daily-{yyyy-MM-dd}` | RPE (1-10), feeling, motivation par séance — alimente le gouverneur de charge interne |
 | `users/{uid}/workoutProposals` | `{yyyy-MM-dd}` | Proposition du jour IA : availableMinutes, proposal (sortie `dailyWorkoutRecommendation`), sentToIntervals — un doc par jour, écrasé à la régénération |
 | `users/{uid}/trainingPlans` | `{planId}` | Plan structuré moyen/long terme IA : name, status (`active`/`archived` — un seul actif à la fois), eventName/eventDate, weeklyAvailableMinutes, weeks[] (phase/focus/targetWeeklyMinutes par semaine, sortie `trainingPlanGeneration`) — collection préexistante dans le schéma d'origine (jamais utilisée avant), réutilisée telle quelle |
+| `users/{uid}/coachChatMessages` | `{messageId}` | Log plat du chat "Stella" : role (`user`/`assistant`), content, createdAt — append-only, aucune règle `update` (un message n'est jamais modifié, seulement créé ou supprimé en vidant l'historique) |
 
 ### Hooks Firebase
 
@@ -270,6 +271,21 @@ premier flow).
   pour éviter de faire faire de l'arithmétique de dates à l'IA. Un seul plan `active` à la fois par
   utilisateur (`status: 'active'|'archived'` sur `users/{uid}/trainingPlans/{planId}`) — en générer un
   nouveau archive l'ancien plutôt que de l'écraser.
+
+### Flow existant : `coachChat`
+- Input : `{ messages[] (role user/assistant, historique complet dont le nouveau message), coachContext?, training?, planWeek? }`
+- Output : `string` (texte brut — **seul flow de l'app qui ne répond pas en JSON**, `generateJson` ne
+  s'applique pas à une conversation libre ; appelle directement `anthropic.messages.create` avec le
+  système/historique en `messages`).
+- Usage : `src/components/cycling/stella-chat-tab.tsx` (onglet "Stella" de Cyclisme)
+- Persona conversationnelle réutilisant le même `buildCoachContext` + CTL/ATL/TSB + semaine de plan en
+  cours que les autres flows coach — pas une mémoire séparée. Volontairement consultative seulement : le
+  prompt système interdit à Stella de générer elle-même une séance structurée ou un plan (elle renvoie vers
+  les onglets dédiés) pour ne pas dupliquer un chemin de génération avec un format à respecter en dehors du
+  flow prévu pour ça.
+- Historique stocké intégralement dans `users/{uid}/coachChatMessages` (affichage), mais seule la fenêtre
+  glissante des ~20 derniers messages est effectivement envoyée au modèle à chaque tour
+  (`trimChatHistoryForPrompt` dans `coach-chat-types.ts`) pour borner le coût/latence.
 
 ### Créer un nouveau flow
 
