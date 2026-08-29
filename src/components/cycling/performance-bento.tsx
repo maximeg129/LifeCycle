@@ -84,8 +84,11 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
     <div className="space-y-3">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {/* Hero — TSB */}
-        <div className="col-span-2 row-span-2 rounded-2xl bg-foreground text-background p-6 flex flex-col justify-between shadow-lg">
-          <span className="text-[11px] font-medium uppercase tracking-wider text-background/60">Forme · TSB</span>
+        <Link href="/cycling/metric/tsb" className="col-span-2 row-span-2 rounded-2xl bg-foreground text-background p-6 flex flex-col justify-between shadow-lg group">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium uppercase tracking-wider text-background/60">Forme · TSB</span>
+            <ChevronRight className="w-4 h-4 text-background/40 group-hover:translate-x-0.5 transition-transform" />
+          </div>
           <div className="font-data text-6xl font-bold text-primary my-3">
             {tsb != null ? (tsb > 0 ? `+${tsb}` : tsb) : '—'}
           </div>
@@ -93,7 +96,7 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
             {tsb == null || tsb >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
             <span className="text-background/70">{tsb != null ? label.text : 'Données indisponibles'}</span>
           </div>
-        </div>
+        </Link>
 
         {/* Riegel — right after TSB, only when the athlete has entered power records */}
         {enduranceIndex != null ? (
@@ -101,20 +104,21 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
             label="Indice Riegel"
             value={enduranceIndex.toFixed(2)}
             sublabel={<span className="flex items-center gap-1 text-primary"><Gauge className="w-3 h-3" /> Endurance</span>}
-            href="/lifestyle"
+            href="/cycling/metric/riegel"
             className="bg-primary/5 border-primary/20"
           />
         ) : (
-          <MetricTile label="Fitness (CTL)" value={safeRound(athlete.ctl)} sublabel="Charge chronique" />
+          <MetricTile label="Fitness (CTL)" value={safeRound(athlete.ctl)} sublabel="Charge chronique" href="/cycling/metric/ctl" />
         )}
 
-        {enduranceIndex != null && <MetricTile label="Fitness (CTL)" value={safeRound(athlete.ctl)} sublabel="Charge chronique" />}
-        <MetricTile label="Fatigue (ATL)" value={safeRound(athlete.atl)} sublabel="Charge aiguë" />
+        {enduranceIndex != null && <MetricTile label="Fitness (CTL)" value={safeRound(athlete.ctl)} sublabel="Charge chronique" href="/cycling/metric/ctl" />}
+        <MetricTile label="Fatigue (ATL)" value={safeRound(athlete.atl)} sublabel="Charge aiguë" href="/cycling/metric/atl" />
         <MetricTile
           label="FTP"
           value={athlete.ftp ?? '—'}
           unit="W"
           sublabel={athlete.ftp && athlete.weight && athlete.weight > 0 ? `${(athlete.ftp / athlete.weight).toFixed(2)} W/kg` : undefined}
+          href="/cycling/metric/ftp"
         />
 
         {/* Recovery — moved from Vie & Santé, now primary here */}
@@ -123,20 +127,20 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
           value={lifestyle.latest?.sleepHours ?? '—'}
           unit={lifestyle.latest?.sleepHours != null ? 'h' : undefined}
           sublabel={lifestyle.latest?.sleepQuality != null ? `Qualité ${lifestyle.latest.sleepQuality}%` : undefined}
-          href="/lifestyle"
+          href="/cycling/metric/sleep"
         />
         <MetricTile
           label="HRV"
           value={lifestyle.latest?.hrv ?? '—'}
           unit={lifestyle.latest?.hrv != null ? 'ms' : undefined}
-          href="/lifestyle"
+          href="/cycling/metric/hrv"
         />
         <MetricTile
           label="Readiness"
           value={lifestyle.readiness ?? '—'}
           unit={lifestyle.readiness != null ? '/100' : undefined}
           sublabel={lifestyle.readiness != null ? (lifestyle.readiness > 75 ? "Prêt pour l'effort" : lifestyle.readiness > 50 ? 'Effort modéré' : 'Récupération') : undefined}
-          href="/lifestyle"
+          href="/cycling/metric/readiness"
         />
       </div>
 

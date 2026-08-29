@@ -85,12 +85,13 @@ async function fetchProxy<T>(path: string, athleteId: string, apiKey: string): P
 
 // ── Fetch windows ────────────────────────────────────────────────────
 // A superset of every consumer's needed range (kJ budget: 77d, governor:
-// 35d, PMC chart: 84d, cycling journal: 30d…) — each hook below filters
-// this shared data down to whatever range it was actually asked for.
+// 35d, PMC chart: 84d, cycling journal: 30d, metric detail pages: ~180d…) —
+// each hook below filters this shared data down to whatever range it was
+// actually asked for.
 
 const ACTIVITIES_WINDOW_DAYS = 90
-const WELLNESS_WINDOW_DAYS = 90
-const FITNESS_WINDOW_DAYS = 90
+const WELLNESS_WINDOW_DAYS = 180
+const FITNESS_WINDOW_DAYS = 180
 
 // Gear totals need the bike's *entire* riding history, not just the 90-day
 // window above (that window is sized for training-load metrics, and a bike

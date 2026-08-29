@@ -16,26 +16,32 @@ import {
 
 const HISTORY_DAYS = 7
 
-export function useLifestyleData() {
+/**
+ * `days` defaults to the 7-day window every existing call site relies on
+ * (Vue d'ensemble's latest-value tiles, Proposition du jour's recovery
+ * context) — pass a wider value (e.g. from a metric detail page wanting
+ * several months of trend) without touching those call sites at all.
+ */
+export function useLifestyleData(days: number = HISTORY_DAYS) {
   const { user } = useUser()
   const db = useFirestore()
   const uid = user?.uid ?? null
 
-  const dayIds = useMemo(() => getLastDayIds(HISTORY_DAYS), [])
+  const dayIds = useMemo(() => getLastDayIds(days), [days])
   const oldestDayId = dayIds[0]
   const newestDayId = dayIds[dayIds.length - 1]
 
   const metricsQuery = useMemoFirebase(() => {
     if (!uid || !db) return null
     const start = new Date()
-    start.setDate(start.getDate() - (HISTORY_DAYS - 1))
+    start.setDate(start.getDate() - (days - 1))
     start.setHours(0, 0, 0, 0)
     return query(
       collection(db, `users/${uid}/healthMetrics`),
       where('date', '>=', Timestamp.fromDate(start)),
       orderBy('date', 'asc')
     )
-  }, [db, uid])
+  }, [db, uid, days])
   const { data: metrics, isLoading: loadingMetrics } = useCollection<HealthMetric>(metricsQuery)
 
   const goalsQuery = useMemoFirebase(() => {
@@ -56,7 +62,13 @@ export function useLifestyleData() {
     const latest = pickLatestWithData(dailySeries)
     const latestWellness = latest ? wellnessByDay.get(latest.dayId) : undefined
     const readiness = resolveReadiness(latest, latestWellness?.readiness)
-    return { dailySeries, latest, readiness }
+    // Per-day readiness for the whole window (not just the latest day) —
+    // only the metric detail pages need this trend; every other call site
+    // just ignores it.
+    const readinessSeries = dailySeries
+      .map((d) => ({ dayId: d.dayId, value: resolveReadiness(d, wellnessByDay.get(d.dayId)?.readiness) }))
+      .filter((d): d is { dayId: string; value: number } => d.value != null)
+    return { dailySeries, latest, readiness, readinessSeries }
   }, [metrics, dayIds, wellness.data])
 
   return {

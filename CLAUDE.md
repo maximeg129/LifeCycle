@@ -28,6 +28,7 @@ src/
 │   ├── login/page.tsx            # Authentification (email + Google)
 │   ├── register/page.tsx         # Inscription (email + Google)
 │   ├── cycling/page.tsx          # Page données, pas d'onglets : tuiles Vue d'ensemble (CTL/ATL/TSB/FTP/Riegel/sommeil/HRV/readiness) + budget kJ + gouverneur + PMC (courbe 12 semaines, charge hebdo, records de puissance) en scroll continu
+│   ├── cycling/metric/[id]/page.tsx  # Page détail d'une tuile Vue d'ensemble : courbe ~180j + explication (metric-info.ts) — une seule route dynamique pour les 8 métriques
 │   ├── coach/page.tsx            # Hub coaching IA — 6 sous-onglets : Proposition du jour (défaut), Sorties (journal d'activités), Météo & Tenue (ex-/weather), Plan, Stella, Mémoire coach
 │   ├── garage/page.tsx           # Matériel + Chaînes + Garde-robe (Firestore) — sorti de Cyclisme, sa propre destination de nav
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
@@ -139,6 +140,16 @@ Cyclisme redevient purement la page données (Vue d'ensemble + PMC, sans onglets
 Proposition du jour peut aussi recevoir un lieu/heure de départ optionnels : le flow
 `dailyWorkoutRecommendation` récupère alors la météo réelle (vent inclus) et ajoute un conseil de
 direction pour l'avoir dans le dos au retour — voir la section flows IA plus bas.
+
+**Chaque tuile de Vue d'ensemble renvoie vers `/cycling/metric/<id>`** (`cycling/metric/[id]/page.tsx`)
+— une page détail avec la courbe des ~180 derniers jours et une explication du principe de
+l'indicateur (`metric-info.ts`, contenu statique par métrique). CTL/ATL/TSB viennent de
+`useFitnessChart` et Sommeil/HRV/Readiness de `useLifestyleData(180)` (le paramètre `days`,
+optionnel, garde tous les appels existants à 7 jours par défaut inchangés) — `WELLNESS_WINDOW_DAYS`/
+`FITNESS_WINDOW_DAYS` dans `use-intervals.tsx` sont passés de 90 à 180 jours pour donner de la marge.
+FTP et l'indice Riegel n'ont pas d'historique suivi jour par jour aujourd'hui (FTP vient d'un test
+ponctuel Intervals.icu, Riegel est recalculé à la volée depuis la courbe de puissance actuelle) —
+leur page affiche honnêtement "pas encore d'historique suivi" plutôt que d'inventer une tendance.
 
 **Vie & Santé et Finances ne sont plus dans `navItems`** (ni dans la nav mobile) — leurs pages
 (`/lifestyle`, `/finance`) restent entièrement fonctionnelles mais ne sont plus accédées que via
