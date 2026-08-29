@@ -12,7 +12,8 @@ import {
   LogOut,
   Home,
   Search,
-  Wrench
+  Wrench,
+  Sparkles
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -212,39 +213,57 @@ export function AppNavigation() {
           </div>
         </header>
 
-        {/* Bottom nav — 5 core destinations (thumb-reach budget) + Réglages. */}
-        <nav className="fixed bottom-0 left-0 right-0 h-[72px] bg-background/90 backdrop-blur-2xl border-t border-border/50 z-40 flex items-center justify-around px-1 pb-2 safe-area-bottom">
-          {[
-            navItems.find(i => i.href === '/cycling')!,
-            navItems.find(i => i.href === '/coach')!,
-            navItems.find(i => i.href === '/garage')!,
-            navItems.find(i => i.href === '/nutrition')!,
-            navItems.find(i => i.href === '/home-management')!,
-            { name: 'Réglages', href: '/settings', icon: Settings },
-          ].map((item) => {
-            const isActive = pathname === item.href
-            const badge = badgeForHref(item.href, overdueTasks, overduePlants)
-            return (
-              <Link key={item.href} href={item.href} className="flex flex-col items-center gap-1 min-w-[56px] py-1">
-                <div className={cn(
-                  "relative w-9 h-9 flex items-center justify-center rounded-[10px] transition-all duration-200",
-                  isActive ? "bg-primary/12 text-primary" : "text-muted-foreground"
-                )}>
-                  <item.icon className="w-[20px] h-[20px]" />
-                  {badge > 0 && (
-                    <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-destructive" />
-                  )}
-                </div>
-                <span className={cn(
-                  "text-[9px] font-medium tracking-tight",
-                  isActive ? "text-primary" : "text-muted-foreground"
-                )}>
-                  {item.name.split(' ')[0]}
-                </span>
-              </Link>
-            )
-          })}
-        </nav>
+        {/* Bottom nav — floating pill (5 core destinations + Réglages) with a
+            separate circular Stella shortcut alongside it, à la Whoop coach
+            button (retour utilisateur sur une capture de référence). Stella
+            already lives inside Coach as a sub-onglet — this is a fast path
+            to it, not a replacement, so nothing changes on desktop where the
+            tab is already one click away. */}
+        <div className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-3 pt-1 flex items-center gap-2.5 safe-area-bottom pointer-events-none">
+          <nav className="flex-1 h-16 rounded-full bg-background/90 backdrop-blur-2xl border border-border/60 shadow-lg shadow-black/5 flex items-center justify-around px-1 pointer-events-auto">
+            {[
+              navItems.find(i => i.href === '/cycling')!,
+              navItems.find(i => i.href === '/coach')!,
+              navItems.find(i => i.href === '/garage')!,
+              navItems.find(i => i.href === '/nutrition')!,
+              navItems.find(i => i.href === '/home-management')!,
+              { name: 'Réglages', href: '/settings', icon: Settings },
+            ].map((item) => {
+              const isActive = pathname === item.href
+              const badge = badgeForHref(item.href, overdueTasks, overduePlants)
+              return (
+                <Link key={item.href} href={item.href} className="flex flex-col items-center gap-1 min-w-[48px] py-1">
+                  <div className={cn(
+                    "relative w-9 h-9 flex items-center justify-center rounded-[10px] transition-all duration-200",
+                    isActive ? "bg-primary/12 text-primary" : "text-muted-foreground"
+                  )}>
+                    <item.icon className="w-[20px] h-[20px]" />
+                    {badge > 0 && (
+                      <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-destructive" />
+                    )}
+                  </div>
+                  <span className={cn(
+                    "text-[9px] font-medium tracking-tight",
+                    isActive ? "text-primary" : "text-muted-foreground"
+                  )}>
+                    {item.name.split(' ')[0]}
+                  </span>
+                </Link>
+              )
+            })}
+          </nav>
+
+          <Link
+            href="/coach?tab=stella"
+            aria-label="Stella"
+            className={cn(
+              "pointer-events-auto shrink-0 w-16 h-16 rounded-full flex items-center justify-center shadow-lg shadow-primary/30 transition-transform active:scale-95",
+              pathname === '/coach' ? "bg-primary text-primary-foreground" : "bg-foreground text-primary"
+            )}
+          >
+            <Sparkles className="w-6 h-6" />
+          </Link>
+        </div>
       </div>
 
       <CommandPalette />
