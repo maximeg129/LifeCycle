@@ -20,8 +20,14 @@
 // purpose, so every existing call site keeps working unchanged — they're
 // now thin, range-filtered views over the shared context instead of
 // independent fetchers.
+//
+// The provider also runs this same sync automatically once per app session
+// — reads first (fast, drives isLoading/skeletons), then the km
+// reconciliation in the background (drives isSyncing, same spinner as a
+// manual click) — so opening the site is enough; nobody has to remember to
+// press "Synchroniser" themselves. See the two effects below.
 
-import React, { createContext, useContext, useState, useCallback, useEffect, useMemo } from 'react'
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { format, subDays } from 'date-fns'
 import { collection, doc, getDocs, updateDoc } from 'firebase/firestore'
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
@@ -163,8 +169,81 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
     return { athleteData, activitiesData }
   }, [])
 
-  // Initial/background load: reads only, never writes — km deltas are only
-  // ever applied from an explicit syncAll() click.
+  // The write side of sync: reconciles bike/component/chain km against the
+  // athlete's real Intervals.icu riding history. Split out from syncAll()
+  // so the auto-sync-on-load effect below can run it right after the initial
+  // reads without re-issuing them a second time.
+  const applyGearKmSync = useCallback(async (athleteId: string, apiKey: string): Promise<SyncAllResult> => {
+    let bikesUpdated = 0
+    let componentsUpdated = 0
+    let totalNewKm = 0
+
+    if (user && db) {
+      const [bikesSnap, componentsSnap, chainsSnap] = await Promise.all([
+        getDocs(collection(db, `users/${user.uid}/bikes`)),
+        getDocs(collection(db, `users/${user.uid}/components`)),
+        getDocs(collection(db, `users/${user.uid}/chains`)),
+      ])
+      const bikes = bikesSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Bike[]
+      const components = componentsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as BikeComponent[]
+      const chains = chainsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Chain[]
+      const todayStr = format(new Date(), 'yyyy-MM-dd')
+      const linkedBikes = bikes.filter((b): b is Bike & { externalGearId: string } => !!b.externalGearId)
+
+      if (linkedBikes.length > 0) {
+        // Ground truth for gear totals: the bike's *entire* real riding
+        // history tagged with its gear.id — not Intervals.icu's own
+        // /athlete bikes[].distance rollup (confirmed via live debug data
+        // to undercount gear whose rides sync directly from Wahoo,
+        // bypassing Strava), and not just the 90-day training window
+        // above. Recomputing the absolute total from scratch every sync
+        // (rather than an incremental delta since the last sync date)
+        // means the value always matches what Intervals.icu's own site
+        // shows, and self-heals any drift instead of requiring a manual
+        // one-time correction.
+        // `raw=1` skips the `fields=` sparse-fieldset param entirely — the
+        // API has already been caught silently dropping a field name it
+        // doesn't recognize from that param (the gear_id/gear mixup), so
+        // this fetch asks for the full, unfiltered shape instead of
+        // trusting an unverified sparse selector for the one field this
+        // computation actually depends on.
+        const fullHistory = await fetchProxy<IntervalsActivity[]>(
+          `/api/intervals/activities?oldest=${GEAR_HISTORY_OLDEST}&newest=${todayStr}&raw=1`,
+          athleteId,
+          apiKey
+        )
+
+        for (const bike of linkedBikes) {
+          const trueTotalKm = computeGearKmFromActivities(fullHistory, bike.externalGearId, null)
+          const delta = trueTotalKm - bike.totalKm
+          if (delta <= 0) continue
+
+          const bikeRef = doc(db, `users/${user.uid}/bikes`, bike.id)
+          await updateDoc(bikeRef, { totalKm: trueTotalKm, lastSyncDate: todayStr }).catch(() => {
+            errorEmitter.emit('permission-error', new FirestorePermissionError({ path: bikeRef.path, operation: 'update' }))
+          })
+          bikesUpdated++
+          totalNewKm += delta
+
+          const bikeComponents = components.filter((c) => c.bikeId === bike.id && c.status !== 'retired')
+          const result = await applyKmDeltaToBikeDependents({
+            db,
+            uid: user.uid,
+            bikeComponents,
+            bikeChains: chains.filter((c) => c.bikeId === bike.id),
+            delta,
+          })
+          componentsUpdated += result.componentsUpdated
+        }
+      }
+    }
+
+    return { bikesUpdated, componentsUpdated, totalNewKm }
+  }, [user, db])
+
+  // Initial/background load: reads only, so the app's first paint stays
+  // fast — skeletons resolve as soon as this comes back, independently of
+  // however long the gear km reconciliation below takes.
   useEffect(() => {
     if (!creds.isConfigured || !creds.athleteId || !creds.apiKey) return
     let cancelled = false
@@ -176,89 +255,67 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
     return () => { cancelled = true }
   }, [creds.isConfigured, creds.athleteId, creds.apiKey, fetchReads])
 
+  // Auto-sync on load: once the reads above are back, run the same km
+  // reconciliation the "Synchroniser" button triggers, automatically and
+  // exactly once per app session — the user shouldn't have to click it
+  // themselves every time they open the site. Runs through isSyncing (the
+  // button's own spinner), not isLoading, so it never blocks the initial
+  // paint above; the ref guard (not just the effect's dep array) is what
+  // makes this fire once, since applyGearKmSync's identity can still change
+  // afterwards as user/db settle.
+  const hasAutoSyncedRef = useRef(false)
+  useEffect(() => {
+    if (isLoading) return
+    if (!creds.isConfigured || !creds.athleteId || !creds.apiKey) return
+    if (hasAutoSyncedRef.current) return
+    hasAutoSyncedRef.current = true
+
+    setIsSyncing(true)
+    applyGearKmSync(creds.athleteId, creds.apiKey)
+      .then((result) => {
+        setLastSyncedAt(new Date())
+        // Silent when there was nothing to reconcile — a toast on every
+        // single page load even when nothing changed would get old fast.
+        // Still surfaced when km actually moved, same as a manual click.
+        if (result.totalNewKm > 0) {
+          toast({
+            title: 'Synchronisation terminée',
+            description: `+${result.totalNewKm} km sur ${result.bikesUpdated} vélo${result.bikesUpdated > 1 ? 's' : ''}, ${result.componentsUpdated} composant${result.componentsUpdated > 1 ? 's' : ''} mis à jour.`,
+          })
+        }
+      })
+      .catch((e) => {
+        const message = e instanceof Error ? e.message : 'Erreur inconnue'
+        setError(message)
+        toast({ variant: 'destructive', title: 'Erreur de synchronisation', description: message })
+      })
+      .finally(() => setIsSyncing(false))
+  }, [isLoading, creds.isConfigured, creds.athleteId, creds.apiKey, applyGearKmSync, toast])
+
   const syncAll = useCallback(async (): Promise<SyncAllResult | null> => {
     if (!creds.athleteId || !creds.apiKey) return null
+
+    // Counts as the once-per-session auto-sync too, so a manual click right
+    // after page load doesn't get redundantly followed by the automatic one
+    // once the reads finish.
+    hasAutoSyncedRef.current = true
 
     setIsSyncing(true)
     try {
       await fetchReads(creds.athleteId, creds.apiKey)
       setError(null)
 
-      // Apply km deltas to bikes/components/chains — the write side of
-      // sync, gated behind this explicit action only.
-      let bikesUpdated = 0
-      let componentsUpdated = 0
-      let totalNewKm = 0
-
-      if (user && db) {
-        const [bikesSnap, componentsSnap, chainsSnap] = await Promise.all([
-          getDocs(collection(db, `users/${user.uid}/bikes`)),
-          getDocs(collection(db, `users/${user.uid}/components`)),
-          getDocs(collection(db, `users/${user.uid}/chains`)),
-        ])
-        const bikes = bikesSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Bike[]
-        const components = componentsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as BikeComponent[]
-        const chains = chainsSnap.docs.map((d) => ({ id: d.id, ...d.data() })) as Chain[]
-        const todayStr = format(new Date(), 'yyyy-MM-dd')
-        const linkedBikes = bikes.filter((b): b is Bike & { externalGearId: string } => !!b.externalGearId)
-
-        if (linkedBikes.length > 0) {
-          // Ground truth for gear totals: the bike's *entire* real riding
-          // history tagged with its gear.id — not Intervals.icu's own
-          // /athlete bikes[].distance rollup (confirmed via live debug data
-          // to undercount gear whose rides sync directly from Wahoo,
-          // bypassing Strava), and not just the 90-day training window
-          // above. Recomputing the absolute total from scratch every sync
-          // (rather than an incremental delta since the last sync date)
-          // means the value always matches what Intervals.icu's own site
-          // shows, and self-heals any drift instead of requiring a manual
-          // one-time correction.
-          // `raw=1` skips the `fields=` sparse-fieldset param entirely — the
-          // API has already been caught silently dropping a field name it
-          // doesn't recognize from that param (the gear_id/gear mixup), so
-          // this fetch asks for the full, unfiltered shape instead of
-          // trusting an unverified sparse selector for the one field this
-          // computation actually depends on.
-          const fullHistory = await fetchProxy<IntervalsActivity[]>(
-            `/api/intervals/activities?oldest=${GEAR_HISTORY_OLDEST}&newest=${todayStr}&raw=1`,
-            creds.athleteId,
-            creds.apiKey
-          )
-
-          for (const bike of linkedBikes) {
-            const trueTotalKm = computeGearKmFromActivities(fullHistory, bike.externalGearId, null)
-            const delta = trueTotalKm - bike.totalKm
-            if (delta <= 0) continue
-
-            const bikeRef = doc(db, `users/${user.uid}/bikes`, bike.id)
-            await updateDoc(bikeRef, { totalKm: trueTotalKm, lastSyncDate: todayStr }).catch(() => {
-              errorEmitter.emit('permission-error', new FirestorePermissionError({ path: bikeRef.path, operation: 'update' }))
-            })
-            bikesUpdated++
-            totalNewKm += delta
-
-            const bikeComponents = components.filter((c) => c.bikeId === bike.id && c.status !== 'retired')
-            const result = await applyKmDeltaToBikeDependents({
-              db,
-              uid: user.uid,
-              bikeComponents,
-              bikeChains: chains.filter((c) => c.bikeId === bike.id),
-              delta,
-            })
-            componentsUpdated += result.componentsUpdated
-          }
-        }
-      }
+      const result = await applyGearKmSync(creds.athleteId, creds.apiKey)
 
       setLastSyncedAt(new Date())
-      toast(totalNewKm > 0
+      toast(result.totalNewKm > 0
         ? {
           title: 'Synchronisation terminée',
-          description: `+${totalNewKm} km sur ${bikesUpdated} vélo${bikesUpdated > 1 ? 's' : ''}, ${componentsUpdated} composant${componentsUpdated > 1 ? 's' : ''} mis à jour.`,
+          description: `+${result.totalNewKm} km sur ${result.bikesUpdated} vélo${result.bikesUpdated > 1 ? 's' : ''}, ${result.componentsUpdated} composant${result.componentsUpdated > 1 ? 's' : ''} mis à jour.`,
         }
         : { title: 'Synchronisation terminée', description: 'Toutes les données Intervals.icu sont déjà à jour.' })
 
-      return { bikesUpdated, componentsUpdated, totalNewKm }
+      return result
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Erreur inconnue'
       setError(message)
@@ -267,7 +324,7 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsSyncing(false)
     }
-  }, [creds.athleteId, creds.apiKey, user, db, fetchReads, toast])
+  }, [creds.athleteId, creds.apiKey, fetchReads, applyGearKmSync, toast])
 
   const value: IntervalsContextValue = {
     isConfigured: creds.isConfigured,
