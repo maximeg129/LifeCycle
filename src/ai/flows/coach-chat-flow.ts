@@ -42,6 +42,12 @@ const CoachChatInputSchema = z.object({
     focus: z.string(),
     targetWeeklyMinutes: z.number(),
   }).optional().describe('The current week of the athlete\'s active training plan, if one exists.'),
+  recovery: z.object({
+    sleepHours: z.number().optional(),
+    sleepQuality: z.number().optional().describe('0-100'),
+    hrv: z.number().optional().describe('ms'),
+    readiness: z.number().optional().describe('0-100'),
+  }).optional().describe('Last night\'s sleep/HRV/readiness, auto-synced from Intervals.icu (or manually logged).'),
 }).describe('Input for the coach chat flow.');
 
 export type CoachChatInput = z.infer<typeof CoachChatInputSchema>;
@@ -58,6 +64,10 @@ export async function coachChat(input: CoachChatInput): Promise<string> {
     const w = parsedInput.planWeek;
     contextLines.push(`PLAN EN COURS : semaine ${w.weekNumber}, phase ${w.phase} — ${w.focus} (volume cible ${w.targetWeeklyMinutes} min)`);
   }
+  if (parsedInput.recovery) {
+    const r = parsedInput.recovery;
+    contextLines.push(`RÉCUPÉRATION (nuit dernière) : sommeil ${r.sleepHours != null ? `${r.sleepHours}h` : 'n/a'}${r.sleepQuality != null ? ` (${r.sleepQuality}%)` : ''}, HRV ${r.hrv != null ? `${r.hrv}ms` : 'n/a'}, readiness ${r.readiness != null ? `${r.readiness}/100` : 'n/a'}`);
+  }
 
   const coachContextBlock = parsedInput.coachContext ? `${parsedInput.coachContext}\n\n` : '';
   const liveContextBlock = contextLines.length > 0 ? `${contextLines.join('\n')}\n\n` : '';
@@ -73,6 +83,9 @@ Ton, style :
   demande explicitement.
 - Si une donnée pertinente manque (ex: pas de blessure enregistrée, pas de plan actif), dis-le simplement
   plutôt que d'inventer.
+- Si on te parle d'entraînement du jour et que la récupération (sommeil/HRV/readiness) est mauvaise,
+  dis-le franchement et conseille de lever le pied — ne reste pas focalisé uniquement sur la charge
+  d'entraînement en ignorant l'état de récupération réel.
 
 Limites importantes :
 - Tu peux discuter d'une séance, donner un avis, expliquer un choix — mais tu ne génères PAS toi-même de

@@ -6,8 +6,9 @@
 // A single ongoing conversation per user (no threads) — coachChatMessages
 // is a flat, append-only, chronologically-ordered log. Same context
 // sources as the other coach features (buildCoachContext, current
-// CTL/ATL/TSB, active plan's current week) so Stella isn't a second,
-// disconnected notion of the athlete.
+// CTL/ATL/TSB, active plan's current week, last night's sleep/HRV/readiness
+// via useLifestyleData) so Stella isn't a second, disconnected notion of
+// the athlete.
 
 import { useCallback, useMemo, useState } from 'react'
 import { collection, doc, getDocs, query, orderBy, setDoc, deleteDoc, serverTimestamp, Timestamp, where } from 'firebase/firestore'
@@ -24,6 +25,7 @@ import { coachChat, type CoachChatMessage } from '@/ai/flows/coach-chat-flow'
 import { trimChatHistoryForPrompt, isSendableChatMessage } from './coach-chat-types'
 import { currentPlanWeek, type PlanWeek } from './training-plan-types'
 import { format } from 'date-fns'
+import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 
 interface StoredChatMessage extends CoachChatMessage {
   userId: string
@@ -38,6 +40,7 @@ export function useCoachChat() {
   const memory = useCoachMemory()
   const governor = useGovernor()
   const budget = useKJBudget(governor.status)
+  const lifestyle = useLifestyleData()
 
   const messagesQuery = useMemoFirebase(() => {
     if (!user || !db) return null
@@ -97,6 +100,12 @@ export function useCoachChat() {
           focus: planWeek.focus,
           targetWeeklyMinutes: planWeek.targetWeeklyMinutes,
         } : undefined,
+        recovery: lifestyle.latest ? {
+          sleepHours: lifestyle.latest.sleepHours,
+          sleepQuality: lifestyle.latest.sleepQuality,
+          hrv: lifestyle.latest.hrv,
+          readiness: lifestyle.readiness ?? undefined,
+        } : undefined,
       })
 
       const assistantRef = doc(collection(db, `users/${user.uid}/coachChatMessages`))
@@ -114,7 +123,7 @@ export function useCoachChat() {
     } finally {
       setIsSending(false)
     }
-  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data, planWeek, messages, toast])
+  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data, planWeek, lifestyle.latest, lifestyle.readiness, messages, toast])
 
   const clearHistory = useCallback(async () => {
     if (!user || !db) return

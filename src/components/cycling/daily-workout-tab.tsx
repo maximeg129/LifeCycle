@@ -21,6 +21,7 @@ export function DailyWorkoutTab() {
     storedAvailableMinutes,
     sentToIntervals,
     planWeek,
+    recovery,
     isLoadingStored,
     isGenerating,
     isSending,
@@ -76,11 +77,20 @@ export function DailyWorkoutTab() {
             Indiquez le temps dont vous disposez aujourd&apos;hui — l&apos;IA propose une séance adaptée à votre forme actuelle
             (charge interne, TSB, blessures, objectifs), que vous pouvez ajuster avant de l&apos;envoyer sur Intervals.icu.
           </CardDescription>
-          {planWeek && (
-            <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
-              Semaine {planWeek.weekNumber} du plan · {planWeek.focus}
-            </Badge>
-          )}
+          <div className="flex flex-wrap gap-2">
+            {planWeek && (
+              <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
+                Semaine {planWeek.weekNumber} du plan · {planWeek.focus}
+              </Badge>
+            )}
+            {recovery && (recovery.sleepHours != null || recovery.hrv != null || recovery.readiness != null) && (
+              <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
+                Récup {recovery.sleepHours != null ? `${recovery.sleepHours}h` : ''}
+                {recovery.hrv != null ? ` · HRV ${recovery.hrv}ms` : ''}
+                {recovery.readiness != null ? ` · Readiness ${recovery.readiness}/100` : ''}
+              </Badge>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-4">
           <div className="space-y-2">

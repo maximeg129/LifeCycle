@@ -13,7 +13,12 @@ import { doc, setDoc, serverTimestamp, Timestamp } from 'firebase/firestore'
 import { useCrudSubmit } from '@/hooks/use-crud-submit'
 import { getDayId } from './lifestyle-types'
 
-export function LogMetricDialog() {
+interface Props {
+  /** Whether Intervals.icu is connected and has wellness data — when true, this form is a secondary "compléter/corriger" action rather than the primary way to get data in (sleep/HRV/mood already arrive automatically). */
+  isAutoSynced?: boolean
+}
+
+export function LogMetricDialog({ isAutoSynced }: Props) {
   const { toast } = useToast()
   const { user } = useUser()
   const db = useFirestore()
@@ -73,11 +78,21 @@ export function LogMetricDialog() {
   return (
     <CrudDialogShell
       title="Journal du jour"
-      description="Toutes les mesures sont optionnelles — renseignez ce que vous avez."
+      description={
+        isAutoSynced
+          ? "Sommeil, HRV et humeur arrivent normalement automatiquement d'Intervals.icu — utilisez ce formulaire pour le stress (non synchronisé) ou pour corriger une valeur."
+          : "Toutes les mesures sont optionnelles — renseignez ce que vous avez."
+      }
       trigger={
-        <Button className="rounded-full h-11 px-6 font-bold gap-2">
-          <Plus className="w-4 h-4" /> Enregistrer mes mesures
-        </Button>
+        isAutoSynced ? (
+          <Button variant="outline" size="sm" className="rounded-full gap-2">
+            <Plus className="w-4 h-4" /> Compléter mes mesures
+          </Button>
+        ) : (
+          <Button className="rounded-full h-11 px-6 font-bold gap-2">
+            <Plus className="w-4 h-4" /> Enregistrer mes mesures
+          </Button>
+        )
       }
       open={open}
       onOpenChange={setOpen}

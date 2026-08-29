@@ -31,7 +31,7 @@ src/
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
 │   ├── weather/page.tsx          # Assistant météo IA (flow Claude)
 │   ├── home-management/page.tsx  # Tâches récurrentes + plantes (Firestore)
-│   ├── lifestyle/page.tsx        # Sommeil, HRV, stress, récupération
+│   ├── lifestyle/page.tsx        # Sommeil, HRV, stress, récupération (auto-sync Intervals.icu en priorité, saisie manuelle en complément — voir `mergeDailyWellness`)
 │   ├── finance/page.tsx          # Budgets et dépenses lifestyle
 │   └── settings/page.tsx        # Intégration Intervals.icu (Firestore)
 │
@@ -242,7 +242,10 @@ premier flow).
 - Usage : `src/app/lifestyle/page.tsx` (bouton "Analyser" dans l'onglet Récupération)
 
 ### Flow existant : `dailyWorkoutRecommendation`
-- Input : `{ date, availableMinutes, sportType?, training?, recentSessions[], coachContext? }`
+- Input : `{ date, availableMinutes, sportType?, training?, recentSessions[], planWeek?, recovery?, coachContext? }`
+  — `recovery` (sleepHours/sleepQuality/hrv/readiness) vient de la même série fusionnée auto-sync Intervals.icu +
+  saisie manuelle que Vie & Santé (`useLifestyleData`) : une mauvaise nuit doit réduire l'intensité proposée
+  même si la charge d'entraînement suggérerait autre chose — la récupération prime en cas de tension.
 - Output : `{ title, sportType, durationMinutes, intensityLabel, rationale, structuredWorkout, warnings[] }`
   — `structuredWorkout` est le script texte du "workout builder" Intervals.icu que le site parse lui-même :
   en-têtes de section (optionnellement suffixés `Nx` pour une répétition) suivis de lignes `- <durée> <cible%>`.
@@ -273,7 +276,7 @@ premier flow).
   nouveau archive l'ancien plutôt que de l'écraser.
 
 ### Flow existant : `coachChat`
-- Input : `{ messages[] (role user/assistant, historique complet dont le nouveau message), coachContext?, training?, planWeek? }`
+- Input : `{ messages[] (role user/assistant, historique complet dont le nouveau message), coachContext?, training?, planWeek?, recovery? }`
 - Output : `string` (texte brut — **seul flow de l'app qui ne répond pas en JSON**, `generateJson` ne
   s'applique pas à une conversation libre ; appelle directement `anthropic.messages.create` avec le
   système/historique en `messages`).

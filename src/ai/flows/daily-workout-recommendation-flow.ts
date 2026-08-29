@@ -2,8 +2,9 @@
 /**
  * @fileOverview Proposes a single concrete workout for today, sized to the
  * time the athlete actually has available and adapted to their current form
- * (internal load governor, CTL/ATL/TSB, recent sessions) and Coach Memory
- * (injuries, goals, lifestyle). Output includes an Intervals.icu
+ * (internal load governor, CTL/ATL/TSB, recent sessions, last night's
+ * sleep/HRV/readiness) and Coach Memory (injuries, goals, lifestyle).
+ * Output includes an Intervals.icu
  * workout-builder step script, ready to push to the calendar via
  * createPlannedWorkout() (see src/lib/intervals-api.ts).
  *
@@ -36,6 +37,12 @@ const DailyWorkoutRecommendationInputSchema = z.object({
     focus: z.string(),
     targetWeeklyMinutes: z.number(),
   }).optional().describe('The current week of the athlete\'s active mid/long-term training plan, if one exists — today\'s session should fit this week\'s phase and focus rather than being generated in a vacuum.'),
+  recovery: z.object({
+    sleepHours: z.number().optional(),
+    sleepQuality: z.number().optional().describe('0-100'),
+    hrv: z.number().optional().describe('ms'),
+    readiness: z.number().optional().describe('0-100, device-reported recovery/readiness score when available (e.g. WHOOP via Intervals.icu), otherwise a lightweight local heuristic.'),
+  }).optional().describe('Last night\'s sleep/HRV/readiness, auto-synced from Intervals.icu (or manually logged) — a bad night should measurably change today\'s proposal, not just training load.'),
   coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, lifestyle, goals, remembered facts, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
 }).describe('Input for the daily workout recommendation flow.');
 
@@ -94,6 +101,16 @@ export async function dailyWorkoutRecommendation(input: DailyWorkoutRecommendati
     ].join('\n'));
   }
 
+  if (parsedInput.recovery) {
+    const r = parsedInput.recovery;
+    sections.push([
+      'RÉCUPÉRATION (nuit dernière) :',
+      `Sommeil : ${r.sleepHours != null ? `${r.sleepHours}h` : 'n/a'}${r.sleepQuality != null ? ` (qualité ${r.sleepQuality}%)` : ''}`,
+      `HRV : ${r.hrv != null ? `${r.hrv}ms` : 'n/a'}`,
+      `Readiness : ${r.readiness != null ? `${r.readiness}/100` : 'n/a'}`,
+    ].join('\n'));
+  }
+
   const coachContextBlock = parsedInput.coachContext ? `${parsedInput.coachContext}\n\n` : '';
 
   const system = `${coachContextBlock}Tu es un coach cycliste expert. À partir du contexte fourni (forme actuelle, charge d'entraînement,
@@ -112,6 +129,11 @@ Règles impératives :
   de la semaine en cours (ex: en phase "base", privilégie l'endurance même si le temps disponible permettrait
   une séance plus intense ; en phase "taper", réduis délibérément l'intensité et le volume). Le plan prime
   sur une proposition générique.
+- Si la récupération de la nuit dernière est mauvaise (sommeil court ou de faible qualité, HRV en baisse
+  nette, readiness basse), RÉDUIS l'intensité prévue même si la charge d'entraînement et le plan suggéreraient
+  autre chose, propose éventuellement une alternative (récupération active, endurance légère plutôt que
+  seuil/VO2max), et dis-le explicitement dans rationale — la récupération prime sur la programmation quand
+  les deux sont en tension.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
 
 Format du script structuré (structuredWorkout), en syntaxe Intervals.icu — c'est le format texte du

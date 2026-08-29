@@ -102,7 +102,7 @@ export default function LifestylePage() {
                 {latest?.date?.seconds ? `Dernière mesure : ${format(new Date(latest.date.seconds * 1000), 'dd MMM', { locale: fr })}` : 'Aucune mesure'}
               </Badge>
               <SyncButton />
-              <LogMetricDialog />
+              <LogMetricDialog isAutoSynced={wellnessStatus.isConfigured && wellnessStatus.hasAnyEntry} />
             </>
           }
         />

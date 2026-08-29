@@ -6,9 +6,11 @@
 // One proposal per calendar day (users/{uid}/workoutProposals/{yyyy-MM-dd}),
 // overwritten on regenerate. Generation reuses the same context sources as
 // the recovery-insight flow (buildCoachContext, governor, kJ budget) plus
-// fresh CTL/ATL/TSB and the last 7 days of completed sessions, so the
-// suggestion reflects the same "form" the rest of the app already computes
-// — not a second, disconnected notion of readiness.
+// fresh CTL/ATL/TSB, the last 7 days of completed sessions, and last
+// night's sleep/HRV/readiness (useLifestyleData — same merged auto-synced
+// Intervals.icu + manual series Vie & Santé shows), so the suggestion
+// reflects the same "form" the rest of the app already computes — not a
+// second, disconnected notion of readiness.
 
 import { useCallback, useMemo, useState } from 'react'
 import { collection, doc, query, setDoc, updateDoc, where, serverTimestamp } from 'firebase/firestore'
@@ -25,6 +27,7 @@ import { buildCoachContext } from './coach-context'
 import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload } from './daily-workout-types'
 import { currentPlanWeek, type PlanWeek } from './training-plan-types'
+import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 
 interface IntervalsCredentialsDoc {
   intervalsAthleteId?: string
@@ -48,6 +51,10 @@ export function useDailyWorkout() {
   const memory = useCoachMemory()
   const governor = useGovernor()
   const budget = useKJBudget(governor.status)
+  // Same merged (auto-synced Intervals.icu + manual) daily series as Vie &
+  // Santé — a bad night should measurably change today's proposal, not
+  // just the training-load side of the decision.
+  const lifestyle = useLifestyleData()
 
   const todayId = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
   const sessionsOldest = useMemo(() => format(subDays(new Date(), SESSIONS_WINDOW_DAYS), 'yyyy-MM-dd'), [])
@@ -115,6 +122,12 @@ export function useDailyWorkout() {
           focus: planWeek.focus,
           targetWeeklyMinutes: planWeek.targetWeeklyMinutes,
         } : undefined,
+        recovery: lifestyle.latest ? {
+          sleepHours: lifestyle.latest.sleepHours,
+          sleepQuality: lifestyle.latest.sleepQuality,
+          hrv: lifestyle.latest.hrv,
+          readiness: lifestyle.readiness ?? undefined,
+        } : undefined,
         coachContext,
       })
 
@@ -139,7 +152,7 @@ export function useDailyWorkout() {
     } finally {
       setIsGenerating(false)
     }
-  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, todayId, athlete.isConfigured, athlete.data, recentActivities.data, planWeek, toast])
+  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, todayId, athlete.isConfigured, athlete.data, recentActivities.data, planWeek, lifestyle.latest, lifestyle.readiness, toast])
 
   const sendToIntervals = useCallback(async (proposal: DailyWorkoutRecommendationOutput): Promise<boolean> => {
     if (!creds?.intervalsAthleteId || !creds?.intervalsApiKey) {
@@ -186,6 +199,7 @@ export function useDailyWorkout() {
     storedAvailableMinutes: stored?.availableMinutes ?? null,
     sentToIntervals: stored?.sentToIntervals ?? false,
     planWeek,
+    recovery: lifestyle.latest ? { ...lifestyle.latest, readiness: lifestyle.readiness } : null,
     isLoadingStored: loadingStored,
     isGenerating,
     isSending,
