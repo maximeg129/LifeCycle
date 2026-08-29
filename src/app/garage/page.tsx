@@ -12,7 +12,6 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Wrench, Droplets } from 'lucide-react'
-import { SyncButton } from '@/components/cycling/sync-button'
 
 const GearTab = dynamic(() => import('@/components/cycling/gear-tab').then(m => m.GearTab), {
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
@@ -27,7 +26,7 @@ export default function GaragePage() {
       <AppNavigation />
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
-        <PageHeader category="Matériel" title="Garage" actions={<SyncButton />} />
+        <PageHeader category="Matériel" title="Garage" />
 
         <Tabs defaultValue="gear">
           <TabsList className="bg-card/30 border border-border/60 p-1 h-auto flex flex-wrap gap-1">

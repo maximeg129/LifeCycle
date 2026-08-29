@@ -26,7 +26,6 @@ import { KJBudgetWidget } from '@/components/cycling/kj-budget-widget'
 import { GovernorWidget } from '@/components/cycling/governor-widget'
 import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
 import { useGovernor } from '@/components/cycling/use-governor'
-import { SyncButton } from '@/components/cycling/sync-button'
 import { PageHeader } from '@/components/ui/page-header'
 import { PerformanceBento } from '@/components/cycling/performance-bento'
 import { BrainCircuit } from 'lucide-react'
@@ -116,7 +115,7 @@ export default function CyclingHub() {
       <AppNavigation />
 
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        <PageHeader category="Performance" title="LifeCycle Vault" actions={<SyncButton />} />
+        <PageHeader category="Performance" title="LifeCycle Vault" />
 
         <Tabs defaultValue="overview" className="space-y-6">
           <TabsList className="bg-card/50 border border-border p-1 h-auto flex flex-wrap gap-1">

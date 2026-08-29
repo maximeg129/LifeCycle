@@ -21,6 +21,7 @@ import { ProfileCard } from '@/components/settings/profile-card'
 import { DataExportCard } from '@/components/settings/data-export-card'
 import { NotificationPrefsCard } from '@/components/settings/notification-prefs-card'
 import { DangerZoneCard } from '@/components/settings/danger-zone-card'
+import { SyncButton } from '@/components/cycling/sync-button'
 
 export default function SettingsPage() {
   const { user } = useUser()
@@ -160,9 +161,19 @@ export default function SettingsPage() {
                   <CardDescription className="text-sm">Synchronisation des données de performance.</CardDescription>
                 </div>
               </div>
-              {settings?.intervalsAthleteId && (
-                <Badge className="rounded-full bg-green-500/10 text-green-600 border-none text-xs px-3">Connecté</Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {settings?.intervalsAthleteId && (
+                  <Badge className="rounded-full bg-green-500/10 text-green-600 border-none text-xs px-3">Connecté</Badge>
+                )}
+                {/* Seul bouton Synchroniser de l'app — la synchro se relance déjà
+                    automatiquement à l'ouverture (voir use-intervals.tsx), ce
+                    bouton reste comme échappatoire manuelle pour forcer un
+                    rafraîchissement immédiat (ex. juste après avoir ajouté un
+                    vélo). Auparavant dupliqué sur Cyclisme, Garage, Matériel et
+                    Vie & Santé — regroupé ici, à côté du statut de connexion,
+                    plutôt que répété sur chaque page qui consomme les données. */}
+                <SyncButton />
+              </div>
             </div>
           </CardHeader>
           <CardContent className="space-y-6">

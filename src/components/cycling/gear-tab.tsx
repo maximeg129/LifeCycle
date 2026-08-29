@@ -54,7 +54,6 @@ import { TirePressureCard } from './tire-pressure-card'
 import { useGearSync } from './use-gear-sync'
 import { useChains } from './use-chains'
 import { applyKmDeltaToBikeDependents } from './km-sync'
-import { SyncButton } from './sync-button'
 import { EmptyState } from '@/components/ui/empty-state'
 
 // ── Main component ───────────────────────────────────────────────────
@@ -210,7 +209,6 @@ export function GearTab() {
               <Bike className="w-6 h-6 text-primary" /> Vos Velos
             </h3>
             <div className="flex gap-2">
-              <SyncButton />
               <AddComponentDialog bikes={activeBikes} />
               <AddBikeDialog />
             </div>
