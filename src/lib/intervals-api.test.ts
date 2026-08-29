@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { IntervalsService, bestAverageWatts } from './intervals-api'
+import { IntervalsService, bestAverageWatts, bestRpe, feelToScore } from './intervals-api'
 
 function jsonResponse(body: unknown, ok = true, status = 200) {
   return {
@@ -115,6 +115,30 @@ describe('bestAverageWatts', () => {
     expect(bestAverageWatts({})).toBeNull()
     expect(bestAverageWatts({ average_watts: 0 })).toBeNull()
     expect(bestAverageWatts({ average_watts: null })).toBeNull()
+  })
+})
+
+describe('bestRpe', () => {
+  it('prefers icu_rpe over the Strava-mirrored perceived_exertion', () => {
+    expect(bestRpe({ icu_rpe: 7, perceived_exertion: 6 })).toBe(7)
+  })
+  it('falls back to perceived_exertion when icu_rpe is absent', () => {
+    expect(bestRpe({ perceived_exertion: 6 })).toBe(6)
+  })
+  it('is null when neither field is present', () => {
+    expect(bestRpe({})).toBeNull()
+  })
+})
+
+describe('feelToScore', () => {
+  it('maps the 1-5 Intervals.icu feel rating onto -1..1, ascending is better', () => {
+    expect(feelToScore({ feel: 1 })).toBe(-1)
+    expect(feelToScore({ feel: 3 })).toBe(0)
+    expect(feelToScore({ feel: 5 })).toBe(1)
+  })
+  it('is null when there is no feel rating', () => {
+    expect(feelToScore({})).toBeNull()
+    expect(feelToScore({ feel: null })).toBeNull()
   })
 })
 

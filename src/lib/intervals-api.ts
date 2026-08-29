@@ -95,6 +95,16 @@ export interface IntervalsActivity {
   icu_ctl?: number | null;
   icu_atl?: number | null;
   icu_tsb?: number | null;
+  // Per-session RPE/feel, entered directly on Intervals.icu's activity page
+  // (its own "RPE" and "Feel" inputs — separately toggleable there via
+  // showRPE/showFeel, confirmed against the platform's OpenAPI schema) —
+  // the app's local sessionFeedback quick-entry is now a fallback for
+  // activities not (yet) rated there, not the primary source. icu_rpe is
+  // Intervals.icu's own field; perceived_exertion mirrors Strava's when an
+  // activity syncs in from there without ever being edited on Intervals.icu.
+  icu_rpe?: number | null;
+  perceived_exertion?: number | null;
+  feel?: number | null;
 }
 
 export interface IntervalsWellness {
@@ -197,7 +207,7 @@ const ACTIVITY_FIELDS = [
   'average_watts', 'weighted_average_watts', 'icu_intensity', 'icu_training_load',
   'icu_ftp', 'icu_weight', 'average_heartrate', 'max_heartrate',
   'total_elevation_gain', 'average_speed', 'max_speed', 'calories',
-  'icu_ctl', 'icu_atl', 'icu_tsb',
+  'icu_ctl', 'icu_atl', 'icu_tsb', 'icu_rpe', 'perceived_exertion', 'feel',
 ].join(',');
 
 // ── Pure helpers ─────────────────────────────────────────────────────
@@ -213,6 +223,33 @@ export interface PowerFieldsLike {
 export function bestAverageWatts(activity: PowerFieldsLike): number | null {
   const watts = activity.icu_weighted_avg_watts ?? activity.weighted_average_watts ?? activity.icu_average_watts ?? activity.average_watts;
   return watts != null && watts > 0 ? watts : null;
+}
+
+export interface RpeFieldsLike {
+  icu_rpe?: number | null;
+  perceived_exertion?: number | null;
+}
+
+/** Best available session RPE (1-10, entered on the activity's Intervals.icu page), preferring the icu_ field over the Strava-mirrored one — same preference order as bestAverageWatts. Null if neither is present. */
+export function bestRpe(activity: RpeFieldsLike): number | null {
+  const rpe = activity.icu_rpe ?? activity.perceived_exertion;
+  return rpe != null ? rpe : null;
+}
+
+export interface FeelFieldLike {
+  feel?: number | null;
+}
+
+/**
+ * Converts Intervals.icu's 1-5 "Feel" rating (1 = terrible, 5 = great — same
+ * ascending-is-better convention as every comparable training app) onto the
+ * -1..1 scale this app's own bien/neutre/mauvais feeling score already uses
+ * (see FEELING_SCORE in session-feedback-types.ts), so the two sources can
+ * be trended together. Null if the activity has no feel rating.
+ */
+export function feelToScore(activity: FeelFieldLike): number | null {
+  if (activity.feel == null) return null;
+  return (activity.feel - 3) / 2;
 }
 
 // ── Service ──────────────────────────────────────────────────────────

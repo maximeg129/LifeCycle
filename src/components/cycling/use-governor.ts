@@ -5,7 +5,7 @@ import { format, subDays } from 'date-fns'
 import { collection, query, where, orderBy, Timestamp } from 'firebase/firestore'
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
 import { useWellness, useActivities } from '@/hooks/use-intervals'
-import { bestAverageWatts } from '@/lib/intervals-api'
+import { bestAverageWatts, bestRpe, feelToScore } from '@/lib/intervals-api'
 import { useSessionFeedback } from './use-session-feedback'
 import {
   windowedTrendSignal,
@@ -77,13 +77,38 @@ export function useGovernor(): GovernorResult {
       .filter((x): x is { date: string; ef: number } => x.ef != null)
       .map((x) => ({ date: x.date, value: x.ef }))
 
-    const rpeSeries: DatedValue[] = feedback
-      .filter((f) => f.rpe != null)
+    // RPE and "feel" are entered directly on each activity's Intervals.icu
+    // page — that's the primary source now, not the app's own quick-feedback
+    // widget (used inconsistently). Local sessionFeedback fills in whatever
+    // Intervals.icu doesn't have for a given date (not-yet-rated activities,
+    // or a standalone daily-* check-in with no linked activity) rather than
+    // being dropped, but never doubles up a date Intervals.icu already covers.
+    const intervalsRpeSeries: DatedValue[] = activities.data
+      .map((a) => {
+        const rpe = bestRpe(a)
+        if (rpe == null || !a.start_date_local) return null
+        return { date: a.start_date_local.slice(0, 10), value: rpe }
+      })
+      .filter((x): x is DatedValue => x != null)
+    const intervalsRpeDates = new Set(intervalsRpeSeries.map((x) => x.date))
+    const localRpeSeries: DatedValue[] = feedback
+      .filter((f) => f.rpe != null && !intervalsRpeDates.has(f.date))
       .map((f) => ({ date: f.date, value: f.rpe as number }))
+    const rpeSeries: DatedValue[] = [...intervalsRpeSeries, ...localRpeSeries]
 
-    const feelingSeries: DatedValue[] = feedback
+    const intervalsFeelSeries: DatedValue[] = activities.data
+      .map((a) => {
+        const score = feelToScore(a)
+        if (score == null || !a.start_date_local) return null
+        return { date: a.start_date_local.slice(0, 10), value: score }
+      })
+      .filter((x): x is DatedValue => x != null)
+    const intervalsFeelDates = new Set(intervalsFeelSeries.map((x) => x.date))
+    const localFeelingSeries: DatedValue[] = feedback
+      .filter((f) => !intervalsFeelDates.has(f.date))
       .map((f) => ({ date: f.date, value: feelingScore(f.feeling, f.motivation) }))
       .filter((x): x is { date: string; value: number } => x.value != null)
+    const feelingSeries: DatedValue[] = [...intervalsFeelSeries, ...localFeelingSeries]
 
     // Cross-references the Vie & Santé daily log (sommeil, stress, humeur)
     // with training load instead of treating recovery and cycling as
