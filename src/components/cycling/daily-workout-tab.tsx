@@ -8,17 +8,20 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock } from 'lucide-react'
+import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
+import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { EmptyState } from '@/components/ui/empty-state'
 
 const DEFAULT_MINUTES = 60
+const DEFAULT_RIDE_TIME = '09:00'
 
 export function DailyWorkoutTab() {
   const {
     stored,
     storedAvailableMinutes,
+    storedRide,
     sentToIntervals,
     planWeek,
     recovery,
@@ -31,6 +34,8 @@ export function DailyWorkoutTab() {
   } = useDailyWorkout()
 
   const [minutes, setMinutes] = useState(DEFAULT_MINUTES)
+  const [rideLocation, setRideLocation] = useState('')
+  const [rideTime, setRideTime] = useState(DEFAULT_RIDE_TIME)
   const [draft, setDraft] = useState<DailyWorkoutRecommendationOutput | null>(null)
   const [wasSent, setWasSent] = useState(false)
 
@@ -42,13 +47,20 @@ export function DailyWorkoutTab() {
       setWasSent(sentToIntervals)
     }
     if (storedAvailableMinutes != null) setMinutes(storedAvailableMinutes)
+    if (storedRide) {
+      setRideLocation(storedRide.location)
+      setRideTime(storedRide.departureDateTime.slice(11, 16) || DEFAULT_RIDE_TIME)
+    }
     // Only meant to run once the stored doc first resolves — not on every
     // render, or a user's in-progress edits would get clobbered.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoadingStored])
 
   const handleGenerate = async () => {
-    const proposal = await generate(minutes)
+    const ride = rideLocation.trim()
+      ? { location: rideLocation.trim(), departureDateTime: buildRideDateTime(new Date(), rideTime) }
+      : undefined
+    const proposal = await generate(minutes, ride)
     if (proposal) {
       setDraft(proposal)
       setWasSent(false)
@@ -106,11 +118,41 @@ export function DailyWorkoutTab() {
               className="w-32"
             />
           </div>
+          <div className="space-y-2">
+            <Label htmlFor="ride-location" className="flex items-center gap-1.5">
+              <MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Lieu de départ (optionnel)
+            </Label>
+            <Input
+              id="ride-location"
+              placeholder="ex: Mont Ventoux"
+              value={rideLocation}
+              onChange={(e) => setRideLocation(e.target.value)}
+              className="w-48"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="ride-time">Heure de départ</Label>
+            <Input
+              id="ride-time"
+              type="time"
+              value={rideTime}
+              onChange={(e) => setRideTime(e.target.value)}
+              disabled={!rideLocation.trim()}
+              className="w-28"
+            />
+          </div>
           <Button onClick={handleGenerate} disabled={isGenerating} className="gap-2">
             {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             {draft ? 'Régénérer' : 'Proposer une séance'}
           </Button>
         </CardContent>
+        {rideLocation.trim() && (
+          <CardContent className="pt-0">
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+              <Wind className="w-3 h-3" /> Avec un lieu et une heure de départ, l&apos;IA récupère la météo réelle et conseille une direction pour avoir le vent dans le dos au retour.
+            </p>
+          </CardContent>
+        )}
       </Card>
 
       {isLoadingStored && !draft ? (
@@ -155,6 +197,13 @@ export function DailyWorkoutTab() {
                     <span>{w}</span>
                   </div>
                 ))}
+              </div>
+            )}
+
+            {draft.windAdvice && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-primary/5 border border-primary/20 text-sm">
+                <Wind className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <span>{draft.windAdvice}</span>
               </div>
             )}
 

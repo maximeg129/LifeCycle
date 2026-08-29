@@ -14,6 +14,10 @@
 
 import { z } from 'zod';
 import { generateJson } from '@/ai/anthropic';
+import { fetchWeatherForecast, degreesToCompass } from '@/ai/weather';
+
+/** Below this, wind isn't worth routing around — asking the AI for advice on a light breeze would just invent filler. */
+const WIND_ADVICE_THRESHOLD_KMH = 15;
 
 const DailyWorkoutRecommendationInputSchema = z.object({
   date: z.string().describe('yyyy-MM-dd — the day this workout is planned for.'),
@@ -44,6 +48,10 @@ const DailyWorkoutRecommendationInputSchema = z.object({
     readiness: z.number().optional().describe('0-100, device-reported recovery/readiness score when available (e.g. WHOOP via Intervals.icu), otherwise a lightweight local heuristic.'),
   }).optional().describe('Last night\'s sleep/HRV/readiness, auto-synced from Intervals.icu (or manually logged) — a bad night should measurably change today\'s proposal, not just training load.'),
   coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, lifestyle, goals, remembered facts, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
+  ride: z.object({
+    location: z.string().describe('Departure location — city/place name, or "lat,lon".'),
+    departureDateTime: z.string().describe('ISO date-time of departure — used to fetch the real forecast for wind-aware routing.'),
+  }).optional().describe('When provided, the flow fetches the real weather forecast (temperature, wind speed/direction) via Open-Meteo and — if the wind is strong enough to matter — adds routing advice on which direction to head out first so it ends up as a tailwind on the way back.'),
 }).describe('Input for the daily workout recommendation flow.');
 
 export type DailyWorkoutRecommendationInput = z.infer<typeof DailyWorkoutRecommendationInputSchema>;
@@ -56,6 +64,7 @@ const DailyWorkoutRecommendationOutputSchema = z.object({
   rationale: z.string().describe('2-4 sentences in French explaining why this session fits today, grounded in the actual form/context data provided — not generic advice.'),
   structuredWorkout: z.string().describe('Intervals.icu workout-builder text script — section headers (optionally suffixed "Nx" for a repeat) each followed by "- " step lines. See system prompt for the exact syntax.'),
   warnings: z.array(z.string()).describe('0-3 short things the athlete should know before starting (injury caution, heavy week, etc). Empty array if nothing stands out.'),
+  windAdvice: z.string().nullable().describe('1-2 French sentences of wind-aware routing advice (which general direction to head out first so the wind ends up at your back on the return leg) — null when no ride location/time was given, the forecast could not be fetched, or the wind is too light to matter.'),
 }).describe('Output of the daily workout recommendation flow.');
 
 export type DailyWorkoutRecommendationOutput = z.infer<typeof DailyWorkoutRecommendationOutputSchema>;
@@ -111,6 +120,24 @@ export async function dailyWorkoutRecommendation(input: DailyWorkoutRecommendati
     ].join('\n'));
   }
 
+  // Wind-aware routing: only fetched when the athlete gave a departure
+  // location/time (Coach > Proposition du jour, champs optionnels). Fails
+  // soft — a geocoding/forecast error just means no weather section (and no
+  // windAdvice) rather than breaking the whole proposal.
+  let windIsSignificant = false;
+  if (parsedInput.ride) {
+    const forecast = await fetchWeatherForecast(parsedInput.ride.location, parsedInput.ride.departureDateTime);
+    if (!forecast.error) {
+      windIsSignificant = forecast.windSpeedKmh >= WIND_ADVICE_THRESHOLD_KMH;
+      sections.push([
+        `MÉTÉO PRÉVUE POUR LA SORTIE (${parsedInput.ride.location}, départ ${parsedInput.ride.departureDateTime}) :`,
+        `Température : ${forecast.temperatureCelsius}°C`,
+        `Vent : ${forecast.windSpeedKmh} km/h, venant du ${degreesToCompass(forecast.windDirectionDeg)}`,
+        `Conditions : ${forecast.conditions}`,
+      ].join('\n'));
+    }
+  }
+
   const coachContextBlock = parsedInput.coachContext ? `${parsedInput.coachContext}\n\n` : '';
 
   const system = `${coachContextBlock}Tu es un coach cycliste expert. À partir du contexte fourni (forme actuelle, charge d'entraînement,
@@ -135,6 +162,11 @@ Règles impératives :
   seuil/VO2max), et dis-le explicitement dans rationale — la récupération prime sur la programmation quand
   les deux sont en tension.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
+${windIsSignificant ? `- Une météo de sortie avec du vent significatif (${WIND_ADVICE_THRESHOLD_KMH}+ km/h) est fournie ci-dessus : remplis
+  windAdvice avec 1-2 phrases indiquant la direction générale à prendre AU DÉPART pour avoir le vent de face
+  à l'aller et dans le dos au retour (ex. "Partez vers le Nord-Ouest à l'aller, vous aurez le vent dans le
+  dos sur le retour"). C'est un conseil de direction générale, pas un itinéraire précis — tu ne connais pas
+  les routes locales.` : '- Mets windAdvice à null : soit aucune météo de sortie n\'a été fournie, soit le vent prévu est trop faible pour justifier un conseil d\'itinéraire.'}
 
 Format du script structuré (structuredWorkout), en syntaxe Intervals.icu — c'est le format texte du
 "workout builder" que le site parse lui-même pour générer les étapes, respecte-le EXACTEMENT :
@@ -170,7 +202,8 @@ Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, p
   "intensityLabel": "un ou deux mots",
   "rationale": "2 à 4 phrases justifiant ce choix à partir du contexte réel fourni",
   "structuredWorkout": "script structuré en sections + étapes, voir le format ci-dessus",
-  "warnings": ["0 à 3 points d'attention courts, tableau vide si rien à signaler"]
+  "warnings": ["0 à 3 points d'attention courts, tableau vide si rien à signaler"],
+  "windAdvice": "conseil de direction pour avoir le vent dans le dos au retour, ou null"
 }`;
 
   return generateJson(DailyWorkoutRecommendationOutputSchema, {

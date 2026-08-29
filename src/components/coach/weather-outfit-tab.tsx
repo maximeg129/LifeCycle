@@ -7,6 +7,7 @@
 // l'angle météo plutôt qu'intensité. /weather redirige ici (next.config.ts).
 
 import React, { useState } from 'react'
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -27,7 +28,9 @@ import {
   Search,
   Navigation,
   CalendarIcon,
-  Timer
+  Timer,
+  Shirt,
+  ChevronRight,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
@@ -35,7 +38,6 @@ import { cn } from '@/lib/utils'
 import { cyclingOutfitRecommendation, type CyclingOutfitRecommendationOutput } from '@/ai/flows/cycling-outfit-recommendation-flow'
 import { useToast } from '@/hooks/use-toast'
 import { useClothingInventory } from '@/components/weather/use-clothing-inventory'
-import { ManageClothingDialog } from '@/components/weather/manage-clothing-dialog'
 import { toFlowInventoryItem, buildOutfitDateTime } from '@/components/weather/clothing-types'
 
 export function WeatherOutfitTab() {
@@ -124,7 +126,19 @@ export function WeatherOutfitTab() {
   return (
     <div className="space-y-6">
       <div className="flex justify-end">
-        <ManageClothingDialog />
+        {/* La garde-robe elle-même vit dans Garage (retour utilisateur : c'est
+            du matériel, pas une fonctionnalité IA) — ce lien y renvoie plutôt
+            que de dupliquer le CRUD ici. */}
+        <Link
+          href="/garage"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-primary transition-colors"
+        >
+          <Shirt className="w-3.5 h-3.5" />
+          {clothingItems.length > 0
+            ? `${clothingItems.length} vêtement${clothingItems.length > 1 ? 's' : ''} — gérer dans Garage`
+            : 'Garde-robe vide — ajouter des vêtements dans Garage'}
+          <ChevronRight className="w-3.5 h-3.5" />
+        </Link>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">

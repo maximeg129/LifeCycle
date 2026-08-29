@@ -10,6 +10,7 @@
 import { z } from 'zod';
 import type Anthropic from '@anthropic-ai/sdk';
 import { anthropic, CLAUDE_MODEL } from '@/ai/anthropic';
+import { fetchWeatherForecast } from '@/ai/weather';
 
 const CyclingOutfitRecommendationInputSchema = z.object({
   location: z.string().describe('The name of the location (city, region, or coordinates).'),
@@ -47,61 +48,15 @@ interface WeatherToolResult {
   error?: string;
 }
 
-/** Fetches real weather forecast for a given location and date/time via Open-Meteo (no API key needed). */
+/** Thin adapter over the shared fetchWeatherForecast() (src/ai/weather.ts) — keeps this tool's result shape exactly as before (temperature/windSpeed/weatherDescription) for the model. */
 async function getWeatherForecast(location: string, dateTime: string): Promise<WeatherToolResult> {
-  try {
-    let lat: number, lon: number;
-
-    // 1. Geocoding
-    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location)}&count=1&language=fr&format=json`;
-    const geoRes = await fetch(geoUrl);
-    const geoData = await geoRes.json();
-
-    if (!geoData.results || geoData.results.length === 0) {
-      // Fallback if coordinates are provided directly
-      const coords = location.split(',').map((c: string) => parseFloat(c.trim()));
-      if (coords.length === 2 && !isNaN(coords[0])) {
-        [lat, lon] = coords;
-      } else {
-        throw new Error('Location not found');
-      }
-    } else {
-      lat = geoData.results[0].latitude;
-      lon = geoData.results[0].longitude;
-    }
-
-    // 2. Weather Forecast
-    const date = new Date(dateTime);
-    const forecastUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,weathercode,windspeed_10m&forecast_days=14`;
-    const weatherRes = await fetch(forecastUrl);
-    const weatherData = await weatherRes.json();
-
-    // Find the closest hour
-    const targetTime = date.toISOString().slice(0, 13) + ':00';
-    const timeIndex = weatherData.hourly.time.findIndex((t: string) => t.startsWith(targetTime.slice(0, 13)));
-
-    const safeIndex = timeIndex === -1 ? 0 : timeIndex;
-
-    // Weather codes mapping (simplified)
-    const weatherCodes: Record<number, string> = {
-      0: 'Ciel dégagé',
-      1: 'Principalement dégagé', 2: 'Partiellement nuageux', 3: 'Couvert',
-      45: 'Brouillard', 48: 'Brouillard givrant',
-      51: 'Bruine légère', 53: 'Bruine modérée', 55: 'Bruine dense',
-      61: 'Pluie faible', 63: 'Pluie modérée', 65: 'Pluie forte',
-      71: 'Neige faible', 73: 'Neige modérée', 75: 'Neige forte',
-      80: 'Averses légères', 81: 'Averses modérées', 82: 'Averses violentes',
-      95: 'Orage léger', 96: 'Orage avec grêle', 99: 'Orage violent'
-    };
-
-    return {
-      temperature: weatherData.hourly.temperature_2m[safeIndex],
-      windSpeed: weatherData.hourly.windspeed_10m[safeIndex],
-      weatherDescription: weatherCodes[weatherData.hourly.weathercode[safeIndex]] || 'Conditions variables',
-    };
-  } catch (e) {
-    return { temperature: 15, windSpeed: 10, weatherDescription: 'Erreur lors de la récupération des données réelles', error: e instanceof Error ? e.message : String(e) };
-  }
+  const forecast = await fetchWeatherForecast(location, dateTime);
+  return {
+    temperature: forecast.temperatureCelsius,
+    windSpeed: forecast.windSpeedKmh,
+    weatherDescription: forecast.conditions,
+    ...(forecast.error ? { error: forecast.error } : {}),
+  };
 }
 
 const weatherTool: Anthropic.Tool = {

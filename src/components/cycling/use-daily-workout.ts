@@ -34,11 +34,17 @@ interface IntervalsCredentialsDoc {
   intervalsApiKey?: string
 }
 
+export interface StoredRide {
+  location: string
+  departureDateTime: string
+}
+
 interface StoredWorkoutProposal {
   userId: string
   availableMinutes: number
   proposal: DailyWorkoutRecommendationOutput
   sentToIntervals?: boolean
+  ride?: StoredRide | null
 }
 
 const SESSIONS_WINDOW_DAYS = 7
@@ -92,7 +98,7 @@ export function useDailyWorkout() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSending, setIsSending] = useState(false)
 
-  const generate = useCallback(async (rawMinutes: number): Promise<DailyWorkoutRecommendationOutput | null> => {
+  const generate = useCallback(async (rawMinutes: number, ride?: StoredRide): Promise<DailyWorkoutRecommendationOutput | null> => {
     if (!user || !db) return null
     const availableMinutes = clampAvailableMinutes(rawMinutes)
     setIsGenerating(true)
@@ -129,6 +135,7 @@ export function useDailyWorkout() {
           readiness: lifestyle.readiness ?? undefined,
         } : undefined,
         coachContext,
+        ride,
       })
 
       const ref = doc(db, `users/${user.uid}/workoutProposals/${todayId}`)
@@ -137,6 +144,7 @@ export function useDailyWorkout() {
         availableMinutes,
         proposal,
         sentToIntervals: false,
+        ride: ride ?? null,
         createdAt: serverTimestamp(),
       }
       try {
@@ -197,6 +205,7 @@ export function useDailyWorkout() {
   return {
     stored: stored?.proposal ?? null,
     storedAvailableMinutes: stored?.availableMinutes ?? null,
+    storedRide: stored?.ride ?? null,
     sentToIntervals: stored?.sentToIntervals ?? false,
     planWeek,
     recovery: lifestyle.latest ? { ...lifestyle.latest, readiness: lifestyle.readiness } : null,

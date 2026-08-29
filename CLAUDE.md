@@ -29,7 +29,7 @@ src/
 │   ├── register/page.tsx         # Inscription (email + Google)
 │   ├── cycling/page.tsx          # Page données, pas d'onglets : tuiles Vue d'ensemble (CTL/ATL/TSB/FTP/Riegel/sommeil/HRV/readiness) + budget kJ + gouverneur + PMC (courbe 12 semaines, charge hebdo, records de puissance) en scroll continu
 │   ├── coach/page.tsx            # Hub coaching IA — 6 sous-onglets : Proposition du jour (défaut), Sorties (journal d'activités), Météo & Tenue (ex-/weather), Plan, Stella, Mémoire coach
-│   ├── garage/page.tsx           # Matériel + Chaînes (Firestore) — sorti de Cyclisme, sa propre destination de nav
+│   ├── garage/page.tsx           # Matériel + Chaînes + Garde-robe (Firestore) — sorti de Cyclisme, sa propre destination de nav
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
 │   ├── home-management/page.tsx  # Tâches récurrentes + plantes (Firestore)
 │   ├── lifestyle/page.tsx        # Sommeil, HRV, stress, récupération (auto-sync Intervals.icu en priorité, saisie manuelle en complément — voir `mergeDailyWellness`)
@@ -119,17 +119,26 @@ dans `src/components/home-management/`) — anciennement deux modules de nav sé
 Botanica), fusionnés suite à l'audit (voir `AUDIT.md`/`PLAN.md` section 3.2). L'ancienne route
 `/botanica` redirige vers `/home-management` (`next.config.ts`).
 
-**Garage** (`src/app/garage/page.tsx`, Matériel/Chaînes en sous-onglets) a sa propre route et son
-propre item de nav — sorti de Cyclisme suite au retour utilisateur : il doit vivre indépendamment
-du coaching/data, pas comme un sous-onglet noyé dedans.
+**Garage** (`src/app/garage/page.tsx`, Matériel/Chaînes/Garde-robe en sous-onglets) a sa propre
+route et son propre item de nav — sorti de Cyclisme suite au retour utilisateur : il doit vivre
+indépendamment du coaching/data, pas comme un sous-onglet noyé dedans. Garde-robe (vêtements
+cycliste, `wardrobe-tab.tsx`) s'y est ajoutée ensuite — c'est du matériel comme le reste, elle
+vivait auparavant dans Coach > Météo & Tenue (à côté de la fonctionnalité IA qui la consomme) plutôt
+que dans Garage (à côté du reste du matériel) ; les données (`cyclingClothingItems`,
+`src/components/weather/clothing-types.ts`/`use-clothing-inventory.ts`) n'ont pas bougé, seule
+l'UI a changé de page.
 
 **Coach** (`src/app/coach/page.tsx`) regroupe tout ce qui concerne planifier/faire/relire une
 sortie et la relation coach : Proposition du jour (onglet par défaut), Sorties (le journal
 d'activités, déplacé depuis Cyclisme > Vue d'ensemble), Météo & Tenue (l'ex-page `/weather`, qui
-redirige maintenant ici — `next.config.ts`), Plan, Stella, Mémoire coach — remplace l'ancien onglet
+redirige maintenant ici — `next.config.ts` — et qui renvoie vers Garage > Garde-robe plutôt que
+d'embarquer son propre CRUD vêtements), Plan, Stella, Mémoire coach — remplace l'ancien onglet
 "Coaching" de Cyclisme. Planifier une sortie avec la bonne intensité et planifier une sortie avec
 la bonne tenue sont le même geste ; les séparer en deux destinations de nav n'avait pas de sens.
 Cyclisme redevient purement la page données (Vue d'ensemble + PMC, sans onglets — voir plus bas).
+Proposition du jour peut aussi recevoir un lieu/heure de départ optionnels : le flow
+`dailyWorkoutRecommendation` récupère alors la météo réelle (vent inclus) et ajoute un conseil de
+direction pour l'avoir dans le dos au retour — voir la section flows IA plus bas.
 
 **Vie & Santé et Finances ne sont plus dans `navItems`** (ni dans la nav mobile) — leurs pages
 (`/lifestyle`, `/finance`) restent entièrement fonctionnelles mais ne sont plus accédées que via
@@ -157,7 +166,7 @@ Toutes les données utilisateur sont sous `users/{uid}/` :
 | `users/{uid}/coachGoals` | `{goalId}` | Objectifs coach IA : eventName, eventDate, targetOutcome, priority |
 | `users/{uid}/coachMemory` | `lifestyle` / `facts` (singletons) | Style de vie (texte libre) et faits retenus (`items: string[]`) |
 | `users/{uid}/sessionFeedback` | `{activityId}` ou `daily-{yyyy-MM-dd}` | RPE (1-10), feeling, motivation par séance — alimente le gouverneur de charge interne |
-| `users/{uid}/workoutProposals` | `{yyyy-MM-dd}` | Proposition du jour IA : availableMinutes, proposal (sortie `dailyWorkoutRecommendation`), sentToIntervals — un doc par jour, écrasé à la régénération |
+| `users/{uid}/workoutProposals` | `{yyyy-MM-dd}` | Proposition du jour IA : availableMinutes, proposal (sortie `dailyWorkoutRecommendation`), ride (`{location, departureDateTime}` optionnel — pour le conseil vent, voir plus bas), sentToIntervals — un doc par jour, écrasé à la régénération |
 | `users/{uid}/trainingPlans` | `{planId}` | Plan structuré moyen/long terme IA : name, status (`active`/`archived` — un seul actif à la fois), eventName/eventDate, weeklyAvailableMinutes, weeks[] (phase/focus/targetWeeklyMinutes par semaine, sortie `trainingPlanGeneration`) — collection préexistante dans le schéma d'origine (jamais utilisée avant), réutilisée telle quelle |
 | `users/{uid}/coachChatMessages` | `{messageId}` | Log plat du chat "Stella" : role (`user`/`assistant`), content, createdAt — append-only, aucune règle `update` (un message n'est jamais modifié, seulement créé ou supprimé en vidant l'historique) |
 
@@ -244,7 +253,10 @@ Les flows sont dans `src/ai/flows/` et s'appellent côté client via des Server 
 suffisant et peu coûteux pour ces usages perso). Le helper `generateJson(schema, { system, messages })`
 demande une réponse JSON pure à Claude et la valide avec Zod — pattern uniforme utilisé par les
 3 flows plutôt que `output_config.format` (plus simple à garder cohérent avec l'appel d'outil du
-premier flow).
+premier flow). `fetchWeatherForecast`/`degreesToCompass` (`src/ai/weather.ts`) sont le fetch météo
+réel (Open-Meteo, sans clé API) partagé par `cyclingOutfitRecommendation` (via tool use) et
+`dailyWorkoutRecommendation` (appel direct, pas de tool use — la météo est un pré-fetch déterministe,
+pas une décision à laisser au modèle).
 
 ### Flow existant : `cyclingOutfitRecommendation`
 - Input : `{ location, dateTime, durationHours, clothingInventory[] }`
@@ -264,21 +276,29 @@ premier flow).
 - Usage : `src/app/lifestyle/page.tsx` (bouton "Analyser" dans l'onglet Récupération)
 
 ### Flow existant : `dailyWorkoutRecommendation`
-- Input : `{ date, availableMinutes, sportType?, training?, recentSessions[], planWeek?, recovery?, coachContext? }`
+- Input : `{ date, availableMinutes, sportType?, training?, recentSessions[], planWeek?, recovery?, coachContext?, ride? }`
   — `recovery` (sleepHours/sleepQuality/hrv/readiness) vient de la même série fusionnée auto-sync Intervals.icu +
   saisie manuelle que Vie & Santé (`useLifestyleData`) : une mauvaise nuit doit réduire l'intensité proposée
   même si la charge d'entraînement suggérerait autre chose — la récupération prime en cas de tension.
-- Output : `{ title, sportType, durationMinutes, intensityLabel, rationale, structuredWorkout, warnings[] }`
+  `ride` (`{location, departureDateTime}`, optionnel, saisi dans l'onglet) déclenche un fetch météo réel
+  (`fetchWeatherForecast` dans `src/ai/weather.ts`, partagé avec `cyclingOutfitRecommendation`) — échoue en
+  silence (pas de section météo dans le prompt) plutôt que de casser toute la génération si le lieu n'est pas
+  géocodable.
+- Output : `{ title, sportType, durationMinutes, intensityLabel, rationale, structuredWorkout, warnings[], windAdvice }`
   — `structuredWorkout` est le script texte du "workout builder" Intervals.icu que le site parse lui-même :
   en-têtes de section (optionnellement suffixés `Nx` pour une répétition) suivis de lignes `- <durée> <cible%>`.
   Le format inline `Nx (étape / étape)` n'est PAS reconnu par le parseur — voir le prompt du flow.
+  `windAdvice` (string ou null) : conseil de direction générale au départ pour avoir le vent dans le dos au
+  retour, rempli seulement quand `ride` est fourni ET que le vent prévu dépasse 15 km/h (seuil codé en dur,
+  pas laissé à l'appréciation du modèle) — sinon `null`, jamais un conseil inventé sans signal réel.
 - Usage : `src/components/cycling/daily-workout-tab.tsx` (sous-onglet "Proposition du jour" de Coach — onglet par défaut)
 - Réutilise `buildCoachContext` (blessures/objectifs/style de vie/faits retenus/gouverneur/budget kJ) comme
   `recoveryInsight`, plus le CTL/ATL/TSB courant et les séances des 7 derniers jours (`summarizeRecentSessions`
   dans `daily-workout-types.ts`). L'utilisateur peut éditer le titre/durée/script avant envoi. Poussée sur le
   calendrier Intervals.icu via `IntervalsService.createPlannedWorkout()` → `POST /api/intervals/events`
   (`upsertOnUid=true` : ré-envoyer la même journée met à jour l'événement au lieu de le dupliquer, voir
-  `dailyWorkoutExternalId`). Stocké dans `users/{uid}/workoutProposals/{yyyy-MM-dd}`.
+  `dailyWorkoutExternalId`). Stocké dans `users/{uid}/workoutProposals/{yyyy-MM-dd}` (y compris `ride`, pour
+  préremplir le lieu/heure à la réouverture de l'onglet).
 - Si un plan d'entraînement actif existe (voir `trainingPlanGeneration` ci-dessous), reçoit en plus
   `planWeek` (phase/focus/volume cible de la semaine en cours, via `currentPlanWeek` dans
   `training-plan-types.ts`) — la séance du jour doit alors coller à la phase du plan plutôt qu'être

@@ -5,7 +5,7 @@
 // sessions for the AI prompt, building the Intervals.icu push payload — is
 // unit-testable without mocking React/Firebase (see CLAUDE.md convention).
 
-import { subDays } from 'date-fns'
+import { format, subDays } from 'date-fns'
 import type { PlannedWorkoutEvent } from '@/lib/intervals-api'
 import type { DailyWorkoutRecommendationInput, DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 
@@ -52,6 +52,11 @@ export function summarizeRecentSessions(
       trainingLoad: a.icu_training_load ?? undefined,
     }))
     .sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/** Combines a date and "HH:mm" time input into the ISO-ish datetime string fetchWeatherForecast() expects — same shape as buildOutfitDateTime() in weather/clothing-types.ts, kept separate since it's a different domain (a departure time for today's proposal, not an arbitrary future outing). */
+export function buildRideDateTime(date: Date, time: string): string {
+  return `${format(date, 'yyyy-MM-dd')}T${time}:00`
 }
 
 /** Deterministic per-day Intervals.icu external id — re-sending the same day's (possibly edited) proposal upserts the calendar entry instead of duplicating it. */

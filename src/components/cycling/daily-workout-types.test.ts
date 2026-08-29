@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   clampAvailableMinutes,
   summarizeRecentSessions,
+  buildRideDateTime,
   dailyWorkoutExternalId,
   buildWorkoutEventPayload,
   type ActivityLike,
@@ -70,6 +71,12 @@ describe('summarizeRecentSessions', () => {
 
   it('returns an empty array for an empty input', () => {
     expect(summarizeRecentSessions([], '2026-08-28', 7)).toEqual([])
+  })
+})
+
+describe('buildRideDateTime', () => {
+  it('combines a date and time into an ISO-ish datetime string', () => {
+    expect(buildRideDateTime(new Date(2026, 7, 28), '09:30')).toBe('2026-08-28T09:30:00')
   })
 })
 
