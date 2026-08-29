@@ -27,7 +27,8 @@ src/
 │   ├── globals.css               # Variables CSS + classes utilitaires (.lc-card, .text-gradient)
 │   ├── login/page.tsx            # Authentification (email + Google)
 │   ├── register/page.tsx         # Inscription (email + Google)
-│   ├── cycling/page.tsx          # Hub cyclisme — 4 onglets : Vue d'ensemble (tuiles CTL/ATL/TSB/FTP/Riegel/sommeil/HRV/readiness + budget kJ + gouverneur), PMC, Coaching (Plan/Proposition du jour/Stella/Mémoire coach), Garage (Matériel/Chaînes)
+│   ├── cycling/page.tsx          # Hub cyclisme — 3 onglets : Vue d'ensemble (tuiles CTL/ATL/TSB/FTP/Riegel/sommeil/HRV/readiness + budget kJ + gouverneur), PMC, Coaching (Plan/Proposition du jour/Stella/Mémoire coach)
+│   ├── garage/page.tsx           # Matériel + Chaînes (Firestore) — sorti de Cyclisme, sa propre destination de nav
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
 │   ├── weather/page.tsx          # Assistant météo IA (flow Claude)
 │   ├── home-management/page.tsx  # Tâches récurrentes + plantes (Firestore)
@@ -106,6 +107,7 @@ Définie dans `src/components/layout/sidebar.tsx`. La nav items list :
 ```ts
 const navItems = [
   { name: 'Cyclisme',    href: '/cycling',         icon: Bike },
+  { name: 'Garage',      href: '/garage',          icon: Wrench },
   { name: 'Nutrition',   href: '/nutrition',        icon: CookingPot },
   { name: 'Météo AI',    href: '/weather',          icon: CloudSun },
   { name: 'Maison',      href: '/home-management',  icon: Home },
@@ -117,12 +119,17 @@ dans `src/components/home-management/`) — anciennement deux modules de nav sé
 Botanica), fusionnés suite à l'audit (voir `AUDIT.md`/`PLAN.md` section 3.2). L'ancienne route
 `/botanica` redirige vers `/home-management` (`next.config.ts`).
 
+**Garage** (`src/app/garage/page.tsx`, Matériel/Chaînes en sous-onglets) a sa propre route et son
+propre item de nav — sorti de Cyclisme suite au retour utilisateur : il doit vivre indépendamment
+du coaching/data, pas comme un sous-onglet noyé dedans.
+
 **Vie & Santé et Finances ne sont plus dans `navItems`** (ni dans la nav mobile) — leurs pages
 (`/lifestyle`, `/finance`) restent entièrement fonctionnelles mais ne sont plus accédées que via
 la carte "Autres modules" de `/settings`. Les métriques Vie & Santé les plus utilisées par le
 coach IA (sommeil, HRV, readiness) vivent désormais dans Cyclisme > Vue d'ensemble
 (`performance-bento.tsx`), qui reste la même source de données (`useLifestyleData`) — pas une
-copie. Le bottom nav mobile (4 icônes + Réglages) montre Cyclisme/Nutrition/Maison/Météo AI.
+copie. Le bottom nav mobile (5 icônes + Réglages) montre
+Cyclisme/Garage/Nutrition/Maison/Météo AI.
 
 Pour ajouter un module à la nav principale : ajouter une entrée à `navItems` + créer
 `src/app/<route>/page.tsx`. Un module qui ne justifie pas une place dans la nav principale peut

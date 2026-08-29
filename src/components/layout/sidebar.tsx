@@ -11,7 +11,8 @@ import {
   Menu,
   LogOut,
   Home,
-  Search
+  Search,
+  Wrench
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -29,9 +30,13 @@ import { LifeCycleMark } from './lifecycle-mark'
 // l'onglet "Vue d'ensemble" de Cyclisme, et les deux pages restent
 // pleinement fonctionnelles (objectifs, analyse IA, budgets...) — juste
 // accessibles via la carte "Autres modules" de Réglages plutôt que la nav
-// principale. Voir CLAUDE.md.
+// principale. Le Garage (Matériel/Chaînes), lui, a été sorti de Cyclisme
+// pour devenir sa propre destination de nav — retour utilisateur : il doit
+// vivre indépendamment du coaching/data, pas comme un sous-onglet noyé
+// dedans. Voir CLAUDE.md.
 const navItems = [
   { name: 'Cyclisme', href: '/cycling', icon: Bike },
+  { name: 'Garage', href: '/garage', icon: Wrench },
   { name: 'Nutrition', href: '/nutrition', icon: CookingPot },
   { name: 'Météo AI', href: '/weather', icon: CloudSun },
   { name: 'Maison', href: '/home-management', icon: Home },
@@ -201,10 +206,11 @@ export function AppNavigation() {
           </div>
         </header>
 
-        {/* Bottom nav — 4 core destinations (thumb-reach budget) + Réglages. */}
-        <nav className="fixed bottom-0 left-0 right-0 h-[72px] bg-background/90 backdrop-blur-2xl border-t border-border/50 z-40 flex items-center justify-around px-2 pb-2 safe-area-bottom">
+        {/* Bottom nav — 5 core destinations (thumb-reach budget) + Réglages. */}
+        <nav className="fixed bottom-0 left-0 right-0 h-[72px] bg-background/90 backdrop-blur-2xl border-t border-border/50 z-40 flex items-center justify-around px-1 pb-2 safe-area-bottom">
           {[
             navItems.find(i => i.href === '/cycling')!,
+            navItems.find(i => i.href === '/garage')!,
             navItems.find(i => i.href === '/nutrition')!,
             navItems.find(i => i.href === '/home-management')!,
             navItems.find(i => i.href === '/weather')!,

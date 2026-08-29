@@ -16,7 +16,13 @@ import {
   type DatedValue,
 } from './governor-types'
 import { feelingScore } from './session-feedback-types'
-import { getDayId, computeReadiness, type HealthMetric } from '@/components/lifestyle/lifestyle-types'
+import {
+  getLastDayIds,
+  buildMergedDailySeries,
+  resolveReadiness,
+  type HealthMetric,
+  type WellnessLike,
+} from '@/components/lifestyle/lifestyle-types'
 import type { GovernorStatus } from './load-types'
 
 const today = new Date()
@@ -24,6 +30,9 @@ const newest = format(today, 'yyyy-MM-dd')
 const oldest = format(subDays(today, 35), 'yyyy-MM-dd') // 7d recent + 21d baseline + buffer
 const oldestDate = subDays(today, 35)
 oldestDate.setHours(0, 0, 0, 0)
+// Same 36-day span (today + 35 days back) as the wellness/healthMetrics
+// queries above, as day-ids for buildMergedDailySeries below.
+const sleepDayIds = getLastDayIds(36, today)
 
 // Rides below this Intervals.icu intensity are treated as low-intensity/endurance,
 // where HR drift at a stable effort is a meaningful recovery signal.
@@ -79,12 +88,18 @@ export function useGovernor(): GovernorResult {
     // Cross-references the Vie & Santé daily log (sommeil, stress, humeur)
     // with training load instead of treating recovery and cycling as
     // separate worlds — the composite readiness score already used there.
-    const sleepSeries: DatedValue[] = (healthMetrics || [])
-      .map((m) => {
-        if (!m.date?.seconds) return null
-        const readiness = computeReadiness(m)
+    // Merges manual entries with auto-synced Intervals.icu wellness (same
+    // merge as useLifestyleData/mergeDailyWellness) — without this, anyone
+    // relying on auto-sync alone (no manual Vie & Santé entries) saw this
+    // signal stuck on "N/D" even though Vue d'ensemble showed real sleep/HRV
+    // numbers right above, from the exact same underlying data.
+    const wellnessByDay = new Map<string, WellnessLike>(wellness.data.map((w) => [w.id, w]))
+    const mergedDaily = buildMergedDailySeries(healthMetrics || [], wellnessByDay, sleepDayIds)
+    const sleepSeries: DatedValue[] = mergedDaily
+      .map((day) => {
+        const readiness = resolveReadiness(day, wellnessByDay.get(day.dayId)?.readiness)
         if (readiness == null) return null
-        return { date: getDayId(new Date(m.date.seconds * 1000)), value: readiness }
+        return { date: day.dayId, value: readiness }
       })
       .filter((x): x is DatedValue => x != null)
 

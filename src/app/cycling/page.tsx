@@ -11,13 +11,11 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
   Bike,
-  Wrench,
   ChevronRight,
   TrendingUp,
   Activity,
   Timer,
   Flame,
-  Droplets,
   Sparkles,
   Target,
   MessageCircle,
@@ -43,12 +41,6 @@ const PmcTab = dynamic(() => import('@/components/cycling/pmc-tab').then(m => m.
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 const CoachMemoryTab = dynamic(() => import('@/components/cycling/coach-memory-tab').then(m => m.CoachMemoryTab), {
-  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
-})
-const GearTab = dynamic(() => import('@/components/cycling/gear-tab').then(m => m.GearTab), {
-  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
-})
-const ChainsTab = dynamic(() => import('@/components/cycling/chains-tab').then(m => m.ChainsTab), {
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 const DailyWorkoutTab = dynamic(() => import('@/components/cycling/daily-workout-tab').then(m => m.DailyWorkoutTab), {
@@ -136,9 +128,6 @@ export default function CyclingHub() {
             </TabsTrigger>
             <TabsTrigger value="coaching" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <BrainCircuit className="w-4 h-4 mr-2" /> Coaching
-            </TabsTrigger>
-            <TabsTrigger value="garage" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
-              <Wrench className="w-4 h-4 mr-2" /> Garage
             </TabsTrigger>
           </TabsList>
 
@@ -300,26 +289,6 @@ export default function CyclingHub() {
               </TabsContent>
               <TabsContent value="memory" className="space-y-8 pt-6">
                 <CoachMemoryTab governorStatus={governor.status} />
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
-
-          {/* ── Tab Garage — Matériel / Chaînes regroupés ── */}
-          <TabsContent value="garage" className="space-y-6">
-            <Tabs defaultValue="gear">
-              <TabsList className="bg-card/30 border border-border/60 p-1 h-auto flex flex-wrap gap-1">
-                <TabsTrigger value="gear" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-                  <Wrench className="w-3.5 h-3.5 mr-1.5" /> Matériel
-                </TabsTrigger>
-                <TabsTrigger value="chains" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-                  <Droplets className="w-3.5 h-3.5 mr-1.5" /> Chaînes
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="gear" className="space-y-8 pt-6">
-                <GearTab />
-              </TabsContent>
-              <TabsContent value="chains" className="space-y-8 pt-6">
-                <ChainsTab />
               </TabsContent>
             </Tabs>
           </TabsContent>
