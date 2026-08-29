@@ -169,7 +169,7 @@ export function MealPlanWeekView() {
                     draggable
                     onDragStart={() => setDragMealId(meal.id)}
                     onDragEnd={() => setDragMealId(null)}
-                    className={cn('apple-card border-none p-3 space-y-2 cursor-grab active:cursor-grabbing', meal.status === 'saute' && 'opacity-60')}
+                    className={cn('lc-card border-none p-3 space-y-2 cursor-grab active:cursor-grabbing', meal.status === 'saute' && 'opacity-60')}
                   >
                     <div className="flex items-start justify-between gap-1">
                       <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">{MEAL_TYPE_LABELS[meal.mealType]}</span>

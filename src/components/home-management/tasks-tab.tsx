@@ -114,7 +114,7 @@ export function TasksTab() {
         ) : tasks.length === 0 ? (
           <EmptyState className="col-span-full" icon={CheckCircle2} title="Tout est sous contrôle" />
         ) : tasks.map((task) => (
-          <Card key={task.id} className="apple-card border-none p-6 flex flex-col justify-between h-full">
+          <Card key={task.id} className="lc-card border-none p-6 flex flex-col justify-between h-full">
             <div className="space-y-5">
               <div className="flex justify-between items-start">
                 <Badge variant="outline" className="bg-primary/5 text-primary font-bold rounded-full text-[10px] border-none px-3 py-1 uppercase tracking-wider">{task.room}</Badge>

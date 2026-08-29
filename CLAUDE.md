@@ -24,7 +24,7 @@ src/
 ├── app/                          # Next.js App Router
 │   ├── layout.tsx                # Root layout (FirebaseClientProvider + Toaster)
 │   ├── page.tsx                  # Landing page publique
-│   ├── globals.css               # Variables CSS + classes utilitaires (.apple-card, .text-gradient)
+│   ├── globals.css               # Variables CSS + classes utilitaires (.lc-card, .text-gradient)
 │   ├── login/page.tsx            # Authentification (email + Google)
 │   ├── register/page.tsx         # Inscription (email + Google)
 │   ├── cycling/page.tsx          # Hub cyclisme (CTL/ATL/TSB + budget kJ, gouverneur de charge, plan IA, proposition du jour IA, coach mémoire, chat Stella, matériel, chaînes)
@@ -312,31 +312,49 @@ export async function monFlow(input: MonInput) {
 Variable d'environnement requise : `ANTHROPIC_API_KEY` (déclarée dans `apphosting.yaml`, secret
 `anthropic-api-key` à créer dans Secret Manager via `firebase apphosting:secrets:set`).
 
-## Design System
+## Design System — "Performance Lab"
+
+Identité visuelle propre (plus une copie du langage Apple HIG — voir AUDIT.md, l'audit de design
+qui a motivé cette refonte). Décision produit : clair par défaut, fun et orienté découverte des
+données plutôt que dashboard SaaS générique. Une palette d'accent lime fraîche + tuiles "à
+découvrir" pour donner envie d'explorer ses propres stats.
+
+### Typographie
+
+`Space Grotesk` (titres + corps, via `next/font/google`, variable `--font-display`) + `JetBrains
+Mono` (lectures de données chiffrées — stats, prix, dates de table — variable `--font-mono-data`,
+classes utilitaires `font-data` / `.lc-data`). Remplace Inter + `-apple-system`.
 
 ### Classes CSS Utilitaires (globals.css)
 
 ```css
-.apple-card        /* Card arrondie avec ombre douce et hover lift */
+.lc-card           /* Card arrondie avec ombre douce et hover lift (ex .apple-card) */
 .glass-header      /* Header sticky avec backdrop-blur */
 .text-gradient     /* Dégradé foreground → foreground/50 */
+.lc-data           /* Lecture de donnée en monospace, chiffres tabulaires */
 ```
 
 ### Tokens CSS (thème clair par défaut, bascule sombre via `useTheme()`)
 
 Le thème par défaut d'un nouveau visiteur est **clair** — la classe `.dark` n'est ajoutée à
 `<html>` que si `localStorage['lifecycle-theme'] === 'dark'` (voir le script anti-FOUC dans
-`src/app/layout.tsx` et le hook `src/hooks/use-theme.ts`, basculé depuis `/settings`).
+`src/app/layout.tsx` et le hook `src/hooks/use-theme.ts`, basculé depuis `/settings`). Valeurs
+stockées en triplet HSL nu (`H S% L%`, sans wrapper `hsl(...)`) — c'est ce qui permet aux
+utilitaires d'opacité Tailwind (`bg-primary/10`, `border-border/60`, utilisés partout dans l'app)
+de fonctionner : Tailwind les réécrit en `hsl(var(--x) / <alpha>)`, ce qui casserait silencieusement
+si la variable elle-même contenait déjà une fonction de couleur complète (`oklch(...)`, etc.).
 
 | Token | Valeur claire | Valeur sombre |
 |-------|----------------|----------------|
-| `--background` | #F5F5F7 (gris très clair) | #000000 |
-| `--primary` / `--accent` | #007AFF (bleu système iOS) | #0A84FF |
-| `--card` | #FFFFFF | #1C1C1E |
-| `--border` | #E5E5EA | #3A3A3C |
+| `--background` | `60 20% 97%` — blanc cassé chaud | `100 6% 6%` — quasi noir |
+| `--primary` / `--accent` | `86 68% 40%` — lime fraîche | `78 90% 66%` — lime claire |
+| `--card` | `60 25% 99%` | `100 6% 11%` |
+| `--border` | `60 14% 88%` | `100 5% 22%` |
+| `--chart-1..5` | lime / corail / violet / bleu ciel / rouge chaud | déclinaisons plus claires |
 
-Palette "Apple HIG" (`src/app/globals.css`), pas la palette bleu-électrique documentée dans une
-version antérieure de ce fichier.
+`--chart-1..5` (mappés sur `chart-1`..`chart-5` dans `tailwind.config.ts`) servent aussi de
+palette de tags catégoriels hors graphique (ex. bandeau cross-domaine de `performance-bento.tsx` :
+sommeil, HRV, budget — chaque catégorie sa couleur).
 
 ### Échelle de rayons (convention, pas encore appliquée partout — voir AUDIT.md)
 

@@ -81,7 +81,7 @@ export default function SettingsPage() {
         <ProfileCard />
 
         {/* ── Apparence ────────────────────────────────────────────── */}
-        <Card className="apple-card">
+        <Card className="lc-card">
           <CardHeader className="pb-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-purple-500/10 rounded-[10px] flex items-center justify-center">
@@ -147,7 +147,7 @@ export default function SettingsPage() {
         </Card>
 
         {/* ── Intervals.icu ────────────────────────────────────────── */}
-        <Card className="apple-card">
+        <Card className="lc-card">
           <CardHeader className="pb-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">

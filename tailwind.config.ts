@@ -10,9 +10,10 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'sans-serif'],
-        headline: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'sans-serif'],
-        code: ['ui-monospace', 'SFMono-Regular', 'monospace'],
+        body: ['var(--font-display)', 'Space Grotesk', 'system-ui', 'sans-serif'],
+        headline: ['var(--font-display)', 'Space Grotesk', 'system-ui', 'sans-serif'],
+        code: ['var(--font-mono-data)', 'JetBrains Mono', 'ui-monospace', 'monospace'],
+        data: ['var(--font-mono-data)', 'JetBrains Mono', 'ui-monospace', 'monospace'],
       },
       colors: {
         background: 'hsl(var(--background))',

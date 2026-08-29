@@ -4,70 +4,83 @@
 
 @layer base {
   :root {
-    /* Apple HIG — Light Mode */
-    --background: 240 14% 97%;          /* #F5F5F7 */
-    --foreground: 240 6% 10%;           /* #1D1D1F */
-    --card: 0 0% 100%;                  /* #FFFFFF */
-    --card-foreground: 240 6% 10%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 6% 10%;
-    --primary: 211 100% 50%;            /* #007AFF — iOS system blue */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 14% 97%;           /* #F5F5F7 */
-    --secondary-foreground: 240 6% 10%;
-    --muted: 240 10% 94%;               /* #EBEBF0 */
-    --muted-foreground: 240 4% 54%;     /* #86868B */
-    --accent: 211 100% 50%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 2 100% 57%;          /* #FF3B30 — iOS red */
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 6% 90%;               /* #E5E5EA */
-    --input: 240 6% 90%;
-    --ring: 211 100% 50%;
-    --radius: 0.75rem;                  /* 12px base radius */
+    /* LifeCycle "Performance Lab" — Light Mode
+       Warm off-white ground, near-black text, one fresh lime accent —
+       see AUDIT.md/PLAN.md design-identity section. Values stay bare
+       "H S% L%" triples (not wrapped in hsl(...)) so every existing
+       bg-primary/10, border-border/60 etc. opacity-modifier utility across
+       the app keeps working unchanged (Tailwind rewrites those into
+       hsl(var(--x) / <alpha>) — wrapping the variable itself in hsl() or
+       oklch() here would silently break every one of them). */
+    --background: 60 20% 97%;           /* warm off-white */
+    --foreground: 100 8% 12%;
+    --card: 60 25% 99%;
+    --card-foreground: 100 8% 12%;
+    --popover: 60 25% 99%;
+    --popover-foreground: 100 8% 12%;
+    --primary: 86 68% 40%;              /* fresh lime */
+    --primary-foreground: 0 0% 10%;
+    --secondary: 60 18% 94%;
+    --secondary-foreground: 100 8% 12%;
+    --muted: 60 14% 91%;
+    --muted-foreground: 90 6% 42%;
+    --accent: 86 68% 40%;
+    --accent-foreground: 0 0% 10%;
+    --destructive: 14 82% 52%;          /* warm coral-red, not iOS red */
+    --destructive-foreground: 0 0% 99%;
+    --border: 60 14% 88%;
+    --input: 60 14% 88%;
+    --ring: 86 68% 40%;
+    --radius: 0.875rem;                 /* 14px base — slightly softer than the old 12px */
 
-    /* Chart colors — Apple system tints */
-    --chart-1: 211 100% 50%;
-    --chart-2: 142 70% 45%;
-    --chart-3: 25 95% 53%;
-    --chart-4: 263 70% 60%;
-    --chart-5: 2 100% 57%;
+    /* Chart / category colors — lime, coral, violet, sky, warm-red.
+       Same family as the accent, used for cross-domain tags (sommeil/
+       budget/HRV/charge) as well as Recharts series. */
+    --chart-1: 86 68% 40%;
+    --chart-2: 18 85% 60%;
+    --chart-3: 255 70% 62%;
+    --chart-4: 200 75% 55%;
+    --chart-5: 14 82% 52%;
   }
 
   .dark {
-    /* Apple HIG — Dark Mode */
-    --background: 0 0% 0%;              /* #000000 */
-    --foreground: 240 14% 97%;          /* #F5F5F7 */
-    --card: 240 6% 11%;                 /* #1C1C1E */
-    --card-foreground: 240 14% 97%;
-    --popover: 240 6% 11%;
-    --popover-foreground: 240 14% 97%;
-    --primary: 211 100% 52%;            /* #0A84FF — iOS system blue dark */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 240 5% 18%;            /* #2C2C2E */
-    --secondary-foreground: 240 14% 97%;
-    --muted: 240 5% 18%;
-    --muted-foreground: 240 4% 57%;     /* #8E8E93 */
-    --accent: 211 100% 52%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 2 100% 57%;          /* #FF453A — iOS red dark */
-    --destructive-foreground: 0 0% 100%;
-    --border: 240 4% 24%;               /* #3A3A3C */
-    --input: 240 4% 24%;
-    --ring: 211 100% 52%;
+    /* LifeCycle "Performance Lab" — Dark Mode */
+    --background: 100 6% 6%;
+    --foreground: 66 20% 94%;
+    --card: 100 6% 11%;
+    --card-foreground: 66 20% 94%;
+    --popover: 100 6% 11%;
+    --popover-foreground: 66 20% 94%;
+    --primary: 78 90% 66%;              /* bright lime, glows on dark */
+    --primary-foreground: 0 0% 8%;
+    --secondary: 100 5% 16%;
+    --secondary-foreground: 66 20% 94%;
+    --muted: 100 5% 16%;
+    --muted-foreground: 60 8% 62%;
+    --accent: 78 90% 66%;
+    --accent-foreground: 0 0% 8%;
+    --destructive: 12 90% 64%;
+    --destructive-foreground: 100 6% 8%;
+    --border: 100 5% 22%;
+    --input: 100 5% 22%;
+    --ring: 78 90% 66%;
+
+    --chart-1: 82 85% 68%;
+    --chart-2: 20 88% 68%;
+    --chart-3: 258 78% 72%;
+    --chart-4: 200 78% 65%;
+    --chart-5: 12 88% 66%;
   }
 }
 
 @layer base {
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
   body {
     @apply bg-background text-foreground font-body antialiased;
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    letter-spacing: -0.011em;
+    letter-spacing: -0.005em;
   }
 }
 
@@ -77,21 +90,24 @@
    existantes) :
      rounded-lg   (8px)  → éléments interactifs inline (badges, inputs, boutons compacts)
      rounded-xl   (12px) → boutons pleine taille, petits panneaux
-     rounded-2xl  (16px) → cartes (voir .apple-card, qui utilise 18px pour son cas précis)
+     rounded-2xl  (16px) → cartes (voir .lc-card, qui utilise 18px pour son cas précis)
      rounded-3xl  (24px) → dialogues / feuilles modales plein écran
    Éviter les valeurs arbitraires ad hoc (rounded-[Npx]) sauf besoin réel
    non couvert par cette échelle.
    ────────────────────────────────────────────────────────────────── */
 
-/* ── Apple-style card ───────────────────────────────────────────── */
-.apple-card {
+/* ── Carte standard LifeCycle ───────────────────────────────────────
+   Anciennement `.apple-card` — renommée pour ne plus décrire l'app comme
+   une copie du langage visuel Apple (voir l'audit d'identité visuelle). */
+.lc-card {
   @apply bg-card rounded-[18px] border border-border/60
-         shadow-[0_2px_12px_rgba(0,0,0,0.06),0_1px_3px_rgba(0,0,0,0.04)]
+         shadow-[0_2px_12px_rgba(20,23,10,0.06),0_1px_3px_rgba(20,23,10,0.04)]
          transition-all duration-300
-         hover:shadow-[0_4px_24px_rgba(0,0,0,0.09),0_2px_6px_rgba(0,0,0,0.05)];
+         hover:shadow-[0_4px_24px_rgba(20,23,10,0.1),0_2px_6px_rgba(20,23,10,0.05)]
+         hover:-translate-y-[1px];
 }
 
-.dark .apple-card {
+.dark .lc-card {
   @apply shadow-[0_2px_16px_rgba(0,0,0,0.5),0_1px_4px_rgba(0,0,0,0.3)]
          hover:shadow-[0_4px_28px_rgba(0,0,0,0.65),0_2px_8px_rgba(0,0,0,0.4)];
 }
@@ -105,6 +121,12 @@
 /* ── Text gradient ──────────────────────────────────────────────── */
 .text-gradient {
   @apply bg-clip-text text-transparent bg-gradient-to-br from-foreground to-foreground/50;
+}
+
+/* ── Data readout — monospace numerals for stats/metrics ─────────── */
+.lc-data {
+  font-family: var(--font-mono-data), ui-monospace, 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Apple-style inputs ─────────────────────────────────────────── */

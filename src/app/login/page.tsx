@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Bike, Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Loader2, AlertCircle } from 'lucide-react'
+import { LifeCycleMark } from '@/components/layout/lifecycle-mark'
 import {
   signInWithEmailAndPassword,
   signInWithPopup,
@@ -67,9 +68,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
       {/* Logo */}
       <Link href="/" className="mb-10 flex flex-col items-center gap-2.5 group">
-        <div className="w-14 h-14 bg-primary rounded-[16px] flex items-center justify-center shadow-lg shadow-primary/25 transition-transform group-hover:scale-105">
-          <Bike className="w-7 h-7 text-white" />
-        </div>
+        <LifeCycleMark className="w-14 h-14 shadow-lg shadow-primary/25 transition-transform group-hover:scale-105 rounded-[16px]" />
         <span className="text-xl font-semibold tracking-tight">LifeCycle</span>
       </Link>
 

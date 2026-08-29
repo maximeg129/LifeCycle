@@ -7,7 +7,6 @@ import { fr } from 'date-fns/locale'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -15,7 +14,6 @@ import {
   Wrench,
   ChevronRight,
   TrendingUp,
-  TrendingDown,
   Activity,
   Timer,
   Flame,
@@ -32,6 +30,7 @@ import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
 import { useGovernor } from '@/components/cycling/use-governor'
 import { SyncButton } from '@/components/cycling/sync-button'
 import { PageHeader } from '@/components/ui/page-header'
+import { PerformanceBento } from '@/components/cycling/performance-bento'
 import { BrainCircuit } from 'lucide-react'
 
 // Code-split: only the Entraînement tab (the default) ships in the main
@@ -76,18 +75,6 @@ function formatDistance(meters: number | null | undefined): string {
   if (meters == null || isNaN(meters)) return '—'
   const km = meters / 1000
   return km >= 100 ? `${Math.round(km)} km` : `${km.toFixed(1)} km`
-}
-
-function safeRound(value: number | null | undefined): string {
-  if (value == null || isNaN(value)) return '—'
-  return String(Math.round(value))
-}
-
-function tsbLabel(tsb: number): { text: string; className: string } {
-  if (tsb > 25) return { text: 'Très reposé', className: 'text-blue-400' }
-  if (tsb > 5) return { text: 'Forme optimale', className: 'text-green-400' }
-  if (tsb > -10) return { text: 'En charge', className: 'text-yellow-400' }
-  return { text: 'Fatigue élevée', className: 'text-red-400' }
 }
 
 // ── Date ranges ──────────────────────────────────────────────────────
@@ -173,82 +160,23 @@ export default function CyclingHub() {
               <NotConfiguredBanner />
             ) : (
               <>
-                {/* Fitness cards */}
-                <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                  {athlete.isLoading ? (
-                    <>
-                      <FitnessCardSkeleton />
-                      <FitnessCardSkeleton />
-                      <FitnessCardSkeleton />
-                      <FitnessCardSkeleton />
-                    </>
-                  ) : athlete.data ? (
-                    <>
-                      <Card className="bg-card/40 border-border">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-xs text-muted-foreground uppercase">Fitness (CTL)</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-4xl font-bold">{safeRound(athlete.data.ctl)}</div>
-                          <div className="mt-2 flex items-center text-xs text-muted-foreground">
-                            <TrendingUp className="w-3 h-3 mr-1" /> Charge chronique
-                          </div>
-                        </CardContent>
-                      </Card>
-                      <Card className="bg-card/40 border-border">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-xs text-muted-foreground uppercase">Fatigue (ATL)</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-4xl font-bold">{safeRound(athlete.data.atl)}</div>
-                          <Progress value={Math.min(100, ((athlete.data.atl ?? 0) / Math.max(athlete.data.ctl ?? 1, 1)) * 100)} className="h-1.5 mt-2" />
-                        </CardContent>
-                      </Card>
-                      <Card className="bg-card/40 border-border">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-xs text-muted-foreground uppercase">Forme (TSB)</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          {(() => {
-                            const rawTsb = athlete.data.tsb
-                            const tsb = rawTsb != null && !isNaN(rawTsb) ? Math.round(rawTsb) : null
-                            const label = tsbLabel(tsb ?? 0)
-                            return (
-                              <>
-                                <div className={`text-4xl font-bold ${tsb != null ? label.className : ''}`}>
-                                  {tsb != null ? (tsb > 0 ? `+${tsb}` : tsb) : '—'}
-                                </div>
-                                <div className="mt-2 flex items-center text-xs text-muted-foreground">
-                                  {tsb == null || tsb >= 0 ? <TrendingUp className="w-3 h-3 mr-1" /> : <TrendingDown className="w-3 h-3 mr-1" />}
-                                  {tsb != null ? label.text : 'Données indisponibles'}
-                                </div>
-                              </>
-                            )
-                          })()}
-                        </CardContent>
-                      </Card>
-                      <Card className="bg-card/40 border-border">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-xs text-muted-foreground uppercase">FTP</CardTitle>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="text-4xl font-bold">{athlete.data.ftp ?? '—'}<span className="text-lg text-muted-foreground ml-1">W</span></div>
-                          {athlete.data.ftp && athlete.data.weight && athlete.data.weight > 0 && (
-                            <div className="mt-2 text-xs text-muted-foreground">
-                              {(athlete.data.ftp / athlete.data.weight).toFixed(2)} W/kg
-                            </div>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </>
-                  ) : athlete.error ? (
-                    <Card className="bg-card/40 border-border col-span-full">
-                      <CardContent className="py-8 text-center text-sm text-destructive">
-                        Erreur : {athlete.error}
-                      </CardContent>
-                    </Card>
-                  ) : null}
-                </section>
+                {/* Fitness — hero TSB + stat trio + discover tiles + cross-domain strip */}
+                {athlete.isLoading ? (
+                  <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <FitnessCardSkeleton />
+                    <FitnessCardSkeleton />
+                    <FitnessCardSkeleton />
+                    <FitnessCardSkeleton />
+                  </section>
+                ) : athlete.data ? (
+                  <PerformanceBento athlete={athlete.data} governorStatus={governor.status} />
+                ) : athlete.error ? (
+                  <Card className="bg-card/40 border-border">
+                    <CardContent className="py-8 text-center text-sm text-destructive">
+                      Erreur : {athlete.error}
+                    </CardContent>
+                  </Card>
+                ) : null}
 
                 {/* kJ budget + internal load governor — real mechanical work, not TSS/rigid plan */}
                 <section className="grid grid-cols-1 md:grid-cols-2 gap-4">

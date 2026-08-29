@@ -24,6 +24,7 @@ import { useRouter } from 'next/navigation'
 import { useOverdueCounts } from './use-overdue-counts'
 import { CommandPalette } from '@/components/search/command-palette'
 import { APP_VERSION, formatVersionLabel } from '@/lib/version'
+import { LifeCycleMark } from './lifecycle-mark'
 
 const navItems = [
   { name: 'Cyclisme', href: '/cycling', icon: Bike },
@@ -60,9 +61,7 @@ export function AppNavigation() {
         {/* Logo */}
         <div className="px-6 pt-8 pb-6">
           <Link href="/" className="flex items-center gap-3 group">
-            <div className="w-9 h-9 bg-primary rounded-[10px] flex items-center justify-center shadow-md shadow-primary/25 group-hover:scale-105 transition-transform">
-              <Bike className="w-5 h-5 text-white" />
-            </div>
+            <LifeCycleMark className="w-9 h-9 shadow-md shadow-primary/25 group-hover:scale-105 transition-transform rounded-[10px]" />
             <div className="flex flex-col leading-none">
               <span className="text-[15px] font-semibold tracking-tight">LifeCycle</span>
               <span className="text-[10px] font-medium text-muted-foreground tracking-widest uppercase mt-0.5">Pro</span>
@@ -142,9 +141,7 @@ export function AppNavigation() {
         {/* Top bar */}
         <header className="fixed top-0 left-0 right-0 h-14 bg-background/85 backdrop-blur-2xl border-b border-border/50 z-40 px-5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-7 h-7 bg-primary rounded-[8px] flex items-center justify-center shadow-sm shadow-primary/20">
-              <Bike className="w-4 h-4 text-white" />
-            </div>
+            <LifeCycleMark className="w-7 h-7 shadow-sm shadow-primary/20 rounded-[8px]" />
             <span className="text-[15px] font-semibold tracking-tight">LifeCycle</span>
           </div>
           <div className="flex items-center gap-1">
@@ -165,9 +162,7 @@ export function AppNavigation() {
               <SheetContent side="left" className="bg-background w-64 p-0 border-r border-border/60">
                 <div className="px-6 pt-8 pb-6 border-b border-border/60">
                   <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-primary rounded-[10px] flex items-center justify-center shadow-md shadow-primary/25">
-                      <Bike className="w-5 h-5 text-white" />
-                    </div>
+                    <LifeCycleMark className="w-9 h-9 shadow-md shadow-primary/25 rounded-[10px]" />
                     <div>
                       <span className="text-[15px] font-semibold tracking-tight block">LifeCycle</span>
                       <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Pro</span>

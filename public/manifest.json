@@ -5,8 +5,8 @@
   "start_url": "/home-management",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0B0F1A",
-  "theme_color": "#007AFF",
+  "background_color": "#15170F",
+  "theme_color": "#6FAB21",
   "lang": "fr",
   "icons": [
     { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },

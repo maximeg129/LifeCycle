@@ -1,8 +1,26 @@
 import type { Metadata } from 'next';
+import { Space_Grotesk, JetBrains_Mono } from 'next/font/google';
 import './globals.css';
 import { FirebaseClientProvider } from '@/firebase';
 import { Toaster } from '@/components/ui/toaster';
 import { IntervalsProvider } from '@/hooks/use-intervals';
+
+// "Performance Lab" identity — Space Grotesk (headings/body) + JetBrains
+// Mono (data readouts: stats, prices, dates in tables — see .lc-data /
+// font-data). Self-hosted via next/font (no external request, no FOUC),
+// replacing the Inter + -apple-system stack.
+const spaceGrotesk = Space_Grotesk({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-display',
+  display: 'swap',
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-mono-data',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'LifeCycle Pro',
@@ -20,7 +38,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: '#007AFF',
+  themeColor: '#6FAB21',
 };
 
 export default function RootLayout({
@@ -29,7 +47,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" suppressHydrationWarning>
+    <html lang="fr" suppressHydrationWarning className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
       <head>
         {/* Anti-FOUC: apply saved theme before first paint */}
         <script
@@ -43,9 +61,6 @@ export default function RootLayout({
             __html: `if('serviceWorker' in navigator){window.addEventListener('load',function(){navigator.serviceWorker.register('/sw.js').catch(function(){});});}`,
           }}
         />
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
       </head>
       <body className="font-body">
         <FirebaseClientProvider>

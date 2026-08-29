@@ -151,7 +151,7 @@ export default function LifestylePage() {
           <TabsContent value="overview" className="space-y-8 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {metrics.map((m) => (
-                <Card key={m.label} className="apple-card border-none p-6">
+                <Card key={m.label} className="lc-card border-none p-6">
                   <div className="flex items-center gap-3 mb-4">
                     <div className={cn('w-10 h-10 rounded-2xl flex items-center justify-center', m.bg)}>
                       <m.icon className={cn('w-5 h-5', m.color)} />
@@ -165,7 +165,7 @@ export default function LifestylePage() {
               ))}
             </div>
 
-            <Card className="apple-card border-none p-8">
+            <Card className="lc-card border-none p-8">
               <CardHeader className="p-0 mb-6 flex flex-row items-center justify-between">
                 <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                   <Target className="w-5 h-5 text-primary" /> Objectifs bien-être
@@ -200,7 +200,7 @@ export default function LifestylePage() {
             </Card>
 
             {moodSeries.some((m) => m.score !== null) && (
-              <Card className="apple-card border-none p-8">
+              <Card className="lc-card border-none p-8">
                 <CardHeader className="p-0 mb-6">
                   <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                     <Smile className="w-5 h-5 text-primary" /> Humeur de la semaine
@@ -224,7 +224,7 @@ export default function LifestylePage() {
               </Card>
             )}
 
-            <Card className="apple-card border-none p-8">
+            <Card className="lc-card border-none p-8">
               <CardHeader className="p-0 mb-4">
                 <CardTitle className="text-lg font-bold tracking-tight">Conseils du jour</CardTitle>
               </CardHeader>
@@ -262,7 +262,7 @@ export default function LifestylePage() {
 
           <TabsContent value="sleep" className="space-y-8 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="apple-card border-none p-6">
+              <Card className="lc-card border-none p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center">
                     <Moon className="w-5 h-5 text-indigo-500" />
@@ -272,7 +272,7 @@ export default function LifestylePage() {
                 <div className="text-3xl font-bold tracking-tight">{sleepValues.length ? `${avgSleep.toFixed(1)}h` : '—'}</div>
                 <p className="text-xs text-muted-foreground mt-1">sur {sleepValues.length} jour{sleepValues.length > 1 ? 's' : ''} renseigné{sleepValues.length > 1 ? 's' : ''}</p>
               </Card>
-              <Card className="apple-card border-none p-6">
+              <Card className="lc-card border-none p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-2xl bg-green-500/10 flex items-center justify-center">
                     <TrendingUp className="w-5 h-5 text-green-500" />
@@ -284,7 +284,7 @@ export default function LifestylePage() {
               </Card>
             </div>
 
-            <Card className="apple-card border-none p-8">
+            <Card className="lc-card border-none p-8">
               <CardHeader className="p-0 mb-6">
                 <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                   <Moon className="w-5 h-5 text-indigo-500" /> Durée & qualité de sommeil
@@ -311,7 +311,7 @@ export default function LifestylePage() {
               )}
             </Card>
 
-            <Card className="apple-card border-none p-8">
+            <Card className="lc-card border-none p-8">
               <CardHeader className="p-0 mb-4">
                 <CardTitle className="text-lg font-bold tracking-tight">Détail par nuit</CardTitle>
               </CardHeader>
@@ -344,7 +344,7 @@ export default function LifestylePage() {
           </TabsContent>
 
           <TabsContent value="recovery" className="space-y-8 animate-in fade-in duration-500">
-            <Card className="apple-card border-none p-8">
+            <Card className="lc-card border-none p-8">
               <CardHeader className="p-0 mb-6">
                 <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                   <Activity className="w-5 h-5 text-red-500" /> Variabilité cardiaque (HRV)
@@ -365,7 +365,7 @@ export default function LifestylePage() {
               )}
             </Card>
 
-            <Card className="apple-card border-none p-8">
+            <Card className="lc-card border-none p-8">
               <CardHeader className="p-0 mb-4">
                 <CardTitle className="text-lg font-bold tracking-tight">Analyse de la récupération</CardTitle>
               </CardHeader>

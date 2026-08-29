@@ -4,9 +4,9 @@ import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { 
-  CheckCircle2, 
-  ArrowRight, 
+import { LifeCycleMark } from '@/components/layout/lifecycle-mark'
+import {
+  ArrowRight,
   Sparkles, 
   Bike, 
   CookingPot, 
@@ -45,9 +45,7 @@ export default function LandingPage() {
         isScrolled ? "bg-white/70 dark:bg-black/70 backdrop-blur-2xl border-b border-border/40 py-3" : "bg-transparent"
       )}>
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 bg-foreground rounded-[10px] flex items-center justify-center shadow-lg">
-            <CheckCircle2 className="w-5 h-5 text-background" />
-          </div>
+          <LifeCycleMark className="w-9 h-9 shadow-lg rounded-[10px]" />
           <span className="text-xl font-bold tracking-tight">LifeCycle <span className="font-light opacity-40">Pro</span></span>
         </div>
 
@@ -94,7 +92,7 @@ export default function LandingPage() {
           
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {features.map((f, i) => (
-              <div key={i} className="apple-card p-12 group">
+              <div key={i} className="lc-card p-12 group">
                 <div className={cn("w-16 h-16 rounded-[22px] flex items-center justify-center mb-10 transition-transform duration-500 group-hover:scale-110", f.bg, f.color)}>
                   <f.icon className="w-8 h-8" />
                 </div>
@@ -123,9 +121,7 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-16">
           <div className="flex flex-col items-center md:items-start gap-4">
              <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-foreground rounded-lg flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-background" />
-              </div>
+              <LifeCycleMark className="w-9 h-9 rounded-lg" />
               <span className="font-bold text-xl tracking-tight">LifeCycle</span>
             </div>
             <p className="text-sm text-muted-foreground opacity-60">Votre vie, enfin organisée.</p>

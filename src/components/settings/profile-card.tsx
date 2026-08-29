@@ -39,7 +39,7 @@ export function ProfileCard() {
   }
 
   return (
-    <Card className="apple-card">
+    <Card className="lc-card">
       <CardHeader className="pb-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-blue-500/10 rounded-[10px] flex items-center justify-center">

@@ -53,7 +53,7 @@ export function DangerZoneCard() {
   }
 
   return (
-    <Card className="apple-card border-destructive/30">
+    <Card className="lc-card border-destructive/30">
       <CardHeader className="pb-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-destructive/10 rounded-[10px] flex items-center justify-center">

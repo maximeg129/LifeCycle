@@ -290,7 +290,7 @@ export function PlantsTab() {
             const lastWatered = plant.lastWateringDate?.seconds ? new Date(plant.lastWateringDate.seconds * 1000) : null
 
             return (
-              <div key={plant.id} onClick={() => handleOpenDetail(plant)} className="apple-card border-none overflow-hidden group flex flex-col cursor-pointer">
+              <div key={plant.id} onClick={() => handleOpenDetail(plant)} className="lc-card border-none overflow-hidden group flex flex-col cursor-pointer">
                 <div className="h-52 relative bg-green-900/20 flex-shrink-0">
                   {plant.thumbnailUrl ? (
                     <Image src={plant.thumbnailUrl} alt={plant.nickname} fill className="object-cover transition-transform duration-1000 group-hover:scale-105" />

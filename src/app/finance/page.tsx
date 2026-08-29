@@ -116,7 +116,7 @@ export default function FinancePage() {
           <>
           <TabsContent value="overview" className="space-y-8 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card className="apple-card border-none p-6">
+              <Card className="lc-card border-none p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
                     <CreditCard className="w-5 h-5 text-primary" />
@@ -133,7 +133,7 @@ export default function FinancePage() {
                 )}
               </Card>
 
-              <Card className="apple-card border-none p-6">
+              <Card className="lc-card border-none p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-2xl bg-green-500/10 flex items-center justify-center">
                     <PiggyBank className="w-5 h-5 text-green-500" />
@@ -144,7 +144,7 @@ export default function FinancePage() {
                 <p className="text-xs text-muted-foreground mt-2">sur les {monthIds.length} derniers mois</p>
               </Card>
 
-              <Card className="apple-card border-none p-6">
+              <Card className="lc-card border-none p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-10 h-10 rounded-2xl bg-orange-500/10 flex items-center justify-center">
                     <Target className="w-5 h-5 text-orange-500" />
@@ -163,7 +163,7 @@ export default function FinancePage() {
               </Card>
             </div>
 
-            <Card className="apple-card border-none p-8">
+            <Card className="lc-card border-none p-8">
               <CardHeader className="p-0 mb-6">
                 <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                   <BarChart3 className="w-5 h-5 text-primary" /> Évolution des dépenses
@@ -195,7 +195,7 @@ export default function FinancePage() {
               )}
             </Card>
 
-            <Card className="apple-card border-none p-8">
+            <Card className="lc-card border-none p-8">
               <CardHeader className="p-0 mb-6">
                 <CardTitle className="text-lg font-bold tracking-tight">Dernières transactions</CardTitle>
               </CardHeader>
@@ -244,7 +244,7 @@ export default function FinancePage() {
                     const remainingCat = limitAmount - spent
 
                     return (
-                      <Card key={category.id} className="apple-card border-none p-8">
+                      <Card key={category.id} className="lc-card border-none p-8">
                         <div className="flex items-center justify-between mb-6">
                           <div className="flex items-center gap-3">
                             <div className={cn('w-12 h-12 rounded-2xl flex items-center justify-center', colors.bg)}>
@@ -291,7 +291,7 @@ export default function FinancePage() {
                 />
 
                 {totalSpentThisMonth > 0 && (
-                  <Card className="apple-card border-none p-8">
+                  <Card className="lc-card border-none p-8">
                     <CardHeader className="p-0 mb-4">
                       <CardTitle className="text-lg font-bold tracking-tight">Répartition globale</CardTitle>
                     </CardHeader>
@@ -318,7 +318,7 @@ export default function FinancePage() {
 
           <TabsContent value="savings" className="space-y-8 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card className="apple-card border-none p-8">
+              <Card className="lc-card border-none p-8">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 rounded-2xl bg-green-500/10 flex items-center justify-center">
                     <PiggyBank className="w-6 h-6 text-green-500" />
@@ -338,7 +338,7 @@ export default function FinancePage() {
                 )}
               </Card>
 
-              <Card className="apple-card border-none p-8 flex flex-col justify-between">
+              <Card className="lc-card border-none p-8 flex flex-col justify-between">
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
                     <Target className="w-6 h-6 text-primary" />
@@ -352,7 +352,7 @@ export default function FinancePage() {
               </Card>
             </div>
 
-            <Card className="apple-card border-none p-8">
+            <Card className="lc-card border-none p-8">
               <CardHeader className="p-0 mb-6">
                 <CardTitle className="text-lg font-bold tracking-tight flex items-center gap-2">
                   <ArrowUpRight className="w-5 h-5 text-green-500" /> Évolution de l&apos;épargne

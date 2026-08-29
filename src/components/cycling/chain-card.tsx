@@ -127,7 +127,7 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
   }
 
   return (
-    <Card className="apple-card border-none p-6 space-y-4">
+    <Card className="lc-card border-none p-6 space-y-4">
       <div className="flex items-start justify-between gap-2">
         <div>
           <h3 className="font-bold text-lg">{chain.label}</h3>

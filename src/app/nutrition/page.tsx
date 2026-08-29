@@ -281,7 +281,7 @@ export default function NutritionPage() {
 
           <TabsContent value="plan" className="space-y-8 animate-in fade-in duration-500">
             <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              <Card className="apple-card border-none">
+              <Card className="lc-card border-none">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-[10px] text-muted-foreground uppercase flex items-center gap-2">
                     <Flame className="w-3 h-3 text-orange-500" /> Calories
@@ -292,7 +292,7 @@ export default function NutritionPage() {
                   <Progress value={progressPct(totals.calories, goals.calorieTarget)} className="h-1 mt-3" />
                 </CardContent>
               </Card>
-              <Card className="apple-card border-none">
+              <Card className="lc-card border-none">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-[10px] text-muted-foreground uppercase flex items-center gap-2">
                     <Beef className="w-3 h-3 text-red-500" /> Protéines
@@ -303,7 +303,7 @@ export default function NutritionPage() {
                   <Progress value={progressPct(totals.protein, goals.proteinTarget)} className="h-1 mt-3 bg-red-500/10" />
                 </CardContent>
               </Card>
-              <Card className="apple-card border-none">
+              <Card className="lc-card border-none">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-[10px] text-muted-foreground uppercase flex items-center gap-2">
                     <Wheat className="w-3 h-3 text-yellow-500" /> Glucides
@@ -314,7 +314,7 @@ export default function NutritionPage() {
                   <Progress value={progressPct(totals.carbs, goals.carbsTarget)} className="h-1 mt-3 bg-yellow-500/10" />
                 </CardContent>
               </Card>
-              <Card className="apple-card border-none">
+              <Card className="lc-card border-none">
                 <CardHeader className="pb-2">
                   <CardTitle className="text-[10px] text-muted-foreground uppercase flex items-center gap-2">
                     <Droplets className="w-3 h-3 text-blue-500" /> Hydratation
@@ -331,7 +331,7 @@ export default function NutritionPage() {
               </Card>
             </section>
 
-            <Card className="apple-card border-none">
+            <Card className="lc-card border-none">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div>
                   <CardTitle className="text-xl">Journal du Jour</CardTitle>
@@ -387,7 +387,7 @@ export default function NutritionPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {loadingRecipes ? (
                 Array.from({ length: 3 }).map((_, i) => (
-                  <Card key={i} className="apple-card border-none h-64 animate-pulse bg-muted/20" />
+                  <Card key={i} className="lc-card border-none h-64 animate-pulse bg-muted/20" />
                 ))
               ) : recipes?.length === 0 ? (
                 <div className="col-span-full py-20 text-center space-y-4">
@@ -399,7 +399,7 @@ export default function NutritionPage() {
                 recipes?.map((recipe) => (
                   <Card 
                     key={recipe.id} 
-                    className="apple-card border-none overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer"
+                    className="lc-card border-none overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer"
                     onClick={() => { setSelectedRecipe(recipe); setIsEditingRecipe(false); setIsDetailOpen(true); }}
                   >
                     <div className="h-48 bg-muted relative">
