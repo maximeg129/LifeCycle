@@ -126,36 +126,24 @@ export default function CyclingHub() {
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
         <PageHeader category="Performance" title="LifeCycle Vault" actions={<SyncButton />} />
 
-        <Tabs defaultValue="training" className="space-y-6">
+        <Tabs defaultValue="overview" className="space-y-6">
           <TabsList className="bg-card/50 border border-border p-1 h-auto flex flex-wrap gap-1">
-            <TabsTrigger value="training" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
-              <Activity className="w-4 h-4 mr-2" /> Entraînement
+            <TabsTrigger value="overview" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
+              <Activity className="w-4 h-4 mr-2" /> Vue d&apos;ensemble
             </TabsTrigger>
             <TabsTrigger value="pmc" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
               <TrendingUp className="w-4 h-4 mr-2" /> PMC
             </TabsTrigger>
-            <TabsTrigger value="plan" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
-              <Target className="w-4 h-4 mr-2" /> Plan
+            <TabsTrigger value="coaching" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
+              <BrainCircuit className="w-4 h-4 mr-2" /> Coaching
             </TabsTrigger>
-            <TabsTrigger value="daily-workout" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
-              <Sparkles className="w-4 h-4 mr-2" /> Proposition du jour
-            </TabsTrigger>
-            <TabsTrigger value="stella" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
-              <MessageCircle className="w-4 h-4 mr-2" /> Stella
-            </TabsTrigger>
-            <TabsTrigger value="coach" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
-              <BrainCircuit className="w-4 h-4 mr-2" /> Mémoire coach
-            </TabsTrigger>
-            <TabsTrigger value="gear" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
-              <Wrench className="w-4 h-4 mr-2" /> Matériel
-            </TabsTrigger>
-            <TabsTrigger value="chains" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
-              <Droplets className="w-4 h-4 mr-2" /> Chaînes
+            <TabsTrigger value="garage" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-4 py-2">
+              <Wrench className="w-4 h-4 mr-2" /> Garage
             </TabsTrigger>
           </TabsList>
 
-          {/* ── Tab Entraînement ──────────────────────────────────── */}
-          <TabsContent value="training" className="space-y-8">
+          {/* ── Tab Vue d'ensemble ──────────────────────────────────── */}
+          <TabsContent value="overview" className="space-y-8">
             {!isConfigured && !athlete.isLoading ? (
               <NotConfiguredBanner />
             ) : (
@@ -169,7 +157,7 @@ export default function CyclingHub() {
                     <FitnessCardSkeleton />
                   </section>
                 ) : athlete.data ? (
-                  <PerformanceBento athlete={athlete.data} governorStatus={governor.status} />
+                  <PerformanceBento athlete={athlete.data} />
                 ) : athlete.error ? (
                   <Card className="bg-card/40 border-border">
                     <CardContent className="py-8 text-center text-sm text-destructive">
@@ -283,34 +271,57 @@ export default function CyclingHub() {
             <PmcTab isConfigured={isConfigured} athleteLoading={athlete.isLoading} fitness={fitness} />
           </TabsContent>
 
-          {/* ── Tab Plan (AI flow + Firestore) ── */}
-          <TabsContent value="plan" className="space-y-8">
-            <TrainingPlanTab />
+          {/* ── Tab Coaching — Plan / Proposition du jour / Stella / Mémoire
+               coach regroupés (anciennement 4 onglets séparés) ── */}
+          <TabsContent value="coaching" className="space-y-6">
+            <Tabs defaultValue="plan">
+              <TabsList className="bg-card/30 border border-border/60 p-1 h-auto flex flex-wrap gap-1">
+                <TabsTrigger value="plan" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
+                  <Target className="w-3.5 h-3.5 mr-1.5" /> Plan
+                </TabsTrigger>
+                <TabsTrigger value="daily-workout" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
+                  <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Proposition du jour
+                </TabsTrigger>
+                <TabsTrigger value="stella" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
+                  <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> Stella
+                </TabsTrigger>
+                <TabsTrigger value="memory" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
+                  <BrainCircuit className="w-3.5 h-3.5 mr-1.5" /> Mémoire coach
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="plan" className="space-y-8 pt-6">
+                <TrainingPlanTab />
+              </TabsContent>
+              <TabsContent value="daily-workout" className="space-y-8 pt-6">
+                <DailyWorkoutTab />
+              </TabsContent>
+              <TabsContent value="stella" className="space-y-8 pt-6">
+                <StellaChatTab />
+              </TabsContent>
+              <TabsContent value="memory" className="space-y-8 pt-6">
+                <CoachMemoryTab governorStatus={governor.status} />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
-          {/* ── Tab Proposition du jour (AI flow + Firestore) ── */}
-          <TabsContent value="daily-workout" className="space-y-8">
-            <DailyWorkoutTab />
-          </TabsContent>
-
-          {/* ── Tab Stella (chat conversationnel, AI flow + Firestore) ── */}
-          <TabsContent value="stella" className="space-y-8">
-            <StellaChatTab />
-          </TabsContent>
-
-          {/* ── Tab Mémoire coach (Firestore-backed) ── */}
-          <TabsContent value="coach" className="space-y-8">
-            <CoachMemoryTab governorStatus={governor.status} />
-          </TabsContent>
-
-          {/* ── Tab Matériel (Firestore-backed) ── */}
-          <TabsContent value="gear" className="space-y-8">
-            <GearTab />
-          </TabsContent>
-
-          {/* ── Tab Chaînes (hot wax rotation) ── */}
-          <TabsContent value="chains" className="space-y-8">
-            <ChainsTab />
+          {/* ── Tab Garage — Matériel / Chaînes regroupés ── */}
+          <TabsContent value="garage" className="space-y-6">
+            <Tabs defaultValue="gear">
+              <TabsList className="bg-card/30 border border-border/60 p-1 h-auto flex flex-wrap gap-1">
+                <TabsTrigger value="gear" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
+                  <Wrench className="w-3.5 h-3.5 mr-1.5" /> Matériel
+                </TabsTrigger>
+                <TabsTrigger value="chains" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
+                  <Droplets className="w-3.5 h-3.5 mr-1.5" /> Chaînes
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="gear" className="space-y-8 pt-6">
+                <GearTab />
+              </TabsContent>
+              <TabsContent value="chains" className="space-y-8 pt-6">
+                <ChainsTab />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         </Tabs>
       </main>

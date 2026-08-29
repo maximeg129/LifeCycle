@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
 import { doc, setDoc } from 'firebase/firestore'
-import { ShieldCheck, ExternalLink, Save, Loader2, Key, User, Sun, Moon, Palette } from 'lucide-react'
+import { ShieldCheck, ExternalLink, Save, Loader2, Key, User, Sun, Moon, Palette, HeartPulse, Wallet, ChevronRight } from 'lucide-react'
+import Link from 'next/link'
 import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -102,7 +103,7 @@ export default function SettingsPage() {
                 }
                 <div>
                   <p className="text-sm font-medium">{isDark ? 'Mode sombre' : 'Mode clair'}</p>
-                  <p className="text-xs text-muted-foreground">{isDark ? 'Interface sombre, style Apple dark' : 'Interface claire, style Apple'}</p>
+                  <p className="text-xs text-muted-foreground">{isDark ? 'Interface sombre' : 'Interface claire'}</p>
                 </div>
               </div>
               <Switch
@@ -124,7 +125,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="text-left">
                   <p className="text-sm font-semibold">Clair</p>
-                  <p className="text-xs text-muted-foreground">Style Apple</p>
+                  <p className="text-xs text-muted-foreground">Par défaut</p>
                 </div>
               </button>
 
@@ -139,7 +140,7 @@ export default function SettingsPage() {
                 </div>
                 <div className="text-left">
                   <p className="text-sm font-semibold">Sombre</p>
-                  <p className="text-xs text-muted-foreground">Style Apple dark</p>
+                  <p className="text-xs text-muted-foreground">Performance Lab</p>
                 </div>
               </button>
             </div>
@@ -222,6 +223,40 @@ export default function SettingsPage() {
 
         {/* ── Rappels ──────────────────────────────────────────────── */}
         <NotificationPrefsCard />
+
+        {/* ── Autres modules ───────────────────────────────────────────
+            Vie & Santé et Finances ne sont plus dans la nav principale
+            (les métriques les plus utiles de Vie & Santé vivent maintenant
+            dans Cyclisme > Vue d'ensemble) — les pages restent complètes
+            et accessibles ici. */}
+        <Card className="lc-card">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-base font-semibold">Autres modules</CardTitle>
+            <CardDescription className="text-sm">Toujours disponibles, juste hors de la navigation principale.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Link href="/lifestyle" className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group">
+              <div className="w-9 h-9 rounded-[10px] bg-chart-2/10 flex items-center justify-center shrink-0">
+                <HeartPulse className="w-4 h-4 text-chart-2" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">Vie &amp; Santé</p>
+                <p className="text-xs text-muted-foreground">Objectifs bien-être, historique et analyse IA de récupération.</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+            </Link>
+            <Link href="/finance" className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group">
+              <div className="w-9 h-9 rounded-[10px] bg-chart-3/10 flex items-center justify-center shrink-0">
+                <Wallet className="w-4 h-4 text-chart-3" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">Finances</p>
+                <p className="text-xs text-muted-foreground">Budgets, dépenses et objectifs d&apos;épargne.</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+            </Link>
+          </CardContent>
+        </Card>
 
         {/* ── Données ──────────────────────────────────────────────── */}
         <DataExportCard />

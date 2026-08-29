@@ -27,7 +27,7 @@ src/
 │   ├── globals.css               # Variables CSS + classes utilitaires (.lc-card, .text-gradient)
 │   ├── login/page.tsx            # Authentification (email + Google)
 │   ├── register/page.tsx         # Inscription (email + Google)
-│   ├── cycling/page.tsx          # Hub cyclisme (CTL/ATL/TSB + budget kJ, gouverneur de charge, plan IA, proposition du jour IA, coach mémoire, chat Stella, matériel, chaînes)
+│   ├── cycling/page.tsx          # Hub cyclisme — 4 onglets : Vue d'ensemble (tuiles CTL/ATL/TSB/FTP/Riegel/sommeil/HRV/readiness + budget kJ + gouverneur), PMC, Coaching (Plan/Proposition du jour/Stella/Mémoire coach), Garage (Matériel/Chaînes)
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
 │   ├── weather/page.tsx          # Assistant météo IA (flow Claude)
 │   ├── home-management/page.tsx  # Tâches récurrentes + plantes (Firestore)
@@ -109,8 +109,6 @@ const navItems = [
   { name: 'Nutrition',   href: '/nutrition',        icon: CookingPot },
   { name: 'Météo AI',    href: '/weather',          icon: CloudSun },
   { name: 'Maison',      href: '/home-management',  icon: Home },
-  { name: 'Vie & Santé', href: '/lifestyle',        icon: HeartPulse },
-  { name: 'Finances',    href: '/finance',          icon: Wallet },
 ]
 ```
 
@@ -119,7 +117,16 @@ dans `src/components/home-management/`) — anciennement deux modules de nav sé
 Botanica), fusionnés suite à l'audit (voir `AUDIT.md`/`PLAN.md` section 3.2). L'ancienne route
 `/botanica` redirige vers `/home-management` (`next.config.ts`).
 
-Pour ajouter un module : ajouter une entrée ici + créer `src/app/<route>/page.tsx`.
+**Vie & Santé et Finances ne sont plus dans `navItems`** (ni dans la nav mobile) — leurs pages
+(`/lifestyle`, `/finance`) restent entièrement fonctionnelles mais ne sont plus accédées que via
+la carte "Autres modules" de `/settings`. Les métriques Vie & Santé les plus utilisées par le
+coach IA (sommeil, HRV, readiness) vivent désormais dans Cyclisme > Vue d'ensemble
+(`performance-bento.tsx`), qui reste la même source de données (`useLifestyleData`) — pas une
+copie. Le bottom nav mobile (4 icônes + Réglages) montre Cyclisme/Nutrition/Maison/Météo AI.
+
+Pour ajouter un module à la nav principale : ajouter une entrée à `navItems` + créer
+`src/app/<route>/page.tsx`. Un module qui ne justifie pas une place dans la nav principale peut
+rester accessible via la carte "Autres modules" de Réglages à la place.
 
 ## Modèle de Données Firestore
 
@@ -250,7 +257,7 @@ premier flow).
   — `structuredWorkout` est le script texte du "workout builder" Intervals.icu que le site parse lui-même :
   en-têtes de section (optionnellement suffixés `Nx` pour une répétition) suivis de lignes `- <durée> <cible%>`.
   Le format inline `Nx (étape / étape)` n'est PAS reconnu par le parseur — voir le prompt du flow.
-- Usage : `src/components/cycling/daily-workout-tab.tsx` (onglet "Proposition du jour" de Cyclisme)
+- Usage : `src/components/cycling/daily-workout-tab.tsx` (sous-onglet "Proposition du jour" de Cyclisme > Coaching)
 - Réutilise `buildCoachContext` (blessures/objectifs/style de vie/faits retenus/gouverneur/budget kJ) comme
   `recoveryInsight`, plus le CTL/ATL/TSB courant et les séances des 7 derniers jours (`summarizeRecentSessions`
   dans `daily-workout-types.ts`). L'utilisateur peut éditer le titre/durée/script avant envoi. Poussée sur le
@@ -266,7 +273,7 @@ premier flow).
 - Input : `{ today, goal, weekCount, weeklyAvailableMinutes, training?, coachContext? }`
 - Output : `{ planName, weeks[] (phase/focus/targetWeeklyMinutes/notes — exactement `weekCount` éléments),
   warnings[] }`
-- Usage : `src/components/cycling/training-plan-tab.tsx` (onglet "Plan" de Cyclisme)
+- Usage : `src/components/cycling/training-plan-tab.tsx` (sous-onglet "Plan" de Cyclisme > Coaching)
 - Périodisation classique (base → build → peak → taper, semaines recovery tous les 3-4 semaines) vers un
   objectif choisi parmi `coachGoals`. Le flow ne génère QUE le contenu de chaque semaine — jamais les
   dates elles-mêmes : `buildPlanWeekSkeleton`/`mergePlanWeeks` (`training-plan-types.ts`) calculent les
@@ -280,7 +287,7 @@ premier flow).
 - Output : `string` (texte brut — **seul flow de l'app qui ne répond pas en JSON**, `generateJson` ne
   s'applique pas à une conversation libre ; appelle directement `anthropic.messages.create` avec le
   système/historique en `messages`).
-- Usage : `src/components/cycling/stella-chat-tab.tsx` (onglet "Stella" de Cyclisme)
+- Usage : `src/components/cycling/stella-chat-tab.tsx` (sous-onglet "Stella" de Cyclisme > Coaching)
 - Persona conversationnelle réutilisant le même `buildCoachContext` + CTL/ATL/TSB + semaine de plan en
   cours que les autres flows coach — pas une mémoire séparée. Volontairement consultative seulement : le
   prompt système interdit à Stella de générer elle-même une séance structurée ou un plan (elle renvoie vers
