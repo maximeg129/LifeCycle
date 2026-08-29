@@ -15,10 +15,10 @@
 // "Sync" button in the app — wherever it's rendered — calls the exact same
 // function and gets the exact same result everywhere, immediately.
 //
-// The four hooks below (useAthlete, useActivities, useWellness,
-// useFitnessChart) keep their original signatures and return shapes on
-// purpose, so every existing call site keeps working unchanged — they're
-// now thin, range-filtered views over the shared context instead of
+// The hooks below (useAthlete, useActivities, useWellness, useFitnessChart,
+// usePowerCurveFromIntervals) keep their original signatures and return
+// shapes on purpose, so every existing call site keeps working unchanged —
+// they're now thin, range-filtered views over the shared context instead of
 // independent fetchers.
 //
 // The provider also runs this same sync automatically once per app session
@@ -34,7 +34,7 @@ import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
 import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
-import type { IntervalsAthlete, IntervalsActivity, IntervalsWellness, IntervalsFitnessDay } from '@/lib/intervals-api'
+import type { IntervalsAthlete, IntervalsActivity, IntervalsWellness, IntervalsFitnessDay, IntervalsPowerCurve } from '@/lib/intervals-api'
 import type { Bike, BikeComponent } from '@/components/cycling/gear-types'
 import type { Chain } from '@/components/cycling/chain-types'
 import { applyKmDeltaToBikeDependents, computeGearKmFromActivities } from '@/components/cycling/km-sync'
@@ -124,6 +124,7 @@ interface IntervalsContextValue {
   activities: IntervalsActivity[]
   wellness: IntervalsWellness[]
   fitness: IntervalsFitnessDay[]
+  powerCurve: IntervalsPowerCurve[]
   isLoading: boolean
   error: string | null
   isSyncing: boolean
@@ -143,6 +144,7 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
   const [activities, setActivities] = useState<IntervalsActivity[]>([])
   const [wellness, setWellness] = useState<IntervalsWellness[]>([])
   const [fitness, setFitness] = useState<IntervalsFitnessDay[]>([])
+  const [powerCurve, setPowerCurve] = useState<IntervalsPowerCurve[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isSyncing, setIsSyncing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -155,17 +157,24 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
     const wellnessOldest = format(subDays(today, WELLNESS_WINDOW_DAYS), 'yyyy-MM-dd')
     const fitnessOldest = format(subDays(today, FITNESS_WINDOW_DAYS), 'yyyy-MM-dd')
 
-    const [athleteData, activitiesData, wellnessData, fitnessData] = await Promise.all([
+    const [athleteData, activitiesData, wellnessData, fitnessData, powerCurveData] = await Promise.all([
       fetchProxy<IntervalsAthlete>('/api/intervals/athlete', athleteId, apiKey),
       fetchProxy<IntervalsActivity[]>(`/api/intervals/activities?oldest=${activitiesOldest}&newest=${newest}`, athleteId, apiKey),
       fetchProxy<IntervalsWellness[]>(`/api/intervals/wellness?oldest=${wellnessOldest}&newest=${newest}`, athleteId, apiKey),
       fetchProxy<IntervalsFitnessDay[]>(`/api/intervals/fitness-chart?oldest=${fitnessOldest}&newest=${newest}`, athleteId, apiKey),
+      // Best-effort — this endpoint's shape is a best guess against
+      // Intervals.icu's public OpenAPI spec, unverified against a live
+      // account. A wrong guess must never take down the four reads above
+      // it's fetched alongside, so it degrades to an empty curve instead of
+      // rejecting the whole Promise.all.
+      fetchProxy<IntervalsPowerCurve[]>('/api/intervals/power-curve', athleteId, apiKey).catch(() => [] as IntervalsPowerCurve[]),
     ])
 
     setAthlete(athleteData)
     setActivities(activitiesData)
     setWellness(wellnessData)
     setFitness(fitnessData)
+    setPowerCurve(powerCurveData)
     return { athleteData, activitiesData }
   }, [])
 
@@ -332,6 +341,7 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
     activities,
     wellness,
     fitness,
+    powerCurve,
     isLoading: creds.isLoading || isLoading,
     error,
     isSyncing,
@@ -389,4 +399,10 @@ export function useFitnessChart(oldest: string, newest: string) {
     [ctx.fitness, oldest, newest]
   )
   return { data, isLoading: ctx.isLoading, error: ctx.error, isConfigured: ctx.isConfigured, refresh: ctx.syncAll }
+}
+
+/** The athlete's real mean-max power curve (no date range — Intervals.icu computes it over its own "all time"/"1y"/etc window, see getPowerCurve()). Powers the Riegel power-record auto-fill in use-power-curve.ts. */
+export function usePowerCurveFromIntervals() {
+  const ctx = useIntervalsContext()
+  return { data: ctx.powerCurve, isLoading: ctx.isLoading, error: ctx.error, isConfigured: ctx.isConfigured, refresh: ctx.syncAll }
 }

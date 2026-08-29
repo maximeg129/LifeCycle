@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fitPowerDurationCurve, computeTTE, difficultyRatio, type PowerCurve } from './riegel-types'
+import { fitPowerDurationCurve, computeTTE, difficultyRatio, pickPowerRecordsFromCurve, type PowerCurve } from './riegel-types'
 
 // Points generated exactly from P(t) = 300 · t^(-0.1), so the fit should
 // recover a≈300, e≈0.1, enduranceIndex≈0.9.
@@ -38,6 +38,35 @@ describe('computeTTE', () => {
     const tteEasy = computeTTE(100, curve)!
     const tteHard = computeTTE(250, curve)!
     expect(tteEasy).toBeGreaterThan(tteHard)
+  })
+})
+
+describe('pickPowerRecordsFromCurve', () => {
+  // A realistic Intervals.icu-style curve: a handful of standard duration
+  // buckets, power decreasing with duration.
+  const secs = [5, 60, 300, 1200, 3600, 5400]
+  const values = [900, 500, 320, 260, 220, 200]
+
+  it('picks the closest bucket to each target duration', () => {
+    const picked = pickPowerRecordsFromCurve(secs, values)
+    expect(picked.shortRecord).toEqual({ seconds: 300, watts: 320 }) // exact 5min match
+    expect(picked.mediumRecord).toEqual({ seconds: 1200, watts: 260 }) // exact 20min match
+    expect(picked.longRecord).toEqual({ seconds: 5400, watts: 200 }) // exact 90min match
+  })
+
+  it('falls back to the nearest available bucket when there is no exact match', () => {
+    // No 90min bucket available — closest is 60min (3600s).
+    const picked = pickPowerRecordsFromCurve([5, 300, 1200, 3600], [900, 320, 260, 220])
+    expect(picked.longRecord).toEqual({ seconds: 3600, watts: 220 })
+  })
+
+  it('returns nulls for an empty curve', () => {
+    expect(pickPowerRecordsFromCurve([], [])).toEqual({ shortRecord: null, mediumRecord: null, longRecord: null })
+  })
+
+  it('ignores a bucket with a non-positive value', () => {
+    const picked = pickPowerRecordsFromCurve([300], [0])
+    expect(picked.shortRecord).toBeNull()
   })
 })
 

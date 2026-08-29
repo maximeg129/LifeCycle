@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
   const fullHistoryOldest = '2000-01-01'
 
   try {
-    const [athleteRes, wellnessRes, activitiesRes, fullHistoryRes] = await Promise.all([
+    const [athleteRes, wellnessRes, activitiesRes, fullHistoryRes, powerCurveRes] = await Promise.all([
       fetch(baseUrl, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
       fetch(`${baseUrl}/wellness/${today}`, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
       fetch(`${baseUrl}/activities?oldest=${oldest30}&newest=${today}`, { headers }).then(r => r.json()).catch(e => ({ _error: e.message })),
@@ -28,6 +28,13 @@ export async function GET(request: NextRequest) {
       // exactly, after the sparse-fieldset param was caught silently
       // dropping both `gear_id` and (unverified) `gear`.
       fetch(`${baseUrl}/activities?oldest=${fullHistoryOldest}&newest=${today}`, { headers })
+        .then(async r => ({ _status: r.status, _ok: r.ok, _body: await r.json().catch(() => null) }))
+        .catch(e => ({ _error: e.message })),
+      // Verifies the `power-curves.json` guess behind getPowerCurve() (see
+      // intervals-api.ts) — the endpoint path/ext and the `list[].secs`/
+      // `values` shape are a best guess against the public OpenAPI spec,
+      // never checked against a live account.
+      fetch(`${baseUrl}/power-curves.json?type=Ride&curves=all`, { headers })
         .then(async r => ({ _status: r.status, _ok: r.ok, _body: await r.json().catch(() => null) }))
         .catch(e => ({ _error: e.message })),
     ])
@@ -86,6 +93,18 @@ export async function GET(request: NextRequest) {
           : null,
         dateRangeReturned: dateRange,
         gearTotals,
+      },
+      powerCurve: {
+        _requestUrl: `${baseUrl}/power-curves.json?type=Ride&curves=all`,
+        _status: (powerCurveRes as { _status?: number })?._status ?? null,
+        _ok: (powerCurveRes as { _ok?: boolean })?._ok ?? null,
+        _bodyKeys: (powerCurveRes as { _body?: unknown })?._body && typeof (powerCurveRes as { _body?: unknown })._body === 'object'
+          ? Object.keys((powerCurveRes as { _body: object })._body)
+          : null,
+        _firstCurveKeys: Array.isArray((powerCurveRes as { _body?: { list?: unknown[] } })?._body?.list) && ((powerCurveRes as { _body: { list: unknown[] } })._body.list.length > 0)
+          ? Object.keys((powerCurveRes as { _body: { list: Array<Record<string, unknown>> } })._body.list[0])
+          : null,
+        _sample: powerCurveRes,
       },
     })
   } catch (e) {

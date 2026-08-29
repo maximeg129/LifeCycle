@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Gauge, Loader2 } from 'lucide-react'
+import { Gauge, Loader2, Sparkles } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -29,9 +30,18 @@ export function PowerCurveCard() {
   const { toast } = useToast()
   const { user } = useUser()
   const db = useFirestore()
-  const { data, isLoading, ref } = usePowerCurve()
+  const { data, manual, auto, isConfigured, isLoading, ref } = usePowerCurve()
   const [isSaving, setIsSaving] = useState(false)
   const [targetWatts, setTargetWatts] = useState('')
+
+  // A field is showing an auto-computed value (not yet overridden by hand)
+  // when Intervals.icu supplied it and no manual record exists for it.
+  const isAuto = {
+    short: !manual?.shortRecord && !!auto.shortRecord,
+    medium: !manual?.mediumRecord && !!auto.mediumRecord,
+    long: !manual?.longRecord && !!auto.longRecord,
+  }
+  const anyAuto = isAuto.short || isAuto.medium || isAuto.long
 
   const curve = useMemo(() => {
     const records = [data?.shortRecord, data?.mediumRecord, data?.longRecord].filter((r): r is PowerRecord => !!r)
@@ -90,25 +100,36 @@ export function PowerCurveCard() {
           <Gauge className="w-3.5 h-3.5" /> Courbe puissance-durée (indice d&apos;endurance de Riegel)
         </CardTitle>
         <CardDescription className="text-xs">3 records perso plutôt qu&apos;une puissance critique ou des seuils supposés fixes</CardDescription>
+        {anyAuto && (
+          <p className="text-xs text-primary flex items-center gap-1.5 pt-1">
+            <Sparkles className="w-3 h-3" /> Calculés depuis votre courbe de puissance Intervals.icu — corrigez si besoin.
+          </p>
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
-            <Label className="text-xs">Court (3-7 min)</Label>
+            <Label className="text-xs flex items-center gap-1.5">
+              Court (3-7 min) {isAuto.short && <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Auto</Badge>}
+            </Label>
             <div className="flex gap-2">
               <Input name="shortMinutes" type="number" step={0.1} min={0} placeholder="min" defaultValue={data?.shortRecord ? data.shortRecord.seconds / 60 : undefined} />
               <Input name="shortWatts" type="number" min={0} placeholder="W" defaultValue={data?.shortRecord?.watts} />
             </div>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">Moyen (~20 min)</Label>
+            <Label className="text-xs flex items-center gap-1.5">
+              Moyen (~20 min) {isAuto.medium && <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Auto</Badge>}
+            </Label>
             <div className="flex gap-2">
               <Input name="mediumMinutes" type="number" step={0.1} min={0} placeholder="min" defaultValue={data?.mediumRecord ? data.mediumRecord.seconds / 60 : undefined} />
               <Input name="mediumWatts" type="number" min={0} placeholder="W" defaultValue={data?.mediumRecord?.watts} />
             </div>
           </div>
           <div className="space-y-2">
-            <Label className="text-xs">Long (&gt;60 min)</Label>
+            <Label className="text-xs flex items-center gap-1.5">
+              Long (&gt;60 min) {isAuto.long && <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Auto</Badge>}
+            </Label>
             <div className="flex gap-2">
               <Input name="longMinutes" type="number" step={0.1} min={0} placeholder="min" defaultValue={data?.longRecord ? data.longRecord.seconds / 60 : undefined} />
               <Input name="longWatts" type="number" min={0} placeholder="W" defaultValue={data?.longRecord?.watts} />
@@ -141,7 +162,9 @@ export function PowerCurveCard() {
           </div>
         ) : (
           <p className="text-xs text-muted-foreground pt-2 border-t border-border">
-            Renseignez au moins 2 records pour calculer votre indice d&apos;endurance.
+            {isConfigured
+              ? "Pas encore assez d'historique d'activités sur Intervals.icu pour calculer automatiquement 2 records — renseignez-en manuellement ci-dessus."
+              : 'Renseignez au moins 2 records pour calculer votre indice d’endurance (ou connectez Intervals.icu dans Réglages pour un calcul automatique).'}
           </p>
         )}
       </CardContent>

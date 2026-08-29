@@ -133,6 +133,19 @@ export interface IntervalsWellness {
   atl2?: number;
 }
 
+/**
+ * One best-power-for-duration curve (mean-max power), computed by
+ * Intervals.icu from the athlete's real ride files — not a manually
+ * entered personal record. `secs`/`values` are parallel arrays: the best
+ * average power (W) the athlete has ever held for that many seconds, over
+ * whatever period the curve covers (see getPowerCurve()).
+ */
+export interface IntervalsPowerCurve {
+  id: string;
+  secs: number[];
+  values: number[];
+}
+
 export interface IntervalsFitnessDay {
   date: string;
   ctl: number;
@@ -364,6 +377,22 @@ export class IntervalsService {
         tsb: (e.ctl ?? 0) - (e.atl ?? 0),
         trainingLoad: e.ctlLoad ?? 0,
       }));
+  }
+
+  /**
+   * Best-power-for-duration curve (mean-max power), computed by
+   * Intervals.icu from the athlete's real ride history — the auto-sync
+   * source for the Riegel power records, so the athlete doesn't have to
+   * re-type personal bests the platform already knows (see
+   * pickPowerRecordsFromCurve() in riegel-types.ts). `curves` follows
+   * Intervals.icu's own shorthand ("all", "1y", "42d"...) — defaults to
+   * "all" so a new athlete's whole ride history counts toward it, not just
+   * the last year.
+   */
+  async getPowerCurve(curves = 'all'): Promise<IntervalsPowerCurve[]> {
+    const params = new URLSearchParams({ type: 'Ride', curves });
+    const data = await this.fetchIntervals<{ list?: IntervalsPowerCurve[] }>(`/power-curves.json?${params}`);
+    return data.list ?? [];
   }
 
   /** Détail d'une activité */

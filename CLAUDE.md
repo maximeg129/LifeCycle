@@ -161,7 +161,7 @@ Toutes les données utilisateur sont sous `users/{uid}/` :
 | `users/{uid}/recipes` | `{recipeId}` | Recettes : title, ingredients[], instructions, calories, protein, carbs |
 | `users/{uid}/tasks` | `{taskId}` | Tâches : name, room, priority, recurrenceDays, nextDueDate (Timestamp), isActive |
 | `users/{uid}/settings/intervals` | (singleton) | intervalsAthleteId, intervalsApiKey |
-| `users/{uid}/settings/powerCurve` | (singleton) | shortRecord/mediumRecord/longRecord `{seconds, watts}` — records perso pour l'indice d'endurance de Riegel |
+| `users/{uid}/settings/powerCurve` | (singleton) | shortRecord/mediumRecord/longRecord `{seconds, watts}` — records perso pour l'indice d'endurance de Riegel. Auto-rempli depuis la vraie courbe de puissance Intervals.icu quand connecté (`usePowerCurve` fusionne manuel + auto, manuel prioritaire par champ — même logique que `mergeDailyWellness`) ; ce doc ne stocke que les valeurs manuellement corrigées, pas les valeurs auto-calculées |
 | `users/{uid}/coachInjuries` | `{injuryId}` | Blessures : bodyRegion, severity (1-5), status, startDate, description, physioInstructions |
 | `users/{uid}/coachGoals` | `{goalId}` | Objectifs coach IA : eventName, eventDate, targetOutcome, priority |
 | `users/{uid}/coachMemory` | `lifestyle` / `facts` (singletons) | Style de vie (texte libre) et faits retenus (`items: string[]`) |
