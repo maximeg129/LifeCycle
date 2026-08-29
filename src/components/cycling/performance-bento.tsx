@@ -149,7 +149,7 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
       </div>
       {enduranceIndex == null && powerCurve.data == null && !powerCurve.isLoading && (
         <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-          <Zap className="w-3 h-3" /> Renseignez vos records de puissance (onglet PMC) pour débloquer l&apos;indice Riegel.
+          <Zap className="w-3 h-3" /> Renseignez vos records de puissance (section PMC plus bas) pour débloquer l&apos;indice Riegel.
         </p>
       )}
     </div>

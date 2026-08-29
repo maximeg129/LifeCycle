@@ -269,7 +269,7 @@ export default function NutritionPage() {
         <Tabs defaultValue="plan" onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-muted/50 border border-border/40 p-1 rounded-full w-fit mx-auto md:mx-0">
             <TabsTrigger value="plan" className="px-8 py-2 rounded-full data-[state=active]:bg-background data-[state=active]:shadow-sm">
-              <Calendar className="w-4 h-4 mr-2" /> Plan Nutrition
+              <Utensils className="w-4 h-4 mr-2" /> Aujourd&apos;hui
             </TabsTrigger>
             <TabsTrigger value="cookbook" className="px-8 py-2 rounded-full data-[state=active]:bg-background data-[state=active]:shadow-sm">
               <BookOpen className="w-4 h-4 mr-2" /> Livre de Recettes

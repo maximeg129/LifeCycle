@@ -21,11 +21,13 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
   },
   // Botanica (plants) merged into Maison as its "Plantes" tab — see
-  // AUDIT.md/PLAN.md section 3.2. Redirect old bookmarks/PWA shortcuts
-  // instead of leaving them 404.
+  // AUDIT.md/PLAN.md section 3.2. Météo AI merged into the Coach hub as its
+  // "Météo & Tenue" sub-tab — see CLAUDE.md section Navigation (refonte IA).
+  // Redirect old bookmarks/PWA shortcuts instead of leaving them 404.
   async redirects() {
     return [
       { source: '/botanica', destination: '/home-management', permanent: true },
+      { source: '/weather', destination: '/coach', permanent: true },
     ];
   },
   images: {

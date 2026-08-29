@@ -27,10 +27,10 @@ src/
 │   ├── globals.css               # Variables CSS + classes utilitaires (.lc-card, .text-gradient)
 │   ├── login/page.tsx            # Authentification (email + Google)
 │   ├── register/page.tsx         # Inscription (email + Google)
-│   ├── cycling/page.tsx          # Hub cyclisme — 3 onglets : Vue d'ensemble (tuiles CTL/ATL/TSB/FTP/Riegel/sommeil/HRV/readiness + budget kJ + gouverneur), PMC, Coaching (Plan/Proposition du jour/Stella/Mémoire coach)
+│   ├── cycling/page.tsx          # Page données, pas d'onglets : tuiles Vue d'ensemble (CTL/ATL/TSB/FTP/Riegel/sommeil/HRV/readiness) + budget kJ + gouverneur + PMC (courbe 12 semaines, charge hebdo, records de puissance) en scroll continu
+│   ├── coach/page.tsx            # Hub coaching IA — 6 sous-onglets : Proposition du jour (défaut), Sorties (journal d'activités), Météo & Tenue (ex-/weather), Plan, Stella, Mémoire coach
 │   ├── garage/page.tsx           # Matériel + Chaînes (Firestore) — sorti de Cyclisme, sa propre destination de nav
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
-│   ├── weather/page.tsx          # Assistant météo IA (flow Claude)
 │   ├── home-management/page.tsx  # Tâches récurrentes + plantes (Firestore)
 │   ├── lifestyle/page.tsx        # Sommeil, HRV, stress, récupération (auto-sync Intervals.icu en priorité, saisie manuelle en complément — voir `mergeDailyWellness`)
 │   ├── finance/page.tsx          # Budgets et dépenses lifestyle
@@ -107,9 +107,9 @@ Définie dans `src/components/layout/sidebar.tsx`. La nav items list :
 ```ts
 const navItems = [
   { name: 'Cyclisme',    href: '/cycling',         icon: Bike },
+  { name: 'Coach',       href: '/coach',           icon: BrainCircuit },
   { name: 'Garage',      href: '/garage',          icon: Wrench },
   { name: 'Nutrition',   href: '/nutrition',        icon: CookingPot },
-  { name: 'Météo AI',    href: '/weather',          icon: CloudSun },
   { name: 'Maison',      href: '/home-management',  icon: Home },
 ]
 ```
@@ -123,13 +123,21 @@ Botanica), fusionnés suite à l'audit (voir `AUDIT.md`/`PLAN.md` section 3.2). 
 propre item de nav — sorti de Cyclisme suite au retour utilisateur : il doit vivre indépendamment
 du coaching/data, pas comme un sous-onglet noyé dedans.
 
+**Coach** (`src/app/coach/page.tsx`) regroupe tout ce qui concerne planifier/faire/relire une
+sortie et la relation coach : Proposition du jour (onglet par défaut), Sorties (le journal
+d'activités, déplacé depuis Cyclisme > Vue d'ensemble), Météo & Tenue (l'ex-page `/weather`, qui
+redirige maintenant ici — `next.config.ts`), Plan, Stella, Mémoire coach — remplace l'ancien onglet
+"Coaching" de Cyclisme. Planifier une sortie avec la bonne intensité et planifier une sortie avec
+la bonne tenue sont le même geste ; les séparer en deux destinations de nav n'avait pas de sens.
+Cyclisme redevient purement la page données (Vue d'ensemble + PMC, sans onglets — voir plus bas).
+
 **Vie & Santé et Finances ne sont plus dans `navItems`** (ni dans la nav mobile) — leurs pages
 (`/lifestyle`, `/finance`) restent entièrement fonctionnelles mais ne sont plus accédées que via
 la carte "Autres modules" de `/settings`. Les métriques Vie & Santé les plus utilisées par le
 coach IA (sommeil, HRV, readiness) vivent désormais dans Cyclisme > Vue d'ensemble
 (`performance-bento.tsx`), qui reste la même source de données (`useLifestyleData`) — pas une
 copie. Le bottom nav mobile (5 icônes + Réglages) montre
-Cyclisme/Garage/Nutrition/Maison/Météo AI.
+Cyclisme/Coach/Garage/Nutrition/Maison.
 
 Pour ajouter un module à la nav principale : ajouter une entrée à `navItems` + créer
 `src/app/<route>/page.tsx`. Un module qui ne justifie pas une place dans la nav principale peut
@@ -241,7 +249,7 @@ premier flow).
 ### Flow existant : `cyclingOutfitRecommendation`
 - Input : `{ location, dateTime, durationHours, clothingInventory[] }`
 - Output : `{ predictedWeather, recommendation, recommendedItems[] }`
-- Usage : `src/app/weather/page.tsx`
+- Usage : `src/components/coach/weather-outfit-tab.tsx` (sous-onglet "Météo & Tenue" de Coach — ex-page `/weather`, qui redirige maintenant vers `/coach`)
 - Utilise le tool use de Claude (`get_weather_forecast`, appelle Open-Meteo) avant de produire le JSON final.
 
 ### Flow existant : `identifyPlant`
@@ -264,7 +272,7 @@ premier flow).
   — `structuredWorkout` est le script texte du "workout builder" Intervals.icu que le site parse lui-même :
   en-têtes de section (optionnellement suffixés `Nx` pour une répétition) suivis de lignes `- <durée> <cible%>`.
   Le format inline `Nx (étape / étape)` n'est PAS reconnu par le parseur — voir le prompt du flow.
-- Usage : `src/components/cycling/daily-workout-tab.tsx` (sous-onglet "Proposition du jour" de Cyclisme > Coaching)
+- Usage : `src/components/cycling/daily-workout-tab.tsx` (sous-onglet "Proposition du jour" de Coach — onglet par défaut)
 - Réutilise `buildCoachContext` (blessures/objectifs/style de vie/faits retenus/gouverneur/budget kJ) comme
   `recoveryInsight`, plus le CTL/ATL/TSB courant et les séances des 7 derniers jours (`summarizeRecentSessions`
   dans `daily-workout-types.ts`). L'utilisateur peut éditer le titre/durée/script avant envoi. Poussée sur le
@@ -280,7 +288,7 @@ premier flow).
 - Input : `{ today, goal, weekCount, weeklyAvailableMinutes, training?, coachContext? }`
 - Output : `{ planName, weeks[] (phase/focus/targetWeeklyMinutes/notes — exactement `weekCount` éléments),
   warnings[] }`
-- Usage : `src/components/cycling/training-plan-tab.tsx` (sous-onglet "Plan" de Cyclisme > Coaching)
+- Usage : `src/components/cycling/training-plan-tab.tsx` (sous-onglet "Plan" de Coach)
 - Périodisation classique (base → build → peak → taper, semaines recovery tous les 3-4 semaines) vers un
   objectif choisi parmi `coachGoals`. Le flow ne génère QUE le contenu de chaque semaine — jamais les
   dates elles-mêmes : `buildPlanWeekSkeleton`/`mergePlanWeeks` (`training-plan-types.ts`) calculent les
@@ -294,7 +302,7 @@ premier flow).
 - Output : `string` (texte brut — **seul flow de l'app qui ne répond pas en JSON**, `generateJson` ne
   s'applique pas à une conversation libre ; appelle directement `anthropic.messages.create` avec le
   système/historique en `messages`).
-- Usage : `src/components/cycling/stella-chat-tab.tsx` (sous-onglet "Stella" de Cyclisme > Coaching)
+- Usage : `src/components/cycling/stella-chat-tab.tsx` (sous-onglet "Stella" de Coach)
 - Persona conversationnelle réutilisant le même `buildCoachContext` + CTL/ATL/TSB + semaine de plan en
   cours que les autres flows coach — pas une mémoire séparée. Volontairement consultative seulement : le
   prompt système interdit à Stella de générer elle-même une séance structurée ou un plan (elle renvoie vers

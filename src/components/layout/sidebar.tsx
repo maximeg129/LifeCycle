@@ -6,7 +6,7 @@ import { usePathname } from 'next/navigation'
 import {
   Bike,
   CookingPot,
-  CloudSun,
+  BrainCircuit,
   Settings,
   Menu,
   LogOut,
@@ -27,18 +27,24 @@ import { LifeCycleMark } from './lifecycle-mark'
 
 // Vie & Santé et Finances ont été retirées de la nav principale : leurs
 // métriques les plus utiles (sommeil/HRV/readiness) vivent maintenant dans
-// l'onglet "Vue d'ensemble" de Cyclisme, et les deux pages restent
-// pleinement fonctionnelles (objectifs, analyse IA, budgets...) — juste
-// accessibles via la carte "Autres modules" de Réglages plutôt que la nav
-// principale. Le Garage (Matériel/Chaînes), lui, a été sorti de Cyclisme
-// pour devenir sa propre destination de nav — retour utilisateur : il doit
-// vivre indépendamment du coaching/data, pas comme un sous-onglet noyé
-// dedans. Voir CLAUDE.md.
+// Cyclisme > Vue d'ensemble, et les deux pages restent pleinement
+// fonctionnelles (objectifs, analyse IA, budgets...) — juste accessibles via
+// la carte "Autres modules" de Réglages plutôt que la nav principale. Le
+// Garage (Matériel/Chaînes), lui, a été sorti de Cyclisme pour devenir sa
+// propre destination de nav — retour utilisateur : il doit vivre
+// indépendamment du coaching/data, pas comme un sous-onglet noyé dedans.
+//
+// "Météo AI" a ensuite été fusionnée dans un nouveau hub "Coach", qui
+// regroupe tout ce qui concerne planifier/faire/relire une sortie et la
+// relation coach (Proposition du jour, Sorties, Météo & Tenue, Plan, Stella,
+// Mémoire coach) — planifier une sortie avec la bonne tenue et planifier une
+// séance sont le même geste, ça n'avait pas de sens que ce soit deux
+// destinations de nav différentes. Voir CLAUDE.md.
 const navItems = [
   { name: 'Cyclisme', href: '/cycling', icon: Bike },
+  { name: 'Coach', href: '/coach', icon: BrainCircuit },
   { name: 'Garage', href: '/garage', icon: Wrench },
   { name: 'Nutrition', href: '/nutrition', icon: CookingPot },
-  { name: 'Météo AI', href: '/weather', icon: CloudSun },
   { name: 'Maison', href: '/home-management', icon: Home },
 ]
 
@@ -210,10 +216,10 @@ export function AppNavigation() {
         <nav className="fixed bottom-0 left-0 right-0 h-[72px] bg-background/90 backdrop-blur-2xl border-t border-border/50 z-40 flex items-center justify-around px-1 pb-2 safe-area-bottom">
           {[
             navItems.find(i => i.href === '/cycling')!,
+            navItems.find(i => i.href === '/coach')!,
             navItems.find(i => i.href === '/garage')!,
             navItems.find(i => i.href === '/nutrition')!,
             navItems.find(i => i.href === '/home-management')!,
-            navItems.find(i => i.href === '/weather')!,
             { name: 'Réglages', href: '/settings', icon: Settings },
           ].map((item) => {
             const isActive = pathname === item.href

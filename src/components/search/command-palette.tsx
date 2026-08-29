@@ -7,7 +7,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebas
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
-  Search, Bike, CookingPot, Home, HeartPulse, Wallet, CloudSun, Settings, CornerDownLeft,
+  Search, Bike, CookingPot, Home, HeartPulse, Wallet, Settings, CornerDownLeft, Wrench, BrainCircuit,
 } from 'lucide-react'
 
 interface ResultItem {
@@ -21,8 +21,9 @@ interface ResultItem {
 
 const PAGES: ResultItem[] = [
   { id: 'page-cycling', label: 'Cyclisme', href: '/cycling', icon: Bike, group: 'Pages' },
+  { id: 'page-coach', label: 'Coach', href: '/coach', icon: BrainCircuit, group: 'Pages' },
+  { id: 'page-garage', label: 'Garage', href: '/garage', icon: Wrench, group: 'Pages' },
   { id: 'page-nutrition', label: 'Nutrition', href: '/nutrition', icon: CookingPot, group: 'Pages' },
-  { id: 'page-weather', label: 'Météo AI', href: '/weather', icon: CloudSun, group: 'Pages' },
   { id: 'page-home', label: 'Maison', href: '/home-management', icon: Home, group: 'Pages' },
   { id: 'page-lifestyle', label: 'Vie & Santé', href: '/lifestyle', icon: HeartPulse, group: 'Pages' },
   { id: 'page-finance', label: 'Finances', href: '/finance', icon: Wallet, group: 'Pages' },
