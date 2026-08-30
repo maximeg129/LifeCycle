@@ -104,6 +104,92 @@ Points clés :
 - `md:pl-64` : espace pour la sidebar desktop (largeur 256px)
 - `mt-16 md:mt-0` (baked into `PageHeader`) : compense le header mobile fixe
 
+## Internationalisation (i18n) — chantier en cours
+
+Retour utilisateur : "le multilangue de l'app" — un gros chantier, démarré volontairement en deux
+temps : ce commit pose **le mécanisme complet de bout en bout** (une preuve, pas une couverture
+exhaustive) ; l'extraction page par page des ~30 pages/100+ composants reste à faire, listée dans le
+"Reste à faire" ci-dessous. Décisions actées avec l'utilisateur avant de commencer :
+- V1 : français (existant) + anglais.
+- La langue est une **préférence explicite** choisie dans Réglages — jamais une détection
+  automatique du navigateur.
+- Le contenu généré par l'IA (Stella, propositions de séance, analyses...) doit aussi changer de
+  langue, pas seulement l'UI statique.
+
+**Librairie : `next-intl`**, en mode "pas de préfixe de langue dans l'URL" (pas de
+`/en/cycling`/`/fr/cycling`, pas de dossier `src/app/[locale]/...`) — cette app est
+personnelle/authentifiée, pas un site public multi-marché ; un préfixe forcerait à restructurer
+TOUTES les routes existantes (chaque `page.tsx`, les redirects de `next.config.ts`, chaque `<Link>`)
+pour un bénéfice (SEO) qui ne s'applique pas ici.
+
+**Comment la locale est résolue** — `src/i18n/config.ts` (locales supportées, cookie name
+`NEXT_LOCALE`, `defaultLocale = 'fr'`) + `src/i18n/request.ts` (lit le cookie côté serveur à chaque
+requête, `fr` par défaut si absent/invalide). `next.config.ts` est enveloppé par
+`createNextIntlPlugin('./src/i18n/request.ts')`. `src/app/layout.tsx` (redevenu `async`) appelle
+`getLocale()`/`getMessages()` et pose `<html lang={locale}>` + `<NextIntlClientProvider>` — jamais
+`lang="fr"` en dur comme avant. **Jamais résolu depuis la préférence Firestore directement** : cette
+app ne lit Firestore que côté client (voir "Authentification" plus bas — aucun accès Firebase Admin
+côté serveur), donc le serveur ne peut connaître la préférence de l'utilisateur qu'via ce cookie.
+
+**`<LocaleSync>`** (`src/i18n/locale-sync.tsx`, monté une fois dans `layout.tsx` à côté de
+`FirebaseClientProvider`) tient ce cookie à jour avec `users/{uid}/settings/language` (même patron
+"un doc par préoccupation" que `settings/notifications`/`settings/powerCurve`) : sur un nouvel
+appareil (pas encore de cookie, ou cookie périmé), il détecte l'écart entre la préférence Firestore
+et la locale servie, pose le cookie et déclenche `router.refresh()` — silencieusement, sans jamais
+écrire dans Firestore lui-même (ce n'est pas son rôle). **`LanguageCard`**
+(`src/components/settings/language-card.tsx`, sur `/settings`, juste après `ProfileCard`) est
+l'action consciente inverse : l'utilisateur choisit dans un `Select`, le composant pose le cookie
+lui-même (effet immédiat, sans attendre le round-trip du listener Firestore) ET écrit la préférence
+dans Firestore (persistance cross-device), puis `router.refresh()`.
+
+**⚠️ Coût de cette approche, accepté consciemment** : `i18n/request.ts` appelle `cookies()`
+(`next/headers`) à chaque rendu, ce qui désactive le rendu statique pour TOUTE page qui passe par le
+layout racine — confirmé par `next build` : toutes les routes sont passées de `○ (Static)` à
+`ƒ (Dynamic)` après ce changement. Pour une app personnelle authentifiée (chaque page déjà derrière
+`AuthGuard`, déjà très majoritairement `"use client"`) ce coût est jugé acceptable face à la
+simplicité de ne pas restructurer les routes — mais c'est un vrai changement de comportement
+(légèrement plus de latence/charge serveur par requête), à garder en tête si l'app grossit.
+
+**Fichiers de traduction** : `src/messages/fr.json` / `src/messages/en.json`, un namespace par
+concept UI (`Nav`, `LanguageCard` existent déjà). Utilisation : `useTranslations('Nom')` dans un
+composant client (`const t = useTranslations('Nav'); t('cycling')`) — jamais au scope module (le hook
+n'y est pas utilisable, voir le commentaire sur `navItems` dans `sidebar.tsx` pour le contournement
+quand une constante module-level a besoin d'un libellé traduit).
+
+**IA multilingue** : `src/ai/language.ts` (fichier *plain*, PAS `'use server'` — même raison que
+`structured-workout-syntax.ts`, voir plus bas "Un fichier 'use server' ne peut exporter QUE des
+fonctions async") exporte `languageInstruction(language)`, à interpoler dans le system prompt de
+chaque flow à la place d'un `"Write your entire response in French."` figé. **Seul `recoveryInsight`
+migré pour l'instant** (`language: z.enum(['fr','en']).default('fr')` ajouté à son schéma d'input —
+le `.default('fr')` préserve le comportement de tout appelant pas encore mis à jour), consommé par
+`recovery-insight-panel.tsx` via `useLocale()` (`next-intl`, `language: locale as 'fr' | 'en'` — le
+cast est sûr, `request.ts` ne résout jamais autre chose qu'une locale configurée).
+
+**Reste à faire (chantier ouvert)** :
+- **Flows IA** (6 restants, même recette que `recoveryInsight` sur chacun : ajouter `language` au
+  schéma Zod d'input avec le même `.default('fr')`, interpoler `languageInstruction(language)` dans
+  le system prompt, passer `useLocale()` côté composant appelant) :
+  `dailyWorkoutRecommendation`, `trainingPlanGeneration`, `planWeekSessions`, `rideAnalysis`,
+  `cyclingOutfitRecommendation`, `coachChat` (celui-ci n'utilise pas `generateJson` — le system prompt
+  vit directement dans le flow, même principe d'interpolation).
+- **Extraction du texte UI** — la quasi-totalité de l'app reste en français en dur (chaque
+  `page.tsx`, `CLAUDE.md` section "Règles de développement" point 1 dit encore "UI en français" sans
+  qualifier "aujourd'hui"). Namespace par module logique (`Cycling`, `Nutrition`, `Coach`, `Garage`,
+  `HomeManagement`, `Lifestyle`, `Finance`, `Settings`...) plutôt qu'un fichier plat — suivre le
+  découpage de `src/app/` donne une correspondance directe fichier↔namespace. Prioriser les pages de
+  la nav principale (Cyclisme/Coach/Garage/Nutrition/Maison/Réglages) avant les pages sorties de la
+  nav (Vie & Santé, Finances).
+- **`date-fns`** : `import { fr } from 'date-fns/locale'` est câblé en dur dans chaque fichier qui
+  formate une date — remplacer par une locale résolue depuis `useLocale()` (`date-fns/locale` exporte
+  aussi `enUS`).
+- **Métadonnées** (`layout.tsx` `export const metadata`) : titre/description de la page restent en
+  français statique (les métadonnées `<head>` ne peuvent pas dépendre du provider React) — nécessite
+  `generateMetadata()` avec `getTranslations()` côté serveur si on veut les traduire aussi.
+- **Tests** : aucun test ne couvre encore `computeBMR`-style la logique i18n elle-même (pas de pure
+  logic à tester ici, `languageInstruction()` est trivial) — mais toute future pure logic de
+  formatage dépendant de la langue (pluriels, formats de date) devrait suivre le patron
+  test-le-fichier-`*-types.ts` habituel de ce projet.
+
 ## Navigation (`AppNavigation`)
 
 Définie dans `src/components/layout/sidebar.tsx`. La nav items list :
@@ -812,7 +898,11 @@ npm run test          # Vitest (tests unitaires)
 
 ## Règles de développement
 
-1. **Langue** : UI en français, code en anglais
+1. **Langue** : code en anglais. UI historiquement en français en dur — chantier multilangue en cours
+   (voir section "Internationalisation (i18n)" plus haut) : tout nouveau texte UI dans une page/un
+   composant déjà migré doit passer par `useTranslations()`, pas être écrit en dur ; un texte dans une
+   page pas encore migrée peut rester en français en dur pour l'instant (cohérent avec le reste de
+   cette page), à extraire quand elle sera migrée
 2. **"use client"** : obligatoire sur toutes les pages et composants avec hooks
 3. **Imports Firebase** : toujours depuis `@/firebase` (pas directement firebase/*)
 4. **Mutations** : utiliser le pattern errorEmitter pour les erreurs Firestore

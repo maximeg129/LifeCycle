@@ -10,6 +10,7 @@
 
 import { z } from 'zod';
 import { generateJson, type FlowResult } from '@/ai/anthropic';
+import { languageInstruction } from '@/ai/language';
 
 const RecoveryInsightInputSchema = z.object({
   dailyMetrics: z.array(z.object({
@@ -33,6 +34,7 @@ const RecoveryInsightInputSchema = z.object({
     rampRate: z.number().optional(),
   }).optional().describe('Cycling training load from Intervals.icu, if the user connected it.'),
   coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, lifestyle, goals, remembered facts, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
+  language: z.enum(['fr', 'en']).default('fr').describe("User's UI language preference — the response is written in this language. Defaults to 'fr' so any existing caller that hasn't been updated yet keeps behaving exactly as before."),
 }).describe('Input for the recovery insight flow.');
 
 export type RecoveryInsightInput = z.infer<typeof RecoveryInsightInputSchema>;
@@ -82,7 +84,7 @@ export async function recoveryInsight(input: RecoveryInsightInput): Promise<Flow
   const coachContextBlock = parsedInput.coachContext ? `${parsedInput.coachContext}\n\n` : '';
 
   const system = `${coachContextBlock}You are an expert endurance coach and sleep/recovery specialist speaking to a cyclist who also
-tracks their sleep, HRV, stress and mood daily. Write your entire response in French.
+tracks their sleep, HRV, stress and mood daily. ${languageInstruction(parsedInput.language)}
 
 Analyze the data below and produce a short, encouraging but honest recovery insight. Be specific and
 reference actual numbers from the data when you can (e.g. "votre HRV moyen est de 62ms"). If a field is

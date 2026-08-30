@@ -3,6 +3,7 @@
 import React from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import {
   Bike,
   CookingPot,
@@ -41,12 +42,16 @@ import { LifeCycleMark } from './lifecycle-mark'
 // Mémoire coach) — planifier une sortie avec la bonne tenue et planifier une
 // séance sont le même geste, ça n'avait pas de sens que ce soit deux
 // destinations de nav différentes. Voir CLAUDE.md.
+// `key` indexe le namespace Nav (messages/{locale}.json) — le libellé
+// affiché est résolu dans le composant via useTranslations('Nav'), jamais
+// stocké ici : ce tableau reste un module-scope constant (hors composant),
+// où le hook de traduction n'est pas utilisable.
 const navItems = [
-  { name: 'Cyclisme', href: '/cycling', icon: Bike },
-  { name: 'Coach', href: '/coach', icon: BrainCircuit },
-  { name: 'Garage', href: '/garage', icon: Wrench },
-  { name: 'Nutrition', href: '/nutrition', icon: CookingPot },
-  { name: 'Maison', href: '/home-management', icon: Home },
+  { key: 'cycling' as const, href: '/cycling', icon: Bike },
+  { key: 'coach' as const, href: '/coach', icon: BrainCircuit },
+  { key: 'garage' as const, href: '/garage', icon: Wrench },
+  { key: 'nutrition' as const, href: '/nutrition', icon: CookingPot },
+  { key: 'home' as const, href: '/home-management', icon: Home },
 ]
 
 // Maison covers both tabs (Tâches / Plantes — see AUDIT.md/PLAN.md section
@@ -62,6 +67,7 @@ export function AppNavigation() {
   const auth = useAuth()
   const router = useRouter()
   const { overdueTasks, overduePlants } = useOverdueCounts()
+  const t = useTranslations('Nav')
 
   const handleSignOut = async () => {
     await signOut(auth)
@@ -90,7 +96,7 @@ export function AppNavigation() {
             className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] bg-muted/60 text-muted-foreground hover:bg-muted transition-colors text-left"
           >
             <Search className="w-4 h-4 shrink-0" />
-            <span className="text-[13px] flex-1">Rechercher...</span>
+            <span className="text-[13px] flex-1">{t('search')}</span>
             <kbd className="text-[10px] font-mono bg-background/80 border border-border/60 rounded px-1.5 py-0.5">⌘K</kbd>
           </button>
         </div>
@@ -98,7 +104,7 @@ export function AppNavigation() {
         {/* Nav */}
         <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
           <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest px-3 pb-2">
-            Modules
+            {t('modules')}
           </p>
           {navItems.map((item) => {
             const isActive = pathname === item.href
@@ -112,7 +118,7 @@ export function AppNavigation() {
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}>
                   <item.icon className={cn("w-[18px] h-[18px] shrink-0", isActive ? "text-primary" : "group-hover:text-foreground")} />
-                  <span className="text-[13.5px] font-medium flex-1">{item.name}</span>
+                  <span className="text-[13.5px] font-medium flex-1">{t(item.key)}</span>
                   {badge > 0 && (
                     <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
                       {badge}
@@ -134,7 +140,7 @@ export function AppNavigation() {
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}>
               <Settings className="w-[18px] h-[18px] shrink-0 group-hover:rotate-45 transition-transform duration-500" />
-              <span className="text-[13.5px] font-medium">Réglages</span>
+              <span className="text-[13.5px] font-medium">{t('settings')}</span>
             </div>
           </Link>
           <button
@@ -142,7 +148,7 @@ export function AppNavigation() {
             className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-muted-foreground hover:bg-destructive/8 hover:text-destructive transition-all duration-150 group"
           >
             <LogOut className="w-[18px] h-[18px] shrink-0" />
-            <span className="text-[13.5px] font-medium">Déconnexion</span>
+            <span className="text-[13.5px] font-medium">{t('logout')}</span>
           </button>
           <p className="px-3 pt-2 text-[10px] font-mono text-muted-foreground/40 select-text">
             {formatVersionLabel(APP_VERSION.gitSha, APP_VERSION.buildTime)}
@@ -194,7 +200,7 @@ export function AppNavigation() {
                           isActive ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
                         )}>
                           <item.icon className="w-5 h-5 shrink-0" />
-                          <span className="text-[14px] font-medium flex-1">{item.name}</span>
+                          <span className="text-[14px] font-medium flex-1">{t(item.key)}</span>
                           {badge > 0 && (
                             <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
                               {badge}
@@ -216,7 +222,7 @@ export function AppNavigation() {
                       pathname === '/settings' ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
                     )}>
                       <Settings className="w-5 h-5 shrink-0" />
-                      <span className="text-[14px] font-medium">Réglages</span>
+                      <span className="text-[14px] font-medium">{t('settings')}</span>
                     </div>
                   </Link>
                   <button
@@ -224,7 +230,7 @@ export function AppNavigation() {
                     className="w-full flex items-center gap-3 px-3 py-3 rounded-[10px] text-muted-foreground hover:bg-destructive/8 hover:text-destructive transition-all"
                   >
                     <LogOut className="w-5 h-5 shrink-0" />
-                    <span className="text-[14px] font-medium">Déconnexion</span>
+                    <span className="text-[14px] font-medium">{t('logout')}</span>
                   </button>
                   <p className="px-3 pt-2 text-[10px] font-mono text-muted-foreground/40 select-text">
                     {formatVersionLabel(APP_VERSION.gitSha, APP_VERSION.buildTime)}
@@ -244,12 +250,12 @@ export function AppNavigation() {
         <div className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-3 pt-1 flex items-center gap-2.5 safe-area-bottom pointer-events-none">
           <nav className="flex-1 h-16 rounded-full bg-background/90 backdrop-blur-2xl border border-border/60 shadow-lg shadow-black/5 flex items-center justify-around px-1 pointer-events-auto">
             {[
-              navItems.find(i => i.href === '/cycling')!,
-              navItems.find(i => i.href === '/coach')!,
-              navItems.find(i => i.href === '/garage')!,
-              navItems.find(i => i.href === '/nutrition')!,
-              navItems.find(i => i.href === '/home-management')!,
-              { name: 'Réglages', href: '/settings', icon: Settings },
+              { ...navItems.find(i => i.href === '/cycling')!, label: t('cycling') },
+              { ...navItems.find(i => i.href === '/coach')!, label: t('coach') },
+              { ...navItems.find(i => i.href === '/garage')!, label: t('garage') },
+              { ...navItems.find(i => i.href === '/nutrition')!, label: t('nutrition') },
+              { ...navItems.find(i => i.href === '/home-management')!, label: t('home') },
+              { href: '/settings', icon: Settings, label: t('settings') },
             ].map((item) => {
               const isActive = pathname === item.href
               const badge = badgeForHref(item.href, overdueTasks, overduePlants)
@@ -268,7 +274,7 @@ export function AppNavigation() {
                     "text-[9px] font-medium tracking-tight",
                     isActive ? "text-primary" : "text-muted-foreground"
                   )}>
-                    {item.name.split(' ')[0]}
+                    {item.label}
                   </span>
                 </Link>
               )

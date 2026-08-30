@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
 import { Space_Grotesk, JetBrains_Mono } from 'next/font/google';
+import { NextIntlClientProvider } from 'next-intl';
+import { getLocale, getMessages } from 'next-intl/server';
 import './globals.css';
 import { FirebaseClientProvider } from '@/firebase';
 import { Toaster } from '@/components/ui/toaster';
 import { IntervalsProvider } from '@/hooks/use-intervals';
+import { LocaleSync } from '@/i18n/locale-sync';
 
 // "Performance Lab" identity — Space Grotesk (headings/body) + JetBrains
 // Mono (data readouts: stats, prices, dates in tables — see .lc-data /
@@ -41,13 +44,21 @@ export const viewport = {
   themeColor: '#6FAB21',
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Résolu depuis le cookie NEXT_LOCALE côté serveur (src/i18n/request.ts) —
+  // jamais depuis la préférence Firestore directement (lecture Firestore
+  // client-only dans cette app, voir la section Authentification de
+  // CLAUDE.md). <LocaleSync> ci-dessous tient ce cookie à jour dès que
+  // l'utilisateur est connecté.
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="fr" suppressHydrationWarning className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
+    <html lang={locale} suppressHydrationWarning className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`}>
       <head>
         {/* Anti-FOUC: apply saved theme before first paint */}
         <script
@@ -63,12 +74,15 @@ export default function RootLayout({
         />
       </head>
       <body className="font-body">
-        <FirebaseClientProvider>
-          <IntervalsProvider>
-            {children}
-            <Toaster />
-          </IntervalsProvider>
-        </FirebaseClientProvider>
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <FirebaseClientProvider>
+            <IntervalsProvider>
+              <LocaleSync />
+              {children}
+              <Toaster />
+            </IntervalsProvider>
+          </FirebaseClientProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

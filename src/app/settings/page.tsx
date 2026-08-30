@@ -19,6 +19,7 @@ import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { useTheme } from '@/hooks/use-theme'
 import { ProfileCard } from '@/components/settings/profile-card'
+import { LanguageCard } from '@/components/settings/language-card'
 import { DataExportCard } from '@/components/settings/data-export-card'
 import { NotificationPrefsCard } from '@/components/settings/notification-prefs-card'
 import { DangerZoneCard } from '@/components/settings/danger-zone-card'
@@ -83,6 +84,9 @@ export default function SettingsPage() {
 
         {/* ── Profil ───────────────────────────────────────────────── */}
         <ProfileCard />
+
+        {/* ── Langue ───────────────────────────────────────────────── */}
+        <LanguageCard />
 
         {/* ── Apparence ────────────────────────────────────────────── */}
         <Card className="lc-card">

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { format } from 'date-fns'
+import { useLocale } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Sparkles, Loader2, TrendingUp, Zap } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
@@ -26,6 +27,7 @@ interface Props {
 
 export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
   const { toast } = useToast()
+  const locale = useLocale()
   const athlete = useAthlete()
   const memory = useCoachMemory()
   const governor = useGovernor()
@@ -67,6 +69,9 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
           rampRate: athlete.data.rampRate,
         } : undefined,
         coachContext,
+        // useLocale() is always 'fr'|'en' in practice — guaranteed by
+        // src/i18n/request.ts, which only ever resolves a configured locale.
+        language: locale as 'fr' | 'en',
       })
       if (!flowResult.ok) {
         toast({ variant: 'destructive', title: "L'IA n'a pas pu générer d'analyse", description: flowResult.error })

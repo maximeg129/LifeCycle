@@ -1,0 +1,22 @@
+{
+  "Nav": {
+    "cycling": "Cycling",
+    "coach": "Coach",
+    "garage": "Garage",
+    "nutrition": "Nutrition",
+    "home": "Home",
+    "settings": "Settings",
+    "logout": "Log out",
+    "search": "Search...",
+    "modules": "Modules"
+  },
+  "LanguageCard": {
+    "title": "Language",
+    "description": "The language of the interface and of the AI's responses (Stella, workout suggestions, ride analyses...).",
+    "french": "French",
+    "english": "English",
+    "saved": "Language updated",
+    "error": "Error",
+    "errorDescription": "Could not update the language."
+  }
+}

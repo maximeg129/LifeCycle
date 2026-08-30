@@ -1,5 +1,8 @@
 import type {NextConfig} from 'next';
 import { execSync } from 'child_process';
+import createNextIntlPlugin from 'next-intl/plugin';
+
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 // Git commit + build time, exposed to the client so a small badge in the
 // sidebar can show which commit is actually deployed — Firebase App Hosting
@@ -74,4 +77,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

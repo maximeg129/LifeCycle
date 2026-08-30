@@ -1,0 +1,22 @@
+{
+  "Nav": {
+    "cycling": "Cyclisme",
+    "coach": "Coach",
+    "garage": "Garage",
+    "nutrition": "Nutrition",
+    "home": "Maison",
+    "settings": "Réglages",
+    "logout": "Déconnexion",
+    "search": "Rechercher...",
+    "modules": "Modules"
+  },
+  "LanguageCard": {
+    "title": "Langue",
+    "description": "La langue de l'interface et des réponses de l'IA (Stella, propositions de séance, analyses...).",
+    "french": "Français",
+    "english": "Anglais",
+    "saved": "Langue mise à jour",
+    "error": "Erreur",
+    "errorDescription": "Impossible de mettre à jour la langue."
+  }
+}
