@@ -953,6 +953,37 @@ implémenté cette nuit : un changement de cette ampleur, fait sans pouvoir le t
 projet Firebase, risquait de casser l'intégration Intervals.icu entière sans supervision pour le
 corriger — jugé pire que documenter le risque honnêtement pour une décision consciente plus tard.
 
+## Landing page (`src/app/page.tsx`)
+
+Retour utilisateur : "revoir le site pour mettre en avant toutes les fonctions de l'application,
+avec des screenshoots exemple etc." La grille de 6 icônes génériques (Performance/Fueling/Maison/
+Météo AI/Santé/Finances, `desc` en une phrase abstraite, aucun visuel) est remplacée par une vitrine
+module par module — 5 sections alternées gauche/droite (`modules: ShowcaseModule[]`, une par item de
+`navItems` : Cyclisme, Coach IA, Nutrition, Garage, Maison), chacune avec un titre orienté bénéfice,
+3 points concrets ancrés dans de vraies fonctionnalités (pas de marketing vague) et un vrai aperçu
+visuel de l'écran correspondant.
+
+**Captures dans `public/screenshots/*.png`** — pas des captures d'un vrai compte utilisateur (aucun
+compte de démo n'existe), mais des mockups composés à partir des **vrais composants** de l'app
+(`RingGauge`, `RecipeCard`) stylés avec les vraies classes du design system (`lc-card`, tokens de
+couleur, `font-data`) et des données d'exemple plausibles — jamais présentés nulle part comme
+appartenant à un utilisateur réel. Générées via une page temporaire `src/app/preview-recipe/page.tsx`
+(supprimée après capture Playwright — voir la technique de screenshot ailleurs dans ce fichier pour
+la doc du binaire `headless_shell` à utiliser), affichant 5 panneaux `id="shot-*"` capturés
+individuellement (`page.$(selector).screenshot()`) plutôt qu'un screenshot pleine page, pour un
+recadrage propre par module. Si ces visuels doivent être régénérés un jour (nouveau module, refonte
+visuelle), recréer une page jetable du même type plutôt que de committer un compte de démo réel.
+
+Rendues via `next/image` (`width`/`imageH` = dimensions intrinsèques réelles du PNG, pas de valeur
+arbitraire — Next.js s'en sert pour réserver l'espace et éviter un layout shift). Alternance
+gauche/droite obtenue avec `[direction:rtl]`/`[direction:ltr]` sur la grid (pas de réordonnancement
+`order-*` : le DOM garde l'ordre texte-puis-image partout, seul l'effet visuel alterne).
+
+Section CTA finale : ajout d'une ligne de réassurance data-protection (`Lock` icon, "chiffrées en
+transit, isolées par compte, exportables et supprimables à tout moment") — directement lié à l'audit
+sécurité ci-dessus (export/suppression de compte existent réellement, voir Réglages), pas une
+promesse en l'air.
+
 ## Commandes
 
 ```bash

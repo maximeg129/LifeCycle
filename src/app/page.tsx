@@ -1,24 +1,121 @@
 "use client"
 
+// Landing page publique — retour utilisateur : "revoir le site pour mettre
+// en avant toutes les fonctions de l'application, avec des screenshoots
+// exemple etc." Remplace la grille d'icônes génériques par une vitrine
+// module par module, avec un vrai aperçu visuel de chaque écran
+// (public/screenshots/*.png — des mockups fidèles au design system réel,
+// composés à partir des vrais composants (RingGauge, RecipeCard...) avec
+// des données d'exemple, jamais présentés comme un compte utilisateur réel).
+
 import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { LifeCycleMark } from '@/components/layout/lifecycle-mark'
 import {
   ArrowRight,
-  Sparkles, 
-  Bike, 
-  CookingPot, 
-  CloudSun, 
-  Leaf, 
-  HeartPulse, 
-  Wallet,
-  Menu,
-  X,
-  ShieldCheck
+  Sparkles,
+  Bike,
+  BrainCircuit,
+  CookingPot,
+  Wrench,
+  Home as HomeIcon,
+  ShieldCheck,
+  Lock,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+
+interface ShowcaseModule {
+  icon: typeof Bike
+  color: string
+  bg: string
+  eyebrow: string
+  title: string
+  points: string[]
+  image: string
+  imageW: number
+  imageH: number
+}
+
+const modules: ShowcaseModule[] = [
+  {
+    icon: Bike,
+    color: 'text-primary',
+    bg: 'bg-primary/10',
+    eyebrow: 'Cyclisme',
+    title: 'Votre forme, en un coup d’œil',
+    points: [
+      'Anneaux Forme / Récupération / Sommeil façon Whoop, synchronisés avec Intervals.icu (CTL, ATL, TSB, FTP, HRV, FC repos).',
+      'Budget kJ de la semaine et Gouverneur de charge interne — 6 signaux de récupération pour doser l’entraînement, pas un TSS arbitraire.',
+      'Courbe de performance 12 semaines et calculateur d’indice d’endurance de Riegel.',
+    ],
+    image: '/screenshots/cycling.png',
+    imageW: 960,
+    imageH: 688,
+  },
+  {
+    icon: BrainCircuit,
+    color: 'text-purple-500',
+    bg: 'bg-purple-500/10',
+    eyebrow: 'Coach IA',
+    title: 'Un coach qui connaît vraiment vos données',
+    points: [
+      'Proposition de séance quotidienne générée par IA, adaptée à votre récupération réelle et à la météo (vent inclus) — pas un plan figé.',
+      'Stella, l’assistant conversationnel qui peut mettre à jour vos objectifs et votre mémoire coach sur simple demande.',
+      'Plan d’entraînement structuré vers un objectif, et analyse complète de chaque sortie (pacing, zones, dérive cardiaque).',
+    ],
+    image: '/screenshots/coach.png',
+    imageW: 960,
+    imageH: 738,
+  },
+  {
+    icon: CookingPot,
+    color: 'text-orange-500',
+    bg: 'bg-orange-500/10',
+    eyebrow: 'Nutrition',
+    title: 'Un fueling pensé pour l’entraînement',
+    points: [
+      'Livre de recettes avec macros, ingrédients en checklist et préparation en étapes — un tap pour logger une recette au journal du jour.',
+      'Fueling vs Workload : calories brûlées à l’entraînement séparées du métabolisme de base, écart réel avec ce que vous avez mangé.',
+      'Planning de repas hebdomadaire et cible protéines ajustée à votre poids.',
+    ],
+    image: '/screenshots/nutrition.png',
+    imageW: 1040,
+    imageH: 708,
+  },
+  {
+    icon: Wrench,
+    color: 'text-blue-500',
+    bg: 'bg-blue-500/10',
+    eyebrow: 'Garage',
+    title: 'Votre matériel, sous contrôle',
+    points: [
+      'Vélos, composants et suivi d’entretien de chaîne (rotation à chaud) avec historique et rappels.',
+      'Garde-robe cycliste reliée à la météo IA — la bonne tenue proposée pour la sortie du jour.',
+      'Alertes avant que l’usure devienne un problème, pas après.',
+    ],
+    image: '/screenshots/garage.png',
+    imageW: 960,
+    imageH: 608,
+  },
+  {
+    icon: HomeIcon,
+    color: 'text-green-500',
+    bg: 'bg-green-500/10',
+    eyebrow: 'Maison',
+    title: 'La vie de tous les jours, aussi',
+    points: [
+      'Tâches récurrentes avec rappels et indicateurs de retard — plus besoin de s’en souvenir.',
+      'Soin des plantes avec diagnostic photo par IA et plan d’arrosage.',
+      'Vie & Santé et Finances restent disponibles en un clic depuis Réglages, pour qui veut aller plus loin.',
+    ],
+    image: '/screenshots/home.png',
+    imageW: 960,
+    imageH: 614,
+  },
+]
 
 export default function LandingPage() {
   const [isScrolled, setIsScrolled] = useState(false)
@@ -28,15 +125,6 @@ export default function LandingPage() {
     window.addEventListener('scroll', handleScroll)
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
-
-  const features = [
-    { icon: Bike, title: "Performance", desc: "Suivez votre fitness et fatigue avec Intervals.icu.", color: "text-primary", bg: "bg-primary/5" },
-    { icon: CookingPot, title: "Fueling", desc: "Gérez votre nutrition et votre livre de recettes.", color: "text-orange-500", bg: "bg-orange-500/5" },
-    { icon: Leaf, title: "Maison", desc: "Tâches intelligentes et soin des plantes par IA.", color: "text-green-500", bg: "bg-green-500/5" },
-    { icon: CloudSun, title: "Météo AI", desc: "Anticipez votre tenue cycliste idéale.", color: "text-blue-500", bg: "bg-blue-500/5" },
-    { icon: HeartPulse, title: "Santé", desc: "Analyse HRV, sommeil et récupération.", color: "text-red-500", bg: "bg-red-500/5" },
-    { icon: Wallet, title: "Finances", desc: "Maîtrisez vos budgets lifestyle avec clarté.", color: "text-yellow-500", bg: "bg-yellow-500/5" },
-  ]
 
   return (
     <div className="min-h-screen bg-white dark:bg-[#050505] text-foreground font-body selection:bg-primary/10">
@@ -87,17 +175,44 @@ export default function LandingPage() {
         <div className="max-w-7xl mx-auto px-6">
           <div className="text-center mb-28">
             <h2 className="text-4xl md:text-5xl font-bold tracking-tight mb-8">Un écosystème holistique.</h2>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto opacity-70">Chaque module est conçu pour simplifier votre quotidien et booster votre potentiel.</p>
+            <p className="text-xl text-muted-foreground max-w-2xl mx-auto opacity-70">Chaque module est conçu pour simplifier votre quotidien et booster votre potentiel — voici à quoi ça ressemble, à l&apos;intérieur.</p>
           </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {features.map((f, i) => (
-              <div key={i} className="lc-card p-12 group">
-                <div className={cn("w-16 h-16 rounded-[22px] flex items-center justify-center mb-10 transition-transform duration-500 group-hover:scale-110", f.bg, f.color)}>
-                  <f.icon className="w-8 h-8" />
+
+          <div className="space-y-32">
+            {modules.map((m, i) => (
+              <div
+                key={m.eyebrow}
+                className={cn(
+                  "grid grid-cols-1 lg:grid-cols-2 gap-14 items-center",
+                  i % 2 === 1 && "lg:[direction:rtl]"
+                )}
+              >
+                <div className="lg:[direction:ltr]">
+                  <div className={cn("w-14 h-14 rounded-[20px] flex items-center justify-center mb-8", m.bg, m.color)}>
+                    <m.icon className="w-7 h-7" />
+                  </div>
+                  <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-3">{m.eyebrow}</div>
+                  <h3 className="text-3xl md:text-4xl font-bold mb-8 tracking-tight leading-tight">{m.title}</h3>
+                  <ul className="space-y-4">
+                    {m.points.map((p) => (
+                      <li key={p} className="flex items-start gap-3 text-muted-foreground leading-relaxed opacity-90">
+                        <span className={cn("mt-2 w-1.5 h-1.5 rounded-full shrink-0", m.bg.replace('/10', ''))} />
+                        {p}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-                <h3 className="text-2xl font-bold mb-4 tracking-tight">{f.title}</h3>
-                <p className="text-muted-foreground leading-relaxed text-lg opacity-80">{f.desc}</p>
+                <div className="lg:[direction:ltr]">
+                  <div className="lc-card p-3 overflow-hidden">
+                    <Image
+                      src={m.image}
+                      width={m.imageW}
+                      height={m.imageH}
+                      alt={`Aperçu du module ${m.eyebrow} dans LifeCycle Pro`}
+                      className="w-full h-auto rounded-2xl"
+                    />
+                  </div>
+                </div>
               </div>
             ))}
           </div>
@@ -107,8 +222,11 @@ export default function LandingPage() {
       <section className="py-40 px-6 text-center max-w-5xl mx-auto">
         <ShieldCheck className="w-16 h-16 mx-auto text-primary/20 mb-12" />
         <h2 className="text-5xl md:text-[80px] font-bold tracking-tighter mb-12 leading-none">Prêt pour le prochain niveau ?</h2>
-        <p className="text-xl text-muted-foreground mb-16 max-w-2xl mx-auto leading-relaxed opacity-70">
+        <p className="text-xl text-muted-foreground mb-6 max-w-2xl mx-auto leading-relaxed opacity-70">
           Rejoignez ceux qui ne laissent rien au hasard.
+        </p>
+        <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground mb-16 opacity-60">
+          <Lock className="w-4 h-4" /> Vos données restent les vôtres — chiffrées en transit, isolées par compte, exportables et supprimables à tout moment.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
           <Button asChild size="lg" className="rounded-full h-20 px-16 text-xl font-bold shadow-2xl bg-foreground text-background transition-all hover:scale-[1.03]">
