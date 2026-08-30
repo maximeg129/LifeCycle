@@ -104,6 +104,12 @@ describe('mergePlanWeeks', () => {
     const weeks = mergePlanWeeks(skeleton, [...content, { phase: 'peak', focus: 'extra', targetWeeklyMinutes: 999 }])
     expect(weeks).toHaveLength(2)
   })
+
+  it('omits the notes key entirely rather than setting it to undefined — Firestore setDoc/updateDoc throws on an explicit undefined field value anywhere in the payload, including nested in an array element', () => {
+    const weeks = mergePlanWeeks(skeleton, [content[0]]) // week without notes
+    expect('notes' in weeks[0]).toBe(false)
+    expect(JSON.stringify(weeks[0])).not.toContain('notes')
+  })
 })
 
 describe('currentPlanWeek', () => {

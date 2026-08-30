@@ -154,8 +154,9 @@ export function useDailyWorkout() {
       }
 
       return proposal
-    } catch {
-      toast({ variant: 'destructive', title: 'Erreur', description: "L'IA n'a pas pu générer de séance." })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Erreur inconnue'
+      toast({ variant: 'destructive', title: "L'IA n'a pas pu générer de séance", description: message })
       return null
     } finally {
       setIsGenerating(false)

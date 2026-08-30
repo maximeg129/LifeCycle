@@ -142,8 +142,9 @@ export function useTrainingPlan() {
 
       toast({ title: 'Plan généré', description: `${output.planName} — ${weekCount} semaines` })
       return true
-    } catch {
-      toast({ variant: 'destructive', title: 'Erreur', description: "L'IA n'a pas pu générer de plan." })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Erreur inconnue'
+      toast({ variant: 'destructive', title: "L'IA n'a pas pu générer de plan", description: message })
       return false
     } finally {
       setIsGenerating(false)
@@ -204,8 +205,9 @@ export function useTrainingPlan() {
         return false
       }
       return true
-    } catch {
-      toast({ variant: 'destructive', title: 'Erreur', description: "L'IA n'a pas pu générer les séances de la semaine." })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Erreur inconnue'
+      toast({ variant: 'destructive', title: "L'IA n'a pas pu générer les séances de la semaine", description: message })
       return false
     } finally {
       setGeneratingSessionsForWeek(null)

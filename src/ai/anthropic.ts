@@ -32,12 +32,22 @@ export async function generateJson<T extends z.ZodTypeAny>(
   schema: T,
   { system, messages, maxTokens = 4096 }: GenerateJsonParams
 ): Promise<z.infer<T>> {
-  const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: maxTokens,
-    system,
-    messages,
-  })
+  let response: Anthropic.Message
+  try {
+    response = await anthropic.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: maxTokens,
+      system,
+      messages,
+    })
+  } catch (e) {
+    // Logged server-side (Firebase App Hosting / Cloud Run logs) — the
+    // caller's UI only ever shows a generic "l'IA n'a pas pu générer..."
+    // toast, so this is the only place the real cause (auth, rate limit,
+    // invalid request, network) is visible for debugging a production report.
+    console.error('[generateJson] Anthropic API call failed:', e)
+    throw e
+  }
 
   const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text')
   if (!textBlock) throw new Error('Claude did not return a text response')
@@ -52,5 +62,10 @@ export async function generateJson<T extends z.ZodTypeAny>(
     throw new Error(`Claude response was not valid JSON: ${jsonMatch[0].slice(0, 200)}`)
   }
 
-  return schema.parse(parsed)
+  const result = schema.safeParse(parsed)
+  if (!result.success) {
+    console.error('[generateJson] Response failed schema validation:', result.error.message, '\nRaw response:', jsonMatch[0].slice(0, 2000))
+    throw new Error(`La réponse de l'IA n'a pas le format attendu : ${result.error.issues[0]?.message ?? 'erreur de validation'}`)
+  }
+  return result.data
 }

@@ -89,13 +89,22 @@ export interface PlanWeek extends PlanWeekSkeleton, PlanWeekContent {}
 export function mergePlanWeeks(skeleton: PlanWeekSkeleton[], content: PlanWeekContent[]): PlanWeek[] {
   return skeleton.map((week, i) => {
     const c = content[i]
-    return {
+    const merged: PlanWeek = {
       ...week,
       phase: c?.phase ?? 'base',
       focus: c?.focus ?? '',
       targetWeeklyMinutes: c?.targetWeeklyMinutes ?? 0,
-      notes: c?.notes,
     }
+    // Omit the key entirely rather than `notes: undefined` — most weeks have
+    // no note (the AI is told to add one "only when something needs
+    // flagging"), and Firestore's setDoc/updateDoc throws on an explicit
+    // `undefined` field value anywhere in the payload, including nested
+    // inside an array element. An explicit `notes: c?.notes` here used to
+    // make the whole plan write (and any later week-sessions write, once it
+    // spreads this object back) fail for any plan where at least one week
+    // came back without a note — which is the common case, not the edge case.
+    if (c?.notes) merged.notes = c.notes
+    return merged
   })
 }
 
