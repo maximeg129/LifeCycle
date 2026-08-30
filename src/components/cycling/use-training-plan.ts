@@ -32,6 +32,7 @@ import {
 } from './training-plan-types'
 import { buildWorkoutEventPayload } from './daily-workout-types'
 import type { CoachGoal } from './coach-memory-types'
+import { describeActionDispatchError } from '@/lib/utils'
 
 interface IntervalsCredentialsDoc {
   intervalsAthleteId?: string
@@ -148,8 +149,7 @@ export function useTrainingPlan() {
       toast({ title: 'Plan généré', description: `${output.planName} — ${weekCount} semaines` })
       return true
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Erreur inconnue'
-      toast({ variant: 'destructive', title: "L'IA n'a pas pu générer de plan", description: message })
+      toast({ variant: 'destructive', title: "L'IA n'a pas pu générer de plan", description: describeActionDispatchError(e) })
       return false
     } finally {
       setIsGenerating(false)
@@ -215,8 +215,7 @@ export function useTrainingPlan() {
       }
       return true
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Erreur inconnue'
-      toast({ variant: 'destructive', title: "L'IA n'a pas pu générer les séances de la semaine", description: message })
+      toast({ variant: 'destructive', title: "L'IA n'a pas pu générer les séances de la semaine", description: describeActionDispatchError(e) })
       return false
     } finally {
       setGeneratingSessionsForWeek(null)

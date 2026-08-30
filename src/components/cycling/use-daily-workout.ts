@@ -28,6 +28,7 @@ import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } fro
 import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload } from './daily-workout-types'
 import { currentPlanWeek, type PlanWeek } from './training-plan-types'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
+import { describeActionDispatchError } from '@/lib/utils'
 
 interface IntervalsCredentialsDoc {
   intervalsAthleteId?: string
@@ -160,8 +161,7 @@ export function useDailyWorkout() {
 
       return proposal
     } catch (e) {
-      const message = e instanceof Error ? e.message : 'Erreur inconnue'
-      toast({ variant: 'destructive', title: "L'IA n'a pas pu générer de séance", description: message })
+      toast({ variant: 'destructive', title: "L'IA n'a pas pu générer de séance", description: describeActionDispatchError(e) })
       return null
     } finally {
       setIsGenerating(false)

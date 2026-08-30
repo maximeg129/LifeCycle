@@ -21,7 +21,7 @@ import { identifyPlant } from '@/ai/flows/identify-plant-flow'
 import type { IdentifyPlantOutput } from '@/ai/flows/identify-plant-flow'
 import { format, differenceInDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { cn } from '@/lib/utils'
+import { cn, describeActionDispatchError } from '@/lib/utils'
 import { usePlants, usePlantAnalyses, type Plant } from './use-plants'
 import { getDaysUntilWatering, getHealthColor, getHealthLabel, isAnalysisOverdue } from './plant-types'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -125,8 +125,8 @@ export function PlantsTab() {
       if (daysMatch) setWateringDays(Number(daysMatch[1]))
       const mlMatch = res.hydrationPlan?.amount?.match(/(\d+)/)
       if (mlMatch) setWateringAmount(Number(mlMatch[1]))
-    } catch {
-      toast({ variant: 'destructive', title: "Erreur d'analyse" })
+    } catch (e) {
+      toast({ variant: 'destructive', title: "Erreur d'analyse", description: describeActionDispatchError(e) })
     } finally {
       setIsScanning(false)
     }
@@ -197,8 +197,8 @@ export function PlantsTab() {
         return
       }
       setDetailScanResult(flowResult.data)
-    } catch {
-      toast({ variant: 'destructive', title: "Erreur d'analyse" })
+    } catch (e) {
+      toast({ variant: 'destructive', title: "Erreur d'analyse", description: describeActionDispatchError(e) })
     } finally {
       setIsDetailScanning(false)
     }

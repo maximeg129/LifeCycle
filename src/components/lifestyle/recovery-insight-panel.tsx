@@ -13,6 +13,7 @@ import { useGovernor } from '@/components/cycling/use-governor'
 import { usePowerCurve } from '@/components/cycling/use-power-curve'
 import { fitPowerDurationCurve, type PowerRecord } from '@/components/cycling/riegel-types'
 import { buildCoachContext } from '@/components/cycling/coach-context'
+import { describeActionDispatchError } from '@/lib/utils'
 
 type DailyMetric = HealthMetricLike & { dayId: string }
 type WithIdGoal = HealthGoal & { id: string }
@@ -70,8 +71,8 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
         return
       }
       setResult(flowResult.data)
-    } catch {
-      toast({ variant: 'destructive', title: 'Erreur', description: "L'IA n'a pas pu générer d'analyse." })
+    } catch (e) {
+      toast({ variant: 'destructive', title: "L'IA n'a pas pu générer d'analyse", description: describeActionDispatchError(e) })
     } finally {
       setLoading(false)
     }
