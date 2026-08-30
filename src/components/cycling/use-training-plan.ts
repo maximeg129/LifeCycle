@@ -92,6 +92,7 @@ export function useTrainingPlan() {
     setIsGenerating(true)
     try {
       const coachContext = buildCoachContext({
+        today,
         injuries: memory.injuries,
         lifestyle: memory.lifestyle,
         goals: memory.goals,
@@ -177,6 +178,7 @@ export function useTrainingPlan() {
     setGeneratingSessionsForWeek(week.weekNumber)
     try {
       const coachContext = buildCoachContext({
+        today: format(new Date(), 'yyyy-MM-dd'),
         injuries: memory.injuries,
         lifestyle: memory.lifestyle,
         goals: memory.goals,

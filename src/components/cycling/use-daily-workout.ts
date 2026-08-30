@@ -105,6 +105,7 @@ export function useDailyWorkout() {
     setIsGenerating(true)
     try {
       const coachContext = buildCoachContext({
+        today: todayId,
         injuries: memory.injuries,
         lifestyle: memory.lifestyle,
         goals: memory.goals,

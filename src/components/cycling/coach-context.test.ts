@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { buildCoachContext, type CoachContextInput } from './coach-context'
 
 const baseInput: CoachContextInput = {
+  today: '2026-08-30',
   injuries: [],
   lifestyle: null,
   goals: [],
@@ -11,6 +12,24 @@ const baseInput: CoachContextInput = {
 }
 
 describe('buildCoachContext', () => {
+  it("includes today's date", () => {
+    expect(buildCoachContext(baseInput)).toContain("AUJOURD'HUI : 2026-08-30")
+  })
+
+  it('annotates each goal with how many days away it is', () => {
+    const text = buildCoachContext({
+      ...baseInput,
+      goals: [
+        { eventName: 'La Marmotte', eventDate: '2026-09-09', targetOutcome: 'Sub 8h', priority: 1 },
+        { eventName: 'Objectif passé', eventDate: '2026-08-20', targetOutcome: 'Fait', priority: 2 },
+        { eventName: "Objectif aujourd'hui", eventDate: '2026-08-30', targetOutcome: 'Fait', priority: 3 },
+      ],
+    })
+    expect(text).toContain('La Marmotte (2026-09-09, priorité 1, dans 10 jours)')
+    expect(text).toContain('Objectif passé (2026-08-20, priorité 2, il y a 10 jours)')
+    expect(text).toContain("Objectif aujourd'hui (2026-08-30, priorité 3, aujourd'hui)")
+  })
+
   it('includes the kJ budget and governor status', () => {
     const text = buildCoachContext({
       ...baseInput,

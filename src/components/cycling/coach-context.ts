@@ -6,6 +6,7 @@
 // internal load governor, endurance index). The block is prefixed to the
 // system prompt of any Claude call concerning training.
 
+import { differenceInCalendarDays } from 'date-fns'
 import type { GovernorStatus } from './load-types'
 import type { InjuryStatus } from './coach-memory-types'
 
@@ -33,6 +34,16 @@ export interface CoachContextLifestyle {
 }
 
 export interface CoachContextInput {
+  /**
+   * yyyy-MM-dd — required, not optional: this used to be absent entirely
+   * (the LLM had no idea what "today" was, only whatever date labels
+   * happened to be embedded in individual records), which made any
+   * date-relative reasoning ("dans combien de jours ?", "cette semaine")
+   * unreliable across every flow that shares this context, Stella's chat
+   * included. Every call site can trivially supply
+   * `format(new Date(), 'yyyy-MM-dd')`.
+   */
+  today: string
   injuries: CoachContextInjury[]
   lifestyle: CoachContextLifestyle | null
   goals: CoachContextGoal[]
@@ -54,6 +65,8 @@ function governorStatusLabel(status: GovernorStatus): string {
 /** Composes the structured coach-memory context block, in French, ready to prefix a system prompt. */
 export function buildCoachContext(input: CoachContextInput): string {
   const lines: string[] = ['=== CONTEXTE COACH (mémoire structurée) ===']
+
+  lines.push('', `AUJOURD'HUI : ${input.today}`)
 
   lines.push('', "CHARGE D'ENTRAÎNEMENT ACTUELLE :")
   lines.push(`- Budget kJ de la semaine : ${input.kjBudget.realized} kJ réalisés / ${input.kjBudget.target || '?'} kJ cible (base 8 semaines : ${input.kjBudget.baseline} kJ)`)
@@ -88,9 +101,12 @@ export function buildCoachContext(input: CoachContextInput): string {
   if (input.goals.length === 0) {
     lines.push('- Aucun objectif enregistré.')
   } else {
+    const today = new Date(`${input.today}T00:00:00`)
     const sorted = [...input.goals].sort((a, b) => a.eventDate.localeCompare(b.eventDate))
     for (const g of sorted) {
-      lines.push(`- ${g.eventName} (${g.eventDate}, priorité ${g.priority}) : ${g.targetOutcome}`)
+      const daysUntil = differenceInCalendarDays(new Date(`${g.eventDate}T00:00:00`), today)
+      const distance = daysUntil < 0 ? `il y a ${-daysUntil} jours` : daysUntil === 0 ? "aujourd'hui" : `dans ${daysUntil} jours`
+      lines.push(`- ${g.eventName} (${g.eventDate}, priorité ${g.priority}, ${distance}) : ${g.targetOutcome}`)
     }
   }
 

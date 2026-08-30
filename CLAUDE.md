@@ -281,6 +281,13 @@ dans le toast plutôt que d'attraper une exception. `generateJson` logue aussi c
 JSON introuvable/invalide, validation Zod — pour le débogage, puisque le client ne peut voir que la
 version résumée dans `result.error`.
 
+`buildCoachContext` (`src/components/cycling/coach-context.ts`) — le bloc de contexte partagé par tous
+les flows coach (blessures/objectifs/style de vie/faits retenus/gouverneur/budget kJ) — inclut désormais
+`today` en premier champ obligatoire, rendu en tête du contexte (`AUJOURD'HUI : ...`) et utilisé pour
+annoter chaque objectif de son délai (`dans N jours`/`il y a N jours`/`aujourd'hui`). Absent jusqu'ici :
+aucun flow n'avait de référence fiable à la date du jour pour un raisonnement relatif ("dans combien de
+temps ?"), Stella y compris — retour utilisateur. Tout appelant passe `today: format(new Date(), 'yyyy-MM-dd')`.
+
 `fetchWeatherForecast`/`degreesToCompass` (`src/ai/weather.ts`) sont le fetch météo
 réel (Open-Meteo, sans clé API) partagé par `cyclingOutfitRecommendation` et `dailyWorkoutRecommendation`
 — dans les deux cas un pré-fetch déterministe fait par le flow lui-même, jamais une décision (ni même
@@ -398,16 +405,31 @@ constante/type/valeur partagée entre un fichier `'use server'` et autre chose d
 propre fichier plain (sans `'use server'`)**, jamais être exportée à côté d'un flow.
 
 ### Flow existant : `coachChat`
-- Input : `{ messages[] (role user/assistant, historique complet dont le nouveau message), coachContext?, training?, planWeek?, recovery? }`
-- Output : `string` (texte brut — **seul flow de l'app qui ne répond pas en JSON**, `generateJson` ne
-  s'applique pas à une conversation libre ; appelle directement `anthropic.messages.create` avec le
-  système/historique en `messages`).
-- Usage : `src/components/cycling/stella-chat-tab.tsx` (sous-onglet "Stella" de Coach)
+- Input : `{ messages[] (role user/assistant, historique complet dont le nouveau message), coachContext?,
+  training?, planWeek?, recovery?, availableGoals? (id + champs, pour cibler update_goal),
+  availableInjuries? (id + champs, pour cibler update_injury_status), pendingToolRound? (voir plus bas) }`
+- Output : `FlowResult<CoachChatOutput>` où `CoachChatOutput` est soit `{ type: 'text', text }`, soit
+  `{ type: 'tool_use', assistantContent, calls[] }` — **seul flow de l'app qui ne répond pas en JSON pour
+  sa branche texte** (`generateJson` ne s'applique pas à une conversation libre ; appelle directement
+  `anthropic.messages.create`), mais avec `tools` déclarés comme n'importe quel flow à tool use.
+- Usage : `src/components/cycling/stella-chat-tab.tsx` (sous-onglet "Stella" de Coach), glue dans
+  `use-coach-chat.ts`.
 - Persona conversationnelle réutilisant le même `buildCoachContext` + CTL/ATL/TSB + semaine de plan en
-  cours que les autres flows coach — pas une mémoire séparée. Volontairement consultative seulement : le
-  prompt système interdit à Stella de générer elle-même une séance structurée ou un plan (elle renvoie vers
-  les onglets dédiés) pour ne pas dupliquer un chemin de génération avec un format à respecter en dehors du
-  flow prévu pour ça.
+  cours que les autres flows coach — pas une mémoire séparée. Reste volontairement consultative pour tout
+  ce qui est précision-critique : le prompt système interdit à Stella de générer elle-même une séance
+  structurée ou un plan (elle renvoie vers les onglets dédiés) pour ne pas dupliquer un chemin de
+  génération avec un format à respecter en dehors du flow prévu pour ça.
+- **Peut en revanche réellement écrire dans la mémoire coach** via 4 tools (`update_goal`, `add_goal`,
+  `add_remembered_fact`, `update_injury_status`) — retour utilisateur : Stella devait pouvoir appliquer ce
+  qu'on lui demande ("mets à jour mon objectif", "note que...") plutôt que seulement en discuter. Aucun
+  outil de suppression n'est exposé (une blessure/un objectif supprimé par erreur via une phrase ambiguë
+  serait pénible à récupérer) — ça reste une action de l'onglet Mémoire coach. Le flow lui-même ne peut PAS
+  écrire dans Firestore (aucun client Firestore authentifié côté serveur, voir Authentification) : un appel
+  d'outil revient donc au client comme `{type:'tool_use', ...}` plutôt que d'être exécuté ici ;
+  `executeToolCall()` dans `use-coach-chat.ts` fait l'écriture réelle (mêmes patterns setDoc/updateDoc/
+  arrayUnion que `coach-memory-tab.tsx`), puis rappelle `coachChat` avec `pendingToolRound` (le tour
+  assistant échoué tel quel + le résultat de l'outil) pour obtenir la confirmation en langage naturel —
+  boucle plafonnée à 4 tours. Un toast confirme chaque écriture réussie en plus de la réponse de Stella.
 - Historique stocké intégralement dans `users/{uid}/coachChatMessages` (affichage), mais seule la fenêtre
   glissante des ~20 derniers messages est effectivement envoyée au modèle à chaque tour
   (`trimChatHistoryForPrompt` dans `coach-chat-types.ts`) pour borner le coût/latence.

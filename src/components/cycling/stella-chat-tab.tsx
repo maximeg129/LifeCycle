@@ -15,6 +15,7 @@ const SUGGESTIONS = [
   'Qu\'est-ce que je fais aujourd\'hui ?',
   'Comment se passe ma récupération en ce moment ?',
   'Je suis fatigué, je lève le pied ou pas ?',
+  'Ajoute un objectif : La Marmotte le 4 juillet, viser moins de 8h, priorité 1',
 ]
 
 export function StellaChatTab() {

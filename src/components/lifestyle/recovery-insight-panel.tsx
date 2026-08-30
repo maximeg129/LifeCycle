@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState } from 'react'
+import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { Sparkles, Loader2, TrendingUp, Zap } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
@@ -40,6 +41,7 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
     setLoading(true)
     try {
       const coachContext = buildCoachContext({
+        today: format(new Date(), 'yyyy-MM-dd'),
         injuries: memory.injuries,
         lifestyle: memory.lifestyle,
         goals: memory.goals,
