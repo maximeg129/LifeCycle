@@ -101,8 +101,16 @@ export default function MetricDetailPage() {
         return {
           series: lifestyle.dailySeries
             .filter((d) => d.hrv != null)
-            .map((d) => ({ date: format(parseISO(d.dayId), 'dd/MM', { locale: fr }), value: d.hrv as number })),
-          currentValue: lifestyle.latest?.hrv != null ? String(lifestyle.latest.hrv) : '—',
+            .map((d) => ({ date: format(parseISO(d.dayId), 'dd/MM', { locale: fr }), value: Math.round(d.hrv as number) })),
+          currentValue: lifestyle.latest?.hrv != null ? safeRound(lifestyle.latest.hrv) : '—',
+          isLoading: lifestyle.isLoading,
+        }
+      case 'restingHr':
+        return {
+          series: lifestyle.dailySeries
+            .filter((d) => d.restingHR != null)
+            .map((d) => ({ date: format(parseISO(d.dayId), 'dd/MM', { locale: fr }), value: Math.round(d.restingHR as number) })),
+          currentValue: lifestyle.latest?.restingHR != null ? safeRound(lifestyle.latest.restingHR) : '—',
           isLoading: lifestyle.isLoading,
         }
       case 'readiness':

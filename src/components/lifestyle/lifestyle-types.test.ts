@@ -13,6 +13,9 @@ import {
   buildMergedDailySeries,
   pickLatestWithData,
   sleepQualityBand,
+  previousValue,
+  vitalTrend,
+  formatSleepDuration,
   type HealthMetricLike,
 } from './lifestyle-types'
 
@@ -171,6 +174,11 @@ describe('mergeDailyWellness', () => {
     expect(merged?.sleepQuality).toBeUndefined()
   })
 
+  it('carries restingHR through from wellness, manual winning when both are present', () => {
+    expect(mergeDailyWellness(undefined, { restingHR: 48 })?.restingHR).toBe(48)
+    expect(mergeDailyWellness({ date: null, restingHR: 45 }, { restingHR: 48 })?.restingHR).toBe(45)
+  })
+
   it('lets a manual entry win field-by-field over the auto-synced reading', () => {
     const manual: HealthMetricLike = { date: ts(100), sleepHours: 6, stressScore: 40 }
     const merged = mergeDailyWellness(manual, { sleepSecs: 27000, hrv: 62, mood: 7 })
@@ -220,6 +228,69 @@ describe('pickLatestWithData', () => {
 
   it('is undefined when no day in the series has any data', () => {
     expect(pickLatestWithData([{ date: null, dayId: '2026-03-08' }])).toBeUndefined()
+  })
+})
+
+describe('previousValue', () => {
+  const series = [
+    { date: null, dayId: '2026-03-07', restingHR: 50 },
+    { date: null, dayId: '2026-03-08' }, // gap day, no restingHR
+    { date: null, dayId: '2026-03-09', restingHR: 48 },
+    { date: null, dayId: '2026-03-10', restingHR: 52 },
+  ]
+
+  it('finds the value on the day right before the reference day', () => {
+    expect(previousValue(series, '2026-03-10', 'restingHR')).toBe(48)
+  })
+
+  it('walks back past a gap day missing that field', () => {
+    expect(previousValue(series, '2026-03-09', 'restingHR')).toBe(50)
+  })
+
+  it('is undefined for the first day in the series (nothing before it)', () => {
+    expect(previousValue(series, '2026-03-07', 'restingHR')).toBeUndefined()
+  })
+
+  it('is undefined when the reference day is not in the series', () => {
+    expect(previousValue(series, '2099-01-01', 'restingHR')).toBeUndefined()
+  })
+})
+
+describe('vitalTrend', () => {
+  it('is null when either value is missing', () => {
+    expect(vitalTrend(undefined, 50, 'lower-better')).toBeNull()
+    expect(vitalTrend(50, undefined, 'lower-better')).toBeNull()
+  })
+
+  it('is neutral on an exact tie', () => {
+    expect(vitalTrend(50, 50, 'lower-better')).toBe('neutral')
+    expect(vitalTrend(60, 60, 'higher-better')).toBe('neutral')
+  })
+
+  it('is good when a lower-better metric decreased, bad when it increased (e.g. resting HR)', () => {
+    expect(vitalTrend(48, 52, 'lower-better')).toBe('good')
+    expect(vitalTrend(55, 52, 'lower-better')).toBe('bad')
+  })
+
+  it('is good when a higher-better metric increased, bad when it decreased (e.g. HRV)', () => {
+    expect(vitalTrend(70, 65, 'higher-better')).toBe('good')
+    expect(vitalTrend(60, 65, 'higher-better')).toBe('bad')
+  })
+})
+
+describe('formatSleepDuration', () => {
+  it('formats decimal hours as XhYY', () => {
+    expect(formatSleepDuration(7.5)).toBe('7h30')
+    expect(formatSleepDuration(7)).toBe('7h00')
+    expect(formatSleepDuration(6.25)).toBe('6h15')
+  })
+
+  it('rounds to the nearest minute', () => {
+    expect(formatSleepDuration(7.516)).toBe('7h31') // matches the screenshot's own "7h31m"
+  })
+
+  it('carries a minute rollover into the hour', () => {
+    expect(formatSleepDuration(6.9933)).toBe('7h00') // 419.6min rounds to 420min = 7h00, not 6h60
   })
 })
 

@@ -5,7 +5,7 @@
 // dans le temps (quand l'historique existe — voir metric-detail-page.tsx
 // pour les métriques qui n'ont pas encore de suivi dans le temps).
 
-export type MetricId = 'tsb' | 'ctl' | 'atl' | 'ftp' | 'riegel' | 'sleep' | 'hrv' | 'readiness'
+export type MetricId = 'tsb' | 'ctl' | 'atl' | 'ftp' | 'riegel' | 'sleep' | 'hrv' | 'restingHr' | 'readiness'
 
 export interface MetricInfo {
   id: MetricId
@@ -93,6 +93,17 @@ export const METRIC_INFO: Record<MetricId, MetricInfo> = {
       "Ce qui compte, c'est la tendance par rapport à sa propre baseline — pas la valeur absolue, qui varie énormément d'une personne à l'autre.",
     ],
     goodDirection: 'higher',
+  },
+  restingHr: {
+    id: 'restingHr',
+    label: 'FC repos',
+    unit: 'bpm',
+    tagline: 'La fréquence cardiaque au réveil — un signal simple de fatigue accumulée, plus stable que le HRV au jour le jour.',
+    explanation: [
+      "La FC (fréquence cardiaque) de repos, mesurée au réveil, tend à baisser avec l'amélioration de la fitness cardiovasculaire sur le long terme. À court terme, une hausse inhabituelle de quelques battements par minute est souvent un des tout premiers signaux de fatigue accumulée, de déshydratation ou d'un début de maladie — avant même que ça se ressente à l'effort.",
+      "Comme le HRV, ce qui compte c'est l'écart à sa propre baseline habituelle plutôt que la valeur absolue, qui dépend énormément de la génétique et du niveau d'entraînement de chacun.",
+    ],
+    goodDirection: 'lower',
   },
   readiness: {
     id: 'readiness',

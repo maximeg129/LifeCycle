@@ -6,6 +6,7 @@ export interface HealthMetric {
   sleepHours?: number
   sleepQuality?: number // 0-100
   hrv?: number // ms
+  restingHR?: number // bpm
   stressScore?: number // 0-100, lower is better
   mood?: number // 0-10
   bedTime?: string // 'HH:mm'
@@ -76,6 +77,7 @@ export interface HealthMetricLike {
   sleepHours?: number
   sleepQuality?: number
   hrv?: number
+  restingHR?: number
   stressScore?: number
   mood?: number
 }
@@ -105,6 +107,7 @@ export interface WellnessLike {
   sleepScore?: number
   sleepQuality?: number
   hrv?: number
+  restingHR?: number
   mood?: number
   readiness?: number
 }
@@ -162,6 +165,7 @@ export function mergeDailyWellness(manual: HealthMetricLike | undefined, wellnes
     sleepHours: manual?.sleepHours ?? sleepHoursFromWellness,
     sleepQuality: manual?.sleepQuality ?? sleepQualityFromWellness,
     hrv: manual?.hrv ?? wellness.hrv,
+    restingHR: manual?.restingHR ?? wellness.restingHR,
     stressScore: manual?.stressScore, // no reliable auto-synced equivalent — manual only
     mood: manual?.mood ?? wellness.mood,
   }
@@ -194,11 +198,64 @@ export function buildMergedDailySeries(manualMetrics: HealthMetricLike[], wellne
 export function pickLatestWithData<T extends HealthMetricLike>(series: (T & { dayId: string })[]): (T & { dayId: string }) | undefined {
   for (let i = series.length - 1; i >= 0; i--) {
     const d = series[i]
-    if (d.sleepHours !== undefined || d.sleepQuality !== undefined || d.hrv !== undefined || d.stressScore !== undefined || d.mood !== undefined) {
+    if (d.sleepHours !== undefined || d.sleepQuality !== undefined || d.hrv !== undefined || d.restingHR !== undefined || d.stressScore !== undefined || d.mood !== undefined) {
       return d
     }
   }
   return undefined
+}
+
+/**
+ * The most recent value for `field` strictly before `beforeDayId` — the
+ * "yesterday" side of a day-over-day trend indicator (see vitalTrend()).
+ * Walks back past any gap day with that field missing, same idea as
+ * pickLatestWithData() but scoped to one field and starting one day
+ * before the reference day rather than from the end of the series.
+ */
+export function previousValue<T extends HealthMetricLike, K extends keyof T>(
+  series: (T & { dayId: string })[],
+  beforeDayId: string,
+  field: K
+): T[K] | undefined {
+  const idx = series.findIndex((d) => d.dayId === beforeDayId)
+  if (idx <= 0) return undefined
+  for (let i = idx - 1; i >= 0; i--) {
+    const v = series[i][field]
+    if (v !== undefined) return v
+  }
+  return undefined
+}
+
+export type VitalTrend = 'good' | 'bad' | 'neutral'
+
+/**
+ * Day-over-day trend for a vital sign with a clear "better direction" —
+ * user feedback: "un petit indicateur flèche rouge/vert... une petite led
+ * rouge/vert/jaune l'évolution vis à vis de la veille". `direction` says
+ * which way is an improvement (resting HR: lower is better; HRV: higher
+ * is better) — `'neutral'` (yellow) only for an exact tie, not a dead
+ * zone around it, since both metrics are already whole-number readings
+ * with no meaningful sub-unit noise to filter out.
+ */
+export function vitalTrend(current: number | undefined, previous: number | undefined, direction: 'lower-better' | 'higher-better'): VitalTrend | null {
+  if (current == null || previous == null) return null
+  if (current === previous) return 'neutral'
+  const improved = direction === 'lower-better' ? current < previous : current > previous
+  return improved ? 'good' : 'bad'
+}
+
+/**
+ * Formats decimal hours as "XhYY" (e.g. 7.5 -> "7h30") — matching the
+ * app's existing duration convention (rides-journal-tab.tsx's
+ * formatDuration) rather than a bare "7.5h", which reads as a typo of
+ * "75h" at a glance and isn't how anyone actually thinks about a night's
+ * sleep. User feedback: "pour tous ne donne pas les décimales".
+ */
+export function formatSleepDuration(hours: number): string {
+  const totalMinutes = Math.round(hours * 60)
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
+  return `${h}h${String(m).padStart(2, '0')}`
 }
 
 /** Lightweight 0-100 readiness heuristic from the most recent entry — not a medical score. */

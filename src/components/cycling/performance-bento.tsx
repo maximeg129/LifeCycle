@@ -30,6 +30,7 @@ import { RingGauge } from './ring-gauge'
 import { tsbRingPercent, tsbRingColor, readinessRingColor, sleepRingPercent, sleepRingColor } from './ring-metrics'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { LogMetricDialog } from '@/components/lifestyle/log-metric-dialog'
+import { previousValue, vitalTrend, formatSleepDuration, type VitalTrend } from '@/components/lifestyle/lifestyle-types'
 
 function safeRound(value: number | null | undefined): string {
   if (value == null || isNaN(value)) return '—'
@@ -45,13 +46,26 @@ interface TileProps {
   sublabel?: ReactNode
   href?: string
   className?: string
+  /** Day-over-day trend vs yesterday — user feedback: "un petit indicateur... une petite led rouge/vert/jaune l'évolution vis à vis de la veille". Omit (or null) for a metric with no meaningful day-to-day "better direction" (Riegel, FTP, CTL...). */
+  trend?: VitalTrend | null
 }
 
-function MetricTile({ label, value, unit, sublabel, href, className }: TileProps) {
+/** The trend LED itself — a small colored dot, title-only explanation (no text label, the tile is dense enough already). */
+function TrendDot({ trend }: { trend: VitalTrend | null | undefined }) {
+  if (!trend) return null
+  const cls = trend === 'good' ? 'bg-green-500' : trend === 'bad' ? 'bg-destructive' : 'bg-yellow-500'
+  const title = trend === 'good' ? 'Mieux qu\'hier' : trend === 'bad' ? 'Moins bien qu\'hier' : 'Stable vs hier'
+  return <span className={cn('inline-block w-1.5 h-1.5 rounded-full shrink-0', cls)} title={title} />
+}
+
+function MetricTile({ label, value, unit, sublabel, href, className, trend }: TileProps) {
   const content = (
     <div className={cn('lc-card p-4 flex flex-col justify-between h-[104px]', href && 'group', className)}>
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{label}</span>
+        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+          {label}
+          <TrendDot trend={trend} />
+        </span>
         {href && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />}
       </div>
       <div className="flex items-baseline gap-1">
@@ -104,6 +118,12 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
 
   const isAutoSynced = lifestyle.wellnessStatus.isConfigured && lifestyle.wellnessStatus.hasAnyEntry
 
+  // Day-over-day trend LEDs (user feedback: "une petite led rouge/vert/jaune
+  // l'évolution vis à vis de la veille") — only meaningful once there's both
+  // a latest reading and a prior day to compare it against.
+  const previousHrv = lifestyle.latest ? previousValue(lifestyle.dailySeries, lifestyle.latest.dayId, 'hrv') : undefined
+  const previousRestingHR = lifestyle.latest ? previousValue(lifestyle.dailySeries, lifestyle.latest.dayId, 'restingHR') : undefined
+
   return (
     <div className="space-y-3">
       {/* Forme / Récupération / Sommeil — Whoop-style ring row, user feedback ("forme tsb - readiness -
@@ -129,8 +149,8 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
           label="Sommeil"
           percent={sleepRingPercent(lifestyle.latest?.sleepHours, lifestyle.latest?.sleepQuality)}
           color={sleepRingColor(lifestyle.latest?.sleepQuality)}
-          centerValue={lifestyle.latest?.sleepHours != null ? `${lifestyle.latest.sleepHours}h` : '—'}
-          sublabel={lifestyle.latest?.sleepQuality != null ? `Qualité ${lifestyle.latest.sleepQuality}%` : undefined}
+          centerValue={lifestyle.latest?.sleepHours != null ? formatSleepDuration(lifestyle.latest.sleepHours) : '—'}
+          sublabel={lifestyle.latest?.sleepQuality != null ? `Qualité ${Math.round(lifestyle.latest.sleepQuality)}%` : undefined}
         />
       </div>
 
@@ -159,9 +179,17 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
         />
         <MetricTile
           label="HRV"
-          value={lifestyle.latest?.hrv ?? '—'}
+          value={lifestyle.latest?.hrv != null ? Math.round(lifestyle.latest.hrv) : '—'}
           unit={lifestyle.latest?.hrv != null ? 'ms' : undefined}
           href="/cycling/metric/hrv"
+          trend={lifestyle.latest?.hrv != null ? vitalTrend(lifestyle.latest.hrv, previousHrv, 'higher-better') : undefined}
+        />
+        <MetricTile
+          label="FC repos"
+          value={lifestyle.latest?.restingHR != null ? Math.round(lifestyle.latest.restingHR) : '—'}
+          unit={lifestyle.latest?.restingHR != null ? 'bpm' : undefined}
+          href="/cycling/metric/restingHr"
+          trend={lifestyle.latest?.restingHR != null ? vitalTrend(lifestyle.latest.restingHR, previousRestingHR, 'lower-better') : undefined}
         />
       </div>
 

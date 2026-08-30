@@ -184,6 +184,29 @@ si jamais seule la bande 1-4 est présente. `sleepQualityBand()` (exportée) rec
 dans ces mêmes bornes 90/80/60 — c'est elle qui pilote la couleur de l'anneau Sommeil (`ring-metrics.ts`)
 plutôt que de relire la bande brute d'Intervals.icu.
 
+**FC repos (Resting HR) + LEDs de tendance jour/veille sur les tuiles Vue d'ensemble** — retour
+utilisateur : "tu n'a pas remonté le resting HR... si on peut y inclure pour les tiles où c'est utile
+[un] petit indicateur... une petite led rouge/vert/jaune l'évolution vis a vis de la veille". Le champ
+brut `restingHR` existait déjà sur `IntervalsWellness` (`intervals-api.ts`) mais n'était lu nulle part
+— maintenant threadé de bout en bout comme `hrv` : `HealthMetric`/`HealthMetricLike`/`WellnessLike`
+(`lifestyle-types.ts`), `mergeDailyWellness()`, saisie manuelle dans `LogMetricDialog`, tuile "FC repos"
+dans `performance-bento.tsx` (`/cycling/metric/restingHr`, nouvel id dans `metric-info.ts`). La LED de
+tendance (`vitalTrend()`, `lifestyle-types.ts` — pur, testé) compare la valeur du jour à celle de la
+veille via `previousValue()` (marche en arrière dans `dailySeries` en sautant les jours sans donnée pour
+ce champ, même principe que `pickLatestWithData`) : vert = amélioration, rouge = dégradation, jaune =
+égalité stricte — `direction` dit quel sens est une amélioration (`'lower-better'` pour FC repos,
+`'higher-better'` pour HRV). Affichée sur les tuiles FC repos et HRV pour l'instant (`MetricTile`
+accepte un prop `trend?`), pas sur Riegel/FTP/CTL/ATL qui n'ont pas de sens "mieux/moins bien" jour à
+jour aussi direct.
+
+**Pas de décimales sur les tuiles** — même retour utilisateur. Les heures de sommeil ("7.5h", lu comme
+un possible "75h" au premier coup d'œil) sont formatées `formatSleepDuration()` (`lifestyle-types.ts`) en
+"XhYY" façon durée (ex. "7h30") plutôt qu'un nombre décimal brut — même convention que
+`formatDuration()` dans `rides-journal-tab.tsx`. HRV et FC repos sont arrondis à l'affichage (`Math.round`)
+— la donnée brute Intervals.icu peut porter une décimale que l'app n'affichait pas encore. Riegel (indice
+0-1, `.toFixed(2)`) et le ratio W/kg de la FTP gardent volontairement leurs décimales : les arrondir à
+l'entier les rendrait inexploitables (l'indice Riegel est toujours entre 0,85 et 0,95).
+
 **Vie & Santé et Finances ne sont plus dans `navItems`** (ni dans la nav mobile) — leurs pages
 (`/lifestyle`, `/finance`) restent entièrement fonctionnelles mais ne sont plus accédées que via
 la carte "Autres modules" de `/settings`. Les métriques Vie & Santé les plus utilisées par le

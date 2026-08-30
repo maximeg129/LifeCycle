@@ -41,11 +41,12 @@ export function LogMetricDialog({ isAutoSynced }: Props) {
     const sleepHours = num('sleepHours')
     const sleepQuality = num('sleepQuality')
     const hrv = num('hrv')
+    const restingHR = num('restingHR')
     const stressScore = num('stressScore')
     const mood = num('mood')
     const bedTime = fd.get('bedTime')?.toString() || undefined
 
-    if ([sleepHours, sleepQuality, hrv, stressScore, mood].every((v) => v === undefined) && !bedTime) {
+    if ([sleepHours, sleepQuality, hrv, restingHR, stressScore, mood].every((v) => v === undefined) && !bedTime) {
       toast({ variant: 'destructive', title: 'Renseignez au moins une mesure' })
       return
     }
@@ -59,6 +60,7 @@ export function LogMetricDialog({ isAutoSynced }: Props) {
     if (sleepHours !== undefined) metricData.sleepHours = sleepHours
     if (sleepQuality !== undefined) metricData.sleepQuality = sleepQuality
     if (hrv !== undefined) metricData.hrv = hrv
+    if (restingHR !== undefined) metricData.restingHR = restingHR
     if (stressScore !== undefined) metricData.stressScore = stressScore
     if (mood !== undefined) metricData.mood = mood
     if (bedTime) metricData.bedTime = bedTime
@@ -120,19 +122,23 @@ export function LogMetricDialog({ isAutoSynced }: Props) {
           <Input id="hrv" name="hrv" type="number" min={0} placeholder="65" />
         </div>
         <div className="space-y-2">
-          <Label htmlFor="stressScore">Stress (0-100)</Label>
-          <Input id="stressScore" name="stressScore" type="number" min={0} max={100} placeholder="25" />
+          <Label htmlFor="restingHR">FC repos (bpm)</Label>
+          <Input id="restingHR" name="restingHR" type="number" min={0} placeholder="48" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
+          <Label htmlFor="stressScore">Stress (0-100)</Label>
+          <Input id="stressScore" name="stressScore" type="number" min={0} max={100} placeholder="25" />
+        </div>
+        <div className="space-y-2">
           <Label htmlFor="mood">Humeur (0-10)</Label>
           <Input id="mood" name="mood" type="number" min={0} max={10} placeholder="8" />
         </div>
-        <div className="space-y-2">
-          <Label htmlFor="bedTime">Heure de coucher</Label>
-          <Input id="bedTime" name="bedTime" type="time" />
-        </div>
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="bedTime">Heure de coucher</Label>
+        <Input id="bedTime" name="bedTime" type="time" />
       </div>
     </CrudDialogShell>
   )
