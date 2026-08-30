@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getDayId, sumMeals, progressPct } from './nutrition-types'
+import { getDayId, sumMeals, progressPct, inferMealType } from './nutrition-types'
 
 describe('getDayId', () => {
   it('formats yyyy-MM-dd with zero-padding', () => {
@@ -35,5 +35,28 @@ describe('progressPct', () => {
   })
   it('returns 0 when target is 0 or missing', () => {
     expect(progressPct(50, 0)).toBe(0)
+  })
+})
+
+describe('inferMealType', () => {
+  it('picks breakfast in the morning', () => {
+    expect(inferMealType(new Date(2026, 0, 5, 7, 30))).toBe('breakfast')
+  })
+  it('picks lunch around midday', () => {
+    expect(inferMealType(new Date(2026, 0, 5, 12, 0))).toBe('lunch')
+  })
+  it('picks snack mid-afternoon', () => {
+    expect(inferMealType(new Date(2026, 0, 5, 16, 0))).toBe('snack')
+  })
+  it('picks dinner in the evening', () => {
+    expect(inferMealType(new Date(2026, 0, 5, 20, 0))).toBe('dinner')
+  })
+  it('picks dinner late at night / early morning (fallback)', () => {
+    expect(inferMealType(new Date(2026, 0, 5, 2, 0))).toBe('dinner')
+  })
+  it('places boundary hours in the later slot', () => {
+    expect(inferMealType(new Date(2026, 0, 5, 11, 0))).toBe('lunch')
+    expect(inferMealType(new Date(2026, 0, 5, 15, 0))).toBe('snack')
+    expect(inferMealType(new Date(2026, 0, 5, 19, 0))).toBe('dinner')
   })
 })

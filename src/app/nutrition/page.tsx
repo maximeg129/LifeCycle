@@ -29,6 +29,7 @@ import { NutritionGoalsDialog } from '@/components/nutrition/nutrition-goals-dia
 import { RecipeAddDialog } from '@/components/nutrition/recipe-add-dialog'
 import { RecipeCard } from '@/components/nutrition/recipe-card'
 import { RecipeDetailDialog } from '@/components/nutrition/recipe-detail-dialog'
+import { RecipeQuickLog } from '@/components/nutrition/recipe-quick-log'
 import type { Recipe } from '@/components/nutrition/recipe-types'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -163,6 +164,8 @@ export default function NutritionPage() {
                 </CardContent>
               </Card>
             </section>
+
+            <RecipeQuickLog recipes={recipes || []} />
 
             <Card className="lc-card border-none">
               <CardHeader className="flex flex-row items-center justify-between">

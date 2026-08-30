@@ -398,6 +398,20 @@ migration — les règles de `update`/`delete` ne comparent le champ que s'il ex
 son propre bandeau d'en-tête avec son propre bouton de fermeture (comme celui-ci), au lieu du X en
 `position: absolute` du composant partagé, qui dupliquerait ou entrerait en collision avec lui.
 
+**Ajouter une recette du livre au journal du jour, en un tap** (`recipe-quick-log.tsx`) — retour
+utilisateur : "Sur la page aujourd'hui je devrais pouvoir Sélectionner une recette du livre de recette
+pour qu'elle soit ajoutée à la consommation du jour. Ce n'est pas le cas aujourd'hui." Cette capacité
+existait déjà (le Select "Depuis une recette" dans `LogMealDialog`/"Ajouter un repas"), mais enterrée
+dans un formulaire générique où l'utilisateur ne l'a pas retrouvée — pas un bug, un problème de
+découvrabilité. `RecipeQuickLog` ajoute une bande de recettes en scroll horizontal directement sur
+l'onglet Aujourd'hui (entre les tuiles macros et Journal du Jour, masquée si le livre est vide) :
+tap une recette → `setDoc` immédiat dans `mealLogs` avec ses macros, aucun dialogue. Le type de repas
+est déduit de l'heure courante (`inferMealType()` dans `nutrition-types.ts`, pur/testé — matin→petit-
+déj, midi→déjeuner, après-midi→collation, soir/nuit→dîner) plutôt que demandé à chaque tap ; une
+inférence incorrecte se corrige comme n'importe quelle entrée du Journal du Jour (supprimer + re-
+ajouter via le sélecteur de `LogMealDialog`, qui reste le chemin pour choisir consciemment le type de
+repas ou faire une saisie libre).
+
 ## Flows IA (Claude)
 
 Les flows sont dans `src/ai/flows/` et s'appellent côté client via des Server Actions Next.js

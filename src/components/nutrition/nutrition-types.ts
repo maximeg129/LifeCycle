@@ -76,3 +76,17 @@ export function progressPct(current: number, target: number): number {
   if (!target || target <= 0) return 0
   return Math.min(100, Math.round((current / target) * 100))
 }
+
+/**
+ * Default meal type for a one-tap "add this recipe now" action (see
+ * recipe-quick-log.tsx) — sensible enough that most taps need no correction,
+ * while the meal stays fully editable afterwards ("Journal du Jour" entries
+ * support the same edit/delete as any other logged meal).
+ */
+export function inferMealType(date: Date): MealType {
+  const hour = date.getHours()
+  if (hour >= 5 && hour < 11) return 'breakfast'
+  if (hour >= 11 && hour < 15) return 'lunch'
+  if (hour >= 15 && hour < 19) return 'snack'
+  return 'dinner'
+}
