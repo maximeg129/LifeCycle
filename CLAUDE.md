@@ -163,11 +163,18 @@ pratique [-30, 20] (le plancher de la zone Optimal au plafond de la zone Frais, 
 deuxième) ; le sommeil affiche les heures au centre mais son remplissage suit la qualité (0-100) quand
 connue, sinon une estimation heures/9h, et sa couleur suit `sleepQualityBand()` (Great/Good/Average/Poor
 — voir bug ci-dessous, Great+Good regroupés en vert) ; la récupération utilise directement le score
-Readiness existant. `RingTile` (`performance-bento.tsx`) remplace l'ancienne tuile héro TSB seule + les tuiles
-plates Sommeil/Readiness par 3 cartes sombres (`bg-foreground`) à 3 anneaux — reprend le piège déjà
+Readiness existant. Les 3 anneaux et les stats HRV/FC repos vivent dans un seul panneau
+« Aujourd'hui » teinté citron vert (`bg-primary/5 border-primary/20`, même traitement que la tuile
+Riegel) plutôt qu'un bloc noir (`bg-foreground`) — retour utilisateur après relecture d'un brouillon
+de canevas de design proposant 3 pistes : "Le a avec le bloc mais pas en noir mais plus comme les
+couleurs de l'indice riegel". La grille « Entraînement » juste en dessous ne garde que Riegel/CTL/
+ATL/FTP. `RingItem`/`StatChip` (`performance-bento.tsx`) posent les anneaux/stats directement sur le
+panneau (pas de carte individuelle par anneau), séparés par un simple `divide-x`. Reprend le piège déjà
 documenté pour `tsb-zones.ts` : un cercle SVG se peint via l'attribut `stroke`, pas la propriété CSS
 `background-color` qu'une classe Tailwind `bg-*` pose, donc `ring-metrics.ts` expose des couleurs CSS
-réelles (hex ou `hsl(var(--destructive))`), jamais des classes Tailwind, pour l'anneau lui-même.
+réelles (hex ou `hsl(var(--destructive))`), jamais des classes Tailwind, pour l'anneau lui-même — la
+piste (fond clair) sert aussi de couleur de repli pour l'arc quand une donnée manque, plutôt que le
+blanc translucide de l'ancien traitement sombre.
 La tuile détail TSB (`cycling/metric/[id]/page.tsx`) garde son propre traitement — bandes de fond +
 légende des 5 zones sur le graphe historique — documenté juste au-dessus.
 

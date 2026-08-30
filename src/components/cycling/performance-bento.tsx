@@ -4,15 +4,18 @@
 //
 // Every metric the coach IA actually uses, at a glance — inspired by
 // Whoop's tile-dense layout rather than a handful of oversized cards.
-// Forme (TSB)/Récupération (Readiness)/Sommeil open the page as a
-// 3-across ring row (RingTile, Whoop-style circular gauges — user
-// feedback, a screenshot of Whoop's own ring layout) since those three
-// are "how am I today?" signals read together at a glance, not standalone
-// numbers; everything else — including HRV, previously only on Vie &
-// Santé — is a small flat tile in the grid below, since that page is no
-// longer in the primary nav (see AUDIT.md/PLAN.md design-identity work).
-// Riegel's endurance index sits right after the ring row per earlier user
-// feedback ("un des premiers"), not buried at the end.
+//
+// "Aujourd'hui" panel — every signal that describes how the body is doing
+// right now (Forme/Récupération/Sommeil rings + HRV/FC repos) lives inside
+// one lime-tinted panel, same treatment as the Riegel tile
+// (bg-primary/5 border-primary/20) — chosen over a design-canvas draft
+// that used a black bg-foreground panel: user feedback, having reviewed
+// that draft, "Le a avec le bloc mais pas en noir mais plus comme les
+// couleurs de l'indice ri[e]del". The "Entraînement" grid below keeps only
+// the training-load numbers (Riegel/CTL/ATL/FTP) — the two-zone split
+// itself was already the shipped design ("un des premiers" for Riegel,
+// the ring row for Forme/Récupération/Sommeil); this only changes the
+// panel's color and pulls HRV/FC repos up into it.
 //
 // kJ budget and the internal load governor keep their own richer widgets
 // (KJBudgetWidget/GovernorWidget) below this grid — they already handle
@@ -78,10 +81,13 @@ function MetricTile({ label, value, unit, sublabel, href, className, trend }: Ti
   return href ? <Link href={href}>{content}</Link> : content
 }
 
-// ── Ring tile — the 3-across "état de forme" row (Forme/Récupération/
-// Sommeil), Whoop-style ─────────────────────────────────────────────────
+// ── "Aujourd'hui" panel — 3 rings (Forme/Récupération/Sommeil) + HRV/FC
+// repos stats, all inside one lime-tinted surface ───────────────────────
 
-interface RingTileProps {
+/** No individual card behind a ring — RingItem sits directly on the shared panel, separated from its neighbors by a thin divider (see the panel wrapper below), same effect as MetricTile's border but shared across three items instead of drawn three times. */
+const RING_TRACK_COLOR = 'hsl(var(--border))'
+
+interface RingItemProps {
   href: string
   label: string
   percent: number
@@ -90,17 +96,40 @@ interface RingTileProps {
   sublabel?: ReactNode
 }
 
-function RingTile({ href, label, percent, color, centerValue, sublabel }: RingTileProps) {
+function RingItem({ href, label, percent, color, centerValue, sublabel }: RingItemProps) {
   return (
-    <Link href={href} className="rounded-2xl bg-foreground p-4 flex flex-col items-center gap-2 shadow-lg group">
-      <RingGauge percent={percent} color={color}>
-        <span className="font-data text-lg font-bold text-background">{centerValue}</span>
+    <Link href={href} className="flex-1 flex flex-col items-center gap-2 group">
+      <RingGauge percent={percent} color={color} trackColor={RING_TRACK_COLOR}>
+        <span className="font-data text-lg font-bold text-foreground">{centerValue}</span>
       </RingGauge>
-      <span className="text-[10px] font-medium uppercase tracking-wider text-background/70 flex items-center gap-0.5 text-center">
+      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-0.5 text-center">
         {label}
-        <ChevronRight className="w-3 h-3 text-background/40 group-hover:translate-x-0.5 transition-transform shrink-0" />
+        <ChevronRight className="w-3 h-3 text-muted-foreground/60 group-hover:translate-x-0.5 transition-transform shrink-0" />
       </span>
-      {sublabel && <span className="text-[10px] text-background/50 -mt-1">{sublabel}</span>}
+      {sublabel && <span className="text-[10px] text-muted-foreground/70 -mt-1">{sublabel}</span>}
+    </Link>
+  )
+}
+
+interface StatChipProps {
+  href: string
+  label: string
+  value: ReactNode
+  unit?: string
+  trend?: VitalTrend | null
+}
+
+function StatChip({ href, label, value, unit, trend }: StatChipProps) {
+  return (
+    <Link href={href} className="flex-1 group">
+      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+        {label}
+        <TrendDot trend={trend} />
+      </span>
+      <div className="flex items-baseline gap-1">
+        <span className="font-data text-xl font-bold text-foreground">{value}</span>
+        {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
+      </div>
     </Link>
   )
 }
@@ -125,72 +154,88 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
   const previousRestingHR = lifestyle.latest ? previousValue(lifestyle.dailySeries, lifestyle.latest.dayId, 'restingHR') : undefined
 
   return (
-    <div className="space-y-3">
-      {/* Forme / Récupération / Sommeil — Whoop-style ring row, user feedback ("forme tsb - readiness -
-          sommeil (heure et qualité), peux ton avoir... représenté de cette façon ?"). Replaces the old
-          TSB-only hero tile + the separate Sommeil/Readiness MetricTiles below. */}
-      <div className="grid grid-cols-3 gap-3">
-        <RingTile
-          href="/cycling/metric/tsb"
-          label="Forme"
-          percent={tsb != null ? tsbRingPercent(tsb) : 0}
-          color={tsb != null ? tsbRingColor(tsb) : 'rgba(255,255,255,0.14)'}
-          centerValue={tsb != null ? (tsb > 0 ? `+${tsb}` : tsb) : '—'}
-        />
-        <RingTile
-          href="/cycling/metric/readiness"
-          label="Récupération"
-          percent={lifestyle.readiness ?? 0}
-          color={lifestyle.readiness != null ? readinessRingColor(lifestyle.readiness) : 'rgba(255,255,255,0.14)'}
-          centerValue={lifestyle.readiness != null ? `${lifestyle.readiness}%` : '—'}
-        />
-        <RingTile
-          href="/cycling/metric/sleep"
-          label="Sommeil"
-          percent={sleepRingPercent(lifestyle.latest?.sleepHours, lifestyle.latest?.sleepQuality)}
-          color={sleepRingColor(lifestyle.latest?.sleepQuality)}
-          centerValue={lifestyle.latest?.sleepHours != null ? formatSleepDuration(lifestyle.latest.sleepHours) : '—'}
-          sublabel={lifestyle.latest?.sleepQuality != null ? `Qualité ${Math.round(lifestyle.latest.sleepQuality)}%` : undefined}
-        />
+    <div className="space-y-4">
+      {/* "Aujourd'hui" — every signal about how the body is doing right now
+          (Forme/Récupération/Sommeil rings + HRV/FC repos) shares one panel,
+          lime-tinted like the Riegel tile rather than a black bg-foreground
+          block (user feedback after reviewing a design-canvas draft: "Le a
+          avec le bloc mais pas en noir mais plus comme les couleurs de
+          l'indice riegel"). */}
+      <div className="space-y-1.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-1">Aujourd&apos;hui</p>
+        <div className="rounded-2xl bg-primary/5 border border-primary/20 p-5">
+          <div className="flex items-stretch divide-x divide-primary/15">
+            <RingItem
+              href="/cycling/metric/tsb"
+              label="Forme"
+              percent={tsb != null ? tsbRingPercent(tsb) : 0}
+              color={tsb != null ? tsbRingColor(tsb) : RING_TRACK_COLOR}
+              centerValue={tsb != null ? (tsb > 0 ? `+${tsb}` : tsb) : '—'}
+            />
+            <RingItem
+              href="/cycling/metric/readiness"
+              label="Récupération"
+              percent={lifestyle.readiness ?? 0}
+              color={lifestyle.readiness != null ? readinessRingColor(lifestyle.readiness) : RING_TRACK_COLOR}
+              centerValue={lifestyle.readiness != null ? `${lifestyle.readiness}%` : '—'}
+            />
+            <RingItem
+              href="/cycling/metric/sleep"
+              label="Sommeil"
+              percent={sleepRingPercent(lifestyle.latest?.sleepHours, lifestyle.latest?.sleepQuality)}
+              color={sleepRingColor(lifestyle.latest?.sleepQuality)}
+              centerValue={lifestyle.latest?.sleepHours != null ? formatSleepDuration(lifestyle.latest.sleepHours) : '—'}
+              sublabel={lifestyle.latest?.sleepQuality != null ? `Qualité ${Math.round(lifestyle.latest.sleepQuality)}%` : undefined}
+            />
+          </div>
+
+          <div className="h-px bg-primary/15 my-4" />
+
+          <div className="flex gap-4">
+            <StatChip
+              href="/cycling/metric/hrv"
+              label="HRV"
+              value={lifestyle.latest?.hrv != null ? Math.round(lifestyle.latest.hrv) : '—'}
+              unit={lifestyle.latest?.hrv != null ? 'ms' : undefined}
+              trend={lifestyle.latest?.hrv != null ? vitalTrend(lifestyle.latest.hrv, previousHrv, 'higher-better') : undefined}
+            />
+            <StatChip
+              href="/cycling/metric/restingHr"
+              label="FC repos"
+              value={lifestyle.latest?.restingHR != null ? Math.round(lifestyle.latest.restingHR) : '—'}
+              unit={lifestyle.latest?.restingHR != null ? 'bpm' : undefined}
+              trend={lifestyle.latest?.restingHR != null ? vitalTrend(lifestyle.latest.restingHR, previousRestingHR, 'lower-better') : undefined}
+            />
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {/* Riegel — right after the ring row per earlier user feedback ("un des premiers"), only when the athlete has entered power records */}
-        {enduranceIndex != null ? (
-          <MetricTile
-            label="Indice Riegel"
-            value={enduranceIndex.toFixed(2)}
-            sublabel={<span className="flex items-center gap-1 text-primary"><Gauge className="w-3 h-3" /> Endurance</span>}
-            href="/cycling/metric/riegel"
-            className="bg-primary/5 border-primary/20"
-          />
-        ) : (
-          <MetricTile label="Fitness (CTL)" value={safeRound(athlete.ctl)} sublabel="Charge chronique" href="/cycling/metric/ctl" />
-        )}
+      {/* "Entraînement" — training-load numbers only; Riegel right after the panel per earlier user feedback ("un des premiers"), only shown when the athlete has entered power records */}
+      <div className="space-y-1.5">
+        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-1">Entraînement</p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {enduranceIndex != null ? (
+            <MetricTile
+              label="Indice Riegel"
+              value={enduranceIndex.toFixed(2)}
+              sublabel={<span className="flex items-center gap-1 text-primary"><Gauge className="w-3 h-3" /> Endurance</span>}
+              href="/cycling/metric/riegel"
+              className="bg-primary/5 border-primary/20"
+            />
+          ) : (
+            <MetricTile label="Fitness (CTL)" value={safeRound(athlete.ctl)} sublabel="Charge chronique" href="/cycling/metric/ctl" />
+          )}
 
-        {enduranceIndex != null && <MetricTile label="Fitness (CTL)" value={safeRound(athlete.ctl)} sublabel="Charge chronique" href="/cycling/metric/ctl" />}
-        <MetricTile label="Fatigue (ATL)" value={safeRound(athlete.atl)} sublabel="Charge aiguë" href="/cycling/metric/atl" />
-        <MetricTile
-          label="FTP"
-          value={athlete.ftp ?? '—'}
-          unit="W"
-          sublabel={athlete.ftp && athlete.weight && athlete.weight > 0 ? `${(athlete.ftp / athlete.weight).toFixed(2)} W/kg` : undefined}
-          href="/cycling/metric/ftp"
-        />
-        <MetricTile
-          label="HRV"
-          value={lifestyle.latest?.hrv != null ? Math.round(lifestyle.latest.hrv) : '—'}
-          unit={lifestyle.latest?.hrv != null ? 'ms' : undefined}
-          href="/cycling/metric/hrv"
-          trend={lifestyle.latest?.hrv != null ? vitalTrend(lifestyle.latest.hrv, previousHrv, 'higher-better') : undefined}
-        />
-        <MetricTile
-          label="FC repos"
-          value={lifestyle.latest?.restingHR != null ? Math.round(lifestyle.latest.restingHR) : '—'}
-          unit={lifestyle.latest?.restingHR != null ? 'bpm' : undefined}
-          href="/cycling/metric/restingHr"
-          trend={lifestyle.latest?.restingHR != null ? vitalTrend(lifestyle.latest.restingHR, previousRestingHR, 'lower-better') : undefined}
-        />
+          {enduranceIndex != null && <MetricTile label="Fitness (CTL)" value={safeRound(athlete.ctl)} sublabel="Charge chronique" href="/cycling/metric/ctl" />}
+          <MetricTile label="Fatigue (ATL)" value={safeRound(athlete.atl)} sublabel="Charge aiguë" href="/cycling/metric/atl" />
+          <MetricTile
+            label="FTP"
+            value={athlete.ftp ?? '—'}
+            unit="W"
+            sublabel={athlete.ftp && athlete.weight && athlete.weight > 0 ? `${(athlete.ftp / athlete.weight).toFixed(2)} W/kg` : undefined}
+            href="/cycling/metric/ftp"
+          />
+        </div>
       </div>
 
       <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
