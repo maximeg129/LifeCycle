@@ -1,6 +1,7 @@
 'use server'
 
 import { anthropic, CLAUDE_MODEL } from '@/ai/anthropic'
+import { dailyWorkoutRecommendation } from '@/ai/flows/daily-workout-recommendation-flow'
 
 // Temporary diagnostic Server Action — delete alongside the rest of the
 // debug-headers/api/debug/* files. Deliberately trivial (no Anthropic call,
@@ -32,6 +33,30 @@ export async function pingAnthropicAction(): Promise<
       ok: false,
       errorName: e instanceof Error ? e.name : undefined,
       errorMessage: e instanceof Error ? e.message : String(e),
+    }
+  }
+}
+
+// Both pingAction() and pingAnthropicAction() succeeded — so it's not the
+// Server Action mechanism, nor "Server Action + Anthropic SDK" in general.
+// This calls the REAL dailyWorkoutRecommendation flow (same one Proposition
+// du jour uses) directly, with a minimal hardcoded input — bypassing
+// useDailyWorkout/buildCoachContext/useCoachMemory/useGovernor entirely —
+// to see whether the flow itself (bigger system prompt incl.
+// STRUCTURED_WORKOUT_SYNTAX, higher max_tokens) breaks under real
+// conditions, or whether the bug is in how the calling hook builds its
+// arguments.
+export async function pingDailyWorkoutAction() {
+  try {
+    return await dailyWorkoutRecommendation({
+      date: '2026-08-30',
+      availableMinutes: 60,
+      recentSessions: [],
+    })
+  } catch (e) {
+    return {
+      ok: false as const,
+      error: `THREW (ne devrait jamais arriver, dailyWorkoutRecommendation renvoie toujours FlowResult) : ${e instanceof Error ? e.message : String(e)}`,
     }
   }
 }

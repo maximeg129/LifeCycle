@@ -14,7 +14,7 @@
 // itself on this deployment, not anything in the AI flow code.
 
 import { useEffect, useState } from 'react'
-import { pingAction, pingAnthropicAction } from './actions'
+import { pingAction, pingAnthropicAction, pingDailyWorkoutAction } from './actions'
 
 export default function DebugHeadersPage() {
   const [headersResult, setHeadersResult] = useState<unknown>(null)
@@ -23,6 +23,8 @@ export default function DebugHeadersPage() {
   const [pingError, setPingError] = useState<string | null>(null)
   const [pingAnthropicResult, setPingAnthropicResult] = useState<unknown>(null)
   const [pingAnthropicError, setPingAnthropicError] = useState<string | null>(null)
+  const [pingWorkoutResult, setPingWorkoutResult] = useState<unknown>(null)
+  const [pingWorkoutError, setPingWorkoutError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/debug/headers', { method: 'POST' })
@@ -37,6 +39,10 @@ export default function DebugHeadersPage() {
     pingAnthropicAction()
       .then((r) => setPingAnthropicResult(r))
       .catch((e) => setPingAnthropicError(e instanceof Error ? e.message : String(e)))
+
+    pingDailyWorkoutAction()
+      .then((r) => setPingWorkoutResult(r))
+      .catch((e) => setPingWorkoutError(e instanceof Error ? e.message : String(e)))
   }, [])
 
   return (
@@ -53,7 +59,12 @@ export default function DebugHeadersPage() {
       {!pingAnthropicResult && !pingAnthropicError && <p>Chargement...</p>}
       {pingAnthropicResult != null && <pre>{JSON.stringify(pingAnthropicResult, null, 2)}</pre>}
 
-      <h2>3. En-têtes vus par un fetch() POST (comparaison)</h2>
+      <h2>3. pingDailyWorkoutAction() — le VRAI flow dailyWorkoutRecommendation, input minimal codé en dur</h2>
+      {pingWorkoutError && <p style={{ color: 'red' }}>ÉCHEC (throw, avant même d&apos;entrer dans la fonction) : {pingWorkoutError}</p>}
+      {!pingWorkoutResult && !pingWorkoutError && <p>Chargement...</p>}
+      {pingWorkoutResult != null && <pre>{JSON.stringify(pingWorkoutResult, null, 2)}</pre>}
+
+      <h2>4. En-têtes vus par un fetch() POST (comparaison)</h2>
       {headersError && <p style={{ color: 'red' }}>Erreur : {headersError}</p>}
       {!headersResult && !headersError && <p>Chargement...</p>}
       {headersResult != null && <pre>{JSON.stringify(headersResult, null, 2)}</pre>}
