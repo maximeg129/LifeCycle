@@ -112,13 +112,23 @@ describe('IntervalsService.getActivities', () => {
 })
 
 describe('bestAverageWatts', () => {
-  it('prefers icu_weighted_avg_watts over every other field', () => {
+  it('prefers icu_average_watts (a real average) over every other field', () => {
     expect(bestAverageWatts({
       icu_weighted_avg_watts: 210,
       weighted_average_watts: 200,
       icu_average_watts: 190,
       average_watts: 180,
-    })).toBe(210)
+    })).toBe(190)
+  })
+  it('never prefers the weighted/normalized-power fields over a real average, even Strava-mirrored', () => {
+    // icu_weighted_avg_watts (Normalized Power) is higher here, as NP always
+    // is on a variable-effort ride — must NOT win over the Strava-mirrored
+    // real average.
+    expect(bestAverageWatts({ icu_weighted_avg_watts: 220, average_watts: 180 })).toBe(180)
+  })
+  it('falls back to weighted/normalized power only when no real average is present at all', () => {
+    expect(bestAverageWatts({ icu_weighted_avg_watts: 210, weighted_average_watts: 200 })).toBe(210)
+    expect(bestAverageWatts({ weighted_average_watts: 200 })).toBe(200)
   })
   it('falls back down the chain when preferred fields are absent', () => {
     expect(bestAverageWatts({ icu_average_watts: 190, average_watts: 180 })).toBe(190)

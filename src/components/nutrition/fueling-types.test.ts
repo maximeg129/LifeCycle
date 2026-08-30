@@ -5,8 +5,12 @@ describe('sessionEnergyBurnedKcal', () => {
   it('uses the kJ≈kcal rule of thumb when power data is available', () => {
     expect(sessionEnergyBurnedKcal({ average_watts: 200, moving_time: 3600 })).toBe(720)
   })
-  it('prefers weighted average power', () => {
-    expect(sessionEnergyBurnedKcal({ average_watts: 200, weighted_average_watts: 210, moving_time: 3600 })).toBe(756)
+  it('prefers real average power over normalized/weighted power, even when higher', () => {
+    // weighted_average_watts (Normalized Power) is always >= average power on
+    // a variable-effort ride — using it here would inflate "burned" kcal on
+    // exactly the rides where it matters most (see bestAverageWatts() in
+    // intervals-api.ts for the full story).
+    expect(sessionEnergyBurnedKcal({ average_watts: 200, weighted_average_watts: 210, moving_time: 3600 })).toBe(720)
   })
   it('falls back to a MET×weight estimate without power data', () => {
     // 1h, moderate intensity (MET 8), 70kg → 560 kcal

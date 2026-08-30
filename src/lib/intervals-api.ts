@@ -244,9 +244,27 @@ export interface PowerFieldsLike {
   weighted_average_watts?: number | null;
 }
 
-/** Best available average-power reading, preferring Intervals.icu's own computation over the Strava-mirrored fields. Null if none present or non-positive. */
+/**
+ * Best available AVERAGE-power reading (arithmetic mean watts over moving
+ * time) — deliberately never the weighted / normalized-power fields
+ * (`icu_weighted_avg_watts`/`weighted_average_watts`, Intervals.icu's and
+ * Strava's names for Normalized Power), which this used to prefer first.
+ * That was a real bug, caught via user report ("vérifie les données de
+ * cette tuile" on Fueling vs Workload): NP is computed to weight harder
+ * efforts more heavily — by design HIGHER than plain average power on any
+ * ride with variable intensity (intervals, hills, group-ride surges) — so
+ * every "kJ ≈ kcal mechanical work" calculation built on this helper
+ * (`load-types.ts` weekly kJ budget, `fueling-types.ts` burned-kcal) was
+ * silently inflated, on exactly the rides where it matters most. Both of
+ * those explicitly document "travail mécanique réel, pas un TSS pondéré
+ * arbitrairement" as their whole reason to exist — the bug undermined that
+ * on every call. The NP fields are kept as a last-resort fallback (still a
+ * power-based estimate, better than nothing) only when no real average is
+ * present at all — never silently swapped in ahead of it. Null if no power
+ * field is present or positive.
+ */
 export function bestAverageWatts(activity: PowerFieldsLike): number | null {
-  const watts = activity.icu_weighted_avg_watts ?? activity.weighted_average_watts ?? activity.icu_average_watts ?? activity.average_watts;
+  const watts = activity.icu_average_watts ?? activity.average_watts ?? activity.icu_weighted_avg_watts ?? activity.weighted_average_watts;
   return watts != null && watts > 0 ? watts : null;
 }
 

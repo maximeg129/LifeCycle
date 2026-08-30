@@ -13,8 +13,12 @@ describe('sessionKJ', () => {
   it('computes kJ from average power and duration', () => {
     expect(sessionKJ({ average_watts: 200, moving_time: 3600 })).toBe(720)
   })
-  it('prefers weighted average power when available', () => {
-    expect(sessionKJ({ average_watts: 200, weighted_average_watts: 210, moving_time: 3600 })).toBe(756)
+  it('prefers the real average power over normalized/weighted power, even when higher', () => {
+    // weighted_average_watts (Normalized Power) is always >= average power on
+    // a variable-effort ride — using it here would inflate "real mechanical
+    // work" kJ on exactly the rides where that matters most (see
+    // bestAverageWatts() in intervals-api.ts for the full story).
+    expect(sessionKJ({ average_watts: 200, weighted_average_watts: 210, moving_time: 3600 })).toBe(720)
   })
   it('returns null without power data', () => {
     expect(sessionKJ({ moving_time: 3600 })).toBeNull()
@@ -27,7 +31,7 @@ describe('sessionKJ', () => {
     // Regression: the app previously only read average_watts/weighted_average_watts,
     // which the /activities endpoint often leaves empty even on power-meter rides.
     expect(sessionKJ({ icu_average_watts: 200, moving_time: 3600 })).toBe(720)
-    expect(sessionKJ({ icu_weighted_avg_watts: 210, average_watts: 200, moving_time: 3600 })).toBe(756)
+    expect(sessionKJ({ icu_weighted_avg_watts: 210, average_watts: 200, moving_time: 3600 })).toBe(720)
   })
 })
 

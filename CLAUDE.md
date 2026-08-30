@@ -34,6 +34,7 @@ src/
 │   ├── coach/page.tsx            # Hub coaching IA — 6 sous-onglets : Proposition du jour (défaut), Sorties (journal d'activités), Météo & Tenue (ex-/weather), Plan, Stella, Mémoire coach
 │   ├── garage/page.tsx           # Matériel + Chaînes + Garde-robe (Firestore) — sorti de Cyclisme, sa propre destination de nav
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
+│   ├── nutrition/fueling/page.tsx # Page détail du widget "Fueling vs Workload" : brûlé/mangé/écart + méthode de calcul (fueling-types.ts)
 │   ├── home-management/page.tsx  # Tâches récurrentes + plantes (Firestore)
 │   ├── lifestyle/page.tsx        # Sommeil, HRV, stress, récupération (auto-sync Intervals.icu en priorité, saisie manuelle en complément — voir `mergeDailyWellness`)
 │   ├── finance/page.tsx          # Budgets et dépenses lifestyle
@@ -411,6 +412,33 @@ déj, midi→déjeuner, après-midi→collation, soir/nuit→dîner) plutôt que
 inférence incorrecte se corrige comme n'importe quelle entrée du Journal du Jour (supprimer + re-
 ajouter via le sélecteur de `LogMealDialog`, qui reste le chemin pour choisir consciemment le type de
 repas ou faire une saisie libre).
+
+## Fueling vs Workload — page détail + correctif puissance moyenne
+
+**`FuelingWidget` renvoie vers `/nutrition/fueling`** (`src/app/nutrition/fueling/page.tsx`) — retour
+utilisateur : "Vérifie les données de cette tuile, et donne accès à plus de détails en cliquant
+dessus." Même convention que `KJBudgetWidget`/`GovernorWidget` (`<Link>` enveloppant toute la carte,
+chevron inclus, page détail qui réaffiche le widget live — sans son propre lien pour ne pas boucler
+sur soi-même — suivi d'une explication du calcul fidèle à `fueling-types.ts`).
+
+**⚠️ Vrai bug trouvé en vérifiant les données** (pas juste un problème d'affichage) : `bestAverageWatts()`
+(`src/lib/intervals-api.ts`), utilisée pour tout calcul "travail mécanique réel" (kJ ≈ kcal) —
+`fueling-types.ts` (`sessionEnergyBurnedKcal`, "Brûlé" sur cette tuile) ET `load-types.ts`
+(`sessionKJ`, le Budget kJ de la semaine sur Cyclisme) — préférait `icu_weighted_avg_watts` (la
+puissance *normalisée*, calculée par Intervals.icu en pondérant plus lourdement les efforts intenses)
+à `icu_average_watts` (la vraie moyenne arithmétique). Or la puissance normalisée est par construction
+toujours ≥ la puissance moyenne sur une sortie à intensité variable (fractionné, bosses, group ride) —
+donc "Brûlé" ET le Budget kJ réalisé étaient tous les deux systématiquement gonflés sur ce type de
+sortie, alors que ces deux widgets existent précisément pour représenter "un travail mécanique réel,
+pas un TSS pondéré arbitrairement" (voir Budget kJ plus haut) — le bug allait directement à l'encontre
+de leur raison d'être. Confirmé par un second symptôme indépendant dans `use-ride-analysis.ts` : le
+Variability Index (`normalizedWatts / avgWatts`) y était calculé en divisant la puissance normalisée
+par... la puissance normalisée (puisque `bestAverageWatts` renvoyait déjà la normalisée), donc écrasé
+vers ~1.0 quel que soit le vrai pacing de la sortie. Corrigé en inversant l'ordre de préférence
+(`icu_average_watts` → `average_watts` → `icu_weighted_avg_watts` → `weighted_average_watts`, la
+normalisée ne servant plus que de dernier recours quand aucune vraie moyenne n'est disponible) — un
+seul correctif, partagé par les trois consommateurs (`fueling-types.ts`, `load-types.ts`,
+`use-ride-analysis.ts`) puisqu'ils passent tous par ce même helper.
 
 ## Flows IA (Claude)
 
