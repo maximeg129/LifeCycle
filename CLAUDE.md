@@ -340,6 +340,64 @@ requises absentes). Les champs du formulaire et l'écriture Firestore elle-même
 chaque dialogue — c'est justement ce qui varie trop pour être généralisé sans forcer une forme qui
 ne colle pas partout.
 
+## Livre de recettes (Nutrition)
+
+Refonte complète — retour utilisateur, capture d'écran mobile : le titre d'une recette en overlay
+sur la photo chevauchait les boutons Modifier/Fermer, symptôme d'un dialogue monolithique
+(~280 lignes ad-hoc dans `nutrition/page.tsx`) qui n'avait jamais été pensé mobile-first. Éclaté en
+`src/components/nutrition/` : `recipe-types.ts` (pur, testé — `Recipe`, `parseIngredientsText`/
+`ingredientsToText`, `parseInstructionSteps`), `recipe-form-fields.tsx` (champs de formulaire
+partagés), `recipe-card.tsx` (tuile grille), `recipe-add-dialog.tsx` (CrudDialogShell/useCrudSubmit,
+enfin aligné sur le patron CRUD standard — ne l'était pas avant), `recipe-detail-dialog.tsx` (détail +
+édition en place).
+
+**Plus de photo stock aléatoire** (`picsum.photos/seed/{id}`, jamais une vraie photo du plat) —
+`recipe-card.tsx`/`recipe-detail-dialog.tsx` affichent un badge icône (`CookingPot`) + les macros à la
+place. Auto-critique assumée : une photo décorative qui ne représente jamais le vrai plat n'aide pas
+un sportif qui compare des recettes par macros, et occupait ~256px de hauteur précieuse sur mobile
+avant même d'atteindre le contenu utile.
+
+**En-tête plein-écran mobile, dialogue centré desktop** (`recipe-detail-dialog.tsx`, une seule classe
+responsive `CONTENT_CLASS` plutôt que deux composants) — fini les boutons Fermer/Modifier en
+`position: absolute` superposés à un titre qui peut faire 4 lignes (l'origine exacte du bug rapporté :
+overlay + titre long = chevauchement garanti quelle que soit la longueur). Le nouveau bandeau
+Fermer/Titre/Modifier vit en flux normal (`flex items-center gap-2`), le titre tronque avec une
+ellipse (`flex-1 min-w-0 truncate`) — impossible à faire chevaucher un bouton, quelle que soit la
+longueur du titre.
+
+**⚠️ Piège CSS Grid rencontré en construisant ce header** — attrapé seulement via screenshot Playwright
+avant livraison (le titre semblait tronqué correctement à l'œil sur desktop, mais débordait
+silencieusement du viewport sur mobile) : `DialogContent` (`ui/dialog.tsx`) est `display: grid` par
+défaut. Sans un `min-w-0` explicite sur l'enfant direct (le `<div className="flex flex-col h-full">`
+qui contient tout le contenu du dialogue), une grid track dimensionne sa colonne implicite sur la
+largeur *max-content* de son contenu — ici le titre non tronqué — et déborde visuellement du
+conteneur (390px) au lieu de forcer `truncate` à s'appliquer. Exactement la même famille de piège que
+le classique `min-width: auto` des enfants flex (déjà documenté ailleurs dans ce fichier pour d'autres
+composants), un niveau au-dessus : la troncature `min-w-0`/`truncate` posée sur le titre lui-même ne
+suffit pas si un ANCÊTRE grid/flex intermédiaire n'a pas aussi son propre `min-w-0`. À surveiller pour
+tout futur header composé à l'intérieur d'un `DialogContent`.
+
+**Ingrédients en checklist, Préparation en étapes numérotées** — plutôt qu'une liste à puces et un
+bloc de texte brut (`whitespace-pre-wrap`) : `parseInstructionSteps()` découpe le texte libre en
+étapes (une par ligne si déjà saisi ainsi — le cas courant — sinon numérotation inline `"1. ... 2.
+..."` détectée par regex, sinon le texte entier devient une seule étape). Les coches de la checklist
+sont un état local UI seulement (pas persisté) — un outil de "mise en place" pendant la cuisson, pas
+une donnée à sauvegarder. Choix pensé pour l'usage réel : mains occupées/sales en cuisine, scanner des
+étapes numérotées et cocher des ingrédients est plus rapide que relire un paragraphe.
+
+**Bug latent corrigé au passage** : les deux chemins de création de recette (`recipe-add-dialog.tsx`
+et l'upsert de `import-meal-plan-dialog.tsx`) n'écrivaient jamais de champ `userId` sur le document —
+or `firestore.rules` (`match /recipes/{recipeId}`) exige `hasValidOwnerField(userId)` (donc un champ
+`userId` égal à l'utilisateur courant) pour autoriser un `create`. Une nouvelle recette échouait donc
+silencieusement (toast d'erreur de permission) sur un compte n'ayant jamais eu ce champ. Les recettes
+existantes (créées avant ce correctif, sans `userId`) restent lisibles/modifiables/supprimables sans
+migration — les règles de `update`/`delete` ne comparent le champ que s'il existe déjà des deux côtés.
+
+`DialogContent` (`ui/dialog.tsx`) accepte désormais un prop optionnel `hideDefaultClose` (défaut
+`false`, donc rétrocompatible avec tous les autres dialogues de l'app) — pour un dialogue qui construit
+son propre bandeau d'en-tête avec son propre bouton de fermeture (comme celui-ci), au lieu du X en
+`position: absolute` du composant partagé, qui dupliquerait ou entrerait en collision avec lui.
+
 ## Flows IA (Claude)
 
 Les flows sont dans `src/ai/flows/` et s'appellent côté client via des Server Actions Next.js

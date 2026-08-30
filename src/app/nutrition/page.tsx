@@ -1,86 +1,57 @@
 "use client"
 
-import React, { useState, useMemo } from 'react'
+import { useState } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { AuthGuard } from '@/components/layout/auth-guard'
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { Input } from '@/components/ui/input'
-import { Textarea } from '@/components/ui/textarea'
-import { Label } from '@/components/ui/label'
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger,
-  DialogFooter,
-  DialogDescription
-} from '@/components/ui/dialog'
-import { 
-  CookingPot, 
-  Droplets, 
-  Utensils, 
-  Apple, 
-  Plus, 
-  Flame, 
-  ChevronRight,
+import {
+  CookingPot,
+  Droplets,
+  Utensils,
+  Flame,
   Beef,
   Wheat,
   Calendar,
-  Search,
   BookOpen,
-  CheckCircle2,
-  Clock,
-  Loader2,
   Trash2,
-  Pencil,
-  X
 } from 'lucide-react'
-import Image from 'next/image'
-import { useToast } from '@/hooks/use-toast'
-import { useBodyScrollLock } from '@/hooks/use-body-scroll-lock'
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
-import { collection, doc, setDoc, deleteDoc, serverTimestamp, increment } from 'firebase/firestore'
+import { collection, doc, deleteDoc, setDoc, serverTimestamp, increment } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { useNutritionData } from '@/components/nutrition/use-nutrition-data'
 import { FuelingWidget } from '@/components/nutrition/fueling-widget'
 import { LogMealDialog } from '@/components/nutrition/log-meal-dialog'
 import { NutritionGoalsDialog } from '@/components/nutrition/nutrition-goals-dialog'
+import { RecipeAddDialog } from '@/components/nutrition/recipe-add-dialog'
+import { RecipeCard } from '@/components/nutrition/recipe-card'
+import { RecipeDetailDialog } from '@/components/nutrition/recipe-detail-dialog'
+import type { Recipe } from '@/components/nutrition/recipe-types'
 import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { MEAL_TYPE_LABELS, progressPct } from '@/components/nutrition/nutrition-types'
 import { MealPlanWeekView } from '@/components/nutrition/meal-plan-week-view'
 
 export default function NutritionPage() {
-  const { toast } = useToast()
   const { user } = useUser()
   const db = useFirestore()
-  
-  const [activeTab, setActiveTab] = useState('plan')
-  const [selectedRecipe, setSelectedRecipe] = useState<any>(null)
-  const [isDetailOpen, setIsDetailOpen] = useState(false)
-  const [isEditingRecipe, setIsEditingRecipe] = useState(false)
-  const [isAddingRecipe, setIsAddingRecipe] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
 
-  // Belt-and-suspenders on top of Radix's own scroll lock — see the hook's
-  // doc comment for why (iOS Chrome doesn't reliably honor Radix's JS-based
-  // touchmove interception, and the page behind the modal ends up scrolling
-  // instead of the modal's own content).
-  useBodyScrollLock(isDetailOpen)
+  const [selectedRecipeId, setSelectedRecipeId] = useState<string | null>(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
 
   // Firestore Recipes
-  const recipesPath = user ? `users/${user.uid}/recipes` : null
   const recipesRef = useMemoFirebase(() => {
-    if (!recipesPath || !db) return null
-    return collection(db, recipesPath)
-  }, [db, recipesPath])
-  const { data: recipes, isLoading: loadingRecipes } = useCollection(recipesRef)
+    if (!user || !db) return null
+    return collection(db, `users/${user.uid}/recipes`)
+  }, [db, user])
+  const { data: recipes, isLoading: loadingRecipes } = useCollection<Recipe>(recipesRef)
+  // Regardé par id plutôt que gardé comme copie locale de son propre état :
+  // une modification se reflète immédiatement (le listener temps réel de
+  // useCollection la pousse), sans merge manuel après un setDoc réussi.
+  const selectedRecipe = recipes?.find((r) => r.id === selectedRecipeId) ?? null
 
   // Today's nutrition log (meals, hydration, goals)
   const { meals, totals, hydrationLiters, goals, isLoading: loadingNutrition, todayId } = useNutritionData()
@@ -101,108 +72,14 @@ export default function NutritionPage() {
     })
   }
 
-  const handleAddRecipe = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!user || !db) return
-    
-    setIsSaving(true)
-    const formData = new FormData(e.currentTarget)
-    const title = formData.get('title')?.toString()
-    const ingredientsStr = formData.get('ingredients')?.toString() || ""
-    const instructions = formData.get('instructions')?.toString() || ""
-    const calories = Number(formData.get('calories')) || 0
-    const protein = Number(formData.get('protein')) || 0
-    const carbs = Number(formData.get('carbs')) || 0
-
-    if (!title) {
-      toast({ variant: "destructive", title: "Le titre est requis" })
-      setIsSaving(false)
-      return
-    }
-
-    const ingredients = ingredientsStr.split('\n').filter(i => i.trim() !== "")
-    const recipeData = {
-      title,
-      ingredients,
-      instructions,
-      calories,
-      protein,
-      carbs,
-      imageHint: "healthy food",
-      createdAt: serverTimestamp()
-    }
-
-    const recipeRef = doc(collection(db, `users/${user.uid}/recipes`))
-    
-    setDoc(recipeRef, recipeData)
-      .then(() => {
-        setIsAddingRecipe(false)
-        toast({ title: "Recette ajoutée", description: "Votre livre de cuisine s'agrandit !" })
-      })
-      .catch(async (err) => {
-        const permissionError = new FirestorePermissionError({
-          path: recipeRef.path,
-          operation: 'create',
-          requestResourceData: recipeData,
-        })
-        errorEmitter.emit('permission-error', permissionError)
-      })
-      .finally(() => setIsSaving(false))
-  }
-
   const handleDeleteRecipe = async (id: string) => {
     if (!user || !db) return
     const recipeRef = doc(db, `users/${user.uid}/recipes`, id)
+    if (selectedRecipeId === id) setIsDetailOpen(false)
 
-    deleteDoc(recipeRef)
-      .catch(async (err) => {
-        const permissionError = new FirestorePermissionError({
-          path: recipeRef.path,
-          operation: 'delete',
-        })
-        errorEmitter.emit('permission-error', permissionError)
-      })
-  }
-
-  const handleUpdateRecipe = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    if (!user || !db || !selectedRecipe) return
-
-    setIsSaving(true)
-    const formData = new FormData(e.currentTarget)
-    const title = formData.get('title')?.toString()
-    const ingredientsStr = formData.get('ingredients')?.toString() || ""
-    const instructions = formData.get('instructions')?.toString() || ""
-    const calories = Number(formData.get('calories')) || 0
-    const protein = Number(formData.get('protein')) || 0
-    const carbs = Number(formData.get('carbs')) || 0
-
-    if (!title) {
-      toast({ variant: "destructive", title: "Le titre est requis" })
-      setIsSaving(false)
-      return
-    }
-
-    const ingredients = ingredientsStr.split('\n').filter(i => i.trim() !== "")
-    const recipeData = { title, ingredients, instructions, calories, protein, carbs }
-
-    const recipeRef = doc(db, `users/${user.uid}/recipes`, selectedRecipe.id)
-
-    setDoc(recipeRef, recipeData, { merge: true })
-      .then(() => {
-        setSelectedRecipe((prev: any) => prev ? { ...prev, ...recipeData } : prev)
-        setIsEditingRecipe(false)
-        toast({ title: "Recette modifiée", description: "Les macros ont été mises à jour." })
-      })
-      .catch(async () => {
-        const permissionError = new FirestorePermissionError({
-          path: recipeRef.path,
-          operation: 'update',
-          requestResourceData: recipeData,
-        })
-        errorEmitter.emit('permission-error', permissionError)
-      })
-      .finally(() => setIsSaving(false))
+    deleteDoc(recipeRef).catch(() => {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: recipeRef.path, operation: 'delete' }))
+    })
   }
 
   return (
@@ -217,58 +94,12 @@ export default function NutritionPage() {
           actions={
             <>
               <NutritionGoalsDialog current={goals} />
-              <Dialog open={isAddingRecipe} onOpenChange={setIsAddingRecipe}>
-                <DialogTrigger asChild>
-                  <Button className="bg-primary text-primary-foreground hover:bg-primary/90 rounded-full px-6 shadow-lg shadow-primary/20">
-                    <Plus className="w-4 h-4 mr-2" /> Ajouter une Recette
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[600px]">
-                  <DialogHeader>
-                    <DialogTitle>Nouvelle Recette</DialogTitle>
-                    <DialogDescription>Enregistrez vos créations culinaires dans votre coffre-fort personnel.</DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleAddRecipe} className="grid gap-4 py-4">
-                    <div className="grid gap-2">
-                      <Label htmlFor="title">Titre</Label>
-                      <Input id="title" name="title" placeholder="ex: Risotto de Quinoa" required />
-                    </div>
-                    <div className="grid grid-cols-3 gap-4">
-                      <div className="grid gap-2">
-                        <Label htmlFor="calories">Calories</Label>
-                        <Input id="calories" name="calories" type="number" placeholder="450" />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="protein">Protéines (g)</Label>
-                        <Input id="protein" name="protein" type="number" placeholder="25" />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="carbs">Glucides (g)</Label>
-                        <Input id="carbs" name="carbs" type="number" placeholder="60" />
-                      </div>
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="ingredients">Ingrédients (un par ligne)</Label>
-                      <Textarea id="ingredients" name="ingredients" placeholder="100g Quinoa..." rows={4} />
-                    </div>
-                    <div className="grid gap-2">
-                      <Label htmlFor="instructions">Instructions</Label>
-                      <Textarea id="instructions" name="instructions" placeholder="1. Cuire..." rows={4} />
-                    </div>
-                    <DialogFooter>
-                      <Button type="submit" disabled={isSaving}>
-                        {isSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                        Sauvegarder
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
+              <RecipeAddDialog />
             </>
           }
         />
 
-        <Tabs defaultValue="plan" onValueChange={setActiveTab} className="space-y-6">
+        <Tabs defaultValue="plan" className="space-y-6">
           <TabsList className="bg-muted/50 border border-border/40 p-1 rounded-full w-fit mx-auto md:mx-0">
             <TabsTrigger value="plan" className="px-8 py-2 rounded-full data-[state=active]:bg-background data-[state=active]:shadow-sm">
               <Utensils className="w-4 h-4 mr-2" /> Aujourd&apos;hui
@@ -339,7 +170,7 @@ export default function NutritionPage() {
                   <CardTitle className="text-xl">Journal du Jour</CardTitle>
                   <CardDescription>Optimisez votre fueling.</CardDescription>
                 </div>
-                <LogMealDialog recipes={(recipes || []).map((r: any) => ({ id: r.id, title: r.title, calories: r.calories, protein: r.protein, carbs: r.carbs }))} />
+                <LogMealDialog recipes={(recipes || []).map((r) => ({ id: r.id, title: r.title, calories: r.calories, protein: r.protein, carbs: r.carbs }))} />
               </CardHeader>
               <CardContent className="p-0">
                 {loadingNutrition ? (
@@ -386,51 +217,26 @@ export default function NutritionPage() {
           </TabsContent>
 
           <TabsContent value="cookbook" className="space-y-8 animate-in slide-in-from-right duration-500">
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {loadingRecipes ? (
                 Array.from({ length: 3 }).map((_, i) => (
-                  <Card key={i} className="lc-card border-none h-64 animate-pulse bg-muted/20" />
+                  <Card key={i} className="lc-card border-none h-40 animate-pulse bg-muted/20" />
                 ))
               ) : recipes?.length === 0 ? (
-                <div className="col-span-full py-20 text-center space-y-4">
-                  <CookingPot className="w-16 h-16 text-muted-foreground/20 mx-auto" />
-                  <p className="text-muted-foreground">Votre livre de cuisine est vide. Commencez par ajouter une recette !</p>
-                  <Button variant="outline" onClick={() => setIsAddingRecipe(true)} className="rounded-full">Créer une recette</Button>
-                </div>
+                <EmptyState
+                  className="col-span-full"
+                  icon={CookingPot}
+                  title="Votre livre de cuisine est vide"
+                  description="Ajoutez une première recette pour la retrouver au moment de logger un repas."
+                />
               ) : (
                 recipes?.map((recipe) => (
-                  <Card 
-                    key={recipe.id} 
-                    className="lc-card border-none overflow-hidden group hover:scale-[1.02] transition-all cursor-pointer"
-                    onClick={() => { setSelectedRecipe(recipe); setIsEditingRecipe(false); setIsDetailOpen(true); }}
-                  >
-                    <div className="h-48 bg-muted relative">
-                      <Image 
-                        src={`https://picsum.photos/seed/${recipe.id}/600/400`} 
-                        alt={recipe.title}
-                        fill
-                        className="object-cover"
-                        data-ai-hint="healthy food recipe"
-                      />
-                      <div className="absolute top-3 right-3 flex gap-2">
-                         <Button 
-                          size="icon" 
-                          variant="secondary" 
-                          className="h-8 w-8 rounded-full bg-white/80 backdrop-blur shadow-sm hover:text-destructive"
-                          onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.id); }}
-                         >
-                           <Trash2 className="w-4 h-4" />
-                         </Button>
-                      </div>
-                    </div>
-                    <CardContent className="p-5 space-y-3">
-                      <h3 className="font-bold text-lg">{recipe.title}</h3>
-                      <div className="flex items-center gap-4 text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
-                        <span className="flex items-center gap-1"><Flame className="w-3 h-3 text-orange-500" /> {recipe.calories} kcal</span>
-                        <span className="flex items-center gap-1"><Beef className="w-3 h-3 text-red-500" /> {recipe.protein}g P</span>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <RecipeCard
+                    key={recipe.id}
+                    recipe={recipe}
+                    onOpen={() => { setSelectedRecipeId(recipe.id); setIsDetailOpen(true) }}
+                    onDelete={() => handleDeleteRecipe(recipe.id)}
+                  />
                 ))
               )}
             </div>
@@ -444,141 +250,7 @@ export default function NutritionPage() {
         <FuelingWidget />
       </main>
 
-      <Dialog open={isDetailOpen} onOpenChange={(open) => { setIsDetailOpen(open); if (!open) setIsEditingRecipe(false); }}>
-        <DialogContent className="sm:max-w-[700px] h-[85dvh] max-h-[85dvh] p-0 border-none shadow-2xl rounded-[32px]">
-          {selectedRecipe && (
-            <div className="flex flex-col h-full">
-              {/* Rounded corners are clipped per-section (header/footer) rather than on
-                  this whole flex column: an overflow-hidden + rounded-corner ANCESTOR of
-                  a scrollable child is a known WebKit bug that can block touch-scroll
-                  from ever reaching that child on iOS. */}
-              <div className="h-64 relative shrink-0 overflow-hidden rounded-t-[32px]">
-                <Image
-                  src={`https://picsum.photos/seed/${selectedRecipe.id}/800/600`}
-                  alt={selectedRecipe.title}
-                  fill
-                  className="object-cover"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent" />
-                <div className="absolute bottom-6 left-8">
-                  <h2 className="text-4xl font-bold tracking-tighter">{selectedRecipe.title}</h2>
-                </div>
-                {!isEditingRecipe && (
-                  <Button
-                    size="icon"
-                    variant="secondary"
-                    className="absolute top-4 right-14 h-9 w-9 rounded-full bg-white/80 backdrop-blur shadow-sm"
-                    onClick={() => setIsEditingRecipe(true)}
-                  >
-                    <Pencil className="w-4 h-4" />
-                  </Button>
-                )}
-              </div>
-
-              {isEditingRecipe ? (
-                <form onSubmit={handleUpdateRecipe} key={selectedRecipe.id} className="flex flex-col flex-1 min-h-0">
-                  <div
-                    className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-8 py-6"
-                    style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', transform: 'translateZ(0)' }}
-                  >
-                    <div className="grid gap-4 max-w-lg">
-                      <div className="grid gap-2">
-                        <Label htmlFor="title">Titre</Label>
-                        <Input id="title" name="title" defaultValue={selectedRecipe.title} required />
-                      </div>
-                      <div className="grid grid-cols-3 gap-4">
-                        <div className="grid gap-2">
-                          <Label htmlFor="calories">Calories</Label>
-                          <Input id="calories" name="calories" type="number" min={0} defaultValue={selectedRecipe.calories} />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="protein">Protéines (g)</Label>
-                          <Input id="protein" name="protein" type="number" min={0} defaultValue={selectedRecipe.protein} />
-                        </div>
-                        <div className="grid gap-2">
-                          <Label htmlFor="carbs">Glucides (g)</Label>
-                          <Input id="carbs" name="carbs" type="number" min={0} defaultValue={selectedRecipe.carbs} />
-                        </div>
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="ingredients">Ingrédients (un par ligne)</Label>
-                        <Textarea id="ingredients" name="ingredients" defaultValue={selectedRecipe.ingredients?.join('\n')} rows={6} />
-                      </div>
-                      <div className="grid gap-2">
-                        <Label htmlFor="instructions">Instructions</Label>
-                        <Textarea id="instructions" name="instructions" defaultValue={selectedRecipe.instructions} rows={4} />
-                      </div>
-                    </div>
-                  </div>
-                  <div className="p-6 bg-muted/20 border-t border-border/40 flex justify-end gap-2 rounded-b-[32px]">
-                    <Button type="button" variant="outline" onClick={() => setIsEditingRecipe(false)} className="rounded-full px-6">
-                      <X className="w-4 h-4 mr-2" /> Annuler
-                    </Button>
-                    <Button type="submit" disabled={isSaving} className="rounded-full px-8">
-                      {isSaving && <Loader2 className="w-4 h-4 animate-spin mr-2" />}
-                      Enregistrer
-                    </Button>
-                  </div>
-                </form>
-              ) : (
-                <>
-                  <div
-                    className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-8 py-6"
-                    style={{ WebkitOverflowScrolling: 'touch', touchAction: 'pan-y', transform: 'translateZ(0)' }}
-                  >
-                    <div className="grid grid-cols-3 gap-6 mb-10">
-                      <div className="space-y-1">
-                        <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">Calories</div>
-                        <div className="text-2xl font-bold">{selectedRecipe.calories}</div>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest text-red-500">Protéines</div>
-                        <div className="text-2xl font-bold">{selectedRecipe.protein}g</div>
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest text-yellow-500">Glucides</div>
-                        <div className="text-2xl font-bold">{selectedRecipe.carbs}g</div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                      <div className="space-y-6">
-                        <h3 className="font-bold text-xl flex items-center gap-3">
-                          <Utensils className="w-5 h-5 text-primary" /> Ingrédients
-                        </h3>
-                        <ul className="space-y-3">
-                          {selectedRecipe.ingredients?.map((ing: string, i: number) => (
-                            <li key={i} className="text-sm flex items-start gap-3 text-muted-foreground">
-                              <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
-                              {ing}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-
-                      <div className="space-y-6">
-                        <h3 className="font-bold text-xl flex items-center gap-3">
-                          <Clock className="w-5 h-5 text-primary" /> Préparation
-                        </h3>
-                        <div className="text-sm text-muted-foreground leading-relaxed whitespace-pre-wrap">
-                          {selectedRecipe.instructions}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="p-6 bg-muted/20 border-t border-border/40 flex justify-end gap-2 rounded-b-[32px]">
-                    <Button variant="outline" onClick={() => setIsEditingRecipe(true)} className="rounded-full px-6">
-                      <Pencil className="w-4 h-4 mr-2" /> Modifier
-                    </Button>
-                    <Button variant="secondary" onClick={() => setIsDetailOpen(false)} className="rounded-full px-8">Fermer</Button>
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <RecipeDetailDialog recipe={selectedRecipe} open={isDetailOpen} onOpenChange={setIsDetailOpen} />
     </div>
     </AuthGuard>
   )

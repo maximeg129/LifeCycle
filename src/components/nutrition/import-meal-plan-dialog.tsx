@@ -48,13 +48,13 @@ export function ImportMealPlanDialog({ weekStart }: { weekStart: Date }) {
 
     const recipeRef = doc(collection(db!, `users/${user!.uid}/recipes`))
     await setDoc(recipeRef, {
+      userId: user!.uid,
       title: recipe.title,
       ingredients: recipe.ingredients.map(formatIngredientLine),
       instructions: recipe.instructions,
       calories: recipe.macros.calories,
       protein: recipe.macros.protein,
       carbs: recipe.macros.carbs,
-      imageHint: 'healthy food',
       createdAt: serverTimestamp(),
     })
     known.push({ id: recipeRef.id, title: recipe.title }) // avoid re-creating on a duplicate title within the same import
