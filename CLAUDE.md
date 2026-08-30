@@ -257,6 +257,7 @@ Toutes les données utilisateur sont sous `users/{uid}/` :
 | `users/{uid}/tasks` | `{taskId}` | Tâches : name, room, priority, recurrenceDays, nextDueDate (Timestamp), isActive |
 | `users/{uid}/settings/intervals` | (singleton) | intervalsAthleteId, intervalsApiKey |
 | `users/{uid}/settings/powerCurve` | (singleton) | shortRecord/mediumRecord/longRecord `{seconds, watts}` — records perso pour l'indice d'endurance de Riegel. Auto-rempli depuis la vraie courbe de puissance Intervals.icu quand connecté (`usePowerCurve` fusionne manuel + auto, manuel prioritaire par champ — même logique que `mergeDailyWellness`) ; ce doc ne stocke que les valeurs manuellement corrigées, pas les valeurs auto-calculées |
+| `users/{uid}/settings/biometrics` | (singleton) | `heightCm`/`age`/`sex` — saisie manuelle uniquement (Intervals.icu ne fournit que le poids), pour le calcul du métabolisme de base (Mifflin-St Jeor, `computeBMR()` dans `fueling-types.ts`) sur la tuile Fueling vs Workload |
 | `users/{uid}/coachInjuries` | `{injuryId}` | Blessures : bodyRegion, severity (1-5), status, startDate, description, physioInstructions |
 | `users/{uid}/coachGoals` | `{goalId}` | Objectifs coach IA : eventName, eventDate, targetOutcome, priority |
 | `users/{uid}/coachMemory` | `lifestyle` / `facts` (singletons) | Style de vie (texte libre) et faits retenus (`items: string[]`) |
@@ -439,6 +440,24 @@ vers ~1.0 quel que soit le vrai pacing de la sortie. Corrigé en inversant l'ord
 normalisée ne servant plus que de dernier recours quand aucune vraie moyenne n'est disponible) — un
 seul correctif, partagé par les trois consommateurs (`fueling-types.ts`, `load-types.ts`,
 `use-ride-analysis.ts`) puisqu'ils passent tous par ce même helper.
+
+**Métabolisme de base (BMR) séparé du "brûlé sport"** — retour utilisateur, sur cette même tuile :
+"Il faudrait d'une façon différenciée ajouter le métabolisme de base et séparer les calories brûlées
+au sport." Avant ce correctif, "Brûlé" ne comptait QUE l'énergie des activités du jour — jamais le
+métabolisme de base — donc l'Écart affiché n'était pas un vrai bilan énergétique quotidien (voir la
+note "⚠️" déjà présente dans la page détail à l'époque). `computeBMR()` (`fueling-types.ts`, pur/testé)
+calcule l'estimation via la formule de Mifflin-St Jeor (référence actuelle, plus fiable que
+Harris-Benedict) à partir du poids (Intervals.icu) + taille/âge/sexe — trois champs qu'Intervals.icu
+ne fournit pas, saisis manuellement via `BiometricsCard`/`use-biometrics.ts`
+(`users/{uid}/settings/biometrics`, même patron que `settings/powerCurve` mais sans volet auto : rien
+à fusionner puisqu'aucune source externe ne les fournit). `FuelingWidget`/la page détail affichent
+désormais 4 chiffres distincts — **Sport** (activités du jour), **Métabolisme** ("à configurer" tant
+que taille/âge/sexe manquent, jamais une estimation par défaut inventée), **Mangé**, **Écart** — et
+l'Écart se base sur Mangé − (Sport + Métabolisme) une fois le métabolisme configuré, dégradé sur
+Mangé − Sport seul sinon (comportement identique à avant ce correctif, donc non-cassant pour qui n'a
+pas encore renseigné son profil biométrique). Le métabolisme est une estimation pour la journée
+entière (24h de repos), jamais proratisée à l'heure actuelle — contrairement à "Sport", qui ne
+reflète que les activités déjà enregistrées au moment de la consultation.
 
 ## Flows IA (Claude)
 

@@ -6,24 +6,34 @@ import Link from 'next/link'
 import { MetricCard } from '@/components/ui/metric-card'
 import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Flame, UtensilsCrossed, Scale, Beef, ChevronRight } from 'lucide-react'
+import { Flame, UtensilsCrossed, Scale, Beef, Activity as ActivityIcon, ChevronRight } from 'lucide-react'
 import { useAthlete, useActivities } from '@/hooks/use-intervals'
 import { useNutritionData } from './use-nutrition-data'
-import { totalEnergyBurnedKcal, recoveryGap, proteinTargetRange } from './fueling-types'
+import { useBiometrics } from './use-biometrics'
+import { totalEnergyBurnedKcal, recoveryGap, proteinTargetRange, computeBMR } from './fueling-types'
 
 export function FuelingWidget() {
   const athlete = useAthlete()
   const todayId = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
   const activities = useActivities(todayId, todayId)
   const nutrition = useNutritionData()
+  const biometrics = useBiometrics()
 
   const weightKg = athlete.data?.weight ?? null
   const isAvailable = weightKg != null && weightKg > 0
-  const isLoading = athlete.isLoading || activities.isLoading || nutrition.isLoading
+  const isLoading = athlete.isLoading || activities.isLoading || nutrition.isLoading || biometrics.isLoading
 
-  const burned = useMemo(() => totalEnergyBurnedKcal(activities.data, weightKg), [activities.data, weightKg])
+  // Retour utilisateur : "d'une façon différenciée ajouter le métabolisme de
+  // base et séparer les calories brûlées au sport" — Sport (activités du
+  // jour) et Métabolisme (repos, Mifflin-St Jeor) restent deux chiffres
+  // distincts plutôt qu'un seul "Brûlé" agrégé ; l'Écart se base sur leur
+  // somme quand le métabolisme est configuré (sinon, dégradé sur Sport
+  // seul — jamais un métabolisme inventé).
+  const sportBurned = useMemo(() => totalEnergyBurnedKcal(activities.data, weightKg), [activities.data, weightKg])
+  const bmr = useMemo(() => computeBMR(weightKg, biometrics.data), [weightKg, biometrics.data])
+  const totalBurned = sportBurned + (bmr ?? 0)
   const eaten = nutrition.totals.calories
-  const gap = recoveryGap(eaten, burned)
+  const gap = recoveryGap(eaten, totalBurned)
   const protein = weightKg ? proteinTargetRange(weightKg) : null
 
   if (isLoading) {
@@ -50,13 +60,20 @@ export function FuelingWidget() {
         ctaHref="/settings"
         className="group-hover:border-primary/40 transition-colors"
       >
-        <div className="grid grid-cols-3 gap-4 text-center">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
           <div>
             <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
-              <Flame className="w-3.5 h-3.5 text-orange-400" /> Brûlé
+              <Flame className="w-3.5 h-3.5 text-orange-400" /> Sport
             </div>
-            <div className="text-2xl font-bold">{burned}</div>
+            <div className="text-2xl font-bold">{sportBurned}</div>
             <div className="text-[10px] text-muted-foreground">kcal</div>
+          </div>
+          <div>
+            <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
+              <ActivityIcon className="w-3.5 h-3.5 text-purple-400" /> Métabolisme
+            </div>
+            <div className="text-2xl font-bold">{bmr ?? '—'}</div>
+            <div className="text-[10px] text-muted-foreground">{bmr != null ? 'kcal' : 'à configurer'}</div>
           </div>
           <div>
             <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">

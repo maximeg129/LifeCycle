@@ -57,3 +57,36 @@ export interface ProteinTargetRange {
 export function proteinTargetRange(weightKg: number): ProteinTargetRange {
   return { min: Math.round(weightKg * 1.6), max: Math.round(weightKg * 2.0) }
 }
+
+// ── Basal metabolic rate — retour utilisateur : "d'une façon différenciée
+// ajouter le métabolisme de base et séparer les calories brûlées au sport"
+// (see fueling-widget.tsx: "Sport" and "Métabolisme" are now two distinct
+// stats, never folded into one "Brûlé" number). ─────────────────────────
+
+export type Sex = 'male' | 'female'
+
+export interface BiometricsLike {
+  heightCm?: number | null
+  age?: number | null
+  sex?: Sex | null
+}
+
+/**
+ * Mifflin-St Jeor — the current standard resting-metabolic-rate estimate
+ * (more accurate than the older Harris-Benedict formula it replaced in most
+ * clinical/sports-nutrition use). A whole-day estimate (BMR is what the
+ * body burns at complete rest over 24h) — never prorated to the time of day,
+ * unlike "Sport" which only reflects activities actually logged so far.
+ * Needs weight (kg, from Intervals.icu), height (cm), age (years) and sex —
+ * null if any is missing, never a guessed default for a biometric this
+ * personal.
+ */
+export function computeBMR(weightKg: number | null | undefined, biometrics: BiometricsLike | null | undefined): number | null {
+  if (!weightKg || weightKg <= 0) return null
+  const heightCm = biometrics?.heightCm
+  const age = biometrics?.age
+  const sex = biometrics?.sex
+  if (!heightCm || heightCm <= 0 || !age || age <= 0 || !sex) return null
+  const base = 10 * weightKg + 6.25 * heightCm - 5 * age
+  return Math.round(sex === 'male' ? base + 5 : base - 161)
+}

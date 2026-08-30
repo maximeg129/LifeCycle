@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { sessionEnergyBurnedKcal, totalEnergyBurnedKcal, recoveryGap, proteinTargetRange } from './fueling-types'
+import { sessionEnergyBurnedKcal, totalEnergyBurnedKcal, recoveryGap, proteinTargetRange, computeBMR } from './fueling-types'
 
 describe('sessionEnergyBurnedKcal', () => {
   it('uses the kJ≈kcal rule of thumb when power data is available', () => {
@@ -41,5 +41,25 @@ describe('recoveryGap', () => {
 describe('proteinTargetRange', () => {
   it('scales 1.6-2.0 g/kg to bodyweight', () => {
     expect(proteinTargetRange(70)).toEqual({ min: 112, max: 140 })
+  })
+})
+
+describe('computeBMR', () => {
+  it('computes Mifflin-St Jeor for a man', () => {
+    expect(computeBMR(70, { heightCm: 175, age: 30, sex: 'male' })).toBe(1649)
+  })
+  it('computes Mifflin-St Jeor for a woman', () => {
+    expect(computeBMR(60, { heightCm: 165, age: 25, sex: 'female' })).toBe(1345)
+  })
+  it('is null without a known weight', () => {
+    expect(computeBMR(null, { heightCm: 175, age: 30, sex: 'male' })).toBeNull()
+    expect(computeBMR(0, { heightCm: 175, age: 30, sex: 'male' })).toBeNull()
+  })
+  it('is null when biometrics are missing or incomplete', () => {
+    expect(computeBMR(70, null)).toBeNull()
+    expect(computeBMR(70, {})).toBeNull()
+    expect(computeBMR(70, { heightCm: 175, age: 30 })).toBeNull()
+    expect(computeBMR(70, { heightCm: 175, sex: 'male' })).toBeNull()
+    expect(computeBMR(70, { age: 30, sex: 'male' })).toBeNull()
   })
 })
