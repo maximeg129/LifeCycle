@@ -13,7 +13,7 @@
  */
 
 import { z } from 'zod';
-import { generateJson } from '@/ai/anthropic';
+import { generateJson, type FlowResult } from '@/ai/anthropic';
 import { fetchWeatherForecast, degreesToCompass } from '@/ai/weather';
 
 /** Below this, wind isn't worth routing around — asking the AI for advice on a light breeze would just invent filler. */
@@ -113,7 +113,8 @@ function formatRecentSessions(sessions: DailyWorkoutRecommendationInput['recentS
   }).join('\n');
 }
 
-export async function dailyWorkoutRecommendation(input: DailyWorkoutRecommendationInput): Promise<DailyWorkoutRecommendationOutput> {
+export async function dailyWorkoutRecommendation(input: DailyWorkoutRecommendationInput): Promise<FlowResult<DailyWorkoutRecommendationOutput>> {
+  try {
   const parsedInput = DailyWorkoutRecommendationInputSchema.parse(input);
 
   const sections: string[] = [
@@ -220,4 +221,8 @@ Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, p
     system,
     messages: [{ role: 'user', content: sections.join('\n\n') }],
   });
+  } catch (e) {
+    console.error('[dailyWorkoutRecommendation] failed:', e);
+    return { ok: false, error: e instanceof Error ? e.message : 'Erreur inconnue.' };
+  }
 }

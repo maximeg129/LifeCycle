@@ -113,7 +113,12 @@ export function PlantsTab() {
     setIsScanning(true)
     try {
       const compressed = await compressImage(previewUrl)
-      const res = await identifyPlant({ photoDataUri: compressed })
+      const flowResult = await identifyPlant({ photoDataUri: compressed })
+      if (!flowResult.ok) {
+        toast({ variant: 'destructive', title: "Erreur d'analyse", description: flowResult.error })
+        return
+      }
+      const res = flowResult.data
       setScanResult(res)
       setNickname(res.name)
       const daysMatch = res.hydrationPlan?.frequency?.match(/(\d+)/)
@@ -175,7 +180,7 @@ export function PlantsTab() {
     setIsDetailScanning(true)
     try {
       const compressed = await compressImage(detailPreviewUrl)
-      const res = await identifyPlant({
+      const flowResult = await identifyPlant({
         photoDataUri: compressed,
         locationContext: selectedPlant.location,
         plantContext: {
@@ -187,7 +192,11 @@ export function PlantsTab() {
             : undefined,
         },
       })
-      setDetailScanResult(res)
+      if (!flowResult.ok) {
+        toast({ variant: 'destructive', title: "Erreur d'analyse", description: flowResult.error })
+        return
+      }
+      setDetailScanResult(flowResult.data)
     } catch {
       toast({ variant: 'destructive', title: "Erreur d'analyse" })
     } finally {

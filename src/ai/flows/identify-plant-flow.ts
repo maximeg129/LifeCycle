@@ -6,7 +6,7 @@
 
 import { z } from 'zod';
 import type Anthropic from '@anthropic-ai/sdk';
-import { generateJson } from '@/ai/anthropic';
+import { generateJson, type FlowResult } from '@/ai/anthropic';
 
 const PlantContextSchema = z.object({
   name: z.string().optional(),
@@ -45,7 +45,8 @@ function parseDataUri(dataUri: string): { mediaType: string; data: string } {
   return { mediaType: match[1], data: match[2] };
 }
 
-export async function identifyPlant(input: IdentifyPlantInput): Promise<IdentifyPlantOutput> {
+export async function identifyPlant(input: IdentifyPlantInput): Promise<FlowResult<IdentifyPlantOutput>> {
+  try {
   const parsedInput = IdentifyPlantInputSchema.parse(input);
   const { mediaType, data } = parseDataUri(parsedInput.photoDataUri);
 
@@ -91,4 +92,8 @@ Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas de texte au
     system,
     messages: [{ role: 'user', content }],
   });
+  } catch (e) {
+    console.error('[identifyPlant] failed:', e);
+    return { ok: false, error: e instanceof Error ? e.message : 'Erreur inconnue.' };
+  }
 }

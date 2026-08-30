@@ -13,7 +13,7 @@
  */
 
 import { z } from 'zod';
-import { generateJson } from '@/ai/anthropic';
+import { generateJson, type FlowResult } from '@/ai/anthropic';
 import { STRUCTURED_WORKOUT_SYNTAX } from './daily-workout-recommendation-flow';
 
 const PlanWeekSessionsInputSchema = z.object({
@@ -57,7 +57,8 @@ const PHASE_GUIDANCE: Record<PlanWeekSessionsInput['phase'], string> = {
   recovery: 'Phase récupération : volume et intensité réduits (~50-60% de la normale), quasi exclusivement en endurance légère.',
 };
 
-export async function planWeekSessions(input: PlanWeekSessionsInput): Promise<PlanWeekSessionsOutput> {
+export async function planWeekSessions(input: PlanWeekSessionsInput): Promise<FlowResult<PlanWeekSessionsOutput>> {
+  try {
   const parsedInput = PlanWeekSessionsInputSchema.parse(input);
 
   const sections: string[] = [
@@ -120,4 +121,8 @@ Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, p
     messages: [{ role: 'user', content: sections.join('\n\n') }],
     maxTokens: 8192,
   });
+  } catch (e) {
+    console.error('[planWeekSessions] failed:', e);
+    return { ok: false, error: e instanceof Error ? e.message : 'Erreur inconnue.' };
+  }
 }

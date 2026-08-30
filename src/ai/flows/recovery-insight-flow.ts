@@ -9,7 +9,7 @@
  */
 
 import { z } from 'zod';
-import { generateJson } from '@/ai/anthropic';
+import { generateJson, type FlowResult } from '@/ai/anthropic';
 
 const RecoveryInsightInputSchema = z.object({
   dailyMetrics: z.array(z.object({
@@ -56,7 +56,8 @@ function formatMetricsLog(dailyMetrics: RecoveryInsightInput['dailyMetrics']): s
   }).join('\n');
 }
 
-export async function recoveryInsight(input: RecoveryInsightInput): Promise<RecoveryInsightOutput> {
+export async function recoveryInsight(input: RecoveryInsightInput): Promise<FlowResult<RecoveryInsightOutput>> {
+  try {
   const parsedInput = RecoveryInsightInputSchema.parse(input);
 
   const sections: string[] = [`WELLNESS LOG (oldest first):\n${formatMetricsLog(parsedInput.dailyMetrics)}`];
@@ -100,4 +101,8 @@ Respond with ONLY a JSON object (no markdown fences, no other text) matching exa
     system,
     messages: [{ role: 'user', content: sections.join('\n\n') }],
   });
+  } catch (e) {
+    console.error('[recoveryInsight] failed:', e);
+    return { ok: false, error: e instanceof Error ? e.message : 'Erreur inconnue.' };
+  }
 }

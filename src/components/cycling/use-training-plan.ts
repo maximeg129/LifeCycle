@@ -99,7 +99,7 @@ export function useTrainingPlan() {
         governorStatus: governor.status,
       })
 
-      const output = await trainingPlanGeneration({
+      const result = await trainingPlanGeneration({
         today,
         goal: { eventName: goal.eventName, eventDate: goal.eventDate, targetOutcome: goal.targetOutcome, priority: goal.priority },
         weekCount,
@@ -111,6 +111,11 @@ export function useTrainingPlan() {
         } : undefined,
         coachContext,
       })
+      if (!result.ok) {
+        toast({ variant: 'destructive', title: "L'IA n'a pas pu générer de plan", description: result.error })
+        return false
+      }
+      const output = result.data
 
       const skeleton = buildPlanWeekSkeleton(today, weekCount)
       const weeks = mergePlanWeeks(skeleton, output.weeks)
@@ -180,7 +185,7 @@ export function useTrainingPlan() {
         governorStatus: governor.status,
       })
 
-      const output = await planWeekSessions({
+      const result = await planWeekSessions({
         weekNumber: week.weekNumber,
         phase: week.phase,
         focus: week.focus,
@@ -193,9 +198,13 @@ export function useTrainingPlan() {
         } : undefined,
         coachContext,
       })
+      if (!result.ok) {
+        toast({ variant: 'destructive', title: "L'IA n'a pas pu générer les séances de la semaine", description: result.error })
+        return false
+      }
 
       const weeks = activePlan.weeks.map((w) =>
-        w.weekNumber === week.weekNumber ? { ...w, sampleSessions: output.sessions } : w
+        w.weekNumber === week.weekNumber ? { ...w, sampleSessions: result.data.sessions } : w
       )
       const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
       try {

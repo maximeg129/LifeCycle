@@ -47,7 +47,7 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
         governorStatus: governor.status,
         enduranceIndex,
       })
-      const output = await recoveryInsight({
+      const flowResult = await recoveryInsight({
         dailyMetrics: dailySeries.map((d) => ({
           date: d.dayId,
           sleepHours: d.sleepHours,
@@ -65,7 +65,11 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
         } : undefined,
         coachContext,
       })
-      setResult(output)
+      if (!flowResult.ok) {
+        toast({ variant: 'destructive', title: "L'IA n'a pas pu générer d'analyse", description: flowResult.error })
+        return
+      }
+      setResult(flowResult.data)
     } catch {
       toast({ variant: 'destructive', title: 'Erreur', description: "L'IA n'a pas pu générer d'analyse." })
     } finally {

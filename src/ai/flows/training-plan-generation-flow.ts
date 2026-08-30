@@ -15,7 +15,7 @@
  */
 
 import { z } from 'zod';
-import { generateJson } from '@/ai/anthropic';
+import { generateJson, type FlowResult } from '@/ai/anthropic';
 
 const TrainingPlanGenerationInputSchema = z.object({
   today: z.string().describe('yyyy-MM-dd'),
@@ -52,7 +52,8 @@ const TrainingPlanGenerationOutputSchema = z.object({
 
 export type TrainingPlanGenerationOutput = z.infer<typeof TrainingPlanGenerationOutputSchema>;
 
-export async function trainingPlanGeneration(input: TrainingPlanGenerationInput): Promise<TrainingPlanGenerationOutput> {
+export async function trainingPlanGeneration(input: TrainingPlanGenerationInput): Promise<FlowResult<TrainingPlanGenerationOutput>> {
+  try {
   const parsedInput = TrainingPlanGenerationInputSchema.parse(input);
 
   const sections: string[] = [
@@ -110,4 +111,8 @@ et le tableau "weeks" doit contenir EXACTEMENT ${parsedInput.weekCount} élémen
     messages: [{ role: 'user', content: sections.join('\n\n') }],
     maxTokens: 8192,
   });
+  } catch (e) {
+    console.error('[trainingPlanGeneration] failed:', e);
+    return { ok: false, error: e instanceof Error ? e.message : 'Erreur inconnue.' };
+  }
 }

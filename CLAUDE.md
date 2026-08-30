@@ -262,9 +262,27 @@ Les flows sont dans `src/ai/flows/` et s'appellent côté client via des Server 
 (fonctions `'use server'` important directement, pas d'abstraction Genkit). Chaque flow appelle
 `@anthropic-ai/sdk` via le client partagé `src/ai/anthropic.ts` (modèle `claude-haiku-4-5`,
 suffisant et peu coûteux pour ces usages perso). Le helper `generateJson(schema, { system, messages })`
-demande une réponse JSON pure à Claude et la valide avec Zod — pattern uniforme utilisé par les
-3 flows plutôt que `output_config.format` (plus simple à garder cohérent avec l'appel d'outil du
-premier flow). `fetchWeatherForecast`/`degreesToCompass` (`src/ai/weather.ts`) sont le fetch météo
+demande une réponse JSON pure à Claude et la valide avec Zod — pattern uniforme utilisé par 5 des
+6 flows (tous sauf `cyclingOutfitRecommendation`, qui garde son appel d'outil manuel, et `coachChat`,
+texte brut) plutôt que `output_config.format`.
+
+**`generateJson` ne lève jamais d'exception** — il renvoie `FlowResult<T>` (`{ok:true, data} |
+{ok:false, error}`), et chaque flow qui l'utilise propage ce type comme son propre type de retour
+(`Promise<FlowResult<Output>>`, avec son corps entier dans un `try/catch` qui convertit toute
+exception de validation d'input en `{ok:false, error}` de la même façon). Ce n'est pas un choix de
+style : Next.js redacte le message de toute erreur qui traverse la frontière Server Action en
+production — le client ne reçoit jamais que le texte générique "An error occurred in the Server
+Components render...", quel que soit le message original (confirmé dans le bundle client
+`react-server-dom-webpack`, fonction `resolveErrorProd()`). Un message ne survit que s'il voyage
+comme donnée dans une promesse résolue, jamais comme rejet — d'où `{ok:false, error}` plutôt qu'un
+`throw`. Chaque hook appelant (`use-daily-workout.ts`, `use-training-plan.ts`,
+`recovery-insight-panel.tsx`, `plants-tab.tsx`) doit vérifier `result.ok` et afficher `result.error`
+dans le toast plutôt que d'attraper une exception. `generateJson` logue aussi côté serveur
+(`console.error`, visible dans les logs Firebase App Hosting/Cloud Run) chaque échec — appel API,
+JSON introuvable/invalide, validation Zod — pour le débogage, puisque le client ne peut voir que la
+version résumée dans `result.error`.
+
+`fetchWeatherForecast`/`degreesToCompass` (`src/ai/weather.ts`) sont le fetch météo
 réel (Open-Meteo, sans clé API) partagé par `cyclingOutfitRecommendation` (via tool use) et
 `dailyWorkoutRecommendation` (appel direct, pas de tool use — la météo est un pré-fetch déterministe,
 pas une décision à laisser au modèle).

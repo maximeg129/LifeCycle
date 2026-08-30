@@ -112,7 +112,7 @@ export function useDailyWorkout() {
         governorStatus: governor.status,
       })
 
-      const proposal = await dailyWorkoutRecommendation({
+      const result = await dailyWorkoutRecommendation({
         date: todayId,
         availableMinutes,
         training: athlete.isConfigured && athlete.data ? {
@@ -137,6 +137,11 @@ export function useDailyWorkout() {
         coachContext,
         ride,
       })
+      if (!result.ok) {
+        toast({ variant: 'destructive', title: "L'IA n'a pas pu générer de séance", description: result.error })
+        return null
+      }
+      const proposal = result.data
 
       const ref = doc(db, `users/${user.uid}/workoutProposals/${todayId}`)
       const data = {
