@@ -18,19 +18,25 @@
 
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { TrendingUp, TrendingDown, ChevronRight, Gauge, Moon, Activity as ActivityIcon, Zap } from 'lucide-react'
+import { ChevronRight, Gauge, Moon, Activity as ActivityIcon, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { IntervalsAthlete } from '@/lib/intervals-api'
 import { usePowerCurve } from './use-power-curve'
 import { fitPowerDurationCurve, type PowerRecord } from './riegel-types'
+import { tsbZone, type TsbZoneId } from './tsb-zones'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { LogMetricDialog } from '@/components/lifestyle/log-metric-dialog'
 
-function tsbLabel(tsb: number): { text: string; className: string } {
-  if (tsb > 25) return { text: 'Très reposé', className: 'text-chart-4' }
-  if (tsb > 5) return { text: 'Forme optimale', className: 'text-primary' }
-  if (tsb > -10) return { text: 'En charge', className: 'text-chart-2' }
-  return { text: 'Fatigue élevée', className: 'text-destructive' }
+// tsb-zones.ts's textClassName is tuned for light card backgrounds
+// (lc-card, elsewhere in the app) — this hero tile is always a dark
+// bg-foreground/text-background card regardless of the site's own
+// light/dark theme, so it needs lighter shades to stay legible.
+const HERO_TILE_ZONE_TEXT: Record<TsbZoneId, string> = {
+  transition: 'text-orange-400',
+  fresh: 'text-blue-400',
+  grey: 'text-background/70',
+  optimal: 'text-green-400',
+  'high-risk': 'text-red-400',
 }
 
 function safeRound(value: number | null | undefined): string {
@@ -76,7 +82,7 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
 
   const rawTsb = athlete.tsb
   const tsb = rawTsb != null && !isNaN(rawTsb) ? Math.round(rawTsb) : null
-  const label = tsbLabel(tsb ?? 0)
+  const zone = tsb != null ? tsbZone(tsb) : null
 
   const isAutoSynced = lifestyle.wellnessStatus.isConfigured && lifestyle.wellnessStatus.hasAnyEntry
 
@@ -92,9 +98,11 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
           <div className="font-data text-6xl font-bold text-primary my-3">
             {tsb != null ? (tsb > 0 ? `+${tsb}` : tsb) : '—'}
           </div>
-          <div className={cn('flex items-center gap-2 text-xs', label.className)}>
-            {tsb == null || tsb >= 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-            <span className="text-background/70">{tsb != null ? label.text : 'Données indisponibles'}</span>
+          <div className="flex items-center gap-2 text-xs">
+            {zone && <span className={cn('w-2 h-2 rounded-full shrink-0', zone.dotClassName)} />}
+            <span className={cn(zone ? HERO_TILE_ZONE_TEXT[zone.id] : 'text-background/70')}>
+              {zone ? zone.label : 'Données indisponibles'}
+            </span>
           </div>
         </Link>
 

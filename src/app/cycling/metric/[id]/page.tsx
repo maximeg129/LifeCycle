@@ -22,15 +22,17 @@ import { AuthGuard } from '@/components/layout/auth-guard'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, type ChartConfig, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceArea } from 'recharts'
 import { Skeleton } from '@/components/ui/skeleton'
 import { EmptyState } from '@/components/ui/empty-state'
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, History } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useAthlete, useFitnessChart } from '@/hooks/use-intervals'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { usePowerCurve } from '@/components/cycling/use-power-curve'
 import { fitPowerDurationCurve, type PowerRecord } from '@/components/cycling/riegel-types'
 import { METRIC_INFO, type MetricId } from '@/components/cycling/metric-info'
+import { tsbZone, TSB_ZONES_ORDERED } from '@/components/cycling/tsb-zones'
 
 const TREND_DAYS = 180 // ~6 mois
 
@@ -128,6 +130,20 @@ export default function MetricDetailPage() {
   }, [series])
   const TrendIcon = trendIcon
 
+  // "État de fraîcheur" — retour utilisateur : "conserve la couleur comme
+  // indicateur et donne le graph d'historique quand on clic dessus", à
+  // partir d'une capture du Form chart d'Intervals.icu lui-même (mêmes 5
+  // zones/mêmes bornes, voir tsb-zones.ts). Bornes du graphe étendues
+  // au-delà des données pour toujours montrer un peu de contexte de chaque
+  // bande adjacente à la zone actuelle, jamais rétrécies au point de couper
+  // une bande en cours.
+  const currentZone = id === 'tsb' && athlete.data?.tsb != null ? tsbZone(athlete.data.tsb) : null
+  const tsbYDomain = useMemo((): [number, number] => {
+    if (id !== 'tsb' || !series || series.length === 0) return [-35, 25]
+    const values = series.map((p) => p.value)
+    return [Math.min(...values, -35), Math.max(...values, 25)]
+  }, [id, series])
+
   if (!info) {
     return (
       <AuthGuard>
@@ -154,7 +170,7 @@ export default function MetricDetailPage() {
         <PageHeader category="Vue d'ensemble" title={info.label} description={info.tagline} />
 
         <Card className="lc-card">
-          <CardContent className="p-6 flex items-baseline gap-3">
+          <CardContent className="p-6 flex items-baseline gap-3 flex-wrap">
             {isLoading ? (
               <Skeleton className="h-12 w-24" />
             ) : (
@@ -162,6 +178,12 @@ export default function MetricDetailPage() {
                 <span className="font-data text-5xl font-bold">{currentValue}</span>
                 {info.unit && <span className="text-lg text-muted-foreground">{info.unit}</span>}
                 {TrendIcon && <TrendIcon className="w-5 h-5 text-muted-foreground ml-2" />}
+                {currentZone && (
+                  <span className={cn('ml-2 inline-flex items-center gap-1.5 text-sm font-medium px-2.5 py-1 rounded-full', currentZone.bgClassName, currentZone.textClassName)}>
+                    <span className={cn('w-2 h-2 rounded-full', currentZone.dotClassName)} />
+                    {currentZone.label}
+                  </span>
+                )}
               </>
             )}
           </CardContent>
@@ -175,15 +197,37 @@ export default function MetricDetailPage() {
             {isLoading ? (
               <Skeleton className="h-[240px] w-full rounded-lg" />
             ) : series && series.length > 1 ? (
-              <ChartContainer config={chartConfig} className="h-[240px] w-full">
-                <LineChart data={series}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" interval="preserveStartEnd" />
-                  <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" domain={['auto', 'auto']} />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <Line type="monotone" dataKey="value" stroke="var(--color-value)" strokeWidth={2} dot={false} />
-                </LineChart>
-              </ChartContainer>
+              <>
+                <ChartContainer config={chartConfig} className="h-[240px] w-full">
+                  <LineChart data={series}>
+                    {id === 'tsb' && TSB_ZONES_ORDERED.map((z) => (
+                      <ReferenceArea
+                        key={z.id}
+                        y1={z.min ?? tsbYDomain[0]}
+                        y2={z.max ?? tsbYDomain[1]}
+                        fill={z.fillColor}
+                        fillOpacity={0.12}
+                        strokeOpacity={0}
+                      />
+                    ))}
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" interval="preserveStartEnd" />
+                    <YAxis tick={{ fontSize: 11 }} stroke="hsl(var(--muted-foreground))" domain={id === 'tsb' ? tsbYDomain : ['auto', 'auto']} />
+                    <ChartTooltip content={<ChartTooltipContent />} />
+                    <Line type="monotone" dataKey="value" stroke="var(--color-value)" strokeWidth={2} dot={false} />
+                  </LineChart>
+                </ChartContainer>
+                {id === 'tsb' && (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-border">
+                    {TSB_ZONES_ORDERED.map((z) => (
+                      <span key={z.id} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                        <span className={cn('w-2 h-2 rounded-full', z.dotClassName)} />
+                        {z.label}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </>
             ) : (
               <EmptyState
                 size="compact"

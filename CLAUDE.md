@@ -151,6 +151,22 @@ FTP et l'indice Riegel n'ont pas d'historique suivi jour par jour aujourd'hui (F
 ponctuel Intervals.icu, Riegel est recalculé à la volée depuis la courbe de puissance actuelle) —
 leur page affiche honnêtement "pas encore d'historique suivi" plutôt que d'inventer une tendance.
 
+**La tuile héro TSB affiche l'état de fraîcheur** (`tsb-zones.ts`, `src/components/cycling/`) —
+retour utilisateur, à partir d'une capture de son propre Form chart Intervals.icu : "rajouter l'état
+de fraîcheur dans une tuile... conserve la couleur comme indicateur et donne le graph d'historique
+quand on clic dessus". Reprend telles quelles les 5 zones et bornes d'Intervals.icu (Transition >20,
+Frais 5–20, Zone grise -10–5, Optimal -30–-10, Risque élevé <-30 — même échelle que l'athlète lit déjà
+sur Intervals.icu, pas une seconde échelle à apprendre) plutôt que l'ancien classement à 4 bandes
+propre à l'app. `tsbZone(tsb)` classe une valeur ; la tuile héro (`performance-bento.tsx`) affiche un
+point + libellé coloré (teintes plus claires que `tsb-zones.ts` — la tuile est toujours sombre,
+`bg-foreground`, indépendamment du thème clair/sombre du site) ; la page détail
+(`cycling/metric/[id]/page.tsx`, uniquement pour `id === 'tsb'`) superpose des bandes de fond colorées
+sur le graphe (Recharts `ReferenceArea`) + une légende des 5 zones. Piège : un `<ReferenceArea>` est du
+SVG, peint via l'attribut `fill` — une classe Tailwind `bg-*` (CSS `background-color`) n'y a aucun
+effet, silencieusement ; `tsb-zones.ts` garde donc un champ `fillColor` séparé (couleur CSS réelle,
+`hsl(var(--muted-foreground))`/`hsl(var(--destructive))` pour réutiliser les tokens existants, hex
+Tailwind brut sinon) à côté de `bgClassName`/`dotClassName`/`textClassName` pour le HTML normal.
+
 **Vie & Santé et Finances ne sont plus dans `navItems`** (ni dans la nav mobile) — leurs pages
 (`/lifestyle`, `/finance`) restent entièrement fonctionnelles mais ne sont plus accédées que via
 la carte "Autres modules" de `/settings`. Les métriques Vie & Santé les plus utilisées par le
