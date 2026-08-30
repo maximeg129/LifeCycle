@@ -4,12 +4,15 @@
 //
 // Every metric the coach IA actually uses, at a glance — inspired by
 // Whoop's tile-dense layout rather than a handful of oversized cards.
-// TSB (the "should I push today?" number) stays the one hero tile;
-// everything else — including sleep/HRV/readiness, previously only on
-// Vie & Santé — is a small tile in the same grid, since that page is no
+// Forme (TSB)/Récupération (Readiness)/Sommeil open the page as a
+// 3-across ring row (RingTile, Whoop-style circular gauges — user
+// feedback, a screenshot of Whoop's own ring layout) since those three
+// are "how am I today?" signals read together at a glance, not standalone
+// numbers; everything else — including HRV, previously only on Vie &
+// Santé — is a small flat tile in the grid below, since that page is no
 // longer in the primary nav (see AUDIT.md/PLAN.md design-identity work).
-// Riegel's endurance index sits right after TSB per user feedback ("un
-// des premiers"), not buried at the end.
+// Riegel's endurance index sits right after the ring row per earlier user
+// feedback ("un des premiers"), not buried at the end.
 //
 // kJ budget and the internal load governor keep their own richer widgets
 // (KJBudgetWidget/GovernorWidget) below this grid — they already handle
@@ -23,21 +26,10 @@ import { cn } from '@/lib/utils'
 import type { IntervalsAthlete } from '@/lib/intervals-api'
 import { usePowerCurve } from './use-power-curve'
 import { fitPowerDurationCurve, type PowerRecord } from './riegel-types'
-import { tsbZone, type TsbZoneId } from './tsb-zones'
+import { RingGauge } from './ring-gauge'
+import { tsbRingPercent, tsbRingColor, readinessRingColor, sleepRingPercent, SLEEP_RING_COLOR } from './ring-metrics'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { LogMetricDialog } from '@/components/lifestyle/log-metric-dialog'
-
-// tsb-zones.ts's textClassName is tuned for light card backgrounds
-// (lc-card, elsewhere in the app) — this hero tile is always a dark
-// bg-foreground/text-background card regardless of the site's own
-// light/dark theme, so it needs lighter shades to stay legible.
-const HERO_TILE_ZONE_TEXT: Record<TsbZoneId, string> = {
-  transition: 'text-orange-400',
-  fresh: 'text-blue-400',
-  grey: 'text-background/70',
-  optimal: 'text-green-400',
-  'high-risk': 'text-red-400',
-}
 
 function safeRound(value: number | null | undefined): string {
   if (value == null || isNaN(value)) return '—'
@@ -72,6 +64,33 @@ function MetricTile({ label, value, unit, sublabel, href, className }: TileProps
   return href ? <Link href={href}>{content}</Link> : content
 }
 
+// ── Ring tile — the 3-across "état de forme" row (Forme/Récupération/
+// Sommeil), Whoop-style ─────────────────────────────────────────────────
+
+interface RingTileProps {
+  href: string
+  label: string
+  percent: number
+  color: string
+  centerValue: ReactNode
+  sublabel?: ReactNode
+}
+
+function RingTile({ href, label, percent, color, centerValue, sublabel }: RingTileProps) {
+  return (
+    <Link href={href} className="rounded-2xl bg-foreground p-4 flex flex-col items-center gap-2 shadow-lg group">
+      <RingGauge percent={percent} color={color}>
+        <span className="font-data text-lg font-bold text-background">{centerValue}</span>
+      </RingGauge>
+      <span className="text-[10px] font-medium uppercase tracking-wider text-background/70 flex items-center gap-0.5 text-center">
+        {label}
+        <ChevronRight className="w-3 h-3 text-background/40 group-hover:translate-x-0.5 transition-transform shrink-0" />
+      </span>
+      {sublabel && <span className="text-[10px] text-background/50 -mt-1">{sublabel}</span>}
+    </Link>
+  )
+}
+
 export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
   const powerCurve = usePowerCurve()
   const lifestyle = useLifestyleData()
@@ -82,31 +101,41 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
 
   const rawTsb = athlete.tsb
   const tsb = rawTsb != null && !isNaN(rawTsb) ? Math.round(rawTsb) : null
-  const zone = tsb != null ? tsbZone(tsb) : null
 
   const isAutoSynced = lifestyle.wellnessStatus.isConfigured && lifestyle.wellnessStatus.hasAnyEntry
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-        {/* Hero — TSB */}
-        <Link href="/cycling/metric/tsb" className="col-span-2 row-span-2 rounded-2xl bg-foreground text-background p-6 flex flex-col justify-between shadow-lg group">
-          <div className="flex items-center justify-between">
-            <span className="text-[11px] font-medium uppercase tracking-wider text-background/60">Forme · TSB</span>
-            <ChevronRight className="w-4 h-4 text-background/40 group-hover:translate-x-0.5 transition-transform" />
-          </div>
-          <div className="font-data text-6xl font-bold text-primary my-3">
-            {tsb != null ? (tsb > 0 ? `+${tsb}` : tsb) : '—'}
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            {zone && <span className={cn('w-2 h-2 rounded-full shrink-0', zone.dotClassName)} />}
-            <span className={cn(zone ? HERO_TILE_ZONE_TEXT[zone.id] : 'text-background/70')}>
-              {zone ? zone.label : 'Données indisponibles'}
-            </span>
-          </div>
-        </Link>
+      {/* Forme / Récupération / Sommeil — Whoop-style ring row, user feedback ("forme tsb - readiness -
+          sommeil (heure et qualité), peux ton avoir... représenté de cette façon ?"). Replaces the old
+          TSB-only hero tile + the separate Sommeil/Readiness MetricTiles below. */}
+      <div className="grid grid-cols-3 gap-3">
+        <RingTile
+          href="/cycling/metric/tsb"
+          label="Forme"
+          percent={tsb != null ? tsbRingPercent(tsb) : 0}
+          color={tsb != null ? tsbRingColor(tsb) : 'rgba(255,255,255,0.14)'}
+          centerValue={tsb != null ? (tsb > 0 ? `+${tsb}` : tsb) : '—'}
+        />
+        <RingTile
+          href="/cycling/metric/readiness"
+          label="Récupération"
+          percent={lifestyle.readiness ?? 0}
+          color={lifestyle.readiness != null ? readinessRingColor(lifestyle.readiness) : 'rgba(255,255,255,0.14)'}
+          centerValue={lifestyle.readiness != null ? `${lifestyle.readiness}%` : '—'}
+        />
+        <RingTile
+          href="/cycling/metric/sleep"
+          label="Sommeil"
+          percent={sleepRingPercent(lifestyle.latest?.sleepHours, lifestyle.latest?.sleepQuality)}
+          color={SLEEP_RING_COLOR}
+          centerValue={lifestyle.latest?.sleepHours != null ? `${lifestyle.latest.sleepHours}h` : '—'}
+          sublabel={lifestyle.latest?.sleepQuality != null ? `Qualité ${lifestyle.latest.sleepQuality}%` : undefined}
+        />
+      </div>
 
-        {/* Riegel — right after TSB, only when the athlete has entered power records */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+        {/* Riegel — right after the ring row per earlier user feedback ("un des premiers"), only when the athlete has entered power records */}
         {enduranceIndex != null ? (
           <MetricTile
             label="Indice Riegel"
@@ -128,27 +157,11 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
           sublabel={athlete.ftp && athlete.weight && athlete.weight > 0 ? `${(athlete.ftp / athlete.weight).toFixed(2)} W/kg` : undefined}
           href="/cycling/metric/ftp"
         />
-
-        {/* Recovery — moved from Vie & Santé, now primary here */}
-        <MetricTile
-          label="Sommeil"
-          value={lifestyle.latest?.sleepHours ?? '—'}
-          unit={lifestyle.latest?.sleepHours != null ? 'h' : undefined}
-          sublabel={lifestyle.latest?.sleepQuality != null ? `Qualité ${lifestyle.latest.sleepQuality}%` : undefined}
-          href="/cycling/metric/sleep"
-        />
         <MetricTile
           label="HRV"
           value={lifestyle.latest?.hrv ?? '—'}
           unit={lifestyle.latest?.hrv != null ? 'ms' : undefined}
           href="/cycling/metric/hrv"
-        />
-        <MetricTile
-          label="Readiness"
-          value={lifestyle.readiness ?? '—'}
-          unit={lifestyle.readiness != null ? '/100' : undefined}
-          sublabel={lifestyle.readiness != null ? (lifestyle.readiness > 75 ? "Prêt pour l'effort" : lifestyle.readiness > 50 ? 'Effort modéré' : 'Récupération') : undefined}
-          href="/cycling/metric/readiness"
         />
       </div>
 

@@ -151,21 +151,24 @@ FTP et l'indice Riegel n'ont pas d'historique suivi jour par jour aujourd'hui (F
 ponctuel Intervals.icu, Riegel est recalculé à la volée depuis la courbe de puissance actuelle) —
 leur page affiche honnêtement "pas encore d'historique suivi" plutôt que d'inventer une tendance.
 
-**La tuile héro TSB affiche l'état de fraîcheur** (`tsb-zones.ts`, `src/components/cycling/`) —
-retour utilisateur, à partir d'une capture de son propre Form chart Intervals.icu : "rajouter l'état
-de fraîcheur dans une tuile... conserve la couleur comme indicateur et donne le graph d'historique
-quand on clic dessus". Reprend telles quelles les 5 zones et bornes d'Intervals.icu (Transition >20,
-Frais 5–20, Zone grise -10–5, Optimal -30–-10, Risque élevé <-30 — même échelle que l'athlète lit déjà
-sur Intervals.icu, pas une seconde échelle à apprendre) plutôt que l'ancien classement à 4 bandes
-propre à l'app. `tsbZone(tsb)` classe une valeur ; la tuile héro (`performance-bento.tsx`) affiche un
-point + libellé coloré (teintes plus claires que `tsb-zones.ts` — la tuile est toujours sombre,
-`bg-foreground`, indépendamment du thème clair/sombre du site) ; la page détail
-(`cycling/metric/[id]/page.tsx`, uniquement pour `id === 'tsb'`) superpose des bandes de fond colorées
-sur le graphe (Recharts `ReferenceArea`) + une légende des 5 zones. Piège : un `<ReferenceArea>` est du
-SVG, peint via l'attribut `fill` — une classe Tailwind `bg-*` (CSS `background-color`) n'y a aucun
-effet, silencieusement ; `tsb-zones.ts` garde donc un champ `fillColor` séparé (couleur CSS réelle,
-`hsl(var(--muted-foreground))`/`hsl(var(--destructive))` pour réutiliser les tokens existants, hex
-Tailwind brut sinon) à côté de `bgClassName`/`dotClassName`/`textClassName` pour le HTML normal.
+**Vue d'ensemble ouvre sur 3 anneaux Forme/Récupération/Sommeil, façon Whoop** (`ring-gauge.tsx`/
+`ring-metrics.ts`, `src/components/cycling/`) — retour utilisateur, capture d'écran des anneaux
+Whoop à l'appui : "forme tsb - readiness - sommeil (heure et qualité), peux ton avoir... représenté
+de cette façon ?". `RingGauge` (`ring-gauge.tsx`) est un simple cercle SVG (technique
+`stroke-dasharray`/`strokeDashoffset`, pas de librairie de graphes) prenant un `percent` 0-100 et une
+vraie couleur CSS ; `ring-metrics.ts` (pur, testé) calcule ce pourcentage et cette couleur par métrique
+— TSB n'étant pas nativement sur une échelle 0-100, `tsbRingPercent` le ramène dans une fenêtre
+pratique [-30, 20] (le plancher de la zone Optimal au plafond de la zone Frais, voir `tsb-zones.ts`),
+`tsbRingColor` réutilise `tsbZone(tsb).fillColor` (même classification que la tuile détail, pas une
+deuxième) ; le sommeil affiche les heures au centre mais son remplissage suit la qualité (0-100) quand
+connue, sinon une estimation heures/9h ; la récupération utilise directement le score Readiness
+existant. `RingTile` (`performance-bento.tsx`) remplace l'ancienne tuile héro TSB seule + les tuiles
+plates Sommeil/Readiness par 3 cartes sombres (`bg-foreground`) à 3 anneaux — reprend le piège déjà
+documenté pour `tsb-zones.ts` : un cercle SVG se peint via l'attribut `stroke`, pas la propriété CSS
+`background-color` qu'une classe Tailwind `bg-*` pose, donc `ring-metrics.ts` expose des couleurs CSS
+réelles (hex ou `hsl(var(--destructive))`), jamais des classes Tailwind, pour l'anneau lui-même.
+La tuile détail TSB (`cycling/metric/[id]/page.tsx`) garde son propre traitement — bandes de fond +
+légende des 5 zones sur le graphe historique — documenté juste au-dessus.
 
 **Vie & Santé et Finances ne sont plus dans `navItems`** (ni dans la nav mobile) — leurs pages
 (`/lifestyle`, `/finance`) restent entièrement fonctionnelles mais ne sont plus accédées que via
