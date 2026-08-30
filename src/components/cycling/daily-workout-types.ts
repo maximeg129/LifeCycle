@@ -7,7 +7,15 @@
 
 import { format, subDays } from 'date-fns'
 import type { PlannedWorkoutEvent } from '@/lib/intervals-api'
-import type { DailyWorkoutRecommendationInput, DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
+import type { DailyWorkoutRecommendationInput } from '@/ai/flows/daily-workout-recommendation-flow'
+
+/** Minimal shape buildWorkoutEventPayload() needs — DailyWorkoutRecommendationOutput and PlanWeekSession (plan-week-sessions-flow.ts) both satisfy it, so the same push-to-Intervals.icu path serves both "Proposition du jour" and a plan week's sample sessions. */
+export interface WorkoutLike {
+  title: string
+  sportType: string
+  durationMinutes: number
+  structuredWorkout: string
+}
 
 const MIN_AVAILABLE_MINUTES = 15
 const MAX_AVAILABLE_MINUTES = 360
@@ -64,13 +72,20 @@ export function dailyWorkoutExternalId(dateId: string): string {
   return `lifecycle-daily-${dateId}`
 }
 
-/** Builds the Intervals.icu calendar-push payload from a generated (and possibly user-edited) proposal. */
+/**
+ * Builds the Intervals.icu calendar-push payload from a generated (and
+ * possibly user-edited) workout. `externalId` defaults to the per-day
+ * "Proposition du jour" scheme; a plan week's sample sessions pass their
+ * own (see planSessionExternalId in training-plan-types.ts) so the two
+ * features' pushed events never collide.
+ */
 export function buildWorkoutEventPayload(
-  proposal: Pick<DailyWorkoutRecommendationOutput, 'title' | 'sportType' | 'durationMinutes' | 'structuredWorkout'>,
-  dateId: string
+  proposal: WorkoutLike,
+  dateId: string,
+  externalId: string = dailyWorkoutExternalId(dateId)
 ): PlannedWorkoutEvent {
   return {
-    externalId: dailyWorkoutExternalId(dateId),
+    externalId,
     name: proposal.title,
     sportType: proposal.sportType || 'Ride',
     startDateLocal: dateId,

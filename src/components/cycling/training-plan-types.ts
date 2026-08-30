@@ -10,6 +10,7 @@
 
 import { addDays, format } from 'date-fns'
 import { mondayOf } from './load-types'
+import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 
 export type PlanPhase = 'base' | 'build' | 'peak' | 'taper' | 'recovery'
 
@@ -67,6 +68,13 @@ export interface PlanWeekContent {
   focus: string
   targetWeeklyMinutes: number
   notes?: string
+  /**
+   * The coach's example sessions for this week — generated lazily (on
+   * first expand, see useTrainingPlan.generateWeekSessions) and cached
+   * here so re-opening the week doesn't re-call the AI. Absent until
+   * generated; never regenerated automatically once present.
+   */
+  sampleSessions?: PlanWeekSession[]
 }
 
 export interface PlanWeek extends PlanWeekSkeleton, PlanWeekContent {}
@@ -94,4 +102,14 @@ export function mergePlanWeeks(skeleton: PlanWeekSkeleton[], content: PlanWeekCo
 /** The week containing todayIso, or null if today falls before the plan starts or after it ends. */
 export function currentPlanWeek(weeks: PlanWeek[], todayIso: string): PlanWeek | null {
   return weeks.find((w) => todayIso >= w.startDate && todayIso <= w.endDate) ?? null
+}
+
+/**
+ * Deterministic per-session Intervals.icu external id — date-independent
+ * (unlike dailyWorkoutExternalId, keyed on the calendar day) so that
+ * re-picking a date for the same plan/week/session slot moves the
+ * calendar entry instead of duplicating it.
+ */
+export function planSessionExternalId(planId: string, weekNumber: number, sessionIndex: number): string {
+  return `lifecycle-plan-${planId}-w${weekNumber}-s${sessionIndex}`
 }

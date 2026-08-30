@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, AlertTriangle, Target, Archive } from 'lucide-react'
+import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2 } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -16,6 +16,7 @@ import { useTrainingPlan } from './use-training-plan'
 import { currentPlanWeek, type PlanPhase, type PlanWeek } from './training-plan-types'
 import { upcomingGoals } from './coach-memory-types'
 import { EmptyState } from '@/components/ui/empty-state'
+import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 
 const DEFAULT_WEEKLY_MINUTES = 360
 
@@ -36,13 +37,23 @@ const PHASE_BADGE_CLASS: Record<PlanPhase, string> = {
 }
 
 export function TrainingPlanTab() {
-  const { activePlan, isLoadingPlan, isGenerating, goals, isLoadingGoals, generate, archivePlan } = useTrainingPlan()
+  const {
+    activePlan, isLoadingPlan, isGenerating, goals, isLoadingGoals, generate, archivePlan,
+    generateWeekSessions, generatingSessionsForWeek, sendSessionToIntervals, sendingSessionKey, canSendToIntervals,
+  } = useTrainingPlan()
   const today = format(new Date(), 'yyyy-MM-dd')
   const upcoming = upcomingGoals(goals, today)
 
   const [selectedGoalId, setSelectedGoalId] = useState<string>('')
   const [weeklyMinutes, setWeeklyMinutes] = useState(DEFAULT_WEEKLY_MINUTES)
   const [showNewPlanForm, setShowNewPlanForm] = useState(false)
+  const [expandedWeek, setExpandedWeek] = useState<number | null>(null)
+
+  const toggleWeek = (w: PlanWeek) => {
+    const opening = expandedWeek !== w.weekNumber
+    setExpandedWeek(opening ? w.weekNumber : null)
+    if (opening && !w.sampleSessions) generateWeekSessions(w)
+  }
 
   const handleGenerate = async () => {
     const goal = upcoming.find((g) => g.id === selectedGoalId)
@@ -186,16 +197,41 @@ export function TrainingPlanTab() {
               <tbody>
                 {activePlan.weeks.map((w: PlanWeek) => {
                   const isCurrent = week?.weekNumber === w.weekNumber
+                  const isExpanded = expandedWeek === w.weekNumber
                   return (
-                    <tr key={w.weekNumber} className={cn('border-b border-border/50', isCurrent && 'bg-primary/5')}>
-                      <td className="px-2 py-2 font-medium">S{w.weekNumber}</td>
-                      <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
-                        {format(new Date(`${w.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
-                      </td>
-                      <td className="px-2 py-2"><Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge></td>
-                      <td className="px-2 py-2">{w.focus}{w.notes && <span className="block text-xs text-muted-foreground">{w.notes}</span>}</td>
-                      <td className="px-2 py-2 text-right whitespace-nowrap">{Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h</td>
-                    </tr>
+                    <React.Fragment key={w.weekNumber}>
+                      <tr
+                        className={cn('border-b border-border/50 cursor-pointer hover:bg-muted/40', isCurrent && 'bg-primary/5', isExpanded && 'bg-muted/40')}
+                        onClick={() => toggleWeek(w)}
+                      >
+                        <td className="px-2 py-2 font-medium">
+                          <span className="inline-flex items-center gap-1">
+                            <ChevronDown className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform', isExpanded && 'rotate-180')} />
+                            S{w.weekNumber}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
+                          {format(new Date(`${w.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
+                        </td>
+                        <td className="px-2 py-2"><Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge></td>
+                        <td className="px-2 py-2">{w.focus}{w.notes && <span className="block text-xs text-muted-foreground">{w.notes}</span>}</td>
+                        <td className="px-2 py-2 text-right whitespace-nowrap">{Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h</td>
+                      </tr>
+                      {isExpanded && (
+                        <tr className="border-b border-border/50 bg-muted/20">
+                          <td colSpan={5} className="px-2 py-3">
+                            <WeekSessionsPanel
+                              week={w}
+                              isGenerating={generatingSessionsForWeek === w.weekNumber}
+                              sendingSessionKey={sendingSessionKey}
+                              canSendToIntervals={canSendToIntervals}
+                              onRegenerate={() => generateWeekSessions(w)}
+                              onSend={(session, index, dateId) => sendSessionToIntervals(session, w.weekNumber, index, dateId)}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   )
                 })}
               </tbody>
@@ -203,6 +239,104 @@ export function TrainingPlanTab() {
           </div>
         </CardContent>
       </Card>
+    </div>
+  )
+}
+
+interface WeekSessionsPanelProps {
+  week: PlanWeek
+  isGenerating: boolean
+  sendingSessionKey: string | null
+  canSendToIntervals: boolean
+  onRegenerate: () => void
+  onSend: (session: PlanWeekSession, index: number, dateId: string) => void
+}
+
+/**
+ * The coach's example sessions for one plan week — lazily generated on
+ * first expand (see toggleWeek in TrainingPlanTab), cached in
+ * week.sampleSessions once generated. Each session can be pushed to
+ * Intervals.icu for any date within the week's own range, independently
+ * from "Proposition du jour" (which adapts to a specific day's real
+ * conditions) — these are the phase-appropriate ideal sessions instead.
+ */
+function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToIntervals, onRegenerate, onSend }: WeekSessionsPanelProps) {
+  const [dates, setDates] = useState<Record<number, string>>({})
+  const getDate = (index: number) => dates[index] ?? week.startDate
+
+  if (isGenerating) {
+    return (
+      <div className="space-y-2 py-2">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="w-4 h-4 animate-spin" /> Le coach compose les séances type de la semaine...
+        </div>
+        <Skeleton className="h-16 w-full rounded-xl" />
+        <Skeleton className="h-16 w-full rounded-xl" />
+      </div>
+    )
+  }
+
+  if (!week.sampleSessions || week.sampleSessions.length === 0) {
+    return (
+      <div className="flex items-center justify-between gap-2 py-2">
+        <p className="text-sm text-muted-foreground">Aucune séance type pour cette semaine pour le moment.</p>
+        <Button size="sm" variant="outline" onClick={onRegenerate} className="gap-2 shrink-0">
+          <Wand2 className="w-3.5 h-3.5" /> Proposer les séances
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3 py-1">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
+          Séances type recommandées — S{week.weekNumber}
+        </p>
+        <Button size="sm" variant="ghost" onClick={onRegenerate} className="gap-1.5 text-xs text-muted-foreground h-7">
+          <Wand2 className="w-3 h-3" /> Régénérer
+        </Button>
+      </div>
+      <div className="grid gap-2">
+        {week.sampleSessions.map((session, index) => {
+          const key = `${week.weekNumber}-${index}`
+          const isSending = sendingSessionKey === key
+          return (
+            <div key={index} className="rounded-xl border border-border bg-card/60 p-3 space-y-2">
+              <div className="flex items-start justify-between gap-2 flex-wrap">
+                <div>
+                  <p className="text-sm font-medium">{session.title}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{session.rationale}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Badge variant="outline" className="text-[10px]">{session.intensityLabel}</Badge>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">{session.durationMinutes} min</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Input
+                  type="date"
+                  value={getDate(index)}
+                  min={week.startDate}
+                  max={week.endDate}
+                  onChange={(e) => setDates((d) => ({ ...d, [index]: e.target.value }))}
+                  className="h-8 w-auto text-xs"
+                />
+                <Button
+                  size="sm"
+                  onClick={() => onSend(session, index, getDate(index))}
+                  disabled={isSending || !canSendToIntervals}
+                  className="gap-1.5 h-8"
+                  title={canSendToIntervals ? undefined : 'Renseignez vos identifiants Intervals.icu dans Réglages'}
+                >
+                  {isSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                  Envoyer sur Intervals.icu
+                </Button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

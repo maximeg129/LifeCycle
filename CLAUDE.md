@@ -178,7 +178,7 @@ Toutes les données utilisateur sont sous `users/{uid}/` :
 | `users/{uid}/coachMemory` | `lifestyle` / `facts` (singletons) | Style de vie (texte libre) et faits retenus (`items: string[]`) |
 | `users/{uid}/sessionFeedback` | `{activityId}` ou `daily-{yyyy-MM-dd}` | RPE (1-10), feeling, motivation par séance — alimente le gouverneur de charge interne |
 | `users/{uid}/workoutProposals` | `{yyyy-MM-dd}` | Proposition du jour IA : availableMinutes, proposal (sortie `dailyWorkoutRecommendation`), ride (`{location, departureDateTime}` optionnel — pour le conseil vent, voir plus bas), sentToIntervals — un doc par jour, écrasé à la régénération |
-| `users/{uid}/trainingPlans` | `{planId}` | Plan structuré moyen/long terme IA : name, status (`active`/`archived` — un seul actif à la fois), eventName/eventDate, weeklyAvailableMinutes, weeks[] (phase/focus/targetWeeklyMinutes par semaine, sortie `trainingPlanGeneration`) — collection préexistante dans le schéma d'origine (jamais utilisée avant), réutilisée telle quelle |
+| `users/{uid}/trainingPlans` | `{planId}` | Plan structuré moyen/long terme IA : name, status (`active`/`archived` — un seul actif à la fois), eventName/eventDate, weeklyAvailableMinutes, weeks[] (phase/focus/targetWeeklyMinutes/notes par semaine, sortie `trainingPlanGeneration`, + `sampleSessions?` : séances type générées à la demande par `planWeekSessions` quand l'utilisateur déplie la semaine) — collection préexistante dans le schéma d'origine (jamais utilisée avant), réutilisée telle quelle |
 | `users/{uid}/coachChatMessages` | `{messageId}` | Log plat du chat "Stella" : role (`user`/`assistant`), content, createdAt — append-only, aucune règle `update` (un message n'est jamais modifié, seulement créé ou supprimé en vidant l'historique) |
 
 ### Hooks Firebase
@@ -327,6 +327,28 @@ pas une décision à laisser au modèle).
   pour éviter de faire faire de l'arithmétique de dates à l'IA. Un seul plan `active` à la fois par
   utilisateur (`status: 'active'|'archived'` sur `users/{uid}/trainingPlans/{planId}`) — en générer un
   nouveau archive l'ancien plutôt que de l'écraser.
+- Cliquer sur une semaine dans le tableau du Plan la déplie et déclenche (une seule fois, en lazy —
+  voir `planWeekSessions` ci-dessous) la génération de ses séances type, mises en cache dans
+  `PlanWeek.sampleSessions` (champ optionnel sur `weeks[]`, absent tant que non générées).
+
+### Flow existant : `planWeekSessions`
+- Input : `{ weekNumber, phase, focus, targetWeeklyMinutes, notes?, sportType?, training?, coachContext? }`
+  — le contenu d'une semaine de plan déjà générée par `trainingPlanGeneration`.
+- Output : `{ sessions[] }` — entre 2 et 5 séances type (`title`, `sportType`, `durationMinutes`,
+  `intensityLabel`, `rationale`, `structuredWorkout`) dont la somme des durées colle au volume cible de
+  la semaine (±20%).
+- Usage : `WeekSessionsPanel` dans `src/components/cycling/training-plan-tab.tsx`, déclenché à
+  l'ouverture d'une semaine (voir ci-dessus).
+- Distinct de `dailyWorkoutRecommendation` : ce ne sont PAS des séances adaptées au temps réellement
+  disponible un jour précis ni à la récupération du moment — c'est la répartition idéale de la semaine
+  étant donné sa phase/focus, que l'athlète peut ensuite envoyer telle quelle sur Intervals.icu pour une
+  date de son choix dans la semaine (bouton par séance, date contrainte à `[week.startDate, week.endDate]`).
+  Réutilise le même chemin de push que la Proposition du jour (`buildWorkoutEventPayload` dans
+  `daily-workout-types.ts`, généralisé pour accepter un `externalId` ; ici `planSessionExternalId(planId,
+  weekNumber, sessionIndex)` dans `training-plan-types.ts` — indépendant de la date choisie, donc changer
+  la date d'une séance déplace l'événement calendrier au lieu de le dupliquer) et le même
+  `STRUCTURED_WORKOUT_SYNTAX` (constante partagée exportée par `daily-workout-recommendation-flow.ts`,
+  pour ne jamais laisser dériver la syntaxe du "workout builder" Intervals.icu entre les deux flows).
 
 ### Flow existant : `coachChat`
 - Input : `{ messages[] (role user/assistant, historique complet dont le nouveau message), coachContext?, training?, planWeek?, recovery? }`

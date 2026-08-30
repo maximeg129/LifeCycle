@@ -6,6 +6,7 @@ import {
   buildPlanWeekSkeleton,
   mergePlanWeeks,
   currentPlanWeek,
+  planSessionExternalId,
   type PlanWeekContent,
 } from './training-plan-types'
 
@@ -131,5 +132,18 @@ describe('currentPlanWeek', () => {
 
   it('returns null for an empty plan', () => {
     expect(currentPlanWeek([], '2026-09-01')).toBeNull()
+  })
+})
+
+describe('planSessionExternalId', () => {
+  it('is deterministic for the same plan/week/session', () => {
+    expect(planSessionExternalId('plan1', 3, 0)).toBe(planSessionExternalId('plan1', 3, 0))
+  })
+
+  it('differs across plans, weeks and session indices', () => {
+    const base = planSessionExternalId('plan1', 3, 0)
+    expect(planSessionExternalId('plan2', 3, 0)).not.toBe(base)
+    expect(planSessionExternalId('plan1', 4, 0)).not.toBe(base)
+    expect(planSessionExternalId('plan1', 3, 1)).not.toBe(base)
   })
 })

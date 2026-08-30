@@ -10,7 +10,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { collection, doc, getDocs, query, setDoc, updateDoc, where, serverTimestamp } from 'firebase/firestore'
 import { format } from 'date-fns'
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
+import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase'
 import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
@@ -20,15 +20,23 @@ import { buildCoachContext } from './coach-context'
 import { useGovernor } from './use-governor'
 import { useKJBudget } from './use-kj-budget'
 import { trainingPlanGeneration } from '@/ai/flows/training-plan-generation-flow'
+import { planWeekSessions, type PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 import {
   clampWeeklyMinutes,
   clampPlanWeeks,
   weeksUntilEvent,
   buildPlanWeekSkeleton,
   mergePlanWeeks,
+  planSessionExternalId,
   type PlanWeek,
 } from './training-plan-types'
+import { buildWorkoutEventPayload } from './daily-workout-types'
 import type { CoachGoal } from './coach-memory-types'
+
+interface IntervalsCredentialsDoc {
+  intervalsAthleteId?: string
+  intervalsApiKey?: string
+}
 
 export interface TrainingPlanDoc {
   userId: string
@@ -61,7 +69,18 @@ export function useTrainingPlan() {
   const { data: activePlans, isLoading: isLoadingPlan } = useCollection<StoredPlan>(plansQuery)
   const activePlan = useMemo(() => activePlans?.[0] ?? null, [activePlans])
 
+  // Intervals credentials — same direct-read pattern as use-daily-workout.ts
+  // (IntervalsProvider deliberately doesn't expose the raw athleteId/apiKey).
+  const credsRef = useMemoFirebase(() => {
+    if (!user || !db) return null
+    return doc(db, `users/${user.uid}/settings/intervals`)
+  }, [db, user])
+  const { data: creds } = useDoc<IntervalsCredentialsDoc>(credsRef)
+  const canSendToIntervals = !!creds?.intervalsAthleteId && !!creds?.intervalsApiKey
+
   const [isGenerating, setIsGenerating] = useState(false)
+  const [generatingSessionsForWeek, setGeneratingSessionsForWeek] = useState<number | null>(null)
+  const [sendingSessionKey, setSendingSessionKey] = useState<string | null>(null)
 
   const generate = useCallback(async (goal: CoachGoal & { id: string }, rawWeeklyMinutes: number): Promise<boolean> => {
     if (!user || !db) return false
@@ -141,6 +160,99 @@ export function useTrainingPlan() {
     }
   }, [user, db])
 
+  /**
+   * Lazily generates (once) and caches a week's example sessions. Firestore
+   * has no way to patch a single array element, so this reads the plan's
+   * current `weeks` array from state, replaces just the target week's
+   * `sampleSessions`, and writes the whole array back.
+   */
+  const generateWeekSessions = useCallback(async (week: PlanWeek): Promise<boolean> => {
+    if (!user || !db || !activePlan) return false
+    setGeneratingSessionsForWeek(week.weekNumber)
+    try {
+      const coachContext = buildCoachContext({
+        injuries: memory.injuries,
+        lifestyle: memory.lifestyle,
+        goals: memory.goals,
+        rememberedFacts: memory.rememberedFacts,
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
+        governorStatus: governor.status,
+      })
+
+      const output = await planWeekSessions({
+        weekNumber: week.weekNumber,
+        phase: week.phase,
+        focus: week.focus,
+        targetWeeklyMinutes: week.targetWeeklyMinutes,
+        notes: week.notes,
+        training: athlete.isConfigured && athlete.data ? {
+          ctl: athlete.data.ctl,
+          atl: athlete.data.atl,
+          tsb: athlete.data.tsb,
+        } : undefined,
+        coachContext,
+      })
+
+      const weeks = activePlan.weeks.map((w) =>
+        w.weekNumber === week.weekNumber ? { ...w, sampleSessions: output.sessions } : w
+      )
+      const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
+      try {
+        await updateDoc(ref, { weeks })
+      } catch {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+        return false
+      }
+      return true
+    } catch {
+      toast({ variant: 'destructive', title: 'Erreur', description: "L'IA n'a pas pu générer les séances de la semaine." })
+      return false
+    } finally {
+      setGeneratingSessionsForWeek(null)
+    }
+  }, [user, db, activePlan, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data, toast])
+
+  /** Pushes one plan-week sample session to Intervals.icu on a chosen date — same event path as "Proposition du jour", with a date-independent externalId so re-picking the date moves rather than duplicates the entry. */
+  const sendSessionToIntervals = useCallback(async (
+    session: PlanWeekSession,
+    weekNumber: number,
+    sessionIndex: number,
+    dateId: string
+  ): Promise<boolean> => {
+    if (!activePlan) return false
+    if (!creds?.intervalsAthleteId || !creds?.intervalsApiKey) {
+      toast({ variant: 'destructive', title: 'Intervals.icu non connecté', description: 'Renseignez vos identifiants dans Réglages.' })
+      return false
+    }
+    const key = `${weekNumber}-${sessionIndex}`
+    setSendingSessionKey(key)
+    try {
+      const externalId = planSessionExternalId(activePlan.id, weekNumber, sessionIndex)
+      const event = buildWorkoutEventPayload(session, dateId, externalId)
+      const res = await fetch('/api/intervals/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-intervals-athlete-id': creds.intervalsAthleteId,
+          'x-intervals-api-key': creds.intervalsApiKey,
+        },
+        body: JSON.stringify(event),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Erreur ${res.status}`)
+      }
+      toast({ title: 'Envoyé sur Intervals.icu', description: `${session.title} — ${format(new Date(`${dateId}T00:00:00`), 'dd/MM/yyyy')}` })
+      return true
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Erreur inconnue'
+      toast({ variant: 'destructive', title: "Échec de l'envoi", description: message })
+      return false
+    } finally {
+      setSendingSessionKey(null)
+    }
+  }, [activePlan, creds, toast])
+
   return {
     activePlan,
     isLoadingPlan,
@@ -149,5 +261,10 @@ export function useTrainingPlan() {
     isLoadingGoals: memory.isLoading,
     generate,
     archivePlan,
+    generateWeekSessions,
+    generatingSessionsForWeek,
+    sendSessionToIntervals,
+    sendingSessionKey,
+    canSendToIntervals,
   }
 }
