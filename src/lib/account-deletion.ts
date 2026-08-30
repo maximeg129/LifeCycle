@@ -1,26 +1,57 @@
-import { collection, doc, getDocs, deleteDoc, type Firestore } from 'firebase/firestore'
+import { collection, getDocs, deleteDoc, type Firestore } from 'firebase/firestore'
 
-// Also used by data-export-card.tsx (personal data export) — kept as the
-// single source of truth so the deletion sweep and the export can't drift
-// apart silently as new top-level collections get added.
+// ⚠️ Audit trouvé en vérifiant la protection des données (retour utilisateur :
+// "assurer... de la sécurité et de la protection des données") : cette liste
+// avait dérivé de la vraie structure Firestore — près de la moitié des
+// collections réelles de l'app en étaient absentes, ce qui voulait dire que
+// "Supprimer mon compte" laissait ces données orphelines derrière lui plutôt
+// que de les effacer, et que l'export personnel ne les incluait pas non plus
+// (voir data-export-types.ts : ce même tableau est réexporté tel quel comme
+// unique source de vérité pour les deux usages).
+//
+// Manquaient : chains/waxHistory (entretien chaîne), coachInjuries/coachGoals
+// (mémoire coach), sessionFeedback (RPE/ressenti alimentant le gouverneur),
+// rideAnalyses (analyses IA de sortie), mealPlans/meals (planning repas),
+// mealLogs, hydrationLogs — neuf collections, dont plusieurs contiennent des
+// données personnelles sensibles (blessures, notes de style de vie).
+//
+// Recroisé une bonne fois avec firestore.rules (chaque `match` direct sous
+// /users/{userId}/ y correspond) plutôt que reconstruit à la main — c'est la
+// façon dont ce déséquilibre a pu passer inaperçu la première fois.
 export const TOP_LEVEL_COLLECTIONS = [
-  'activities', 'trainingPlans', 'bikes', 'maintenanceRecords', 'recipes',
-  'tags', 'ingredients', 'cyclingClothingItems', 'plants', 'pantryItems',
-  'shoppingListItems', 'expenseCategories', 'monthlyBudgets', 'expenses',
-  'tasks', 'healthMetrics', 'healthGoals', 'workoutProposals', 'coachChatMessages',
+  'settings', 'coachMemory', 'activities', 'trainingPlans', 'bikes', 'components',
+  'chains', 'coachInjuries', 'coachGoals', 'sessionFeedback', 'workoutProposals',
+  'rideAnalyses', 'coachChatMessages', 'maintenanceRecords', 'recipes', 'tags',
+  'ingredients', 'cyclingClothingItems', 'plants', 'pantryItems', 'shoppingListItems',
+  'mealPlans', 'mealLogs', 'hydrationLogs', 'expenseCategories', 'monthlyBudgets',
+  'expenses', 'tasks', 'healthMetrics', 'healthGoals',
 ]
 
 // parent collection -> its nested subcollection name(s), deleted before the parent doc.
+// ⚠️ `components` used to be listed here as a child of `bikes` — wrong: per
+// firestore.rules' own comment, it's a FLAT top-level collection
+// (users/{uid}/components, with a bikeId field), never actually nested under
+// a bike document. Listed here it silently swept a path nothing ever wrote
+// to, so real component records were never deleted — moved up into
+// TOP_LEVEL_COLLECTIONS instead, where it belongs.
 const NESTED_SUBCOLLECTIONS: Record<string, string[]> = {
-  bikes: ['components', 'tirePressureSetups'],
+  bikes: ['tirePressureSetups'],
+  chains: ['waxHistory'],
   recipes: ['recipeIngredients'],
   plants: ['analyses'],
   trainingPlans: ['trainingSessions'],
+  mealPlans: ['meals'],
   monthlyBudgets: ['budgetAllocations'],
 }
 
-const SETTINGS_DOCS = ['intervals', 'finance', 'notifications']
-
+// `settings` and `coachMemory` are singleton-doc collections (fixed ids like
+// `settings/intervals`, `coachMemory/lifestyle` — see firestore.rules) rather
+// than auto-id documents, but a plain collection-level getDocs() sweep finds
+// and deletes them exactly the same way — no need to enumerate doc ids by
+// hand (the previous SETTINGS_DOCS = ['intervals', 'finance', 'notifications']
+// approach silently missed 'powerCurve'/'biometrics'/'language'/'nutrition'
+// every time a new settings doc was added elsewhere without this list being
+// updated too — a generic sweep can't drift out of date the same way).
 async function deleteCollectionDocs(db: Firestore, path: string) {
   const snap = await getDocs(collection(db, path))
   await Promise.all(snap.docs.map((d) => deleteDoc(d.ref)))
@@ -47,6 +78,4 @@ export async function deleteAllUserData(db: Firestore, uid: string): Promise<voi
     }
     await deleteCollectionDocs(db, basePath)
   }
-
-  await Promise.all(SETTINGS_DOCS.map((id) => deleteDoc(doc(db, `users/${uid}/settings/${id}`)).catch(() => {})))
 }

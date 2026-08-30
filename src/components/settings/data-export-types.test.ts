@@ -33,4 +33,30 @@ describe('TOP_LEVEL_COLLECTIONS', () => {
     expect(TOP_LEVEL_COLLECTIONS).toContain('recipes')
     expect(TOP_LEVEL_COLLECTIONS).toContain('tasks')
   })
+
+  it('has no duplicate entries', () => {
+    expect(new Set(TOP_LEVEL_COLLECTIONS).size).toBe(TOP_LEVEL_COLLECTIONS.length)
+  })
+
+  // Regression guard — an earlier version of this list had silently drifted
+  // out of step with firestore.rules (see account-deletion.ts's comment):
+  // roughly half of the app's real top-level collections were missing, so
+  // account deletion left that data behind instead of erasing it, and the
+  // personal data export omitted it too. Every collection with its own
+  // `match /name/{id}` directly under `/users/{userId}/` in firestore.rules
+  // must be listed here.
+  it('covers every top-level collection defined in firestore.rules', () => {
+    const expected = [
+      'settings', 'coachMemory', 'activities', 'trainingPlans', 'bikes', 'components',
+      'chains', 'coachInjuries', 'coachGoals', 'sessionFeedback', 'workoutProposals',
+      'rideAnalyses', 'coachChatMessages', 'maintenanceRecords', 'recipes', 'tags',
+      'ingredients', 'cyclingClothingItems', 'plants', 'pantryItems', 'shoppingListItems',
+      'mealPlans', 'mealLogs', 'hydrationLogs', 'expenseCategories', 'monthlyBudgets',
+      'expenses', 'tasks', 'healthMetrics', 'healthGoals',
+    ]
+    for (const name of expected) {
+      expect(TOP_LEVEL_COLLECTIONS, `missing '${name}'`).toContain(name)
+    }
+    expect(TOP_LEVEL_COLLECTIONS.length).toBe(expected.length)
+  })
 })

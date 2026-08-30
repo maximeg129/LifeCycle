@@ -9,9 +9,9 @@ import { useUser, useFirestore } from '@/firebase'
 import { useToast } from '@/hooks/use-toast'
 import { TOP_LEVEL_COLLECTIONS, buildExportPayload, buildExportFilename } from './data-export-types'
 
-// Nested subcollections (bike components, recipe ingredients, plant
-// actions, budget allocations...) aren't walked here — this is a personal
-// data export, not a full backup.
+// Nested subcollections (tire pressure setups, wax history, recipe
+// ingredients, plant analyses, meal-plan meals, budget allocations...) aren't
+// walked here — this is a personal data export, not a full backup.
 
 export function DataExportCard() {
   const { user } = useUser()

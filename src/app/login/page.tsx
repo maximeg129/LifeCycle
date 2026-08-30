@@ -11,6 +11,7 @@ import { LifeCycleMark } from '@/components/layout/lifecycle-mark'
 import {
   signInWithEmailAndPassword,
   signInWithPopup,
+  sendPasswordResetEmail,
   GoogleAuthProvider
 } from 'firebase/auth'
 import { useAuth } from '@/firebase'
@@ -27,6 +28,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  const [isResetting, setIsResetting] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -36,8 +38,11 @@ export default function LoginPage() {
     try {
       await signInWithEmailAndPassword(auth, email, password)
       toast({ title: "Bon retour !", description: "Connexion réussie." })
-      router.push('/home-management')
-    } catch (error: any) {
+      router.push('/cycling')
+    } catch {
+      // Message générique volontaire — ne pas révéler si c'est l'email ou le
+      // mot de passe qui est faux (évite de confirmer à un attaquant qu'un
+      // email donné a bien un compte sur l'app).
       setAuthError("Email ou mot de passe incorrect.")
     } finally {
       setIsLoading(false)
@@ -52,15 +57,40 @@ export default function LoginPage() {
     try {
       await signInWithPopup(auth, provider)
       toast({ title: "Succès", description: "Connexion Google réussie." })
-      router.push('/home-management')
-    } catch (error: any) {
+      router.push('/cycling')
+    } catch (error) {
       let message = "Impossible de se connecter avec Google."
-      if (error.code === 'auth/popup-blocked') message = "Fenêtre bloquée. Autorisez les pop-ups."
-      else if (error.code === 'auth/popup-closed-by-user') message = "Connexion annulée."
-      else if (error.code === 'auth/unauthorized-domain') message = `Domaine non autorisé. Ajoutez-le dans Firebase Auth.`
+      const code = error instanceof Error && 'code' in error ? (error as { code: string }).code : undefined
+      if (code === 'auth/popup-blocked') message = "Fenêtre bloquée. Autorisez les pop-ups."
+      else if (code === 'auth/popup-closed-by-user') message = "Connexion annulée."
+      else if (code === 'auth/unauthorized-domain') message = `Domaine non autorisé. Ajoutez-le dans Firebase Auth.`
       setAuthError(message)
     } finally {
       setIsGoogleLoading(false)
+    }
+  }
+
+  // "Oublié ?" pointait vers un lien mort ("#") — retour utilisateur :
+  // "s'assurer du fonctionnement du login". Réutilise le champ email déjà
+  // saisi ; Firebase envoie l'email de réinitialisation lui-même (aucune
+  // donnée sensible ne transite par ce composant). Message de confirmation
+  // volontairement identique que l'email existe ou non (voir handleLogin) —
+  // ne jamais laisser ce formulaire confirmer si une adresse est enregistrée.
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setAuthError("Saisissez votre email ci-dessus, puis cliquez sur « Oublié ? ».")
+      return
+    }
+    setIsResetting(true)
+    setAuthError(null)
+    try {
+      await sendPasswordResetEmail(auth, email)
+    } catch {
+      // Volontairement ignoré : afficher la même confirmation qu'un succès
+      // (auth/user-not-found ne doit pas être distingué des autres cas).
+    } finally {
+      setIsResetting(false)
+      toast({ title: "Email envoyé", description: "Si un compte existe pour cette adresse, un lien de réinitialisation vient d'être envoyé." })
     }
   }
 
@@ -106,7 +136,14 @@ export default function LoginPage() {
           <div className="space-y-1.5">
             <div className="flex justify-between items-center">
               <Label htmlFor="password" className="text-xs font-semibold text-muted-foreground">Mot de passe</Label>
-              <Link href="#" className="text-[11px] text-primary font-semibold hover:underline">Oublié ?</Link>
+              <button
+                type="button"
+                onClick={handleForgotPassword}
+                disabled={isResetting}
+                className="text-[11px] text-primary font-semibold hover:underline disabled:opacity-50"
+              >
+                Oublié ?
+              </button>
             </div>
             <div className="relative">
               <Input

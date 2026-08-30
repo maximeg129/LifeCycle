@@ -9,6 +9,7 @@
 // fait le même travail en silence pour un nouvel appareil qui n'a pas
 // encore ce cookie, donc les deux convergent sans jamais se contredire.
 
+import { useEffect, useState } from 'react'
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -29,10 +30,23 @@ export function LanguageCard() {
   const { toast } = useToast()
   const router = useRouter()
 
+  // Bug attrapé en direct par l'utilisateur ("I can't select anglais") : le
+  // Select était contrôlé directement par `locale` (next-intl), qui ne
+  // change qu'après le aller-retour cookie + setDoc + router.refresh() — le
+  // clic semblait n'avoir aucun effet le temps de ce round-trip (voire pour
+  // de bon si le refresh échouait). État local optimiste à la place : le
+  // menu reflète la sélection instantanément, resynchronisé avec `locale`
+  // une fois le refresh réellement arrivé (sans effet s'ils convergent déjà).
+  const [selected, setSelected] = useState<Locale>(isLocale(locale) ? locale : 'fr')
+  useEffect(() => {
+    if (isLocale(locale)) setSelected(locale)
+  }, [locale])
+
   const LOCALE_LABELS: Record<Locale, string> = { fr: t('french'), en: t('english') }
 
   const handleChange = async (value: string) => {
     if (!isLocale(value) || !user || !db) return
+    setSelected(value)
 
     // Effet immédiat, sans attendre le listener Firestore.
     document.cookie = `${LOCALE_COOKIE}=${value}; path=/; max-age=31536000; SameSite=Lax`
@@ -44,6 +58,7 @@ export function LanguageCard() {
       router.refresh()
       toast({ title: t('saved') })
     } catch {
+      setSelected(isLocale(locale) ? locale : 'fr')
       errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: data }))
       toast({ variant: 'destructive', title: t('error'), description: t('errorDescription') })
     }
@@ -63,7 +78,7 @@ export function LanguageCard() {
         </div>
       </CardHeader>
       <CardContent>
-        <Select value={locale} onValueChange={handleChange}>
+        <Select value={selected} onValueChange={handleChange}>
           <SelectTrigger className="h-11 rounded-xl bg-muted/40 border-border/60">
             <SelectValue />
           </SelectTrigger>

@@ -142,6 +142,14 @@ l'action consciente inverse : l'utilisateur choisit dans un `Select`, le composa
 lui-même (effet immédiat, sans attendre le round-trip du listener Firestore) ET écrit la préférence
 dans Firestore (persistance cross-device), puis `router.refresh()`.
 
+**⚠️ Bug attrapé en direct par l'utilisateur ("I can't select anglais")** : le `Select` était
+contrôlé directement par `useLocale()` (next-intl), qui ne change qu'après l'aller-retour cookie +
+`setDoc` + `router.refresh()` — cliquer sur "Anglais" semblait n'avoir aucun effet le temps de ce
+round-trip (voire pour de bon si le refresh échouait silencieusement). Corrigé avec un état local
+optimiste (`selected`, mis à jour immédiatement au clic) : le menu reflète la sélection à l'instant,
+resynchronisé avec `locale` une fois le refresh réellement arrivé (`useEffect`, sans effet s'ils
+convergent déjà) — et remis en arrière en cas d'échec de l'écriture Firestore.
+
 **⚠️ Coût de cette approche, accepté consciemment** : `i18n/request.ts` appelle `cookies()`
 (`next/headers`) à chaque rendu, ce qui désactive le rendu statique pour TOUTE page qui passe par le
 layout racine — confirmé par `next build` : toutes les routes sont passées de `○ (Static)` à
@@ -870,7 +878,14 @@ Charts via Recharts : `BarChart`, `LineChart`, etc. avec wrapper `ChartContainer
 ## Authentification
 
 - Firebase Auth avec email/password et Google OAuth
-- Après connexion : redirect vers `/home-management`
+- Après connexion (email/password et Google, login et inscription) : redirect vers `/cycling` —
+  retour utilisateur : l'app doit toujours ouvrir sur Cyclisme, la page données. Anciennement
+  `/home-management`, changé aux 4 points d'entrée (`login/page.tsx` ×2, `register/page.tsx` ×2).
+- **Mot de passe oublié** (`login/page.tsx`) : le lien "Oublié ?" pointait vers un `href="#"` mort —
+  remplacé par `sendPasswordResetEmail()` (Firebase Auth) sur le champ email déjà saisi. Message de
+  confirmation volontairement identique que l'adresse existe ou non (comme le message d'erreur
+  générique "Email ou mot de passe incorrect" déjà en place sur l'échec de connexion) — ce formulaire
+  ne doit jamais confirmer à un visiteur qu'une adresse donnée a un compte sur l'app.
 - Pages publiques : `/`, `/login`, `/register`
 - Pages protégées : toutes les autres, wrappées dans `AuthGuard`
   (`src/components/layout/auth-guard.tsx`) — chaque `src/app/<route>/page.tsx` protégé enveloppe
@@ -885,6 +900,58 @@ Charts via Recharts : `BarChart`, `LineChart`, etc. avec wrapper `ChartContainer
 - Déconnexion : bouton dans le bloc du bas de la sidebar desktop **et** dans le menu ☰ (Sheet) de
   la nav mobile (`AppNavigation` dans `sidebar.tsx`) — la nav mobile n'exposait auparavant aucun
   moyen de se déconnecter (le menu ne listait que les items de nav, sans Réglages ni Déconnexion).
+
+### Sécurité & protection des données — audit
+
+Retour utilisateur : "assurer... de la sécurité et de la protection des données". `firestore.rules`
+suit un modèle "path-based ownership" strict (tout sous `/users/{userId}/...`, `isOwner()` compare
+`request.auth.uid` au segment de path, aucune règle `list`/`get` publique, refus implicite par
+défaut) — relu intégralement, sain. Deux trouvailles concrètes corrigées :
+
+**⚠️ `deleteAllUserData()`/l'export personnel oubliaient près de la moitié des collections réelles**
+(`src/lib/account-deletion.ts`, `TOP_LEVEL_COLLECTIONS` — réexporté tel quel par
+`data-export-types.ts` comme unique source de vérité pour les deux usages, donc un seul tableau à
+corriger). La liste avait dérivé de la vraie structure Firestore au fil des ajouts de collections :
+manquaient `settings`, `coachMemory`, `chains`/`waxHistory`, `coachInjuries`, `coachGoals`,
+`sessionFeedback`, `rideAnalyses`, `mealPlans`/`meals`, `mealLogs`, `hydrationLogs` — dont plusieurs
+contiennent des données personnelles sensibles (blessures, notes de style de vie, taille/âge/sexe
+dans `settings/biometrics`). "Supprimer mon compte" laissait donc cette moitié des données
+orpheline dans Firestore plutôt que de l'effacer, et l'export personnel (RGPD-style) ne les incluait
+pas non plus. Bug structurel additionnel trouvé au passage : `components` (matériel installé sur un
+vélo) était listé comme sous-collection de `bikes/{bikeId}`, alors que c'est — per le commentaire de
+`firestore.rules` lui-même — une collection top-level à plat (`users/{uid}/components` avec un champ
+`bikeId`) ; la suppression balayait donc un chemin où rien n'avait jamais rien écrit. `SETTINGS_DOCS`
+(liste à la main de 3 docs `settings/*` sur les 7 réels) a été remplacé par un balayage générique de
+toute la collection `settings` — un `getDocs()` sur la collection trouve n'importe quel id de
+document existant, fixe ou non ; ce mécanisme ne peut plus dériver silencieusement à chaque nouveau
+doc `settings/*` ajouté ailleurs (exactement comme ça s'est produit ici). Un test de non-régression
+(`data-export-types.test.ts`) recroise désormais `TOP_LEVEL_COLLECTIONS` contre la liste complète
+attendue depuis `firestore.rules`.
+
+**Route de debug oubliée en production** : `/api/intervals/debug` (dump brut des réponses
+Intervals.icu — athlète, wellness, historique complet, courbe de puissance — pour diagnostiquer les
+bugs déjà documentés plus haut dans ce fichier) n'avait jamais été supprimée après usage, contrairement
+à `/api/debug/anthropic`/`/debug-headers` (retirées une fois leur diagnostic confirmé, comme documenté
+ailleurs dans ce fichier). Aucun appelant dans le code — supprimée. Sévérité limitée (elle exige déjà
+les identifiants Intervals.icu de l'appelant, comme les routes légitimes) mais surface d'attaque et
+incohérence avec la pratique du projet, sans aucune raison de la garder.
+
+**⚠️ Risque architectural identifié, non corrigé consciemment** : les routes `/api/intervals/*`
+(proxy vers Intervals.icu) ne vérifient qu'un header `x-intervals-athlete-id`/`x-intervals-api-key`
+fourni par l'appelant — aucune vérification d'un token Firebase Auth. N'importe qui peut donc
+appeler ces routes directement (sans être un utilisateur connecté de l'app) s'il possède déjà des
+identifiants Intervals.icu valides — pour n'importe quel athlète, pas nécessairement un utilisateur
+de LifeCycle. Ça n'expose aucune donnée Firestore d'un utilisateur LifeCycle (les règles Firestore
+restent intactes et sont le vrai périmètre de protection des données de cette app) et ça n'élève pas
+l'accès de quelqu'un qui possède déjà ces identifiants (il pourrait interroger Intervals.icu
+directement de toute façon) — mais ça permet d'utiliser le backend de l'app comme relais ouvert vers
+l'API Intervals.icu pour des identifiants tiers, un risque d'abus de ressources/coût plutôt qu'une
+brèche de données. Corriger proprement demanderait le Firebase Admin SDK côté serveur pour vérifier
+un ID token — une architecture que cette app évite délibérément partout ailleurs (voir plus haut,
+"Authentification" : Firestore n'est lu que côté client, aucun accès Admin côté serveur). Non
+implémenté cette nuit : un changement de cette ampleur, fait sans pouvoir le tester contre un vrai
+projet Firebase, risquait de casser l'intégration Intervals.icu entière sans supervision pour le
+corriger — jugé pire que documenter le risque honnêtement pour une décision consciente plus tard.
 
 ## Commandes
 

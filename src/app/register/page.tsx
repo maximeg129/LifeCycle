@@ -41,9 +41,14 @@ export default function RegisterPage() {
         await updateProfile(userCredential.user, { displayName: name })
       }
       toast({ title: "Compte créé !", description: "Bienvenue sur LifeCycle." })
-      router.push('/home-management')
-    } catch (error: any) {
-      setAuthError(error.message || "Impossible de créer le compte.")
+      router.push('/cycling')
+    } catch (error) {
+      const code = error instanceof Error && 'code' in error ? (error as { code: string }).code : undefined
+      const message = code === 'auth/email-already-in-use' ? "Un compte existe déjà avec cet email."
+        : code === 'auth/weak-password' ? "Mot de passe trop faible (6 caractères minimum)."
+        : code === 'auth/invalid-email' ? "Adresse email invalide."
+        : "Impossible de créer le compte."
+      setAuthError(message)
     } finally {
       setIsLoading(false)
     }
@@ -57,11 +62,12 @@ export default function RegisterPage() {
     try {
       await signInWithPopup(auth, provider)
       toast({ title: "Succès", description: "Bienvenue sur LifeCycle !" })
-      router.push('/home-management')
-    } catch (error: any) {
+      router.push('/cycling')
+    } catch (error) {
       let message = "Impossible de s'inscrire avec Google."
-      if (error.code === 'auth/popup-blocked') message = "Veuillez autoriser les fenêtres surgissantes."
-      else if (error.code === 'auth/unauthorized-domain') message = "Ce domaine n'est pas autorisé dans Firebase."
+      const code = error instanceof Error && 'code' in error ? (error as { code: string }).code : undefined
+      if (code === 'auth/popup-blocked') message = "Veuillez autoriser les fenêtres surgissantes."
+      else if (code === 'auth/unauthorized-domain') message = "Ce domaine n'est pas autorisé dans Firebase."
       setAuthError(message)
     } finally {
       setIsGoogleLoading(false)
