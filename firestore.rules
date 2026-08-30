@@ -244,6 +244,19 @@ service cloud.firestore {
       }
 
       /**
+       * @description AI ride analysis ("Analyse complète de la sortie" in
+       * Coach > Sorties), keyed by the Intervals.icu activity id — one per
+       * ride, overwritten on "Régénérer".
+       * @path /users/{userId}/rideAnalyses/{activityId}
+       */
+      match /rideAnalyses/{activityId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
        * @description Messages of the "Stella" coach chat — a flat,
        * append-only log (no update rule: a chat message is never edited
        * after the fact, only created or deleted as part of clearing history).

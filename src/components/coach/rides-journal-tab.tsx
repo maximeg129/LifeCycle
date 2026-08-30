@@ -7,7 +7,7 @@
 // sortie", donc les deux vivent maintenant sous Coach plutôt que sur la page
 // données (Cyclisme).
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { format, subDays, formatDistanceToNow, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +17,7 @@ import { Bike, ChevronRight, Timer, Flame } from 'lucide-react'
 import { useActivities, useFitnessChart } from '@/hooks/use-intervals'
 import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
 import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
+import { RideAnalysisDialog, RideAnalysisTrigger } from './ride-analysis-dialog'
 
 function formatDuration(seconds: number | null | undefined): string {
   if (!seconds) return '—'
@@ -40,6 +41,7 @@ const fitnessOldest = format(subDays(today, 84), 'yyyy-MM-dd') // 12 semaines �
 export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured: boolean; athleteLoading: boolean }) {
   const activities = useActivities(activitiesOldest, newest)
   const fitness = useFitnessChart(fitnessOldest, newest)
+  const [analyzingRide, setAnalyzingRide] = useState<{ id: string; label: string } | null>(null)
 
   // Map date → charge d'entraînement du jour, pour les activités qui
   // n'ont pas leur propre icu_training_load renseigné.
@@ -134,6 +136,12 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                       </div>
                     )}
                     <QuickFeedbackButton activityId={ride.id} date={dateStr ?? format(new Date(), 'yyyy-MM-dd')} />
+                    <RideAnalysisTrigger
+                      onClick={() => setAnalyzingRide({
+                        id: ride.id,
+                        label: ride.name || (dateStr ? format(parseISO(dateStr), 'EEEE d MMMM', { locale: fr }) : 'Activité'),
+                      })}
+                    />
                     <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
                   </div>
                 </a>
@@ -142,6 +150,14 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
           </div>
         )}
       </CardContent>
+      {analyzingRide && (
+        <RideAnalysisDialog
+          activityId={analyzingRide.id}
+          rideLabel={analyzingRide.label}
+          open={!!analyzingRide}
+          onOpenChange={(open) => { if (!open) setAnalyzingRide(null) }}
+        />
+      )}
     </Card>
   )
 }

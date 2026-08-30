@@ -1,0 +1,189 @@
+"use client"
+
+// ── "Analyse complète de la sortie" — glue between the single-activity
+// Intervals.icu proxy route, the pure stream-crunching in
+// ride-analysis-types.ts, the AI flow, and Firestore ────────────────────
+//
+// One analysis per activity (users/{uid}/rideAnalyses/{activityId}),
+// overwritten on "Régénérer" — same overwrite-on-regenerate shape as
+// workoutProposals. Lazy: nothing is fetched until generate() is called
+// (activityId is passed as null while the dialog is closed), so opening
+// the Sorties tab never triggers per-row Intervals.icu calls — only an
+// explicit "Analyser" click does.
+
+import { useCallback, useState } from 'react'
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { format } from 'date-fns'
+import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
+import { useToast } from '@/hooks/use-toast'
+import { errorEmitter } from '@/firebase/error-emitter'
+import { FirestorePermissionError } from '@/firebase/errors'
+import { useAthlete } from '@/hooks/use-intervals'
+import { useCoachMemory } from '@/components/cycling/use-coach-memory'
+import { useGovernor } from '@/components/cycling/use-governor'
+import { useKJBudget } from '@/components/cycling/use-kj-budget'
+import { buildCoachContext } from '@/components/cycling/coach-context'
+import { rideAnalysis, type RideAnalysisOutput } from '@/ai/flows/ride-analysis-flow'
+import { bestAverageWatts, bestRpe, feelToScore, type IntervalsActivity, type IntervalsActivityStream } from '@/lib/intervals-api'
+import { computeNormalizedPower, computePowerZoneDistribution, computeHrZoneDistribution, computeSplitAnalysis, average, type PowerZoneBucket, type HrZoneBucket } from './ride-analysis-types'
+import { describeActionDispatchError } from '@/lib/utils'
+
+interface IntervalsCredentialsDoc {
+  intervalsAthleteId?: string
+  intervalsApiKey?: string
+}
+
+interface StoredRideAnalysis {
+  userId: string
+  analysis: RideAnalysisOutput
+}
+
+function toZoneInput(zones: (PowerZoneBucket | HrZoneBucket)[] | null, totalSeconds: number) {
+  if (!zones) return undefined
+  return zones.map((z) => ({
+    zone: z.zone,
+    label: z.label,
+    minutes: Math.round((z.seconds / 60) * 10) / 10,
+    pctOfRide: totalSeconds > 0 ? Math.round((z.seconds / totalSeconds) * 1000) / 10 : 0,
+  }))
+}
+
+/** activityId: pass null while there's nothing to load yet (e.g. a closed dialog) — avoids an Intervals.icu fetch per row just from the Sorties list rendering. */
+export function useRideAnalysis(activityId: string | null) {
+  const { user } = useUser()
+  const db = useFirestore()
+  const { toast } = useToast()
+  const athlete = useAthlete()
+  const memory = useCoachMemory()
+  const governor = useGovernor()
+  const budget = useKJBudget(governor.status)
+
+  const credsRef = useMemoFirebase(() => {
+    if (!user || !db) return null
+    return doc(db, `users/${user.uid}/settings/intervals`)
+  }, [db, user])
+  const { data: creds } = useDoc<IntervalsCredentialsDoc>(credsRef)
+
+  const analysisRef = useMemoFirebase(() => {
+    if (!user || !db || !activityId) return null
+    return doc(db, `users/${user.uid}/rideAnalyses/${activityId}`)
+  }, [db, user, activityId])
+  const { data: stored, isLoading: isLoadingStored } = useDoc<StoredRideAnalysis>(analysisRef)
+
+  const [isGenerating, setIsGenerating] = useState(false)
+
+  const generate = useCallback(async (): Promise<boolean> => {
+    if (!user || !db || !activityId) return false
+    if (!creds?.intervalsAthleteId || !creds?.intervalsApiKey) {
+      toast({ variant: 'destructive', title: 'Intervals.icu non connecté', description: 'Renseignez vos identifiants dans Réglages.' })
+      return false
+    }
+    setIsGenerating(true)
+    try {
+      const res = await fetch(`/api/intervals/activities/${activityId}`, {
+        headers: {
+          'x-intervals-athlete-id': creds.intervalsAthleteId,
+          'x-intervals-api-key': creds.intervalsApiKey,
+        },
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Erreur ${res.status}`)
+      }
+      const { activity, streams }: { activity: IntervalsActivity; streams: IntervalsActivityStream } = await res.json()
+
+      const watts = streams.watts?.data
+      const heartrate = streams.heartrate?.data
+      const cadence = streams.cadence?.data
+
+      const ftp = athlete.data?.ftp ?? null
+      // No physiological max HR is surfaced by useAthlete() today — this
+      // ride's own recorded max_heartrate is a reasonable per-ride
+      // reference for zone bucketing, and it's always available whenever
+      // an HR stream is (both come off the same activity).
+      const maxHr = activity.max_heartrate ?? null
+
+      const normalizedWatts = watts ? computeNormalizedPower(watts) : null
+      const avgWatts = bestAverageWatts(activity)
+      const variabilityIndex = normalizedWatts != null && avgWatts != null && avgWatts > 0
+        ? Math.round((normalizedWatts / avgWatts) * 100) / 100
+        : undefined
+      const powerZones = computePowerZoneDistribution(watts, ftp)
+      const hrZones = computeHrZoneDistribution(heartrate, maxHr)
+      const split = computeSplitAnalysis(watts)
+      const avgCadence = cadence ? average(cadence) ?? undefined : undefined
+
+      const totalSeconds = activity.moving_time ?? watts?.length ?? heartrate?.length ?? 0
+
+      const today = format(new Date(), 'yyyy-MM-dd')
+      const coachContext = buildCoachContext({
+        today,
+        injuries: memory.injuries,
+        lifestyle: memory.lifestyle,
+        goals: memory.goals,
+        rememberedFacts: memory.rememberedFacts,
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
+        governorStatus: governor.status,
+      })
+
+      const result = await rideAnalysis({
+        activity: {
+          name: activity.name ?? undefined,
+          type: activity.type ?? undefined,
+          date: activity.start_date_local?.slice(0, 10) ?? today,
+          distanceKm: activity.distance != null ? Math.round(activity.distance / 100) / 10 : undefined,
+          durationMinutes: activity.moving_time != null ? Math.round(activity.moving_time / 60) : 0,
+          avgWatts: avgWatts ?? undefined,
+          normalizedWatts: normalizedWatts ?? undefined,
+          variabilityIndex,
+          avgHeartrate: activity.average_heartrate ?? undefined,
+          maxHeartrate: activity.max_heartrate ?? undefined,
+          avgCadence,
+          elevationGainM: activity.total_elevation_gain ?? undefined,
+          trainingLoad: activity.icu_training_load ?? undefined,
+          intensity: activity.icu_intensity ?? undefined,
+          rpe: bestRpe(activity) ?? undefined,
+          feel: feelToScore(activity) ?? undefined,
+        },
+        powerZones: toZoneInput(powerZones, totalSeconds),
+        hrZones: toZoneInput(hrZones, totalSeconds),
+        split: split ?? undefined,
+        athlete: athlete.isConfigured && athlete.data ? {
+          ftp: athlete.data.ftp,
+          ctl: athlete.data.ctl,
+          atl: athlete.data.atl,
+          tsb: athlete.data.tsb,
+        } : undefined,
+        coachContext,
+      })
+
+      if (!result.ok) {
+        toast({ variant: 'destructive', title: "L'IA n'a pas pu analyser la sortie", description: result.error })
+        return false
+      }
+
+      const ref = doc(db, `users/${user.uid}/rideAnalyses/${activityId}`)
+      const data = { userId: user.uid, analysis: result.data, createdAt: serverTimestamp() }
+      try {
+        await setDoc(ref, data)
+      } catch {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'create', requestResourceData: data }))
+        return false
+      }
+      return true
+    } catch (e) {
+      toast({ variant: 'destructive', title: "L'IA n'a pas pu analyser la sortie", description: describeActionDispatchError(e) })
+      return false
+    } finally {
+      setIsGenerating(false)
+    }
+  }, [user, db, activityId, creds, athlete.data, athlete.isConfigured, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, toast])
+
+  return {
+    analysis: stored?.analysis ?? null,
+    isLoadingStored,
+    isGenerating,
+    canAnalyze: !!creds?.intervalsAthleteId && !!creds?.intervalsApiKey,
+    generate,
+  }
+}

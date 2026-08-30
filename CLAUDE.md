@@ -180,6 +180,7 @@ Toutes les données utilisateur sont sous `users/{uid}/` :
 | `users/{uid}/workoutProposals` | `{yyyy-MM-dd}` | Proposition du jour IA : availableMinutes, proposal (sortie `dailyWorkoutRecommendation`), ride (`{location, departureDateTime}` optionnel — pour le conseil vent, voir plus bas), sentToIntervals — un doc par jour, écrasé à la régénération |
 | `users/{uid}/trainingPlans` | `{planId}` | Plan structuré moyen/long terme IA : name, status (`active`/`archived` — un seul actif à la fois), eventName/eventDate, weeklyAvailableMinutes, weeks[] (phase/focus/targetWeeklyMinutes/notes par semaine, sortie `trainingPlanGeneration`, + `sampleSessions?` : séances type générées à la demande par `planWeekSessions` quand l'utilisateur déplie la semaine) — collection préexistante dans le schéma d'origine (jamais utilisée avant), réutilisée telle quelle |
 | `users/{uid}/coachChatMessages` | `{messageId}` | Log plat du chat "Stella" : role (`user`/`assistant`), content, createdAt — append-only, aucune règle `update` (un message n'est jamais modifié, seulement créé ou supprimé en vidant l'historique) |
+| `users/{uid}/rideAnalyses` | `{activityId}` | Analyse IA complète d'une sortie (sortie `rideAnalysis`), keyée par l'id d'activité Intervals.icu — un doc par sortie, écrasé à la régénération ("Régénérer" dans le dialogue) |
 
 ### Hooks Firebase
 
@@ -382,6 +383,34 @@ inventés) et choisir la tenue.
   la date d'une séance déplace l'événement calendrier au lieu de le dupliquer) et le même
   `STRUCTURED_WORKOUT_SYNTAX` (constante partagée exportée par `structured-workout-syntax.ts`, pour ne
   jamais laisser dériver la syntaxe du "workout builder" Intervals.icu entre les deux flows).
+
+### Flow existant : `rideAnalysis`
+- Input : `{ activity (nom/type/date/distance/durée/watts moyens+normalisés/VI/FC/cadence/dénivelé/
+  charge/intensité/RPE/feel), powerZones?, hrZones?, split?, athlete? (ftp/ctl/atl/tsb), coachContext? }`
+  — retour utilisateur : "Crois-tu possible que ... on puisse demander une analyse complète de la
+  sortie basée sur les différentes data d'intervals ?". `getActivity()`/`getActivityStreams()`
+  existaient déjà sur `IntervalsService` (`src/lib/intervals-api.ts`) mais n'étaient utilisés nulle
+  part — ce flow est leur premier vrai consommateur, via la nouvelle route
+  `/api/intervals/activities/[id]` (mêmes en-têtes `x-intervals-athlete-id`/`x-intervals-api-key`
+  que le reste des routes proxy). Les streams bruts (watts/FC/cadence, un point par seconde) sont
+  beaucoup trop volumineux et peu exploitables tels quels pour un prompt — `ride-analysis-types.ts`
+  (`src/components/coach/`, pur, pas `'use server'` — voir l'avertissement ci-dessous) les réduit
+  côté client en quelques chiffres réels avant l'appel : puissance normalisée (algorithme de Coggan,
+  moyenne glissante 30s puis moyenne quadratique⁴ puis racine⁴), répartition du temps par zone de
+  puissance (7 zones Coggan, % de la FTP) et par zone de FC (5 zones, % de la FC max *de cette
+  sortie* — l'app n'expose pas encore de FC max physiologique séparée), et une analyse de pacing
+  (négative/positive split, 1ère vs 2e moitié de la sortie).
+- Output : `{ headline, summary, strengths[], improvementAreas[], effortContext, recommendation }`
+- Usage : `RideAnalysisDialog`/`RideAnalysisTrigger` (`src/components/coach/ride-analysis-dialog.tsx`),
+  un bouton par ligne dans le Journal d'activités (`rides-journal-tab.tsx`, onglet "Sorties" de
+  Coach) — glue dans `use-ride-analysis.ts`. Stocké dans `users/{uid}/rideAnalyses/{activityId}`
+  (un doc par sortie, écrasé au clic "Régénérer"), donc consulté sans re-générer une fois produit.
+- **Volontairement pas exposé comme outil Stella** (contrairement à `update_goal`/`add_goal`/
+  `add_remembered_fact`/`update_injury_status`) — même principe que pour la génération de séance/plan
+  dans le chat (voir `coachChat` ci-dessous) : dupliquer un chemin de génération avec son propre
+  format en dehors de l'onglet dédié introduirait une deuxième façon de produire la même chose,
+  potentiellement incohérente. Si l'utilisateur demande une analyse de sortie à Stella, la réponse
+  attendue est de renvoyer vers Sorties plutôt que de générer une analyse dans le chat.
 
 ### ⚠️ Un fichier `'use server'` ne peut exporter QUE des fonctions async
 
