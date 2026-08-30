@@ -405,6 +405,21 @@ export async function monFlow(input: MonInput) {
 Variable d'environnement requise : `ANTHROPIC_API_KEY` (déclarée dans `apphosting.yaml`, secret
 `anthropic-api-key` à créer dans Secret Manager via `firebase apphosting:secrets:set`).
 
+### Server Actions derrière Firebase App Hosting : `allowedOrigins`
+
+`next.config.ts` déclare `experimental.serverActions.allowedOrigins: ['**.hosted.app']`. Sans ça,
+**tous** les flows IA (Server Actions) échouent en prod avec une erreur instantanée, systématique,
+que l'appareil soit en navigation privée ou non — Firebase App Hosting fronte le backend Cloud Run
+avec son propre proxy, donc l'en-tête `Origin` du navigateur (le domaine public `*.hosted.app`) et
+le `Host`/`x-forwarded-host` vus par le backend peuvent différer, ce qui déclenche la protection
+CSRF intégrée de Next.js pour les Server Actions (`Invalid Server Actions request.`,
+`action-handler.js`). L'erreur est levée avant même d'exécuter le code applicatif, donc invisible
+aux `console.error` de `generateJson` — diagnostiquée via `/api/debug/anthropic` (route temporaire,
+supprimée une fois le diagnostic confirmé), une simple Route Handler non soumise à cette protection
+qui a confirmé que la clé API et l'appel Anthropic fonctionnaient très bien en direct, isolant le
+problème aux Server Actions elles-mêmes. Si un domaine personnalisé est ajouté un jour, il faudra
+l'ajouter à `allowedOrigins` en plus.
+
 ## Design System — "Performance Lab"
 
 Identité visuelle propre (plus une copie du langage Apple HIG — voir AUDIT.md, l'audit de design

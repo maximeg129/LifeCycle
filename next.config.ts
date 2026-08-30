@@ -20,6 +20,26 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_GIT_SHA: gitShortSha(),
     NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
   },
+  experimental: {
+    serverActions: {
+      // Firebase App Hosting fronts the Cloud Run backend with its own edge
+      // proxy — the browser's `Origin` header is the public *.hosted.app
+      // domain, but the `Host`/`x-forwarded-host` header the backend sees
+      // can differ, which trips Next.js's built-in Server Actions CSRF
+      // check (origin !== host → "Invalid Server Actions request.",
+      // node_modules/next/dist/server/app-render/action-handler.js). Every
+      // Server Action (every AI flow generation call in this app) was
+      // failing instantly with that error, redacted client-side to the
+      // generic "An error occurred in the Server Components render..."
+      // text — confirmed by ruling out a bad ANTHROPIC_API_KEY first (see
+      // /api/debug/anthropic, which calls the same Anthropic client
+      // successfully from a plain Route Handler, unaffected by this check
+      // since it isn't a Server Action). `**` matches any number of
+      // subdomain labels, which Firebase's generated hosted.app hostnames
+      // have several of (e.g. <backend>--<hash>.<region>.hosted.app).
+      allowedOrigins: ['**.hosted.app'],
+    },
+  },
   // Botanica (plants) merged into Maison as its "Plantes" tab — see
   // AUDIT.md/PLAN.md section 3.2. Météo AI merged into the Coach hub as its
   // "Météo & Tenue" sub-tab — see CLAUDE.md section Navigation (refonte IA).
