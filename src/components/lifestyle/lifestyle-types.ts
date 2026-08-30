@@ -109,6 +109,33 @@ export interface WellnessLike {
   readiness?: number
 }
 
+export type SleepQualityBand = 'great' | 'good' | 'average' | 'poor'
+
+/**
+ * Intervals.icu's own band boundaries for its derived `sleepQuality`
+ * field (confirmed against their public Wellness Fields doc and a live
+ * account — a screenshot showing score 82 alongside "Q2"): 1=Great
+ * 90-100, 2=Good 80-89, 3=Average 60-79, 4=Poor <60. Exposed so any UI
+ * wanting a "how good was this night" color/label can classify the same
+ * 0-100 score this app already stores, rather than re-reading the raw
+ * (and, per mergeDailyWellness below, not directly usable) 1-4 field.
+ */
+export function sleepQualityBand(score: number): SleepQualityBand {
+  if (score >= 90) return 'great'
+  if (score >= 80) return 'good'
+  if (score >= 60) return 'average'
+  return 'poor'
+}
+
+/** Reverse of the boundaries above — each band's midpoint, only used as a fallback for the (per Intervals.icu's own docs, unlikely) case a source supplies the 1-4 band without the score it's derived from. */
+function sleepQualityBandToScore(band: number | undefined): number | undefined {
+  if (band == null) return undefined
+  if (band <= 1) return 95
+  if (band === 2) return 85
+  if (band === 3) return 70
+  return 50
+}
+
 /**
  * Fills gaps in a manually-logged day with the matching auto-synced
  * wellness reading — the manual entry always wins field-by-field when
@@ -118,7 +145,18 @@ export interface WellnessLike {
 export function mergeDailyWellness(manual: HealthMetricLike | undefined, wellness: WellnessLike | undefined): HealthMetricLike | undefined {
   if (!wellness) return manual
   const sleepHoursFromWellness = wellness.sleepSecs != null ? Math.round((wellness.sleepSecs / 3600) * 10) / 10 : undefined
-  const sleepQualityFromWellness = wellness.sleepQuality ?? wellness.sleepScore
+  // Bug caught live (user feedback, a screenshot of their own Intervals.icu
+  // day view showing "82 Q2" side by side): wellness.sleepQuality is NOT a
+  // percentage — it's Intervals.icu's own derived 1-4 band (1=Great 90-100,
+  // 2=Good 80-89, 3=Average 60-79, 4=Poor <60, confirmed against their
+  // public Wellness Fields doc), computed FROM sleepScore. This app's
+  // sleepQuality field means "0-100" everywhere else (UI %, AI prompts,
+  // readiness computation, manual entry) — preferring the raw category
+  // here silently turned a "Good" night (2) into "Qualité 2%". sleepScore
+  // is the real 0-100 value; sleepQualityBandToScore() is only a fallback
+  // for the (per Intervals.icu's own docs, unlikely) case a source
+  // supplies the band without the score it's derived from.
+  const sleepQualityFromWellness = wellness.sleepScore ?? sleepQualityBandToScore(wellness.sleepQuality)
   return {
     date: manual?.date ?? null,
     sleepHours: manual?.sleepHours ?? sleepHoursFromWellness,

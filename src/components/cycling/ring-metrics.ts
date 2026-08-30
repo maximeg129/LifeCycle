@@ -11,17 +11,16 @@
 // tsb-zones.ts's fillColor, learned the hard way on the TSB chart bands).
 
 import { tsbZone } from './tsb-zones'
+import { sleepQualityBand } from '@/components/lifestyle/lifestyle-types'
 
 const READINESS_GOOD = '#22c55e' // green-500
 const READINESS_OK = '#f97316' // orange-500
 const READINESS_LOW = 'hsl(var(--destructive))'
-/**
- * Sleep's ring color is fixed rather than graded by value — the fill
- * percentage already carries the "how good" signal (see sleepRingPercent),
- * so the color's job here is just to visually distinguish the sleep ring
- * from the other two, not to double as a second severity indicator.
- */
-export const SLEEP_RING_COLOR = '#3b82f6' // blue-500
+const SLEEP_GOOD = '#22c55e' // green-500 — Great/Good (score ≥80)
+const SLEEP_AVERAGE = '#f97316' // orange-500 — Average (60-79)
+const SLEEP_POOR = 'hsl(var(--destructive))' // Poor (<60)
+/** No quality reading at all yet (only hours, or nothing) — same neutral fallback color the other two rings use. */
+const SLEEP_UNKNOWN = '#3b82f6' // blue-500
 
 /**
  * TSB doesn't live on a natural 0-100 scale — clamped to a practical
@@ -48,14 +47,35 @@ export function readinessRingColor(readiness: number): string {
 
 /**
  * Sleep quality is already a 0-100 score when known (auto-synced from a
- * connected sensor, or manually entered) — used directly as the ring
- * fill. Without a quality reading, falls back to hours against a generous
- * 9h reference (a full night, not a strict minimum target) so the ring
- * still shows something meaningful rather than sitting empty whenever
- * only hours were logged.
+ * connected sensor, or manually entered — see mergeDailyWellness in
+ * lifestyle-types.ts for why this is sleepScore, never Intervals.icu's
+ * raw 1-4 sleepQuality band) — used directly as the ring fill. Without a
+ * quality reading, falls back to hours against a generous 9h reference (a
+ * full night, not a strict minimum target) so the ring still shows
+ * something meaningful rather than sitting empty whenever only hours were
+ * logged.
  */
 export function sleepRingPercent(sleepHours: number | null | undefined, sleepQuality: number | null | undefined): number {
   if (sleepQuality != null) return Math.max(0, Math.min(100, sleepQuality))
   if (sleepHours != null) return Math.max(0, Math.min(100, (sleepHours / 9) * 100))
   return 0
+}
+
+/**
+ * Grades the sleep ring's color by Intervals.icu's own Great/Good/
+ * Average/Poor bands (sleepQualityBand in lifestyle-types.ts) — user
+ * feedback: "q1 c'est great, q2=good, q3=average, q4=poor on peut
+ * utiliser ça pour la couleur". Great and Good collapse into one green
+ * tier (matching the 3-color green/orange/red severity scheme the other
+ * rings already use) rather than 4 distinct colors. Falls back to a
+ * neutral color when there's no quality reading at all (only hours, or
+ * nothing) — sleepRingPercent() still shows the hours-based fill in that
+ * case, just without a graded color for it.
+ */
+export function sleepRingColor(sleepQuality: number | null | undefined): string {
+  if (sleepQuality == null) return SLEEP_UNKNOWN
+  const band = sleepQualityBand(sleepQuality)
+  if (band === 'poor') return SLEEP_POOR
+  if (band === 'average') return SLEEP_AVERAGE
+  return SLEEP_GOOD
 }

@@ -12,6 +12,7 @@ import {
   mergeDailyWellness,
   buildMergedDailySeries,
   pickLatestWithData,
+  sleepQualityBand,
   type HealthMetricLike,
 } from './lifestyle-types'
 
@@ -130,15 +131,44 @@ describe('computeGoalProgress', () => {
   })
 })
 
+describe('sleepQualityBand', () => {
+  it('matches Intervals.icu\'s own boundaries (90/80/60)', () => {
+    expect(sleepQualityBand(95)).toBe('great')
+    expect(sleepQualityBand(90)).toBe('great')
+    expect(sleepQualityBand(89)).toBe('good')
+    expect(sleepQualityBand(82)).toBe('good') // the screenshot's own score, "Q2"/Good
+    expect(sleepQualityBand(80)).toBe('good')
+    expect(sleepQualityBand(79)).toBe('average')
+    expect(sleepQualityBand(60)).toBe('average')
+    expect(sleepQualityBand(59)).toBe('poor')
+    expect(sleepQualityBand(0)).toBe('poor')
+  })
+})
+
 describe('mergeDailyWellness', () => {
-  it('fills every field from wellness when nothing was manually logged', () => {
-    const merged = mergeDailyWellness(undefined, { sleepSecs: 27000, sleepQuality: 88, hrv: 62, mood: 7 })
+  it('fills every field from wellness when nothing was manually logged, using sleepScore (0-100) for sleepQuality', () => {
+    const merged = mergeDailyWellness(undefined, { sleepSecs: 27000, sleepScore: 88, hrv: 62, mood: 7 })
     expect(merged).toEqual({ date: null, sleepHours: 7.5, sleepQuality: 88, hrv: 62, stressScore: undefined, mood: 7 })
   })
 
-  it('falls back to sleepScore when sleepQuality is absent', () => {
-    const merged = mergeDailyWellness(undefined, { sleepSecs: 3600, sleepScore: 75 })
-    expect(merged?.sleepQuality).toBe(75)
+  // Regression: caught live via user feedback (a screenshot of their own
+  // Intervals.icu day view showing "82 Q2" side by side) — Intervals.icu's
+  // own `sleepQuality` field is a derived 1-4 band (Great/Good/Average/
+  // Poor), NOT a percentage. Preferring it over sleepScore used to turn a
+  // "Good" night (2) into "Qualité 2%".
+  it('prefers sleepScore (real 0-100) over the raw 1-4 sleepQuality band when both are present', () => {
+    const merged = mergeDailyWellness(undefined, { sleepSecs: 27060, sleepScore: 82, sleepQuality: 2 })
+    expect(merged?.sleepQuality).toBe(82)
+  })
+
+  it('falls back to a band-derived estimate when only the raw 1-4 category is present (no score)', () => {
+    const merged = mergeDailyWellness(undefined, { sleepSecs: 3600, sleepQuality: 2 })
+    expect(merged?.sleepQuality).toBe(85) // midpoint of Good (80-89)
+  })
+
+  it('has no sleepQuality when wellness carries neither sleepScore nor sleepQuality', () => {
+    const merged = mergeDailyWellness(undefined, { sleepSecs: 3600 })
+    expect(merged?.sleepQuality).toBeUndefined()
   })
 
   it('lets a manual entry win field-by-field over the auto-synced reading', () => {

@@ -114,7 +114,19 @@ export interface IntervalsWellness {
   hrv?: number;
   hrvSDNN?: number;
   sleepSecs?: number;
+  /** The real 0-100 sleep score — see mergeDailyWellness() in lifestyle-types.ts, which is what actually reads this. */
   sleepScore?: number;
+  /**
+   * NOT a percentage, despite the type — Intervals.icu's own derived 1-4
+   * band (1=Great 90-100, 2=Good 80-89, 3=Average 60-79, 4=Poor <60,
+   * confirmed against their public Wellness Fields doc and a live
+   * account). Caught live: this app's own `sleepQuality` field means
+   * "0-100" everywhere (UI %, AI prompts, readiness computation) — code
+   * reading a wellness entry's quality must use `sleepScore`, not this
+   * field directly (sleepQualityBandToScore() in lifestyle-types.ts is
+   * the only place this raw value should ever be converted, as a
+   * last-resort fallback when sleepScore itself is absent).
+   */
   sleepQuality?: number;
   readiness?: number;
   fatigue?: number;

@@ -27,7 +27,7 @@ import type { IntervalsAthlete } from '@/lib/intervals-api'
 import { usePowerCurve } from './use-power-curve'
 import { fitPowerDurationCurve, type PowerRecord } from './riegel-types'
 import { RingGauge } from './ring-gauge'
-import { tsbRingPercent, tsbRingColor, readinessRingColor, sleepRingPercent, SLEEP_RING_COLOR } from './ring-metrics'
+import { tsbRingPercent, tsbRingColor, readinessRingColor, sleepRingPercent, sleepRingColor } from './ring-metrics'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { LogMetricDialog } from '@/components/lifestyle/log-metric-dialog'
 
@@ -128,7 +128,7 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
           href="/cycling/metric/sleep"
           label="Sommeil"
           percent={sleepRingPercent(lifestyle.latest?.sleepHours, lifestyle.latest?.sleepQuality)}
-          color={SLEEP_RING_COLOR}
+          color={sleepRingColor(lifestyle.latest?.sleepQuality)}
           centerValue={lifestyle.latest?.sleepHours != null ? `${lifestyle.latest.sleepHours}h` : '—'}
           sublabel={lifestyle.latest?.sleepQuality != null ? `Qualité ${lifestyle.latest.sleepQuality}%` : undefined}
         />

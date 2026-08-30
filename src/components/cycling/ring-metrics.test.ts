@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { tsbRingPercent, tsbRingColor, readinessRingColor, sleepRingPercent } from './ring-metrics'
+import { tsbRingPercent, tsbRingColor, readinessRingColor, sleepRingPercent, sleepRingColor } from './ring-metrics'
 
 describe('tsbRingPercent', () => {
   it('maps the -30..20 window onto 0..100', () => {
@@ -51,5 +51,19 @@ describe('sleepRingPercent', () => {
   it('is 0 when neither hours nor quality are known', () => {
     expect(sleepRingPercent(null, null)).toBe(0)
     expect(sleepRingPercent(undefined, undefined)).toBe(0)
+  })
+})
+
+describe('sleepRingColor', () => {
+  it('grades by Intervals.icu\'s own Great/Good/Average/Poor bands, collapsing Great+Good into green', () => {
+    expect(sleepRingColor(95)).toBe('#22c55e') // great
+    expect(sleepRingColor(82)).toBe('#22c55e') // good — the screenshot's own score
+    expect(sleepRingColor(70)).toBe('#f97316') // average
+    expect(sleepRingColor(40)).toBe('hsl(var(--destructive))') // poor
+  })
+
+  it('falls back to a neutral color when there is no quality reading at all', () => {
+    expect(sleepRingColor(null)).toBe('#3b82f6')
+    expect(sleepRingColor(undefined)).toBe('#3b82f6')
   })
 })

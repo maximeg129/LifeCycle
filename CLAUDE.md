@@ -161,14 +161,28 @@ vraie couleur CSS ; `ring-metrics.ts` (pur, testé) calcule ce pourcentage et ce
 pratique [-30, 20] (le plancher de la zone Optimal au plafond de la zone Frais, voir `tsb-zones.ts`),
 `tsbRingColor` réutilise `tsbZone(tsb).fillColor` (même classification que la tuile détail, pas une
 deuxième) ; le sommeil affiche les heures au centre mais son remplissage suit la qualité (0-100) quand
-connue, sinon une estimation heures/9h ; la récupération utilise directement le score Readiness
-existant. `RingTile` (`performance-bento.tsx`) remplace l'ancienne tuile héro TSB seule + les tuiles
+connue, sinon une estimation heures/9h, et sa couleur suit `sleepQualityBand()` (Great/Good/Average/Poor
+— voir bug ci-dessous, Great+Good regroupés en vert) ; la récupération utilise directement le score
+Readiness existant. `RingTile` (`performance-bento.tsx`) remplace l'ancienne tuile héro TSB seule + les tuiles
 plates Sommeil/Readiness par 3 cartes sombres (`bg-foreground`) à 3 anneaux — reprend le piège déjà
 documenté pour `tsb-zones.ts` : un cercle SVG se peint via l'attribut `stroke`, pas la propriété CSS
 `background-color` qu'une classe Tailwind `bg-*` pose, donc `ring-metrics.ts` expose des couleurs CSS
 réelles (hex ou `hsl(var(--destructive))`), jamais des classes Tailwind, pour l'anneau lui-même.
 La tuile détail TSB (`cycling/metric/[id]/page.tsx`) garde son propre traitement — bandes de fond +
 légende des 5 zones sur le graphe historique — documenté juste au-dessus.
+
+**⚠️ `wellness.sleepQuality` (Intervals.icu) n'est PAS un pourcentage** — bug attrapé en direct par
+l'utilisateur, capture d'écran de sa propre page Intervals.icu à l'appui (score "82" et "Q2" affichés
+côte à côte pour la même nuit) : ce champ brut de l'API est en réalité la bande dérivée 1-4
+d'Intervals.icu (1=Great 90-100, 2=Good 80-89, 3=Average 60-79, 4=Poor <60, confirmé contre leur doc
+publique "Wellness Fields"), pas un score 0-100. Le champ `sleepQuality` de CETTE app veut dire "0-100"
+partout ailleurs (UI, prompts IA, calcul de readiness, saisie manuelle) — `mergeDailyWellness()`
+(`lifestyle-types.ts`) préférait ce champ brut à `sleepScore` (le vrai 0-100), donc une nuit "Good" (2)
+s'affichait "Qualité 2%". Corrigé : `sleepScore` est prioritaire, `sleepQualityBandToScore()` ne sert
+que de repli (peu probable per la doc Intervals.icu — la bande est dérivée du score, jamais l'inverse)
+si jamais seule la bande 1-4 est présente. `sleepQualityBand()` (exportée) reclassifie un score 0-100
+dans ces mêmes bornes 90/80/60 — c'est elle qui pilote la couleur de l'anneau Sommeil (`ring-metrics.ts`)
+plutôt que de relire la bande brute d'Intervals.icu.
 
 **Vie & Santé et Finances ne sont plus dans `navItems`** (ni dans la nav mobile) — leurs pages
 (`/lifestyle`, `/finance`) restent entièrement fonctionnelles mais ne sont plus accédées que via
