@@ -365,8 +365,29 @@ pas une décision à laisser au modèle).
   `daily-workout-types.ts`, généralisé pour accepter un `externalId` ; ici `planSessionExternalId(planId,
   weekNumber, sessionIndex)` dans `training-plan-types.ts` — indépendant de la date choisie, donc changer
   la date d'une séance déplace l'événement calendrier au lieu de le dupliquer) et le même
-  `STRUCTURED_WORKOUT_SYNTAX` (constante partagée exportée par `daily-workout-recommendation-flow.ts`,
-  pour ne jamais laisser dériver la syntaxe du "workout builder" Intervals.icu entre les deux flows).
+  `STRUCTURED_WORKOUT_SYNTAX` (constante partagée exportée par `structured-workout-syntax.ts`, pour ne
+  jamais laisser dériver la syntaxe du "workout builder" Intervals.icu entre les deux flows).
+
+### ⚠️ Un fichier `'use server'` ne peut exporter QUE des fonctions async
+
+Piège vécu en prod, très difficile à diagnostiquer : `STRUCTURED_WORKOUT_SYNTAX` vivait à l'origine
+dans `daily-workout-recommendation-flow.ts` (un fichier `'use server'`), exportée à côté du flow
+lui-même. Next.js interdit ça — *"A 'use server' file can only export async functions, found
+string."* (`node_modules/next/dist/build/webpack/loaders/next-flight-loader/action-validate.js`) —
+mais cette vérification tourne **au runtime**, pas au build : `next build`/`tsc`/`next start` en
+local ne montrent RIEN. En prod (Firebase App Hosting), ça faisait échouer **instantanément** —
+avant même d'exécuter une seule ligne du flow — absolument tout appel à `dailyWorkoutRecommendation`
+ET `planWeekSessions` (qui importait la constante depuis ce même fichier), avec le message générique
+Next.js "An error occurred in the Server Components render..." côté client (voir `FlowResult` dans
+`anthropic.ts`) et rien du tout dans les logs serveur (l'erreur est levée par Next.js lui-même, avant
+que le code applicatif — donc les `console.error` de `generateJson` — n'ait la moindre chance de
+tourner). Diagnostiqué par bisection avec des Server Actions de complexité croissante dans une route
+de debug temporaire (`/debug-headers`, supprimée une fois confirmé) : une Server Action vide
+réussissait, un appel Anthropic minimal depuis une Server Action réussissait, mais dès qu'une
+d'elles importait quoi que ce soit depuis `daily-workout-recommendation-flow.ts`, TOUTES les
+Server Actions de ce module échouaient — y compris celles qui n'utilisaient pas cet import. **Toute
+constante/type/valeur partagée entre un fichier `'use server'` et autre chose doit vivre dans son
+propre fichier plain (sans `'use server'`)**, jamais être exportée à côté d'un flow.
 
 ### Flow existant : `coachChat`
 - Input : `{ messages[] (role user/assistant, historique complet dont le nouveau message), coachContext?, training?, planWeek?, recovery? }`

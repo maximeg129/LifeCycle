@@ -14,7 +14,7 @@
 
 import { z } from 'zod';
 import { generateJson, type FlowResult } from '@/ai/anthropic';
-import { STRUCTURED_WORKOUT_SYNTAX } from './daily-workout-recommendation-flow';
+import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
 
 const PlanWeekSessionsInputSchema = z.object({
   weekNumber: z.number(),
