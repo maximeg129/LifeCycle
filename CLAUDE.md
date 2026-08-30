@@ -462,7 +462,19 @@ Charts via Recharts : `BarChart`, `LineChart`, etc. avec wrapper `ChartContainer
 - Firebase Auth avec email/password et Google OAuth
 - Après connexion : redirect vers `/home-management`
 - Pages publiques : `/`, `/login`, `/register`
-- Pages protégées : toutes les autres (accès conditionné à `useUser().user`)
+- Pages protégées : toutes les autres, wrappées dans `AuthGuard`
+  (`src/components/layout/auth-guard.tsx`) — chaque `src/app/<route>/page.tsx` protégé enveloppe
+  son `return` dans `<AuthGuard>...</AuthGuard>` (voir le Patron de Page ci-dessus). Affiche un
+  spinner pendant la vérification initiale (`isUserLoading`), puis `router.replace('/login')` si
+  personne n'est connecté — avant cet ajout, une page protégée ouverte directement (URL tapée,
+  favori) affichait le shell (nav + widgets vides, chaque requête Firestore étant déjà gardée par
+  `user ? ... : null`) sans jamais rediriger vers `/login`. Les règles de sécurité Firestore
+  bloquaient déjà les lectures/écritures sous-jacentes — ce n'était pas une brèche de données, mais
+  ça laissait un visiteur non connecté voir la coquille de l'app plutôt que d'être renvoyé se
+  connecter.
+- Déconnexion : bouton dans le bloc du bas de la sidebar desktop **et** dans le menu ☰ (Sheet) de
+  la nav mobile (`AppNavigation` dans `sidebar.tsx`) — la nav mobile n'exposait auparavant aucun
+  moyen de se déconnecter (le menu ne listait que les items de nav, sans Réglages ni Déconnexion).
 
 ## Commandes
 
@@ -480,6 +492,7 @@ npm run test          # Vitest (tests unitaires)
 2. **"use client"** : obligatoire sur toutes les pages et composants avec hooks
 3. **Imports Firebase** : toujours depuis `@/firebase` (pas directement firebase/*)
 4. **Mutations** : utiliser le pattern errorEmitter pour les erreurs Firestore
-5. **Nouveau module** : page dans `src/app/<route>/page.tsx` + entrée dans `navItems` de sidebar.tsx
+5. **Nouveau module** : page dans `src/app/<route>/page.tsx` (return enveloppé dans `AuthGuard`,
+   voir Authentification ci-dessus) + entrée dans `navItems` de sidebar.tsx
 6. **Dates** : utiliser `date-fns` avec `import { fr } from 'date-fns/locale'`
 7. **Images externes** : `picsum.photos` autorisé dans next.config.ts

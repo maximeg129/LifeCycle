@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
+import { AuthGuard } from '@/components/layout/auth-guard'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -73,6 +74,7 @@ export default function SettingsPage() {
   }
 
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
@@ -276,5 +278,6 @@ export default function SettingsPage() {
         <DangerZoneCard />
       </main>
     </div>
+    </AuthGuard>
   )
 }

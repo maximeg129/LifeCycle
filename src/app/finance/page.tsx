@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
+import { AuthGuard } from '@/components/layout/auth-guard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -78,6 +79,7 @@ export default function FinancePage() {
   const goalPct = financeSettings?.savingsGoalAmount ? Math.min(100, Math.round((totalSavings / financeSettings.savingsGoalAmount) * 100)) : 0
 
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
@@ -384,5 +386,6 @@ export default function FinancePage() {
         </Tabs>
       </main>
     </div>
+    </AuthGuard>
   )
 }

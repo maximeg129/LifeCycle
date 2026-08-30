@@ -13,6 +13,7 @@ import { Suspense } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { AppNavigation } from '@/components/layout/sidebar'
+import { AuthGuard } from '@/components/layout/auth-guard'
 import { PageHeader } from '@/components/ui/page-header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -97,6 +98,7 @@ function CoachTabs() {
 
 export default function CoachPage() {
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
@@ -108,5 +110,6 @@ export default function CoachPage() {
         </Suspense>
       </main>
     </div>
+    </AuthGuard>
   )
 }

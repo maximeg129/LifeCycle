@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
+import { AuthGuard } from '@/components/layout/auth-guard'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
@@ -205,9 +206,10 @@ export default function NutritionPage() {
   }
 
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
-      
+
       <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
         <PageHeader
           category="Nutrition & Fueling"
@@ -578,5 +580,6 @@ export default function NutritionPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </AuthGuard>
   )
 }

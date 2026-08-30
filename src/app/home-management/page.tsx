@@ -1,6 +1,7 @@
 "use client"
 
 import { AppNavigation } from '@/components/layout/sidebar'
+import { AuthGuard } from '@/components/layout/auth-guard'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { PageHeader } from '@/components/ui/page-header'
 import { ListChecks, Flower2 } from 'lucide-react'
@@ -9,6 +10,7 @@ import { PlantsTab } from '@/components/home-management/plants-tab'
 
 export default function HomeManagementPage() {
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
@@ -35,5 +37,6 @@ export default function HomeManagementPage() {
         </Tabs>
       </main>
     </div>
+    </AuthGuard>
   )
 }

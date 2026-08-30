@@ -14,6 +14,7 @@ import React from 'react'
 import dynamic from 'next/dynamic'
 import { format, subDays } from 'date-fns'
 import { AppNavigation } from '@/components/layout/sidebar'
+import { AuthGuard } from '@/components/layout/auth-guard'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAthlete, useFitnessChart } from '@/hooks/use-intervals'
@@ -63,6 +64,7 @@ export default function CyclingHub() {
   const isConfigured = athlete.isConfigured
 
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
@@ -103,5 +105,6 @@ export default function CyclingHub() {
         )}
       </main>
     </div>
+    </AuthGuard>
   )
 }

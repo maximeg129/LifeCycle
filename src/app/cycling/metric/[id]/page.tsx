@@ -18,6 +18,7 @@ import Link from 'next/link'
 import { format, subDays, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { AppNavigation } from '@/components/layout/sidebar'
+import { AuthGuard } from '@/components/layout/auth-guard'
 import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ChartContainer, type ChartConfig, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart'
@@ -129,16 +130,19 @@ export default function MetricDetailPage() {
 
   if (!info) {
     return (
+      <AuthGuard>
       <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
         <AppNavigation />
         <main className="p-4 md:p-8 max-w-3xl mx-auto">
           <EmptyState icon={History} title="Indicateur inconnu" description="Retournez à Cyclisme pour repartir de la Vue d'ensemble." />
         </main>
       </div>
+      </AuthGuard>
     )
   }
 
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
@@ -207,5 +211,6 @@ export default function MetricDetailPage() {
         </Card>
       </main>
     </div>
+    </AuthGuard>
   )
 }

@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
+import { AuthGuard } from '@/components/layout/auth-guard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -87,6 +88,7 @@ export default function LifestylePage() {
   }
 
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
@@ -390,5 +392,6 @@ export default function LifestylePage() {
         </Tabs>
       </main>
     </div>
+    </AuthGuard>
   )
 }

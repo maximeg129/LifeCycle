@@ -11,6 +11,7 @@
 
 import dynamic from 'next/dynamic'
 import { AppNavigation } from '@/components/layout/sidebar'
+import { AuthGuard } from '@/components/layout/auth-guard'
 import { PageHeader } from '@/components/ui/page-header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -28,6 +29,7 @@ const WardrobeTab = dynamic(() => import('@/components/cycling/wardrobe-tab').th
 
 export default function GaragePage() {
   return (
+    <AuthGuard>
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
@@ -58,5 +60,6 @@ export default function GaragePage() {
         </Tabs>
       </main>
     </div>
+    </AuthGuard>
   )
 }

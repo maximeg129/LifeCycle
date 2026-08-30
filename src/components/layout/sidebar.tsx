@@ -205,9 +205,31 @@ export function AppNavigation() {
                     )
                   })}
                 </nav>
-                <p className="px-6 pt-4 text-[10px] font-mono text-muted-foreground/40 select-text">
-                  {formatVersionLabel(APP_VERSION.gitSha, APP_VERSION.buildTime)}
-                </p>
+                {/* Réglages + Déconnexion — mirrors the desktop sidebar's
+                    bottom block. Réglages is also reachable from the bottom
+                    pill nav, but sign-out previously existed only on
+                    desktop: a mobile user had no way to log out at all. */}
+                <div className="px-3 pt-3 pb-6 mt-3 border-t border-border/60 space-y-0.5">
+                  <Link href="/settings">
+                    <div className={cn(
+                      "flex items-center gap-3 px-3 py-3 rounded-[10px] transition-all",
+                      pathname === '/settings' ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
+                    )}>
+                      <Settings className="w-5 h-5 shrink-0" />
+                      <span className="text-[14px] font-medium">Réglages</span>
+                    </div>
+                  </Link>
+                  <button
+                    onClick={handleSignOut}
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-[10px] text-muted-foreground hover:bg-destructive/8 hover:text-destructive transition-all"
+                  >
+                    <LogOut className="w-5 h-5 shrink-0" />
+                    <span className="text-[14px] font-medium">Déconnexion</span>
+                  </button>
+                  <p className="px-3 pt-2 text-[10px] font-mono text-muted-foreground/40 select-text">
+                    {formatVersionLabel(APP_VERSION.gitSha, APP_VERSION.buildTime)}
+                  </p>
+                </div>
               </SheetContent>
             </Sheet>
           </div>
