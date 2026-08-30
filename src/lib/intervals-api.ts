@@ -442,18 +442,16 @@ export class IntervalsService {
   }
 
   /**
-   * Streams d'une activité (puissance, FC, altitude…) — même remarque que
-   * getActivity() sur le chemin top-level. Deux différences avec ce que le
-   * code envoyait à l'origine (422 Unprocessable Entity en prod, jamais
-   * exercé avant la fonctionnalité d'analyse de sortie) : le chemin prend
-   * le suffixe `.json` (même convention que `/power-curves.json` ci-dessus),
-   * et `types` est une seule valeur séparée par des virgules plutôt que le
-   * paramètre répété une fois par type — reconstruit à partir de plusieurs
-   * sources tierces cohérentes entre elles (aucun compte Intervals.icu
-   * disponible pour vérifier en direct depuis cet environnement), à
-   * re-vérifier si un 4xx réapparaît malgré ce correctif.
+   * Streams d'une activité (puissance, FC, cadence…) — même remarque que
+   * getActivity() sur le chemin top-level. Chemin/paramètres confirmés
+   * corrects en prod (l'erreur restante n'est plus un rejet de requête
+   * mais une vraie réponse 422 applicative — voir l'appelant dans
+   * /api/intervals/activities/[id] pour le cas Strava) : le chemin prend
+   * le suffixe `.json` (même convention que `/power-curves.json`
+   * ci-dessus), et `types` est une seule valeur séparée par des virgules
+   * plutôt qu'un paramètre répété une fois par type.
    */
-  async getActivityStreams(activityId: string, types: string[] = ['watts', 'heartrate', 'cadence', 'altitude']): Promise<IntervalsActivityStream> {
+  async getActivityStreams(activityId: string, types: string[] = ['watts', 'heartrate', 'cadence']): Promise<IntervalsActivityStream> {
     const params = new URLSearchParams({ types: types.join(',') });
     return this.fetchIntervalsAbsolute<IntervalsActivityStream>(`/activity/${activityId}/streams.json?${params}`);
   }

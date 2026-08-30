@@ -90,11 +90,27 @@ export function useRideAnalysis(activityId: string | null) {
         const body = await res.json().catch(() => ({}))
         throw new Error(body.error || `Erreur ${res.status}`)
       }
-      const { activity, streams }: { activity: IntervalsActivity; streams: IntervalsActivityStream } = await res.json()
+      const { activity, streams, streamsError }: { activity: IntervalsActivity; streams: IntervalsActivityStream | null; streamsError: string | null } = await res.json()
 
-      const watts = streams.watts?.data
-      const heartrate = streams.heartrate?.data
-      const cadence = streams.cadence?.data
+      // Streams failing is not fatal (the route degrades to `streams: null`
+      // rather than failing the whole request) — most commonly a Strava-
+      // synced activity whose second-by-second data Intervals.icu itself
+      // couldn't pull ("Cannot read Strava activity API", confirmed live —
+      // not something this app can work around). The analysis still runs
+      // on the activity-level summary fetched above; this is a heads-up,
+      // not an error, so it's a plain (non-destructive) toast.
+      if (streams == null && streamsError) {
+        toast({
+          title: 'Détail seconde par seconde indisponible',
+          description: activity.source === 'STRAVA'
+            ? "Intervals.icu n'a pas pu récupérer le détail de cette sortie synchronisée depuis Strava — l'analyse se base sur les données globales (puissance moyenne, charge, durée...)."
+            : "Intervals.icu n'a pas retourné le détail de cette sortie — l'analyse se base sur les données globales (puissance moyenne, charge, durée...).",
+        })
+      }
+
+      const watts = streams?.watts?.data
+      const heartrate = streams?.heartrate?.data
+      const cadence = streams?.cadence?.data
 
       const ftp = athlete.data?.ftp ?? null
       // No physiological max HR is surfaced by useAthlete() today — this

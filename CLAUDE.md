@@ -400,6 +400,15 @@ inventés) et choisir la tenue.
   puissance (7 zones Coggan, % de la FTP) et par zone de FC (5 zones, % de la FC max *de cette
   sortie* — l'app n'expose pas encore de FC max physiologique séparée), et une analyse de pacing
   (négative/positive split, 1ère vs 2e moitié de la sortie).
+  `getActivityStreams()` échoue de façon non-fatale pour certaines sorties synchronisées depuis
+  Strava — confirmé en prod, Intervals.icu lui-même ne parvient pas toujours à relire le détail
+  seconde par seconde depuis l'API Strava ("Cannot read Strava activity API", une limite côté
+  Intervals.icu, pas un problème de forme de requête côté app). La route `/api/intervals/activities/
+  [id]` dégrade alors vers `streams: null` plutôt que de faire échouer toute la requête — l'analyse
+  tourne quand même sur les données globales déjà récupérées via `getActivity()` (puissance
+  moyenne, charge, durée, RPE...), simplement sans le détail par zones/pacing, et `use-ride-
+  analysis.ts` prévient l'utilisateur d'un toast informatif (pas une erreur) plutôt que de faire
+  échouer toute l'analyse.
 - Output : `{ headline, summary, strengths[], improvementAreas[], effortContext, recommendation }`
 - Usage : `RideAnalysisDialog`/`RideAnalysisTrigger` (`src/components/coach/ride-analysis-dialog.tsx`),
   un bouton par ligne dans le Journal d'activités (`rides-journal-tab.tsx`, onglet "Sorties" de
