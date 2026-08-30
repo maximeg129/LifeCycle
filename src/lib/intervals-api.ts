@@ -424,11 +424,21 @@ export class IntervalsService {
     return this.fetchIntervalsAbsolute<IntervalsActivity>(`/activity/${activityId}`);
   }
 
-  /** Streams d'une activité (puissance, FC, altitude…) — même remarque que getActivity() sur le chemin top-level. */
+  /**
+   * Streams d'une activité (puissance, FC, altitude…) — même remarque que
+   * getActivity() sur le chemin top-level. Deux différences avec ce que le
+   * code envoyait à l'origine (422 Unprocessable Entity en prod, jamais
+   * exercé avant la fonctionnalité d'analyse de sortie) : le chemin prend
+   * le suffixe `.json` (même convention que `/power-curves.json` ci-dessus),
+   * et `types` est une seule valeur séparée par des virgules plutôt que le
+   * paramètre répété une fois par type — reconstruit à partir de plusieurs
+   * sources tierces cohérentes entre elles (aucun compte Intervals.icu
+   * disponible pour vérifier en direct depuis cet environnement), à
+   * re-vérifier si un 4xx réapparaît malgré ce correctif.
+   */
   async getActivityStreams(activityId: string, types: string[] = ['watts', 'heartrate', 'cadence', 'altitude']): Promise<IntervalsActivityStream> {
-    const params = new URLSearchParams();
-    types.forEach(t => params.append('types', t));
-    return this.fetchIntervalsAbsolute<IntervalsActivityStream>(`/activity/${activityId}/streams?${params}`);
+    const params = new URLSearchParams({ types: types.join(',') });
+    return this.fetchIntervalsAbsolute<IntervalsActivityStream>(`/activity/${activityId}/streams.json?${params}`);
   }
 
   /** Zones de puissance */

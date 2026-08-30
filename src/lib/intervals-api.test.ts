@@ -162,7 +162,7 @@ describe('IntervalsService.getActivity / getActivityStreams', () => {
     expect(url).toBe('https://intervals.icu/api/v1/activity/act1')
   })
 
-  it('requests activity streams from the top-level /activity/{id}/streams path with repeated types params', async () => {
+  it('requests activity streams from the top-level /activity/{id}/streams.json path with a comma-joined types param', async () => {
     const fetchMock = vi.fn(async (_url: string, _options?: RequestInit) => jsonResponse({}))
     vi.stubGlobal('fetch', fetchMock)
 
@@ -171,8 +171,8 @@ describe('IntervalsService.getActivity / getActivityStreams', () => {
 
     const [url] = fetchMock.mock.calls[0]
     const parsed = new URL(url)
-    expect(parsed.origin + parsed.pathname).toBe('https://intervals.icu/api/v1/activity/act1/streams')
-    expect(parsed.searchParams.getAll('types')).toEqual(['watts', 'heartrate'])
+    expect(parsed.origin + parsed.pathname).toBe('https://intervals.icu/api/v1/activity/act1/streams.json')
+    expect(parsed.searchParams.get('types')).toBe('watts,heartrate')
   })
 
   it('still sends the API key as HTTP Basic auth on the top-level path', async () => {
