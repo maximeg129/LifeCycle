@@ -13,7 +13,6 @@ import { ChartContainer, ChartConfig, ChartTooltip, ChartTooltipContent } from '
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, BarChart, Bar } from 'recharts'
 import { Flame } from 'lucide-react'
 import { NotConfiguredBanner } from './not-configured-banner'
-import { PowerCurveCard } from './power-curve-card'
 import type { IntervalsFitnessDay } from '@/lib/intervals-api'
 
 const fitnessChartConfig: ChartConfig = {
@@ -63,9 +62,9 @@ export function PmcTab({ isConfigured, athleteLoading, fitness }: PmcTabProps) {
 
   return (
     <div className="space-y-8">
-      {/* Riegel power-duration curve — independent of Intervals.icu, always available */}
-      <PowerCurveCard />
-
+      {/* Riegel power-duration curve — moved to /cycling/metric/riegel (its
+          "detail" page, retour utilisateur : ce module chargeait la page
+          principale sans y avoir sa place — voir CLAUDE.md). */}
       {!isConfigured && !athleteLoading ? (
         <NotConfiguredBanner />
       ) : (

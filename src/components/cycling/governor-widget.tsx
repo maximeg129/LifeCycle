@@ -1,8 +1,9 @@
 "use client"
 
+import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { HeartPulse, Activity, Gauge, MessageCircle, Smile, Moon } from 'lucide-react'
+import { HeartPulse, Activity, Gauge, MessageCircle, Smile, Moon, ChevronRight } from 'lucide-react'
 import { useGovernor } from './use-governor'
 import type { Signal } from './governor-types'
 import type { GovernorStatus } from './load-types'
@@ -51,33 +52,38 @@ export function GovernorWidget() {
   }
 
   return (
-    <Card className="bg-card/40 border-border">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-xs text-muted-foreground uppercase">Gouverneur de charge interne</CardTitle>
-        <CardDescription className="text-xs">FC repos, HRV, dérive à l&apos;effort, RPE, sensations — pas un plan rigide</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="flex items-center gap-3 mb-4">
-          <span className="text-3xl">{meta.emoji}</span>
-          <div>
-            <div className={`font-semibold ${meta.className}`}>{meta.label}</div>
-            <div className="text-xs text-muted-foreground">{meta.hint}</div>
-          </div>
-        </div>
-        <div className="space-y-2">
-          {SIGNAL_ROWS.map(({ key, label, icon: Icon }) => (
-            <div key={key} className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-2 text-muted-foreground">
-                <Icon className="w-3.5 h-3.5" /> {label}
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${signalDot(governor.signals[key])}`} />
-                {signalLabel(governor.signals[key])}
-              </span>
+    // Carte entière cliquable → /cycling/governor (méthode de calcul détaillée) — même
+    // convention que MetricTile/RingItem (performance-bento.tsx).
+    <Link href="/cycling/governor" className="block group relative">
+      <ChevronRight className="absolute top-4 right-4 w-3.5 h-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform z-10" />
+      <Card className="bg-card/40 border-border group-hover:border-primary/40 transition-colors">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-xs text-muted-foreground uppercase">Gouverneur de charge interne</CardTitle>
+          <CardDescription className="text-xs">FC repos, HRV, dérive à l&apos;effort, RPE, sensations — pas un plan rigide</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 mb-4">
+            <span className="text-3xl">{meta.emoji}</span>
+            <div>
+              <div className={`font-semibold ${meta.className}`}>{meta.label}</div>
+              <div className="text-xs text-muted-foreground">{meta.hint}</div>
             </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+          </div>
+          <div className="space-y-2">
+            {SIGNAL_ROWS.map(({ key, label, icon: Icon }) => (
+              <div key={key} className="flex items-center justify-between text-xs">
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Icon className="w-3.5 h-3.5" /> {label}
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className={`w-2 h-2 rounded-full ${signalDot(governor.signals[key])}`} />
+                  {signalLabel(governor.signals[key])}
+                </span>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
   )
 }

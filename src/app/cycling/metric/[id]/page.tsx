@@ -31,6 +31,7 @@ import { useAthlete, useFitnessChart } from '@/hooks/use-intervals'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { usePowerCurve } from '@/components/cycling/use-power-curve'
 import { fitPowerDurationCurve, type PowerRecord } from '@/components/cycling/riegel-types'
+import { PowerCurveCard } from '@/components/cycling/power-curve-card'
 import { METRIC_INFO, type MetricId } from '@/components/cycling/metric-info'
 import { tsbZone, TSB_ZONES_ORDERED } from '@/components/cycling/tsb-zones'
 
@@ -197,6 +198,16 @@ export default function MetricDetailPage() {
           </CardContent>
         </Card>
 
+        {/* Riegel n'a pas de courbe d'historique (recalculé à la volée, jamais
+            stocké jour par jour) — cette page devient plutôt sa destination
+            "détail" pour la saisie des records de puissance et le calculateur
+            de TTE, déplacés ici depuis la page Cyclisme principale (retour
+            utilisateur : ce module n'avait pas sa place noyé dans PMC — voir
+            CLAUDE.md). Le composant gère lui-même son propre état "pas assez
+            de données". */}
+        {id === 'riegel' ? (
+          <PowerCurveCard />
+        ) : (
         <Card className="lc-card">
           <CardHeader>
             <CardTitle className="text-base">Sur les {TREND_DAYS} derniers jours</CardTitle>
@@ -242,7 +253,7 @@ export default function MetricDetailPage() {
                 icon={History}
                 title="Pas encore d'historique suivi"
                 description={
-                  id === 'ftp' || id === 'riegel'
+                  id === 'ftp'
                     ? "Cet indicateur n'est pas enregistré jour par jour aujourd'hui — seule la valeur actuelle est disponible."
                     : "Pas assez de données sur cette période pour tracer une tendance."
                 }
@@ -250,6 +261,7 @@ export default function MetricDetailPage() {
             )}
           </CardContent>
         </Card>
+        )}
 
         <Card className="lc-card">
           <CardHeader>

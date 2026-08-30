@@ -22,7 +22,6 @@ import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
 import { KJBudgetWidget } from '@/components/cycling/kj-budget-widget'
 import { GovernorWidget } from '@/components/cycling/governor-widget'
 import { useGovernor } from '@/components/cycling/use-governor'
-import { PageHeader } from '@/components/ui/page-header'
 import { PerformanceBento } from '@/components/cycling/performance-bento'
 
 // Code-split: PMC pulls in Recharts, which nothing else on this page needs.
@@ -68,9 +67,13 @@ export default function CyclingHub() {
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
-      <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        <PageHeader category="Performance" title="LifeCycle Vault" />
-
+      {/* No PageHeader on this page anymore — retour utilisateur : le bloc
+          "Performance / LifeCycle Vault" faisait doublon avec le header
+          mobile fixe + la sidebar desktop, qui disent déjà "LifeCycle" et
+          surlignent "Cyclisme" comme page active. pt-20 (au lieu du p-4
+          habituel) remplace la clearance mobile que PageHeader apportait
+          via son propre mt-16, pour ne pas passer sous le header fixe. */}
+      <main className="px-4 pt-20 pb-4 md:p-8 max-w-7xl mx-auto space-y-8">
         {!isConfigured && !athlete.isLoading ? (
           <NotConfiguredBanner />
         ) : (

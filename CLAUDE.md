@@ -27,8 +27,10 @@ src/
 │   ├── globals.css               # Variables CSS + classes utilitaires (.lc-card, .text-gradient)
 │   ├── login/page.tsx            # Authentification (email + Google)
 │   ├── register/page.tsx         # Inscription (email + Google)
-│   ├── cycling/page.tsx          # Page données, pas d'onglets : tuiles Vue d'ensemble (CTL/ATL/TSB/FTP/Riegel/sommeil/HRV/readiness) + budget kJ + gouverneur + PMC (courbe 12 semaines, charge hebdo, records de puissance) en scroll continu
-│   ├── cycling/metric/[id]/page.tsx  # Page détail d'une tuile Vue d'ensemble : courbe ~180j + explication (metric-info.ts) — une seule route dynamique pour les 8 métriques
+│   ├── cycling/page.tsx          # Page données, pas de PageHeader ni d'onglets : tuiles Vue d'ensemble (CTL/ATL/TSB/FTP/Riegel/sommeil/HRV/readiness) + budget kJ + gouverneur + PMC (courbe 12 semaines, charge hebdo) en scroll continu
+│   ├── cycling/metric/[id]/page.tsx  # Page détail d'une tuile Vue d'ensemble : courbe ~180j + explication (metric-info.ts) — une seule route dynamique pour les 8 métriques ; pour `riegel`, affiche `PowerCurveCard` (saisie des records + calculateur TTE) à la place du graphique, qui n'existe pas pour cette métrique
+│   ├── cycling/budget/page.tsx   # Page détail du widget "Budget de la semaine" : `KJBudgetWidget` + méthode de calcul (load-types.ts)
+│   ├── cycling/governor/page.tsx # Page détail du "Gouverneur de charge interne" : `GovernorWidget` + méthode de calcul des 6 signaux (governor-types.ts/use-governor.ts)
 │   ├── coach/page.tsx            # Hub coaching IA — 6 sous-onglets : Proposition du jour (défaut), Sorties (journal d'activités), Météo & Tenue (ex-/weather), Plan, Stella, Mémoire coach
 │   ├── garage/page.tsx           # Matériel + Chaînes + Garde-robe (Firestore) — sorti de Cyclisme, sa propre destination de nav
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
@@ -149,7 +151,25 @@ optionnel, garde tous les appels existants à 7 jours par défaut inchangés) �
 `FITNESS_WINDOW_DAYS` dans `use-intervals.tsx` sont passés de 90 à 180 jours pour donner de la marge.
 FTP et l'indice Riegel n'ont pas d'historique suivi jour par jour aujourd'hui (FTP vient d'un test
 ponctuel Intervals.icu, Riegel est recalculé à la volée depuis la courbe de puissance actuelle) —
-leur page affiche honnêtement "pas encore d'historique suivi" plutôt que d'inventer une tendance.
+la page FTP affiche honnêtement "pas encore d'historique suivi" plutôt que d'inventer une tendance ;
+la page Riegel affiche à la place `PowerCurveCard` (saisie des 3 records de puissance + calculateur
+de TTE), déplacé ici depuis la page Cyclisme principale (section PMC) — retour utilisateur, capture
+d'écran cerclant en rouge ce module sur la page principale : "Enlève les éléments cerclés de rouge...
+[le module] n'avait pas sa place noyé dans PMC". Même retour utilisateur pour deux autres éléments
+cerclés de rouge, tous deux supprimés sans remplacement : le `PageHeader` "Performance / LifeCycle
+Vault" de la page Cyclisme (faisait doublon avec le header mobile fixe + la sidebar desktop, qui
+disent déjà "LifeCycle" et surlignent "Cyclisme" comme page active — la page utilise maintenant
+`pt-20` au lieu du `PageHeader` pour la clearance mobile) et le lien "Objectifs, analyse IA &
+historique complet" vers `/lifestyle` dans le panneau "Aujourd'hui" (`performance-bento.tsx`).
+
+**`KJBudgetWidget` et `GovernorWidget` renvoient chacun vers leur propre page détail** (`/cycling/budget`,
+`/cycling/governor`) — même capture d'écran, cerclant ces deux widgets en vert cette fois avec la
+demande "crées de sous page qui donne du détails, méthode de calcul, compréhension, composition".
+Composites calculés en direct (pas des métriques suivies jour par jour) — routes dédiées plutôt que
+`/cycling/metric/[id]`. Chaque widget est enveloppé dans un `<Link>` (même convention "carte entière
+cliquable" que `MetricTile`/`RingItem`, chevron inclus), et chaque page détail réaffiche le widget
+live suivi d'une explication du calcul fidèle au code réel (`load-types.ts` pour le budget kJ ;
+`governor-types.ts`/`use-governor.ts` pour les 6 signaux du gouverneur).
 
 **Vue d'ensemble ouvre sur 3 anneaux Forme/Récupération/Sommeil, façon Whoop** (`ring-gauge.tsx`/
 `ring-metrics.ts`, `src/components/cycling/`) — retour utilisateur, capture d'écran des anneaux

@@ -24,7 +24,7 @@
 
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { ChevronRight, Gauge, Moon, Activity as ActivityIcon, Zap } from 'lucide-react'
+import { ChevronRight, Gauge, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { IntervalsAthlete } from '@/lib/intervals-api'
 import { usePowerCurve } from './use-power-curve'
@@ -238,16 +238,12 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+      <div className="pt-1">
         <LogMetricDialog isAutoSynced={isAutoSynced} />
-        <Link href="/lifestyle" className="text-xs font-medium text-muted-foreground hover:text-primary transition-colors flex items-center gap-1.5">
-          <Moon className="w-3.5 h-3.5" /> Objectifs, analyse IA &amp; historique complet
-          <ActivityIcon className="w-3 h-3" />
-        </Link>
       </div>
       {enduranceIndex == null && powerCurve.data == null && !powerCurve.isLoading && (
         <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-          <Zap className="w-3 h-3" /> Renseignez vos records de puissance (section PMC plus bas) pour débloquer l&apos;indice Riegel.
+          <Zap className="w-3 h-3" /> Renseignez vos records de puissance (page détail Indice Riegel) pour débloquer l&apos;indice Riegel.
         </p>
       )}
     </div>
