@@ -14,13 +14,15 @@
 // itself on this deployment, not anything in the AI flow code.
 
 import { useEffect, useState } from 'react'
-import { pingAction } from './actions'
+import { pingAction, pingAnthropicAction } from './actions'
 
 export default function DebugHeadersPage() {
   const [headersResult, setHeadersResult] = useState<unknown>(null)
   const [headersError, setHeadersError] = useState<string | null>(null)
   const [pingResult, setPingResult] = useState<unknown>(null)
   const [pingError, setPingError] = useState<string | null>(null)
+  const [pingAnthropicResult, setPingAnthropicResult] = useState<unknown>(null)
+  const [pingAnthropicError, setPingAnthropicError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch('/api/debug/headers', { method: 'POST' })
@@ -31,6 +33,10 @@ export default function DebugHeadersPage() {
     pingAction()
       .then((r) => setPingResult(r))
       .catch((e) => setPingError(e instanceof Error ? e.message : String(e)))
+
+    pingAnthropicAction()
+      .then((r) => setPingAnthropicResult(r))
+      .catch((e) => setPingAnthropicError(e instanceof Error ? e.message : String(e)))
   }, [])
 
   return (
@@ -38,11 +44,16 @@ export default function DebugHeadersPage() {
       <h1>Diagnostic Server Actions</h1>
 
       <h2>1. pingAction() — Server Action minimale, sans Anthropic/Firestore</h2>
-      {pingError && <p style={{ color: 'red' }}>ÉCHEC : {pingError}</p>}
+      {pingError && <p style={{ color: 'red' }}>ÉCHEC (throw) : {pingError}</p>}
       {!pingResult && !pingError && <p>Chargement...</p>}
       {pingResult != null && <pre style={{ color: 'green' }}>RÉUSSI : {JSON.stringify(pingResult, null, 2)}</pre>}
 
-      <h2>2. En-têtes vus par un fetch() POST (comparaison)</h2>
+      <h2>2. pingAnthropicAction() — même appel Anthropic que /api/debug/anthropic, mais depuis une vraie Server Action</h2>
+      {pingAnthropicError && <p style={{ color: 'red' }}>ÉCHEC (throw, avant même d&apos;entrer dans la fonction) : {pingAnthropicError}</p>}
+      {!pingAnthropicResult && !pingAnthropicError && <p>Chargement...</p>}
+      {pingAnthropicResult != null && <pre>{JSON.stringify(pingAnthropicResult, null, 2)}</pre>}
+
+      <h2>3. En-têtes vus par un fetch() POST (comparaison)</h2>
       {headersError && <p style={{ color: 'red' }}>Erreur : {headersError}</p>}
       {!headersResult && !headersError && <p>Chargement...</p>}
       {headersResult != null && <pre>{JSON.stringify(headersResult, null, 2)}</pre>}
