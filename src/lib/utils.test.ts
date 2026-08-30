@@ -19,4 +19,19 @@ describe('describeActionDispatchError', () => {
   it('falls back to the actionable message for an empty error message', () => {
     expect(describeActionDispatchError(new Error(''))).toContain('rouvrez complètement')
   })
+
+  // Regression: hit live on ride-analysis "Régénérer" hours after a fresh
+  // deploy — a stale-deploy Server Action error that is NOT redacted (so
+  // the old check for "Server Components render" missed it entirely),
+  // showing the user a cryptic action-id hash instead of an actionable
+  // message.
+  it('replaces a "Server Action ... was not found on the server" error with an actionable message', () => {
+    const e = new Error('Server Action "40eb382bfee2b7bd9ba985b08a8cc5790018b2a3" was not found on the server. This request might be from an older or newer deployment.')
+    expect(describeActionDispatchError(e)).toContain('rouvrez complètement')
+  })
+
+  it('replaces a "Failed to find Server Action" error with an actionable message', () => {
+    const e = new Error('Failed to find Server Action "abc123". This request might be from an older or newer deployment.')
+    expect(describeActionDispatchError(e)).toContain('rouvrez complètement')
+  })
 })
