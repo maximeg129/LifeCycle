@@ -20,15 +20,31 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ error: 'Missing activity id' }, { status: 400 })
   }
 
+  const service = new IntervalsService(athleteId, apiKey)
+
+  // Two independent try/catches (not Promise.all) so a failure says which
+  // of the two calls it came from — a generic "Intervals.icu API Error
+  // 422" gave no way to tell getActivity() and getActivityStreams() apart,
+  // which cost real back-and-forth diagnosing the 404 and 422 this route
+  // hit in production before either was fixed. Only the streams this
+  // route's caller actually consumes are requested (see use-ride-
+  // analysis.ts) — 'altitude'/'time' were being fetched unused, and one
+  // fewer stream-type token is one fewer thing that can be rejected.
+  let activity
   try {
-    const service = new IntervalsService(athleteId, apiKey)
-    const [activity, streams] = await Promise.all([
-      service.getActivity(id),
-      service.getActivityStreams(id, ['watts', 'heartrate', 'cadence', 'altitude', 'time']),
-    ])
-    return NextResponse.json({ activity, streams })
+    activity = await service.getActivity(id)
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error'
-    return NextResponse.json({ error: message }, { status: 502 })
+    return NextResponse.json({ error: `getActivity: ${message}` }, { status: 502 })
   }
+
+  let streams
+  try {
+    streams = await service.getActivityStreams(id, ['watts', 'heartrate', 'cadence'])
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Unknown error'
+    return NextResponse.json({ error: `getActivityStreams: ${message}` }, { status: 502 })
+  }
+
+  return NextResponse.json({ activity, streams })
 }

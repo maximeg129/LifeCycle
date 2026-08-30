@@ -1,12 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { IntervalsService, bestAverageWatts, bestRpe, feelToScore } from './intervals-api'
 
-function jsonResponse(body: unknown, ok = true, status = 200) {
+function jsonResponse(body: unknown, ok = true, status = 200, url = '') {
   return {
     ok,
     status,
     statusText: ok ? 'OK' : 'Error',
+    url,
     json: async () => body,
+    text: async () => JSON.stringify(body),
   } as Response
 }
 
@@ -78,6 +80,17 @@ describe('IntervalsService.getAthlete', () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(null, false, 401)))
     const service = new IntervalsService('i1', 'bad-key')
     await expect(service.getActivities('2026-01-01')).rejects.toThrow(/401/)
+  })
+
+  // Regression: the error used to drop the response body entirely
+  // ("Error {status}: {statusText}"), which meant a 4xx never said *why* —
+  // exactly what cost two guess-and-check round trips diagnosing the
+  // ride-analysis 404 and 422 in production instead of one look at the
+  // API's own error text.
+  it('includes the response body in the thrown error, not just the status', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ message: 'must not be null: types' }, false, 422, 'https://intervals.icu/api/v1/activity/act1/streams.json')))
+    const service = new IntervalsService('i1', 'k')
+    await expect(service.getActivities('2026-01-01')).rejects.toThrow(/must not be null: types/)
   })
 })
 

@@ -265,6 +265,23 @@ export function feelToScore(activity: FeelFieldLike): number | null {
   return (activity.feel - 3) / 2;
 }
 
+/**
+ * Formats a failed Intervals.icu response into an error message that
+ * actually says something — status, the URL that was hit, and the
+ * response body (Intervals.icu's 4xx responses often carry a JSON body
+ * naming the invalid field/param, e.g. on a 422). Every prior version of
+ * this file's error handling dropped the body entirely (just
+ * "Error {status}: {statusText}"), which is exactly why the two real bugs
+ * found via ride-analysis (wrong path → 404, wrong streams param shape →
+ * 422) took two guess-and-check round trips each to pin down instead of
+ * one look at the actual API response.
+ */
+async function describeIntervalsError(response: Response): Promise<string> {
+  const body = await response.text().catch(() => '');
+  const bodySuffix = body ? ` — ${body.slice(0, 500)}` : '';
+  return `Intervals.icu API Error ${response.status} (${response.url}): ${response.statusText}${bodySuffix}`;
+}
+
 // ── Service ──────────────────────────────────────────────────────────
 
 export class IntervalsService {
@@ -283,7 +300,7 @@ export class IntervalsService {
     });
 
     if (!response.ok) {
-      throw new Error(`Intervals.icu API Error ${response.status}: ${response.statusText}`);
+      throw new Error(await describeIntervalsError(response));
     }
 
     return response.json();
@@ -307,7 +324,7 @@ export class IntervalsService {
     });
 
     if (!response.ok) {
-      throw new Error(`Intervals.icu API Error ${response.status}: ${response.statusText}`);
+      throw new Error(await describeIntervalsError(response));
     }
 
     return response.json();
