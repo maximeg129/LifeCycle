@@ -1,6 +1,19 @@
 'use server';
 /**
- * @fileOverview A cycling outfit recommendation AI agent that uses real-time weather data via tools.
+ * @fileOverview Recommends a cycling outfit from the athlete's clothing
+ * inventory, grounded in the real weather forecast (Open-Meteo, via the
+ * shared src/ai/weather.ts) for the exact location/date/time of the ride.
+ *
+ * Used to fetch the forecast via a Claude tool call (`get_weather_forecast`,
+ * `tool_choice: 'auto'`) — the model *usually* called it, but nothing forced
+ * it to, so a skipped tool call meant this flow could silently fall back to
+ * an invented, plausible-sounding forecast instead of the real one (see
+ * CLAUDE.md, and the "on se base sur des estimations" user report that
+ * prompted this rewrite). Now mirrors dailyWorkoutRecommendation's already-
+ * established pattern: the forecast is a deterministic pre-fetch the caller
+ * always makes, never a decision left to the model — the same principle
+ * documented for that flow, just not yet applied here when this one was
+ * first written (it predates dailyWorkoutRecommendation).
  *
  * - cyclingOutfitRecommendation - A function that handles the cycling outfit recommendation process.
  * - CyclingOutfitRecommendationInput - The input type for the cyclingOutfitRecommendation function.
@@ -8,9 +21,8 @@
  */
 
 import { z } from 'zod';
-import type Anthropic from '@anthropic-ai/sdk';
-import { anthropic, CLAUDE_MODEL } from '@/ai/anthropic';
-import { fetchWeatherForecast } from '@/ai/weather';
+import { generateJson, type FlowResult } from '@/ai/anthropic';
+import { fetchWeatherForecast, degreesToCompass } from '@/ai/weather';
 
 const CyclingOutfitRecommendationInputSchema = z.object({
   location: z.string().describe('The name of the location (city, region, or coordinates).'),
@@ -30,123 +42,77 @@ export type CyclingOutfitRecommendationInput = z.infer<typeof CyclingOutfitRecom
 
 const CyclingOutfitRecommendationOutputSchema = z.object({
   predictedWeather: z.object({
-    temperatureCelsius: z.number().describe('Actual average temperature from weather API.'),
-    windSpeedKmh: z.number().describe('Actual wind speed from weather API.'),
-    conditions: z.string().describe('Description of the weather conditions (e.g., "Soleil", "Pluie").'),
-    summary: z.string().describe('A short summary of the weather context for the ride.')
-  }).describe('The real weather data fetched via API.'),
+    temperatureCelsius: z.number().describe('Real temperature from the Open-Meteo forecast.'),
+    windSpeedKmh: z.number().describe('Real wind speed from the Open-Meteo forecast.'),
+    windDirectionCompass: z.string().describe('French 8-point compass label for the direction the wind is blowing FROM, e.g. "Nord-Ouest".'),
+    conditions: z.string().describe('Real weather conditions from the forecast (e.g. "Pluie modérée", "Ciel dégagé").'),
+    summary: z.string().describe('A short summary of the weather context for the ride, in French — restate the real numbers given, never invent different ones.')
+  }).describe('The real weather data fetched via Open-Meteo before this flow ever asked Claude anything — Claude only writes the summary, it never generates these numbers.'),
   recommendation: z.string().describe('Detailed textual recommendation for the cycling outfit.'),
   recommendedItems: z.array(z.string()).describe('List of names of specific clothing items recommended.')
 }).describe('Output of the cycling outfit recommendation flow.');
 
 export type CyclingOutfitRecommendationOutput = z.infer<typeof CyclingOutfitRecommendationOutputSchema>;
 
-interface WeatherToolResult {
-  temperature: number;
-  windSpeed: number;
-  weatherDescription: string;
-  error?: string;
-}
-
-/** Thin adapter over the shared fetchWeatherForecast() (src/ai/weather.ts) — keeps this tool's result shape exactly as before (temperature/windSpeed/weatherDescription) for the model. */
-async function getWeatherForecast(location: string, dateTime: string): Promise<WeatherToolResult> {
-  const forecast = await fetchWeatherForecast(location, dateTime);
-  return {
-    temperature: forecast.temperatureCelsius,
-    windSpeed: forecast.windSpeedKmh,
-    weatherDescription: forecast.conditions,
-    ...(forecast.error ? { error: forecast.error } : {}),
-  };
-}
-
-const weatherTool: Anthropic.Tool = {
-  name: 'get_weather_forecast',
-  description: 'Fetches the real weather forecast for a given location and date/time.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      location: { type: 'string', description: 'City name or coordinates (lat,lon).' },
-      dateTime: { type: 'string', description: 'ISO date-time string.' },
-    },
-    required: ['location', 'dateTime'],
-  },
-};
-
-export async function cyclingOutfitRecommendation(input: CyclingOutfitRecommendationInput): Promise<CyclingOutfitRecommendationOutput> {
+export async function cyclingOutfitRecommendation(input: CyclingOutfitRecommendationInput): Promise<FlowResult<CyclingOutfitRecommendationOutput>> {
+  try {
   const parsedInput = CyclingOutfitRecommendationInputSchema.parse(input);
 
+  // Real forecast, fetched unconditionally — never a tool call the model
+  // could skip. A geocoding/API failure here means we genuinely don't have
+  // real weather to ground a recommendation in, so this flow fails outright
+  // (FlowResult error) rather than asking Claude to guess.
+  const forecast = await fetchWeatherForecast(parsedInput.location, parsedInput.dateTime);
+  if (forecast.error) {
+    return { ok: false, error: `Impossible de récupérer la météo réelle pour "${parsedInput.location}" : ${forecast.error}` };
+  }
+  const windDirectionCompass = degreesToCompass(forecast.windDirectionDeg);
+
   const inventoryText = parsedInput.clothingInventory.map((item) =>
-    `- Name: ${item.name}\n  Type: ${item.type}\n  Temp Range: ${item.temperatureRangeCelsius}\n  Windproof: ${item.windproof ? 'Yes' : 'No'}\n  Waterproof: ${item.waterproof ? 'Yes' : 'No'}\n  Layer: ${item.layer}`
+    `- ${item.name} (${item.type}, couche ${item.layer}) — plage ${item.temperatureRangeCelsius}, coupe-vent : ${item.windproof ? 'oui' : 'non'}, imperméable : ${item.waterproof ? 'oui' : 'non'}`
   ).join('\n');
 
-  const system = `You are an expert cycling coach.
+  const system = `Tu es un coach cycliste expert. On te donne la météo RÉELLE (déjà récupérée via Open-Meteo, pas à toi de la deviner)
+pour le lieu et l'heure de départ d'une sortie, ainsi que la garde-robe cycliste disponible.
 
-First, use the 'get_weather_forecast' tool to fetch the actual weather conditions for the provided location and time.
+Ta tâche :
+1. Rédige un court bulletin météo (summary) en français reprenant les chiffres réels fournis ci-dessous —
+   ne les modifie jamais, ne les arrondis pas différemment, ne les invente pas.
+2. Recommande la tenue idéale en utilisant UNIQUEMENT des vêtements de la garde-robe fournie.
+3. Justifie ton choix à partir de la météo réelle (ex. "12°C avec du vent, la veste coupe-vent est indispensable").
 
-Once you have the weather data:
-1. Summarize the conditions (temp, wind, sky).
-2. Recommend the perfect cycling outfit using ONLY items from the clothing inventory.
-3. Explain your choice based on the real weather data (e.g., "It's 12°C with wind, so the windproof jacket is essential").
-
-When you have everything you need, respond with ONLY a JSON object (no markdown fences, no other text, no tool call) matching exactly this shape:
+Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme :
 {
-  "predictedWeather": { "temperatureCelsius": number, "windSpeedKmh": number, "conditions": "string", "summary": "string" },
-  "recommendation": "detailed textual recommendation",
-  "recommendedItems": ["item name from inventory", ...]
+  "predictedWeather": {
+    "temperatureCelsius": ${forecast.temperatureCelsius},
+    "windSpeedKmh": ${forecast.windSpeedKmh},
+    "windDirectionCompass": "${windDirectionCompass}",
+    "conditions": "${forecast.conditions}",
+    "summary": "bulletin météo court en français"
+  },
+  "recommendation": "recommandation textuelle détaillée",
+  "recommendedItems": ["nom d'article de la garde-robe", ...]
 }`;
 
-  const userPrompt = `RIDE CONTEXT:
-Location: ${parsedInput.location}
-Start Date/Time: ${parsedInput.dateTime}
-Expected Duration: ${parsedInput.durationHours} hours
+  const userPrompt = `CONTEXTE DE LA SORTIE :
+Lieu : ${parsedInput.location}
+Départ : ${parsedInput.dateTime}
+Durée prévue : ${parsedInput.durationHours} heures
+
+MÉTÉO RÉELLE (Open-Meteo) :
+Température : ${forecast.temperatureCelsius}°C
+Vent : ${forecast.windSpeedKmh} km/h, venant du ${windDirectionCompass}
+Conditions : ${forecast.conditions}
 
 ---
-CLOTHING INVENTORY:
+GARDE-ROBE DISPONIBLE :
 ${inventoryText}`;
 
-  const messages: Anthropic.MessageParam[] = [{ role: 'user', content: userPrompt }];
-
-  let response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 4096,
+  return generateJson(CyclingOutfitRecommendationOutputSchema, {
     system,
-    tools: [weatherTool],
-    messages,
+    messages: [{ role: 'user', content: userPrompt }],
   });
-
-  // Manual tool-use loop — the model calls get_weather_forecast at most once in practice.
-  let toolRounds = 0;
-  while (response.stop_reason === 'tool_use' && toolRounds < 3) {
-    toolRounds++;
-    const toolUseBlocks = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
-    messages.push({ role: 'assistant', content: response.content });
-
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
-    for (const block of toolUseBlocks) {
-      if (block.name === 'get_weather_forecast') {
-        const toolInput = block.input as { location: string; dateTime: string };
-        const result = await getWeatherForecast(toolInput.location, toolInput.dateTime);
-        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) });
-      } else {
-        toolResults.push({ type: 'tool_result', tool_use_id: block.id, content: 'Unknown tool', is_error: true });
-      }
-    }
-    messages.push({ role: 'user', content: toolResults });
-
-    response = await anthropic.messages.create({
-      model: CLAUDE_MODEL,
-      max_tokens: 4096,
-      system,
-      tools: [weatherTool],
-      messages,
-    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Erreur inconnue.' };
   }
-
-  const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
-  if (!textBlock) throw new Error('Claude did not return a final text response');
-
-  const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error(`No JSON object found in Claude response: ${textBlock.text.slice(0, 200)}`);
-
-  return CyclingOutfitRecommendationOutputSchema.parse(JSON.parse(jsonMatch[0]));
 }

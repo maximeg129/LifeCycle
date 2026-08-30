@@ -262,9 +262,8 @@ Les flows sont dans `src/ai/flows/` et s'appellent côté client via des Server 
 (fonctions `'use server'` important directement, pas d'abstraction Genkit). Chaque flow appelle
 `@anthropic-ai/sdk` via le client partagé `src/ai/anthropic.ts` (modèle `claude-haiku-4-5`,
 suffisant et peu coûteux pour ces usages perso). Le helper `generateJson(schema, { system, messages })`
-demande une réponse JSON pure à Claude et la valide avec Zod — pattern uniforme utilisé par 5 des
-6 flows (tous sauf `cyclingOutfitRecommendation`, qui garde son appel d'outil manuel, et `coachChat`,
-texte brut) plutôt que `output_config.format`.
+demande une réponse JSON pure à Claude et la valide avec Zod — pattern uniforme utilisé par 6 des
+7 flows (tous sauf `coachChat`, texte brut) plutôt que `output_config.format`.
 
 **`generateJson` ne lève jamais d'exception** — il renvoie `FlowResult<T>` (`{ok:true, data} |
 {ok:false, error}`), et chaque flow qui l'utilise propage ce type comme son propre type de retour
@@ -283,15 +282,24 @@ JSON introuvable/invalide, validation Zod — pour le débogage, puisque le clie
 version résumée dans `result.error`.
 
 `fetchWeatherForecast`/`degreesToCompass` (`src/ai/weather.ts`) sont le fetch météo
-réel (Open-Meteo, sans clé API) partagé par `cyclingOutfitRecommendation` (via tool use) et
-`dailyWorkoutRecommendation` (appel direct, pas de tool use — la météo est un pré-fetch déterministe,
-pas une décision à laisser au modèle).
+réel (Open-Meteo, sans clé API) partagé par `cyclingOutfitRecommendation` et `dailyWorkoutRecommendation`
+— dans les deux cas un pré-fetch déterministe fait par le flow lui-même, jamais une décision (ni même
+un tool use optionnel) laissée au modèle. `cyclingOutfitRecommendation` utilisait à l'origine le tool
+use de Claude pour la météo (`get_weather_forecast`, `tool_choice` par défaut donc pas garanti d'être
+appelé) — retour utilisateur : ça pouvait laisser le modèle deviner une météo plausible plutôt que la
+vraie, et l'onglet Météo & Tenue l'affichait alors comme "estimation basée sur des données historiques"
+alors que le fetch réel, quand il avait bien lieu, donnait déjà une vraie prévision. Réécrit pour suivre
+le même principe que `dailyWorkoutRecommendation` : le fetch est inconditionnel, avant même d'appeler
+Claude, qui ne fait plus que rédiger un court bulletin à partir des chiffres réels fournis (jamais
+inventés) et choisir la tenue.
 
 ### Flow existant : `cyclingOutfitRecommendation`
 - Input : `{ location, dateTime, durationHours, clothingInventory[] }`
-- Output : `{ predictedWeather, recommendation, recommendedItems[] }`
+- Output : `{ predictedWeather (dont windDirectionCompass), recommendation, recommendedItems[] }`
 - Usage : `src/components/coach/weather-outfit-tab.tsx` (sous-onglet "Météo & Tenue" de Coach — ex-page `/weather`, qui redirige maintenant vers `/coach`)
-- Utilise le tool use de Claude (`get_weather_forecast`, appelle Open-Meteo) avant de produire le JSON final.
+- `predictedWeather.temperatureCelsius`/`windSpeedKmh`/`conditions` viennent du fetch réel, pas de Claude
+  — le flow échoue (`FlowResult` en erreur) plutôt que de continuer si `fetchWeatherForecast` échoue
+  (lieu introuvable, API indisponible), au lieu de laisser l'UI afficher une météo inventée.
 
 ### Flow existant : `identifyPlant`
 - Input : `{ photoDataUri }` (base64 data URI)

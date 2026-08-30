@@ -104,13 +104,17 @@ export function WeatherOutfitTab() {
 
     setLoading(true)
     try {
-      const recommendation = await cyclingOutfitRecommendation({
+      const flowResult = await cyclingOutfitRecommendation({
         location: location,
         dateTime: buildOutfitDateTime(date, time),
         durationHours: duration,
         clothingInventory: clothingItems.map(toFlowInventoryItem)
       })
-      setResult(recommendation)
+      if (!flowResult.ok) {
+        toast({ variant: "destructive", title: "Erreur", description: flowResult.error })
+        return
+      }
+      setResult(flowResult.data)
     } catch (error) {
       console.error("Recommendation failed", error)
       toast({
@@ -242,26 +246,26 @@ export function WeatherOutfitTab() {
               <div className="p-4 rounded-full bg-muted/50 mb-4">
                 <CloudSun className="w-12 h-12 text-muted-foreground opacity-20" />
               </div>
-              <h3 className="text-lg font-medium text-foreground mb-2">Analyse prédictive</h3>
-              <p className="text-muted-foreground max-w-xs">Indiquez quand et où vous roulez. L&apos;IA consultera les historiques et prévisions pour vous conseiller.</p>
+              <h3 className="text-lg font-medium text-foreground mb-2">Météo réelle + tenue</h3>
+              <p className="text-muted-foreground max-w-xs">Indiquez quand et où vous roulez. On récupère la vraie météo (Open-Meteo) pour cette date et cette heure, et l&apos;IA vous conseille une tenue à partir de votre garde-robe.</p>
             </div>
           )}
 
           {loading && (
             <div className="h-full min-h-[450px] flex flex-col items-center justify-center text-center p-8 bg-card/20 rounded-xl">
               <Loader2 className="w-12 h-12 text-primary animate-spin mb-4" />
-              <p className="text-muted-foreground font-medium">L&apos;IA déduit les conditions à {location}...</p>
-              <p className="text-xs text-muted-foreground mt-2 italic">Analyse du climat pour le {format(date, "dd/MM")} à {time}...</p>
+              <p className="text-muted-foreground font-medium">Récupération de la météo réelle à {location}...</p>
+              <p className="text-xs text-muted-foreground mt-2 italic">Prévisions pour le {format(date, "dd/MM")} à {time}...</p>
             </div>
           )}
 
           {result && (
             <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
                  <Card className="bg-card/40 border-border">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
-                      <Thermometer className="w-3 h-3 text-accent" /> Temp. Estimée
+                      <Thermometer className="w-3 h-3 text-accent" /> Température
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
@@ -271,11 +275,21 @@ export function WeatherOutfitTab() {
                 <Card className="bg-card/40 border-border">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
-                      <Wind className="w-3 h-3 text-accent" /> Vent Prévu
+                      <Wind className="w-3 h-3 text-accent" /> Vent
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="text-3xl font-bold">{result.predictedWeather.windSpeedKmh} <span className="text-sm">km/h</span></div>
+                  </CardContent>
+                </Card>
+                <Card className="bg-card/40 border-border">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
+                      <Navigation className="w-3 h-3 text-accent" /> Direction du vent
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-xl font-bold truncate">{result.predictedWeather.windDirectionCompass}</div>
                   </CardContent>
                 </Card>
                 <Card className="bg-card/40 border-border">
@@ -334,9 +348,9 @@ export function WeatherOutfitTab() {
                 <CardContent className="pt-6 flex items-start gap-4">
                   <AlertTriangle className="w-5 h-5 text-yellow-500 shrink-0" />
                   <div>
-                    <p className="text-sm font-medium text-yellow-600 dark:text-yellow-500">Note de l&apos;IA</p>
+                    <p className="text-sm font-medium text-yellow-600 dark:text-yellow-500">Prévision réelle (Open-Meteo)</p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Cette météo est une estimation basée sur les données historiques de {location} pour cette période. Vérifiez les prévisions réelles 1h avant le départ.
+                      Ces chiffres viennent d&apos;une vraie prévision météo, pas d&apos;une estimation de l&apos;IA — mais comme toute prévision, elle devient moins fiable au-delà de quelques jours. Un dernier coup d&apos;œil juste avant le départ reste une bonne idée pour une sortie lointaine dans le temps.
                     </p>
                   </div>
                 </CardContent>
