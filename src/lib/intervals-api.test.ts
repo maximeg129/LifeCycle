@@ -142,6 +142,52 @@ describe('feelToScore', () => {
   })
 })
 
+describe('IntervalsService.getActivity / getActivityStreams', () => {
+  // Regression test for a real 404 hit in production: getActivity() and
+  // getActivityStreams() originally went through fetchIntervals(), which
+  // prepends /athlete/{athleteId} to every path — correct for the
+  // athlete-scoped list endpoint, but Intervals.icu addresses a single
+  // activity (and its streams) by its own globally-unique id at a
+  // top-level /activity/{id} path, not nested under /athlete/{id}/
+  // activities/{id}. This went unnoticed because both methods were unused
+  // anywhere in the app until the ride-analysis feature.
+  it('requests the single activity from the top-level /activity/{id} path, not /athlete/{athleteId}/activities/{id}', async () => {
+    const fetchMock = vi.fn(async (_url: string, _options?: RequestInit) => jsonResponse({ id: 'act1' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const service = new IntervalsService('i1', 'k')
+    await service.getActivity('act1')
+
+    const [url] = fetchMock.mock.calls[0]
+    expect(url).toBe('https://intervals.icu/api/v1/activity/act1')
+  })
+
+  it('requests activity streams from the top-level /activity/{id}/streams path with repeated types params', async () => {
+    const fetchMock = vi.fn(async (_url: string, _options?: RequestInit) => jsonResponse({}))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const service = new IntervalsService('i1', 'k')
+    await service.getActivityStreams('act1', ['watts', 'heartrate'])
+
+    const [url] = fetchMock.mock.calls[0]
+    const parsed = new URL(url)
+    expect(parsed.origin + parsed.pathname).toBe('https://intervals.icu/api/v1/activity/act1/streams')
+    expect(parsed.searchParams.getAll('types')).toEqual(['watts', 'heartrate'])
+  })
+
+  it('still sends the API key as HTTP Basic auth on the top-level path', async () => {
+    const fetchMock = vi.fn(async (_url: string, _options?: RequestInit) => jsonResponse({ id: 'act1' }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const service = new IntervalsService('i1', 'my-secret-key')
+    await service.getActivity('act1')
+
+    const [, options] = fetchMock.mock.calls[0]
+    const expected = 'Basic ' + btoa('API_KEY:my-secret-key')
+    expect(options?.headers).toMatchObject({ Authorization: expected })
+  })
+})
+
 describe('IntervalsService.getFitnessChart', () => {
   it('computes tsb as ctl - atl and drops entries with neither', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => jsonResponse([

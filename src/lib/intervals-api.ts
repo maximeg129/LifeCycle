@@ -289,6 +289,30 @@ export class IntervalsService {
     return response.json();
   }
 
+  /**
+   * Same auth/error handling as fetchIntervals(), but for the handful of
+   * endpoints that are NOT nested under /athlete/{athleteId}/... — a single
+   * activity's detail and streams are addressed by their own (globally
+   * unique) activity id, not scoped to an athlete. Routing them through
+   * fetchIntervals() (as getActivity()/getActivityStreams() originally did)
+   * produced a URL Intervals.icu's API has never served, silently 404ing —
+   * this went unnoticed because both methods were unused anywhere in the
+   * app until the ride-analysis feature became their first real caller.
+   */
+  private async fetchIntervalsAbsolute<T = unknown>(path: string): Promise<T> {
+    const response = await fetch(`https://intervals.icu/api/v1${path}`, {
+      headers: {
+        'Authorization': this.authHeader,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Intervals.icu API Error ${response.status}: ${response.statusText}`);
+    }
+
+    return response.json();
+  }
+
   /** Profil athlète avec CTL/ATL/TSB/FTP actuels (fusionne /athlete et /wellness) */
   async getAthlete(): Promise<IntervalsAthlete> {
     const today = new Date().toISOString().slice(0, 10);
@@ -395,16 +419,16 @@ export class IntervalsService {
     return data.list ?? [];
   }
 
-  /** Détail d'une activité */
+  /** Détail d'une activité — endpoint top-level (l'id d'activité est unique globalement, pas besoin de le scoper par athlète, contrairement à la liste). */
   async getActivity(activityId: string): Promise<IntervalsActivity> {
-    return this.fetchIntervals<IntervalsActivity>(`/activities/${activityId}`);
+    return this.fetchIntervalsAbsolute<IntervalsActivity>(`/activity/${activityId}`);
   }
 
-  /** Streams d'une activité (puissance, FC, altitude…) */
+  /** Streams d'une activité (puissance, FC, altitude…) — même remarque que getActivity() sur le chemin top-level. */
   async getActivityStreams(activityId: string, types: string[] = ['watts', 'heartrate', 'cadence', 'altitude']): Promise<IntervalsActivityStream> {
     const params = new URLSearchParams();
     types.forEach(t => params.append('types', t));
-    return this.fetchIntervals<IntervalsActivityStream>(`/activities/${activityId}/streams?${params}`);
+    return this.fetchIntervalsAbsolute<IntervalsActivityStream>(`/activity/${activityId}/streams?${params}`);
   }
 
   /** Zones de puissance */
