@@ -9,8 +9,10 @@
  */
 
 import { z } from 'zod';
-import { generateJson, type FlowResult } from '@/ai/anthropic';
+import { type FlowResult } from '@/ai/anthropic';
 import { languageInstruction } from '@/ai/language';
+import { invokeCoachJson } from '@/ai/coach/invokeCoach';
+import { withCoachOutputContract } from '@/ai/coach/outputContract';
 
 const RecoveryInsightInputSchema = z.object({
   dailyMetrics: z.array(z.object({
@@ -39,9 +41,9 @@ const RecoveryInsightInputSchema = z.object({
 
 export type RecoveryInsightInput = z.infer<typeof RecoveryInsightInputSchema>;
 
-const RecoveryInsightOutputSchema = z.object({
-  summary: z.string().describe('One or two sentence overview of where the user stands right now.'),
-  recommendation: z.string().describe('One concrete, actionable suggestion for today or the coming days (training intensity, rest, sleep, etc).'),
+const RecoveryInsightOutputSchema = withCoachOutputContract({
+  summary: z.string().min(1).describe('One or two sentence overview of where the user stands right now.'),
+  recommendation: z.string().min(1).describe('One concrete, actionable suggestion for today or the coming days (training intensity, rest, sleep, etc).'),
   highlights: z.array(z.string()).describe('1-3 short positive observations from the data. Empty array if none stand out.'),
   watchouts: z.array(z.string()).describe('1-3 short points worth watching or improving. Empty array if none stand out.'),
 }).describe('Output of the recovery insight flow.');
@@ -91,7 +93,8 @@ reference actual numbers from the data when you can (e.g. "votre HRV moyen est d
 missing across the board, don't invent it — just work with what's there. If dailyMetrics is mostly empty,
 say so briefly and recommend logging a few more days rather than fabricating trends.
 
-Respond with ONLY a JSON object (no markdown fences, no other text) matching exactly this shape:
+Respond with ONLY a JSON object (no markdown fences, no other text) matching exactly this shape (plus the
+mandatory contract fields described above):
 {
   "summary": "one or two sentence overview",
   "recommendation": "one concrete, actionable suggestion",
@@ -99,8 +102,9 @@ Respond with ONLY a JSON object (no markdown fences, no other text) matching exa
   "watchouts": ["up to 3 short points worth watching, empty array if none"]
 }`;
 
-  return generateJson(RecoveryInsightOutputSchema, {
-    system,
+  return invokeCoachJson(RecoveryInsightOutputSchema, {
+    flowId: 'recoveryInsight',
+    taskSystemPrompt: system,
     messages: [{ role: 'user', content: sections.join('\n\n') }],
   });
   } catch (e) {

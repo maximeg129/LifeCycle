@@ -1,16 +1,22 @@
 // ── Garde-fous CI, posés en Phase 1 comme demandé (pas repoussés à la fin) ──
 //
-// Deux des six garde-fous demandés ne sont pas encore possibles à ce stade :
-// - "Snapshot du prompt système" — buildSystemPrompt.ts n'existe pas encore
-//   (Phase 3 / PR 8). Rien à snapshotter avant.
-// - "Réponse coach sans uncertainty rejetée" — le contrat de sortie Zod
-//   unifié n'existe pas encore (même PR). Rien à valider avant.
-// Les deux seront ajoutés dans la PR qui introduit buildSystemPrompt.ts.
+// Les 6 garde-fous demandés sont maintenant tous en place :
+// 1-2. rules.test.ts / constants.test.ts (aucune CoachRule sans refs ni
+//    convention:true ; aucune constante pending utilisée sans throw).
+// 3. Le littéral Riegel interdit — scanné ci-dessous.
+// 4. Point d'entrée unique — scanné ci-dessous, resserré à
+//    [anthropic.ts, coach/invokeCoach.ts] par la PR 8 (buildSystemPrompt.ts/
+//    invokeCoach.ts) : les 6 flows coach en périmètre appellent maintenant
+//    exclusivement invokeCoachJson/invokeCoachConversational, plus jamais
+//    generateJson/anthropic.messages.create directement.
+// 5. Snapshot du prompt système — src/ai/coach/buildSystemPrompt.test.ts
+//    (`toMatchSnapshot()` par flow, un snapshot committé par PR 8).
+// 6. Réponse coach sans uncertainty rejetée —
+//    src/ai/coach/outputContract.test.ts.
 //
-// Les quatre autres sont actionnables dès maintenant et vivent ici :
-// rules.test.ts et constants.test.ts couvrent les garde-fous propres à
-// l'évidence base elle-même ; ce fichier couvre les deux garde-fous qui
-// scannent le dépôt (littéral interdit, point d'entrée unique).
+// Ce fichier couvre les deux garde-fous qui scannent le dépôt (littéral
+// interdit, point d'entrée unique) ; les autres vivent dans leurs modules
+// respectifs, plus naturels à maintenir à côté du code qu'ils couvrent.
 
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync, statSync } from 'fs'
@@ -80,14 +86,23 @@ describe('CI guardrail — the Riegel running exponent literal never appears in 
 })
 
 describe('CI guardrail — single entry point to the Anthropic API', () => {
-  // Aujourd'hui (avant la PR 8 / buildSystemPrompt.ts), deux fichiers
-  // appellent réellement l'API : anthropic.ts (generateJson, partagé par
-  // 6 flows) et coach-chat-flow.ts (son propre appel direct, documenté
-  // dans CLAUDE.md). C'est la liste blanche de référence tant que la
-  // migration n'a pas eu lieu — elle ne doit jamais grandir sans une
-  // décision explicite, et elle se réduira à un seul fichier
-  // (src/ai/coach/invokeCoach.ts) une fois la PR 8 livrée.
-  const ALLOWED_CALL_SITES = [join(SRC_ROOT, 'ai', 'anthropic.ts'), join(SRC_ROOT, 'ai', 'flows', 'coach-chat-flow.ts')]
+  // Depuis la PR 8 (buildSystemPrompt.ts/invokeCoach.ts) : exactement deux
+  // fichiers appellent réellement l'API — anthropic.ts (generateJson, le
+  // client bas niveau partagé) et src/ai/coach/invokeCoach.ts (le seul
+  // appelant autorisé de generateJson/anthropic.messages.create pour les 6
+  // flows coach en périmètre, Q2 dans docs/OPEN_QUESTIONS.md). Les 6 flows
+  // eux-mêmes (dailyWorkoutRecommendation, trainingPlanGeneration,
+  // planWeekSessions, coachChat, rideAnalysis, recoveryInsight) n'appellent
+  // plus jamais le modèle directement — coach-chat-flow.ts, seul cas qui
+  // appelait l'API en direct avant cette PR (texte libre/tool_use, pas de
+  // schéma Zod), est passé par invokeCoachConversational comme les 5 autres
+  // par invokeCoachJson. `cyclingOutfitRecommendation`/`identifyPlant`
+  // restent hors périmètre (Q2) et continuent d'appeler generateJson
+  // directement depuis leur propre fichier — mais generateJson lui-même vit
+  // dans anthropic.ts, déjà dans la liste blanche, donc leur appel effectif
+  // à `.messages.create` n'apparaît toujours nulle part ailleurs. Cette
+  // liste ne doit jamais grandir sans une décision explicite.
+  const ALLOWED_CALL_SITES = [join(SRC_ROOT, 'ai', 'anthropic.ts'), join(SRC_ROOT, 'ai', 'coach', 'invokeCoach.ts')]
 
   it('no file outside the allowlist calls anthropic.messages.create', () => {
     const offenders: string[] = []

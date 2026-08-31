@@ -13,8 +13,10 @@
  */
 
 import { z } from 'zod';
-import { generateJson, type FlowResult } from '@/ai/anthropic';
+import { type FlowResult } from '@/ai/anthropic';
 import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
+import { invokeCoachJson } from '@/ai/coach/invokeCoach';
+import { withCoachOutputContract } from '@/ai/coach/outputContract';
 
 const PlanWeekSessionsInputSchema = z.object({
   weekNumber: z.number(),
@@ -42,7 +44,7 @@ const PlanWeekSessionSchema = z.object({
   structuredWorkout: z.string().describe('Intervals.icu workout-builder text script — see system prompt for the exact syntax.'),
 });
 
-const PlanWeekSessionsOutputSchema = z.object({
+const PlanWeekSessionsOutputSchema = withCoachOutputContract({
   sessions: z.array(PlanWeekSessionSchema).describe('2 to 5 example sessions for the week, varied in type, whose durationMinutes sum to approximately targetWeeklyMinutes (±20%).'),
 }).describe('Output of the plan week sample sessions flow.');
 
@@ -102,7 +104,9 @@ Règles impératives :
 
 ${STRUCTURED_WORKOUT_SYNTAX}
 
-Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme :
+Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme
+(plus les champs de contrat obligatoires décrits plus haut — "summary" résume la répartition de la semaine
+en une phrase, "recommendation" indique quelle séance prioriser si le temps manque) :
 {
   "sessions": [
     {
@@ -116,8 +120,9 @@ Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, p
   ]
 }`;
 
-  return generateJson(PlanWeekSessionsOutputSchema, {
-    system,
+  return invokeCoachJson(PlanWeekSessionsOutputSchema, {
+    flowId: 'planWeekSessions',
+    taskSystemPrompt: system,
     messages: [{ role: 'user', content: sections.join('\n\n') }],
     maxTokens: 8192,
   });
