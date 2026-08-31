@@ -32,6 +32,7 @@ import {
 } from './training-plan-types'
 import { buildWorkoutEventPayload } from './daily-workout-types'
 import type { CoachGoal } from './coach-memory-types'
+import type { CoachReason } from '@/ai/coach/outputContract'
 import { describeActionDispatchError } from '@/lib/utils'
 
 interface IntervalsCredentialsDoc {
@@ -50,6 +51,16 @@ export interface TrainingPlanDoc {
   weeklyAvailableMinutes: number
   weeks: PlanWeek[]
   warnings: string[]
+  /**
+   * Paragraphe expliquant la logique du plan (retour utilisateur : "quelle
+   * base il prend pour proposer ce plan... quelles sont les attentes
+   * physiologiques") — champ "summary" du contrat de sortie coach
+   * (withCoachOutputContract), redéfini plus richement pour ce flow. Absent
+   * sur un plan généré avant cet ajout (undefined, pas une chaîne vide).
+   */
+  summary?: string
+  /** Règles citées derrière le plan (withCoachOutputContract) — même champ que daily-workout-tab.tsx, absent sur un plan ancien. */
+  reasons?: CoachReason[]
 }
 
 type StoredPlan = TrainingPlanDoc & { id: string }
@@ -110,6 +121,8 @@ export function useTrainingPlan() {
           ctl: athlete.data.ctl,
           atl: athlete.data.atl,
           tsb: athlete.data.tsb,
+          ftp: athlete.data.ftp,
+          weightKg: athlete.data.weight,
         } : undefined,
         coachContext,
       })
@@ -138,6 +151,8 @@ export function useTrainingPlan() {
         weeklyAvailableMinutes,
         weeks,
         warnings: output.warnings,
+        summary: output.summary,
+        reasons: output.reasons,
         createdAt: serverTimestamp(),
       }
       try {
@@ -197,6 +212,8 @@ export function useTrainingPlan() {
           ctl: athlete.data.ctl,
           atl: athlete.data.atl,
           tsb: athlete.data.tsb,
+          ftp: athlete.data.ftp,
+          weightKg: athlete.data.weight,
         } : undefined,
         coachContext,
       })

@@ -122,6 +122,8 @@ export function useDailyWorkout() {
           atl: athlete.data.atl,
           tsb: athlete.data.tsb,
           rampRate: athlete.data.rampRate,
+          ftp: athlete.data.ftp,
+          weightKg: athlete.data.weight,
         } : undefined,
         recentSessions: summarizeRecentSessions(recentActivities.data, todayId, SESSIONS_WINDOW_DAYS),
         planWeek: planWeek ? {

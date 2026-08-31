@@ -165,6 +165,8 @@ export function useCoachChat() {
           ctl: athlete.data.ctl,
           atl: athlete.data.atl,
           tsb: athlete.data.tsb,
+          ftp: athlete.data.ftp,
+          weightKg: athlete.data.weight,
         } : undefined,
         planWeek: planWeek ? {
           weekNumber: planWeek.weekNumber,

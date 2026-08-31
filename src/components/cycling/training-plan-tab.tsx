@@ -177,6 +177,34 @@ export function TrainingPlanTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* Retour utilisateur : "un paragraphe qui explique les raisons...
+              quelle base il prend pour proposer ce plan... et quelles sont les
+              attentes physiologiques". "summary" est redéfini pour ce flow
+              (training-plan-generation-flow.ts) pour être ce paragraphe plutôt
+              que l'aperçu générique en une phrase du socle. "reasons" cite les
+              règles evidence/rules.ts effectivement appliquées, chacune avec
+              son SourceCitation — absent sur un plan généré avant cet ajout. */}
+          {activePlan.summary && (
+            <p className="text-sm text-muted-foreground leading-relaxed">{activePlan.summary}</p>
+          )}
+
+          {activePlan.reasons && activePlan.reasons.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                Motif de ce plan
+              </p>
+              <ul className="space-y-1.5">
+                {activePlan.reasons.map((r, i) => (
+                  <li key={i} className="flex items-start gap-1.5 text-sm text-muted-foreground">
+                    <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                    <span className="flex-1">{r.detail}</span>
+                    <SourceCitation ruleIds={[r.rule]} label="Voir la règle citée" className="shrink-0 mt-0.5" />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {activePlan.warnings.length > 0 && (
             <div className="space-y-2">
               {activePlan.warnings.map((w, i) => (
