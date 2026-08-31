@@ -26,6 +26,20 @@ const ZoneBucketSchema = z.object({
 });
 type ZoneBucketInput = z.infer<typeof ZoneBucketSchema>;
 
+// Distribution 3 zones (R18, Seiler — domain/cycling/metrics/zones.ts),
+// distincte du modèle 7 zones ci-dessus (power-zones-3-zone-distribution-
+// required, evidence/rules.ts) : la cible ~80% basse intensité qu'elle
+// permet de vérifier est descriptive (observation d'athlètes très
+// entraînés), jamais une prescription — voir la garde-fou dans le prompt
+// système plus bas.
+const ThreeZoneBucketSchema = z.object({
+  id: z.enum(['zone1', 'zone2', 'zone3']),
+  label: z.string(),
+  minutes: z.number(),
+  pctOfRide: z.number(),
+});
+type ThreeZoneBucketInput = z.infer<typeof ThreeZoneBucketSchema>;
+
 // Durabilité (R07/R08/R10, ride-analysis-2-power-profile-by-accumulated-tier,
 // domain/cycling/metrics/durability.ts) — profil de puissance maximale
 // moyenne (MMP) à chaque palier de travail accumulé (kJ/kg) franchi PENDANT
@@ -63,6 +77,10 @@ const RideAnalysisInputSchema = z.object({
   }),
   powerZones: z.array(ZoneBucketSchema).optional().describe('Coggan 7-zone power distribution, % of FTP'),
   hrZones: z.array(ZoneBucketSchema).optional().describe('5-zone heart-rate distribution, % of max HR'),
+  threeZoneDistribution: z
+    .array(ThreeZoneBucketSchema)
+    .optional()
+    .describe('3-zone intensity distribution (R18, Seiler bounds — 0-80/80-100/100%+ FTP), distinct from the 7-zone Coggan model above.'),
   split: z.object({
     firstHalfAvgWatts: z.number(),
     secondHalfAvgWatts: z.number(),
@@ -112,6 +130,13 @@ function formatZones(zones: ZoneBucketInput[] | undefined, label: string): strin
   return `${label} :\n${lines.join('\n')}`;
 }
 
+function formatThreeZones(buckets: ThreeZoneBucketInput[] | undefined): string {
+  if (!buckets || buckets.length === 0) return '';
+  const lines = buckets.filter((b) => b.minutes > 0).map((b) => `  - ${b.label} : ${b.minutes} min (${b.pctOfRide}%)`);
+  if (lines.length === 0) return '';
+  return `RÉPARTITION 3 ZONES D'INTENSITÉ (Seiler, R18, distincte du modèle 7 zones ci-dessus) :\n${lines.join('\n')}`;
+}
+
 function formatDurationLabel(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
   return `${Math.round(seconds / 60)}min`;
@@ -152,6 +177,7 @@ export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult
     const zonesText = [
       formatZones(parsed.powerZones, 'RÉPARTITION PAR ZONES DE PUISSANCE (% FTP)'),
       formatZones(parsed.hrZones, 'RÉPARTITION PAR ZONES DE FC (% FC max de la sortie)'),
+      formatThreeZones(parsed.threeZoneDistribution),
     ].filter(Boolean).join('\n\n');
     if (zonesText) sections.push(zonesText);
 
@@ -192,6 +218,7 @@ export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult
 Analyse les données ci-dessous et produis une analyse honnête, concrète et encourageante de cette sortie. Réfère-toi aux vrais chiffres fournis plutôt que de rester vague (par exemple "puissance normalisée de 210W bien tenue sur l'ensemble" plutôt que "bonne puissance"). Si peu de données sont disponibles (pas de puissance ni de FC), dis-le brièvement et analyse ce qui est disponible (durée, dénivelé, charge, ressenti) plutôt que d'inventer des observations sur la puissance ou la fréquence cardiaque.
 Si un profil de durabilité est fourni, commente si la puissance tient ou décline à mesure que le travail s'accumule pendant la sortie (paliers kJ/kg) — c'est une lecture différente de la puissance moyenne globale, jamais interchangeable avec elle. Cette comparaison reste interne à CETTE sortie (à froid vs fatigué) : ne prétends JAMAIS comparer à l'historique de l'athlète ou à un seuil labo/un autre athlète, aucune de ces deux comparaisons n'est fournie ici.
 Si un découplage puissance:FC est fourni, ne l'interprète JAMAIS automatiquement comme un signe de fatigue — contextualise (chaleur, hydratation/hypovolémie, dénivelé, intensité variable sur la sortie) plutôt que d'affirmer une cause précise que les données ne permettent pas de trancher.
+Si une répartition 3 zones est fournie, la cible ~80% en zone basse intensité est une observation DESCRIPTIVE d'athlètes s'entraînant 10-13 fois/semaine, JAMAIS une prescription universelle — ne dis jamais à l'athlète qu'il "devrait" viser 80% sur CETTE sortie (une sortie seuil/intervalles n'a aucune raison d'être en zone basse), décris seulement où se situe cette sortie et laisse le contexte du plan/objectif de l'athlète, pas ce chiffre seul, dicter si c'était le bon choix.
 
 Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme exacte
 (plus les champs de contrat obligatoires décrits plus haut) :
