@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { type FlowResult } from '@/ai/anthropic';
 import { fetchWeatherForecast, degreesToCompass, isSevereWeather, SEVERE_WIND_THRESHOLD_KMH } from '@/ai/weather';
 import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
+import { HOME_TRAINER_ADAPTATION_GUIDANCE } from './home-trainer-adaptation';
 import { invokeCoachJson } from '@/ai/coach/invokeCoach';
 import { withCoachOutputContract } from '@/ai/coach/outputContract';
 
@@ -26,6 +27,7 @@ const DailyWorkoutRecommendationInputSchema = z.object({
   date: z.string().describe('yyyy-MM-dd — the day this workout is planned for.'),
   availableMinutes: z.number().describe('Minutes the athlete actually has available today, including warmup/cooldown.'),
   sportType: z.string().optional().describe('Preferred Intervals.icu sport type (e.g. "Ride", "VirtualRide"). Defaults to "Ride".'),
+  indoorRequested: z.boolean().optional().describe('Athlete explicitly chose to train indoors (home trainer) today, independent of the weather — forces the same home-trainer adaptation as severe weather, but the athlete\'s own choice rather than a weather alert.'),
   training: z.object({
     ctl: z.number().optional().describe('Chronic Training Load (fitness)'),
     atl: z.number().optional().describe('Acute Training Load (fatigue)'),
@@ -89,6 +91,45 @@ function formatRecentSessions(sessions: DailyWorkoutRecommendationInput['recentS
     const load = s.trainingLoad != null ? `, charge ${Math.round(s.trainingLoad)}` : '';
     return `- ${s.date}: ${type}, ${duration}${load}`;
   }).join('\n');
+}
+
+/**
+ * Instruction météo/home-trainer/windAdvice — trois cas mutuellement
+ * exclusifs (forceIndoor prime sur windIsSignificant, qui prime sur le cas
+ * par défaut). Extrait en fonction plutôt que des ternaires imbriqués dans
+ * le template littéral du system prompt — plus sûr (pas d'échappement de
+ * guillemets à la main) et plus facile à relire.
+ */
+function buildRideGuidance(opts: { forceIndoor: boolean; weatherIsSevere: boolean; windIsSignificant: boolean }): string {
+  const { forceIndoor, weatherIsSevere, windIsSignificant } = opts;
+
+  if (forceIndoor) {
+    const reason = weatherIsSevere
+      ? `- ALERTE MÉTÉO : la météo prévue pour la sortie est jugée trop dégradée pour rouler dehors (vent ${SEVERE_WIND_THRESHOLD_KMH}+ km/h et/ou pluie/neige forte/orage — voir la météo fournie ci-dessus).`
+      : "- L'athlète a choisi explicitement de rouler en intérieur aujourd'hui (aucune alerte météo, c'est un choix délibéré, pas une contrainte).";
+    const alertInstruction = weatherIsSevere
+      ? 'Remplis weatherAlert avec 1-2 phrases citant les chiffres réels et expliquant que la séance a été adaptée pour cette raison, et mentionne aussi ce changement dans warnings.'
+      : "Mets weatherAlert à null (pas d'alerte météo, c'est un choix de l'athlète) — explique l'adaptation home trainer dans rationale à la place.";
+    return [
+      reason,
+      '  Propose une séance ADAPTÉE EN HOME TRAINER : sportType doit être "VirtualRide", et le contenu (durée, intensité,',
+      "  structuredWorkout) doit rester cohérent avec la forme du jour comme n'importe quelle autre proposition — ce",
+      "  n'est pas une simple annulation, c'est une vraie séance indoor équivalente.",
+      `  ${HOME_TRAINER_ADAPTATION_GUIDANCE}`,
+      `  ${alertInstruction}`,
+      '  Mets windAdvice à null (pas de sens pour une séance indoor).',
+    ].join('\n');
+  }
+
+  if (windIsSignificant) {
+    return `- Une météo de sortie avec du vent significatif (${WIND_ADVICE_THRESHOLD_KMH}+ km/h) est fournie ci-dessus : remplis
+  windAdvice avec 1-2 phrases indiquant la direction générale à prendre AU DÉPART pour avoir le vent de face
+  à l'aller et dans le dos au retour (ex. "Partez vers le Nord-Ouest à l'aller, vous aurez le vent dans le
+  dos sur le retour"). C'est un conseil de direction générale, pas un itinéraire précis — tu ne connais pas
+  les routes locales. Mets weatherAlert à null : la météo n'est pas dégradée.`;
+  }
+
+  return "- Mets windAdvice et weatherAlert à null : soit aucune météo de sortie n'a été fournie, soit le vent prévu est trop faible pour justifier un conseil d'itinéraire et la météo n'est pas dégradée.";
 }
 
 export async function dailyWorkoutRecommendation(input: DailyWorkoutRecommendationInput): Promise<FlowResult<DailyWorkoutRecommendationOutput>> {
@@ -167,6 +208,14 @@ export async function dailyWorkoutRecommendation(input: DailyWorkoutRecommendati
     }
   }
 
+  // Home trainer forcé soit par météo dégradée, soit par choix explicite de
+  // l'athlète (retour utilisateur : "choisir si on veut faire la séance en
+  // intérieur ou en extérieur") — même adaptation de contenu dans les deux
+  // cas, seule la justification affichée diffère (weatherAlert cite la
+  // météo réelle ; un choix délibéré n'a pas d'alerte météo à citer, voir
+  // rationale à la place).
+  const forceIndoor = weatherIsSevere || parsedInput.indoorRequested === true;
+
   const coachContextBlock = parsedInput.coachContext ? `${parsedInput.coachContext}\n\n` : '';
 
   const system = `${coachContextBlock}Tu es un coach cycliste expert. À partir du contexte fourni (forme actuelle, charge d'entraînement,
@@ -195,17 +244,7 @@ Règles impératives :
   en % de FTP (voir la syntaxe ci-dessous, que l'app convertit déjà en watts côté Intervals.icu). Si la FTP
   n'est pas fournie (n/a ci-dessus), reste en %/ressenti dans rationale, ne l'invente jamais.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
-${weatherIsSevere ? `- ALERTE MÉTÉO : la météo prévue pour la sortie est jugée trop dégradée pour rouler dehors (vent
-  ${SEVERE_WIND_THRESHOLD_KMH}+ km/h et/ou pluie/neige forte/orage — voir la météo fournie ci-dessus). Propose à la
-  place une séance ADAPTÉE EN HOME TRAINER : sportType doit être "VirtualRide", et le contenu (durée, intensité,
-  structuredWorkout) doit rester cohérent avec la forme du jour comme n'importe quelle autre proposition — ce
-  n'est pas une simple annulation, c'est une vraie séance indoor équivalente. Remplis weatherAlert avec 1-2
-  phrases citant les chiffres réels et expliquant que la séance a été adaptée pour cette raison, et mentionne
-  aussi ce changement dans warnings. Mets windAdvice à null (pas de sens pour une séance indoor).` : windIsSignificant ? `- Une météo de sortie avec du vent significatif (${WIND_ADVICE_THRESHOLD_KMH}+ km/h) est fournie ci-dessus : remplis
-  windAdvice avec 1-2 phrases indiquant la direction générale à prendre AU DÉPART pour avoir le vent de face
-  à l'aller et dans le dos au retour (ex. "Partez vers le Nord-Ouest à l'aller, vous aurez le vent dans le
-  dos sur le retour"). C'est un conseil de direction générale, pas un itinéraire précis — tu ne connais pas
-  les routes locales. Mets weatherAlert à null : la météo n'est pas dégradée.` : '- Mets windAdvice et weatherAlert à null : soit aucune météo de sortie n\'a été fournie, soit le vent prévu est trop faible pour justifier un conseil d\'itinéraire et la météo n\'est pas dégradée.'}
+${buildRideGuidance({ forceIndoor, weatherIsSevere, windIsSignificant })}
 
 ${STRUCTURED_WORKOUT_SYNTAX}
 

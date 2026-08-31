@@ -46,6 +46,8 @@ interface StoredWorkoutProposal {
   proposal: DailyWorkoutRecommendationOutput
   sentToIntervals?: boolean
   ride?: StoredRide | null
+  /** Choix explicite intérieur/extérieur de l'athlète (retour utilisateur), indépendant de la météo — absent (undefined) sur une proposition générée avant cet ajout, traité comme "extérieur" par défaut. */
+  indoorRequested?: boolean
 }
 
 const SESSIONS_WINDOW_DAYS = 7
@@ -99,7 +101,7 @@ export function useDailyWorkout() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSending, setIsSending] = useState(false)
 
-  const generate = useCallback(async (rawMinutes: number, ride?: StoredRide): Promise<DailyWorkoutRecommendationOutput | null> => {
+  const generate = useCallback(async (rawMinutes: number, ride?: StoredRide, indoorRequested?: boolean): Promise<DailyWorkoutRecommendationOutput | null> => {
     if (!user || !db) return null
     const availableMinutes = clampAvailableMinutes(rawMinutes)
     setIsGenerating(true)
@@ -139,7 +141,12 @@ export function useDailyWorkout() {
           readiness: lifestyle.readiness ?? undefined,
         } : undefined,
         coachContext,
-        ride,
+        // ride n'est jamais fourni quand indoorRequested est vrai (voir
+        // daily-workout-tab.tsx : les champs lieu/heure sont masqués en
+        // intérieur, aucune météo à aller chercher) — indoorRequested seul
+        // suffit à déclencher l'adaptation home trainer côté flow.
+        ride: indoorRequested ? undefined : ride,
+        indoorRequested,
       })
       if (!result.ok) {
         toast({ variant: 'destructive', title: "L'IA n'a pas pu générer de séance", description: result.error })
@@ -153,7 +160,8 @@ export function useDailyWorkout() {
         availableMinutes,
         proposal,
         sentToIntervals: false,
-        ride: ride ?? null,
+        ride: indoorRequested ? null : (ride ?? null),
+        indoorRequested: indoorRequested ?? false,
         createdAt: serverTimestamp(),
       }
       try {
@@ -215,6 +223,7 @@ export function useDailyWorkout() {
     stored: stored?.proposal ?? null,
     storedAvailableMinutes: stored?.availableMinutes ?? null,
     storedRide: stored?.ride ?? null,
+    storedIndoorRequested: stored?.indoorRequested ?? false,
     sentToIntervals: stored?.sentToIntervals ?? false,
     planWeek,
     recovery: lifestyle.latest ? { ...lifestyle.latest, readiness: lifestyle.readiness } : null,
