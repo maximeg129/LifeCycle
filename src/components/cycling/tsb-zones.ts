@@ -75,8 +75,9 @@ const ZONES: Record<TsbZoneId, TsbZone> = {
   },
   optimal: {
     id: 'optimal',
-    label: 'Optimal',
-    description: 'Charge productive — la zone visée pour progresser sans basculer dans le surentraînement.',
+    label: 'Charge productive',
+    description:
+      "Zone de charge productive typique pour beaucoup d'athlètes entraînés — pas un état de forme optimal universel : les modèles CTL/ATL/TSB n'ont pas de signification comparable d'un athlète ou d'un modèle à l'autre (R03), votre propre zone productive se lit dans votre trajectoire personnelle, pas dans ce chiffre isolé.",
     min: -30,
     max: -10,
     textClassName: 'text-green-600',

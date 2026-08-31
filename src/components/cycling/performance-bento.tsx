@@ -161,7 +161,6 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
   // Day-over-day trend LEDs (user feedback: "une petite led rouge/vert/jaune
   // l'évolution vis à vis de la veille") — only meaningful once there's both
   // a latest reading and a prior day to compare it against.
-  const previousHrv = lifestyle.latest ? previousValue(lifestyle.dailySeries, lifestyle.latest.dayId, 'hrv') : undefined
   const previousRestingHR = lifestyle.latest ? previousValue(lifestyle.dailySeries, lifestyle.latest.dayId, 'restingHR') : undefined
 
   return (
@@ -209,7 +208,14 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
               label="HRV"
               value={lifestyle.latest?.hrv != null ? Math.round(lifestyle.latest.hrv) : '—'}
               unit={lifestyle.latest?.hrv != null ? 'ms' : undefined}
-              trend={lifestyle.latest?.hrv != null ? vitalTrend(lifestyle.latest.hrv, previousHrv, 'higher-better') : undefined}
+              // Pas de trend jour/veille ici — retiré (docs/AUDIT_CYCLING.md
+              // §1.1) : une LED verte/rouge sur une seule comparaison
+              // jour-à-jour codait l'affirmation interdite section 8 ("qu'une
+              // baisse de HRV signifie fatigue et une hausse fraîcheur") et
+              // violait principle-2 (jamais de décision sur une valeur
+              // isolée) / principle-3 (le signe d'une variation de HRV est
+              // ambigu, R25). La FC repos juste en dessous garde sa LED : R25
+              // ne documente pas la FC repos comme ambiguë de la même façon.
             />
             <StatChip
               href="/cycling/metric/restingHr"

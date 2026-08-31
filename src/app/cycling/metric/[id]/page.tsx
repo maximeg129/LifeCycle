@@ -34,6 +34,16 @@ import { fitPowerDurationCurve, type PowerRecord } from '@/components/cycling/ri
 import { PowerCurveCard } from '@/components/cycling/power-curve-card'
 import { METRIC_INFO, type MetricId } from '@/components/cycling/metric-info'
 import { tsbZone, TSB_ZONES_ORDERED } from '@/components/cycling/tsb-zones'
+import { SourceCitation } from '@/components/coach/source-citation'
+
+// Source-au-clic (Phase 5/UI) — premier déploiement sur les 3 tuiles
+// explicitement corrigées suite à l'audit (docs/AUDIT_CYCLING.md §1) :
+// HRV/CTL/TSB. Le reste des métriques suivra dans une PR de suivi.
+const SOURCE_RULE_IDS: Partial<Record<MetricId, string[]>> = {
+  ctl: ['fitness-fatigue-show-trajectory-not-absolute'],
+  tsb: ['forbidden-tsb-universal-optimal'],
+  hrv: ['principle-3-hrv-sign-ambiguous', 'forbidden-hrv-sign-fatigue-freshness'],
+}
 
 const TREND_DAYS = 180 // ~6 mois
 
@@ -220,9 +230,17 @@ export default function MetricDetailPage() {
                     {currentZone.label}
                   </span>
                 )}
+                {SOURCE_RULE_IDS[id] && (
+                  <SourceCitation ruleIds={SOURCE_RULE_IDS[id]!} label={`Source de ${info.label}`} className="ml-1" />
+                )}
               </>
             )}
           </CardContent>
+          {currentZone && (
+            <CardContent className="px-6 pt-0 pb-5 -mt-2">
+              <p className="text-xs text-muted-foreground">{currentZone.description}</p>
+            </CardContent>
+          )}
         </Card>
 
         {/* Riegel n'a pas de courbe d'historique (recalculé à la volée, jamais
