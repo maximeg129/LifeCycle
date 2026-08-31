@@ -44,6 +44,7 @@ const TrainingPlanRecalibrationInputSchema = z.object({
   today: z.string().describe('yyyy-MM-dd'),
   eventName: z.string(),
   eventDate: z.string().describe('yyyy-MM-dd'),
+  targetOutcome: z.string().optional().describe('What success looks like for this goal, from the athlete\'s own words (CoachGoal.targetOutcome) — the yardstick a real critique should measure against. Absent on a plan created before this field was captured.'),
   throughWeekNumber: z.number().describe('The most recently completed week — never present in remainingWeeks, never to be touched.'),
   completedWeek: z.object({
     phase: PlanPhaseEnum,
@@ -81,6 +82,24 @@ const TrainingPlanRecalibrationOutputSchema = withCoachOutputContract({
     .array(PlanWeekContentSchema)
     .describe('EXACTLY the same weeks as remainingWeeks (same weekNumbers, same order) — adjust phase/focus/targetWeeklyMinutes/notes as needed, or leave a week identical if no change is warranted.'),
   warnings: z.array(z.string()).describe('0-3 short things the athlete should know about this recalibration. Empty array if nothing stands out.'),
+  // Retour utilisateur : "le coach peut il émettre une critique sur le plan
+  // ou des recommendations scientifiquement détaillée qui permettraient à
+  // l'athlete d'atteindre ses objectif". Même idiome que rideAnalysis
+  // (strengths/improvementAreas) — critique concrète et sourcée, pas un
+  // satisfecit générique. C'est ici, à chaque recalibration (déclenchement
+  // choisi par l'utilisateur : "automatique, comme la recalibration"), que
+  // ce bilan a lieu — pas un flow séparé.
+  strengths: z
+    .array(z.string())
+    .describe('1-4 points forts précis et sourcés sur la trajectoire actuelle vers l\'objectif — référence de vrais chiffres (CTL, volume réalisé) quand possible. Tableau vide seulement si rien de solide ne ressort.'),
+  risks: z
+    .array(z.string())
+    .describe(
+      "1-4 risques concrets et sourcés qui pourraient empêcher d'atteindre CET objectif précis (targetOutcome) — jamais une inquiétude vague. " +
+        "Cite la règle evidence/rules.ts qui motive chaque risque quand une s'applique (via reasons), et le chiffre réel qui le déclenche (ex: " +
+        "volume réalisé <70% de la cible sur 2 semaines consécutives, TSB très négatif, blessure active non résolue à l'approche de l'objectif). " +
+        'Tableau vide seulement si la trajectoire est honnêtement solide.'
+    ),
 }).describe('Output of the training plan recalibration flow.');
 
 export type TrainingPlanRecalibrationOutput = z.infer<typeof TrainingPlanRecalibrationOutputSchema>;
@@ -93,7 +112,7 @@ export async function trainingPlanRecalibration(input: TrainingPlanRecalibration
 
   const sections: string[] = [
     `AUJOURD'HUI : ${parsedInput.today}`,
-    `OBJECTIF : ${parsedInput.eventName} le ${parsedInput.eventDate}`,
+    `OBJECTIF : ${parsedInput.eventName} le ${parsedInput.eventDate}${parsedInput.targetOutcome ? ` — résultat visé : ${parsedInput.targetOutcome}` : ''}`,
     [
       `SEMAINE ${parsedInput.throughWeekNumber} TERMINÉE (phase ${cw.phase}, focus "${cw.focus}") :`,
       `Volume ciblé : ${cw.targetWeeklyMinutes} minutes`,
@@ -122,6 +141,13 @@ export async function trainingPlanRecalibration(input: TrainingPlanRecalibration
 terminer — recalibre les semaines RESTANTES du plan (jamais celles déjà passées) à la lumière de ce qui
 s'est réellement passé cette semaine-là, pas seulement de ce qui était prévu à l'origine.
 
+En plus de l'ajustement lui-même, produis un vrai bilan critique de la trajectoire actuelle vers l'objectif
+(strengths/risks) — pas un satisfecit générique ni une inquiétude vague. Un risque doit citer un chiffre réel
+qui le déclenche (volume réalisé sous la cible de façon répétée, TSB très négatif, blessure active proche de
+l'objectif, progression trop agressive pour le niveau CTL/FTP actuel) et, quand une règle evidence/rules.ts
+s'applique, être repris dans "reasons" avec son id. Si le résultat visé (targetOutcome) est fourni, juge
+explicitement si la trajectoire ACTUELLE (pas seulement le plan sur le papier) reste crédible pour l'atteindre.
+
 Règles impératives :
 - Ne touche JAMAIS à une semaine déjà passée (semaine ${parsedInput.throughWeekNumber} ou antérieure) — seules les
   semaines listées dans "SEMAINES RESTANTES" peuvent être modifiées, et le tableau adjustedWeeks doit contenir
@@ -146,7 +172,9 @@ la semaine qui vient) :
   "adjustedWeeks": [
     { "weekNumber": nombre, "phase": "base|build|peak|taper|recovery", "focus": "une phrase courte", "targetWeeklyMinutes": nombre, "notes": "optionnel" }
   ],
-  "warnings": ["0 à 3 points d'attention courts, tableau vide si rien à signaler"]
+  "warnings": ["0 à 3 points d'attention courts, tableau vide si rien à signaler"],
+  "strengths": ["1-4 points forts précis et sourcés sur la trajectoire actuelle"],
+  "risks": ["1-4 risques concrets et sourcés pour l'objectif visé, tableau vide si la trajectoire est honnêtement solide"]
 }`;
 
   return invokeCoachJson(TrainingPlanRecalibrationOutputSchema, {

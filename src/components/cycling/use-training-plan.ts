@@ -55,6 +55,8 @@ export interface TrainingPlanDoc {
   endDate: string
   eventName: string
   eventDate: string
+  /** Résultat visé, dans les mots de l'athlète (CoachGoal.targetOutcome) — capturé à la génération pour que la recalibration puisse juger si la trajectoire actuelle reste crédible pour CET objectif précis. Absent sur un plan créé avant cet ajout. */
+  targetOutcome?: string
   weeklyAvailableMinutes: number
   weeks: PlanWeek[]
   warnings: string[]
@@ -68,6 +70,10 @@ export interface TrainingPlanDoc {
   summary?: string
   /** Règles citées derrière le plan (withCoachOutputContract) — même champ que daily-workout-tab.tsx, absent sur un plan ancien. */
   reasons?: CoachReason[]
+  /** Verdict du contrat de sortie coach à la génération — jusqu'ici calculé mais jamais affiché (vrai oubli, corrigé ici). La bannière affichée à l'athlète utilise le verdict de la DERNIÈRE recalibration si elle existe (plus à jour), sinon celui-ci. */
+  verdict?: 'ok' | 'warn' | 'block'
+  /** "Une action concrète et immédiate" (champ du contrat de sortie coach) — distinct de summary, utilisé pour le texte de la bannière verdict plutôt que de dupliquer le paragraphe d'explication. */
+  recommendation?: string
   /**
    * Trace du plan tel que généré à l'origine — capturé UNE SEULE FOIS à la
    * création, jamais retouché par une recalibration (retour utilisateur :
@@ -90,9 +96,22 @@ export interface PlanRecalibrationEntry {
   throughWeekNumber: number
   /** Explication (champ "summary" du contrat de sortie coach) — "pourquoi le plan a changé". */
   summary: string
+  /** "Une action concrète et immédiate" (champ du contrat de sortie coach) — distinct de summary, utilisé pour le texte de la bannière verdict plutôt que de dupliquer le paragraphe d'explication. */
+  recommendation: string
   reasons: CoachReason[]
   /** Uniquement les semaines dont le contenu a réellement changé — vide si la recalibration a confirmé le plan existant. */
   changes: PlanWeekChange[]
+  /** Verdict du contrat de sortie coach à CETTE recalibration — la lecture la plus à jour de l'état du plan. */
+  verdict: 'ok' | 'warn' | 'block'
+  /**
+   * Bilan critique de la trajectoire actuelle vers l'objectif — retour
+   * utilisateur : "le coach peut il émettre une critique sur le plan ou des
+   * recommendations scientifiquement détaillée". Automatique, au même
+   * déclenchement que la recalibration elle-même (décision utilisateur du
+   * 31 août 2026) plutôt qu'un flow séparé à la demande.
+   */
+  strengths: string[]
+  risks: string[]
 }
 
 type StoredPlan = TrainingPlanDoc & { id: string }
@@ -188,11 +207,14 @@ export function useTrainingPlan() {
         endDate: weeks[weeks.length - 1]?.endDate ?? goal.eventDate,
         eventName: goal.eventName,
         eventDate: goal.eventDate,
+        targetOutcome: goal.targetOutcome,
         weeklyAvailableMinutes,
         weeks,
         warnings: output.warnings,
         summary: output.summary,
         reasons: output.reasons,
+        verdict: output.verdict,
+        recommendation: output.recommendation,
         // Capturé une seule fois, ici, à la création — jamais retouché par
         // une recalibration (voir runRecalibration plus bas), pour garder
         // une vraie trace du plan d'origine.
@@ -257,6 +279,7 @@ export function useTrainingPlan() {
         today: todayId,
         eventName: plan.eventName,
         eventDate: plan.eventDate,
+        targetOutcome: plan.targetOutcome,
         throughWeekNumber,
         completedWeek: {
           phase: completedWeek.phase,
@@ -296,8 +319,12 @@ export function useTrainingPlan() {
         date: todayId,
         throughWeekNumber,
         summary: output.summary,
+        recommendation: output.recommendation,
         reasons: output.reasons,
         changes,
+        verdict: output.verdict,
+        strengths: output.strengths,
+        risks: output.risks,
       }
 
       const ref = doc(db, `users/${user.uid}/trainingPlans/${plan.id}`)
