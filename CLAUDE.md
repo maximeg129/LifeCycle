@@ -31,7 +31,7 @@ src/
 │   ├── cycling/metric/[id]/page.tsx  # Page détail d'une tuile Vue d'ensemble : courbe ~180j + explication (metric-info.ts) — une seule route dynamique pour les 8 métriques ; pour `riegel`, affiche `PowerCurveCard` (saisie des records + calculateur TTE) à la place du graphique, qui n'existe pas pour cette métrique
 │   ├── cycling/budget/page.tsx   # Page détail du widget "Budget de la semaine" : `KJBudgetWidget` + méthode de calcul (load-types.ts)
 │   ├── cycling/governor/page.tsx # Page détail du "Gouverneur de charge interne" : `GovernorWidget` + méthode de calcul des 6 signaux (governor-types.ts/use-governor.ts)
-│   ├── coach/page.tsx            # Hub coaching IA — 6 sous-onglets : Proposition du jour (défaut), Sorties (journal d'activités), Météo & Tenue (ex-/weather), Plan, Stella, Mémoire coach
+│   ├── coach/page.tsx            # Hub coaching IA — 7 sous-onglets : Proposition du jour (défaut), Sorties (journal d'activités), Météo & Tenue (ex-/weather), Plan, Stella, Mémoire coach, Bibliothèque
 │   ├── garage/page.tsx           # Matériel + Chaînes + Garde-robe (Firestore) — sorti de Cyclisme, sa propre destination de nav
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
 │   ├── nutrition/fueling/page.tsx # Page détail du widget "Fueling vs Workload" : brûlé/mangé/écart + méthode de calcul (fueling-types.ts)
@@ -386,6 +386,7 @@ Toutes les données utilisateur sont sous `users/{uid}/` :
 | `users/{uid}/trainingPlans` | `{planId}` | Plan structuré moyen/long terme IA : name, status (`active`/`archived` — un seul actif à la fois), eventName/eventDate, weeklyAvailableMinutes, weeks[] (phase/focus/targetWeeklyMinutes/notes par semaine, sortie `trainingPlanGeneration`, + `sampleSessions?` : séances type générées à la demande par `planWeekSessions` quand l'utilisateur déplie la semaine) — collection préexistante dans le schéma d'origine (jamais utilisée avant), réutilisée telle quelle |
 | `users/{uid}/coachChatMessages` | `{messageId}` | Log plat du chat "Stella" : role (`user`/`assistant`), content, createdAt — append-only, aucune règle `update` (un message n'est jamais modifié, seulement créé ou supprimé en vidant l'historique) |
 | `users/{uid}/rideAnalyses` | `{activityId}` | Analyse IA complète d'une sortie (sortie `rideAnalysis`), keyée par l'id d'activité Intervals.icu — un doc par sortie, écrasé à la régénération ("Régénérer" dans le dialogue) |
+| `users/{uid}/coachLibrary` | `{entryId}` | Bibliothèque du coach : title, authors, sourceType (`etude`/`article`/`livre`/`note-coach`), url, tags[], summary, fullText (optionnel, collé ou extrait d'un PDF) — voir section "Bibliothèque du coach" plus bas |
 
 ### Hooks Firebase
 
@@ -578,6 +579,63 @@ Mangé − Sport seul sinon (comportement identique à avant ce correctif, donc 
 pas encore renseigné son profil biométrique). Le métabolisme est une estimation pour la journée
 entière (24h de repos), jamais proratisée à l'heure actuelle — contrairement à "Sport", qui ne
 reflète que les activités déjà enregistrées au moment de la consultation.
+
+## Bibliothèque du coach
+
+Retour utilisateur : "j'aimerais pouvoir completer le coaching avec des documents solide, des etudes,
+des articles realisé par des coachs, des entraineurs et des scientifique." Nouvel onglet
+**Bibliothèque** dans Coach (`coach-library-tab.tsx`, 7ᵉ sous-onglet après Mémoire coach) — l'athlète y
+ajoute des sources (`users/{uid}/coachLibrary`, `AddLibraryEntryDialog`, patron CrudDialogShell/
+useCrudSubmit standard) : titre, auteur(s), type (Étude scientifique/Article/Livre/Note de coach),
+lien optionnel, tags, un **résumé** (obligatoire — c'est lui que le coach IA lit) et un **texte
+intégral** optionnel (collé ou importé depuis un PDF).
+
+**Seul le résumé part dans les prompts, jamais le texte intégral** — décision prise dès la
+conception plutôt que corrigée après coup, sur le même principe que `trimChatHistoryForPrompt`
+(coach-chat-types.ts) : le texte intégral d'une étude peut faire des dizaines de pages, l'injecter
+dans chaque appel IA coach ferait exploser le coût/latence bien avant d'atteindre la dizaine de
+sources. `buildLibraryContextBlock()` (`library-types.ts`, pur/testé) compose une ligne compacte par
+source (titre, auteurs, type, résumé tronqué à 600 caractères, tags) sous un nouveau bloc "BASE DE
+CONNAISSANCES" ajouté à `buildCoachContext()` (`coach-context.ts`) — le même bloc de contexte déjà
+partagé par tous les flows coach (blessures/objectifs/style de vie/faits retenus/gouverneur/budget
+kJ, voir plus haut). Le texte intégral reste consultable (repliable) dans l'onglet Bibliothèque
+lui-même, pour l'athlète qui veut relire la source — jamais transmis à Claude automatiquement.
+
+**Tous les flows coach existants bénéficient de la bibliothèque sans changement de leur propre
+code** — `references: LibraryEntryLike[]` est un champ optionnel de `CoachContextInput`, et les 6
+hooks qui appellent déjà `buildCoachContext` (`use-daily-workout.ts`, `use-coach-chat.ts`,
+`use-training-plan.ts` ×2, `recovery-insight-panel.tsx`, `use-ride-analysis.ts`) ont chacun été mis à
+jour pour appeler `useCoachLibrary()` à côté de `useCoachMemory()` et passer `references:
+library.entries` — la Proposition du jour, le Plan, Stella, l'analyse de récupération et l'analyse de
+sortie peuvent donc toutes citer une source ajoutée par l'athlète quand elle est pertinente au sujet.
+Le prompt instruit explicitement le modèle de ne jamais inventer une source qui ne s'applique pas.
+
+**Import PDF côté serveur** (`/api/library/extract-pdf`, `pdf-parse@1.1.1`) — retour utilisateur :
+"les deux selon le document" (résumé rédigé à la main OU texte complet collé/importé), donc les deux
+chemins alimentent le même champ `fullText`. Extraction côté serveur plutôt que client
+(`pdfjs-dist` + worker/canvas dans le navigateur est une source connue de galères de build avec
+Next.js/webpack) — un simple `POST multipart/form-data` vers une Route Handler qui tourne
+`pdf-parse` sur le buffer et renvoie le texte brut. Plafonné à 15 Mo (vérifié côté client ET côté
+serveur — un contrôle client seul n'est jamais une vraie garantie).
+
+**⚠️ Piège `pdf-parse` rencontré en buildant cette route, seulement visible via `next build`** :
+importer le paquet normalement (`import pdfParse from 'pdf-parse'`) faisait échouer le build
+entier avec `ENOENT ... ./test/data/05-versions-space.pdf` — le propre `index.js` du paquet lance un
+auto-test (`if (!module.parent) { ...lit un PDF d'exemple... }`) censé ne s'exécuter que si le module
+est lancé directement (`node index.js`), pas importé. Mais dans un bundle de Route Handler Next.js,
+chaque route est son propre point d'entrée webpack, sans chaîne CJS `parent` traditionnelle — donc
+`module.parent` y est toujours faux, et l'auto-test se déclenche à chaque fois. `tsc --noEmit`/le dev
+server ne montrent rien (comme les deux pièges `'use server'`/`allowedOrigins` déjà documentés plus
+haut) : seul `next build` l'attrape, en essayant de collecter les données de la page. Corrigé en
+important directement l'implémentation interne (`pdf-parse/lib/pdf-parse.js`, qui n'a pas cet
+auto-test) plutôt que le point d'entrée du paquet — nécessite sa propre déclaration de types
+(`src/types/pdf-parse-lib.d.ts`, `@types/pdf-parse` ne couvre que le point d'entrée public).
+
+**Sécurité** : `/api/library/extract-pdf` n'est pas authentifiée, même posture assumée que les
+proxies `/api/intervals/*` (voir section sécurité plus haut) — cette app n'a nulle part de Firebase
+Admin SDK côté serveur pour vérifier un token. Cette route ne lit ni n'écrit jamais Firestore (aucune
+donnée utilisateur en jeu), donc le risque se limite à un abus de CPU/bande passante, borné par la
+limite de 15 Mo.
 
 ## Flows IA (Claude)
 

@@ -9,6 +9,7 @@
 import { differenceInCalendarDays } from 'date-fns'
 import type { GovernorStatus } from './load-types'
 import type { InjuryStatus } from './coach-memory-types'
+import { buildLibraryContextBlock, type LibraryEntryLike } from './library-types'
 
 export interface CoachContextInjury {
   bodyRegion: string
@@ -51,6 +52,18 @@ export interface CoachContextInput {
   kjBudget: { realized: number; target: number; baseline: number }
   governorStatus: GovernorStatus
   enduranceIndex?: number | null
+  /**
+   * Sources (études/articles/notes de coach) que l'athlète a ajoutées à sa
+   * bibliothèque — retour utilisateur : "j'aimerais pouvoir completer le
+   * coaching avec des documents solide, des etudes, des articles realisé
+   * par des coachs, des entraineurs et des scientifique". Optionnel pour ne
+   * pas casser un appelant qui n'a pas encore été mis à jour ; chaque hook
+   * glue (use-daily-workout.ts, use-coach-chat.ts, use-training-plan.ts,
+   * recovery-insight-panel.tsx, use-ride-analysis.ts) le fournit via
+   * useCoachLibrary(). Seuls les résumés partent dans le prompt — jamais le
+   * texte intégral, voir library-types.ts.
+   */
+  references?: LibraryEntryLike[]
 }
 
 function governorStatusLabel(status: GovernorStatus): string {
@@ -116,6 +129,9 @@ export function buildCoachContext(input: CoachContextInput): string {
   } else {
     for (const f of input.rememberedFacts) lines.push(`- ${f}`)
   }
+
+  const libraryBlock = buildLibraryContextBlock(input.references ?? [])
+  if (libraryBlock) lines.push(libraryBlock)
 
   lines.push('', '=== FIN DU CONTEXTE COACH ===')
   return lines.join('\n')

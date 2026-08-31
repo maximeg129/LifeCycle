@@ -218,6 +218,20 @@ service cloud.firestore {
       }
 
       /**
+       * @description Coach knowledge library — studies/articles/coach notes
+       * the athlete adds, summarized into every AI coach flow's context
+       * (buildCoachContext). Full text (pasted or PDF-extracted) is optional
+       * and only ever read back by the app itself, never sent to an AI flow.
+       * @path /users/{userId}/coachLibrary/{entryId}
+       */
+      match /coachLibrary/{entryId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
        * @description Per-session RPE / feelings / motivation quick capture,
        * feeding the internal load governor. Keyed by the Intervals.icu
        * activity id when tied to a session, or `daily-{yyyy-MM-dd}` for a

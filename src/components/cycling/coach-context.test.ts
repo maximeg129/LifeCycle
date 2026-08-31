@@ -84,4 +84,17 @@ describe('buildCoachContext', () => {
     expect(buildCoachContext(baseInput)).not.toContain('Indice d\'endurance')
     expect(buildCoachContext({ ...baseInput, enduranceIndex: 0.91 })).toContain("Indice d'endurance (Riegel) : 0.91")
   })
+
+  it('omits the knowledge-base section when there are no references', () => {
+    expect(buildCoachContext(baseInput)).not.toContain('BASE DE CONNAISSANCES')
+  })
+
+  it('includes the library sources when provided', () => {
+    const text = buildCoachContext({
+      ...baseInput,
+      references: [{ title: 'A systems model of training', authors: 'Banister et al.', sourceType: 'etude', summary: 'Modèle impulsion-réponse.' }],
+    })
+    expect(text).toContain('BASE DE CONNAISSANCES (1 source ajoutée')
+    expect(text).toContain('"A systems model of training" (Banister et al.)')
+  })
 })

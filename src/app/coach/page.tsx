@@ -17,7 +17,7 @@ import { AuthGuard } from '@/components/layout/auth-guard'
 import { PageHeader } from '@/components/ui/page-header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Activity, CloudSun, Target, MessageCircle, BrainCircuit } from 'lucide-react'
+import { Sparkles, Activity, CloudSun, Target, MessageCircle, BrainCircuit, Library } from 'lucide-react'
 import { useAthlete } from '@/hooks/use-intervals'
 import { useGovernor } from '@/components/cycling/use-governor'
 import { DailyWorkoutTab } from '@/components/cycling/daily-workout-tab'
@@ -38,6 +38,9 @@ const StellaChatTab = dynamic(() => import('@/components/cycling/stella-chat-tab
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 const CoachMemoryTab = dynamic(() => import('@/components/cycling/coach-memory-tab').then(m => m.CoachMemoryTab), {
+  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
+})
+const CoachLibraryTab = dynamic(() => import('@/components/cycling/coach-library-tab').then(m => m.CoachLibraryTab), {
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 
@@ -72,6 +75,9 @@ function CoachTabs() {
         <TabsTrigger value="memory" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
           <BrainCircuit className="w-3.5 h-3.5 mr-1.5" /> Mémoire coach
         </TabsTrigger>
+        <TabsTrigger value="library" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
+          <Library className="w-3.5 h-3.5 mr-1.5" /> Bibliothèque
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="daily-workout" className="space-y-8">
@@ -91,6 +97,9 @@ function CoachTabs() {
       </TabsContent>
       <TabsContent value="memory" className="space-y-8">
         <CoachMemoryTab governorStatus={governor.status} />
+      </TabsContent>
+      <TabsContent value="library" className="space-y-8">
+        <CoachLibraryTab />
       </TabsContent>
     </Tabs>
   )

@@ -10,6 +10,7 @@ import { useAthlete } from '@/hooks/use-intervals'
 import { recoveryInsight, type RecoveryInsightOutput } from '@/ai/flows/recovery-insight-flow'
 import { type HealthGoal, type HealthMetricLike } from './lifestyle-types'
 import { useCoachMemory } from '@/components/cycling/use-coach-memory'
+import { useCoachLibrary } from '@/components/cycling/use-coach-library'
 import { useKJBudget } from '@/components/cycling/use-kj-budget'
 import { useGovernor } from '@/components/cycling/use-governor'
 import { usePowerCurve } from '@/components/cycling/use-power-curve'
@@ -30,6 +31,7 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
   const locale = useLocale()
   const athlete = useAthlete()
   const memory = useCoachMemory()
+  const library = useCoachLibrary()
   const governor = useGovernor()
   const budget = useKJBudget(governor.status)
   const powerCurve = usePowerCurve()
@@ -48,6 +50,7 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
         lifestyle: memory.lifestyle,
         goals: memory.goals,
         rememberedFacts: memory.rememberedFacts,
+        references: library.entries,
         kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
         governorStatus: governor.status,
         enduranceIndex,

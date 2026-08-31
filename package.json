@@ -45,6 +45,7 @@
     "next": "15.5.9",
     "next-intl": "^4.14.1",
     "patch-package": "^8.0.0",
+    "pdf-parse": "^1.1.1",
     "react": "^19.2.1",
     "react-day-picker": "^9.11.3",
     "react-dom": "^19.2.1",
@@ -56,6 +57,7 @@
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/pdf-parse": "^1.1.5",
     "@types/react": "^19.2.1",
     "@types/react-dom": "^19.2.1",
     "eslint": "^9.39.5",
