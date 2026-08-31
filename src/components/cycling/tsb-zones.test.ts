@@ -34,4 +34,14 @@ describe('TSB_ZONES_ORDERED', () => {
   it('lists all 5 zones from highest (Transition) to lowest (Risque élevé)', () => {
     expect(TSB_ZONES_ORDERED.map((z) => z.id)).toEqual(['transition', 'fresh', 'grey', 'optimal', 'high-risk'])
   })
+
+  // Garde-fou de non-régression : docs/AUDIT_CYCLING.md §1.2 — le label
+  // "Optimal" affirmait un état de forme optimal universel, contredisant
+  // frontalement section 8 ("Qu'un TSB donné correspond à un état de forme
+  // optimal universel. R03"). Corrigé — jamais réintroduit sans y repenser.
+  it('never labels the "optimal" zone with a claim of universal optimality (R03, docs/AUDIT_CYCLING.md §1.2)', () => {
+    const zone = TSB_ZONES_ORDERED.find((z) => z.id === 'optimal')!
+    expect(zone.label.toLowerCase()).not.toBe('optimal')
+    expect(zone.description).toMatch(/R03/)
+  })
 })

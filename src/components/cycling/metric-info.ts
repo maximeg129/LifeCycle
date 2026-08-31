@@ -37,6 +37,7 @@ export const METRIC_INFO: Record<MetricId, MetricInfo> = {
     explanation: [
       "Le CTL (Chronic Training Load) est une moyenne mobile pondérée exponentiellement de la charge d'entraînement quotidienne (TSS), sur une fenêtre d'environ 42 jours. Il monte lentement quand on enchaîne les semaines chargées, et descend lentement en cas de coupure — c'est voulu : la fitness ne se construit ni ne se perd du jour au lendemain.",
       "C'est le meilleur indicateur du volume/intensité que le corps peut absorber sans forcer, mais il ne dit rien de la fraîcheur du moment — c'est le rôle du TSB.",
+      "Ce chiffre n'a pas de signification universelle : les adaptations successives du modèle impulsion-réponse ont produit des formes à 1, 2 ou 3 paramètres — la valeur d'un CTL n'est donc comparable ni d'un athlète à l'autre, ni d'un outil à l'autre (R03). C'est la trajectoire qui compte — la courbe ci-dessous — pas le nombre isolé du jour.",
     ],
     goodDirection: 'higher',
   },
@@ -90,7 +91,7 @@ export const METRIC_INFO: Record<MetricId, MetricInfo> = {
     tagline: 'La variabilité de la fréquence cardiaque — un signal de récupération du système nerveux autonome.',
     explanation: [
       "Le HRV (variabilité de fréquence cardiaque) mesure les micro-variations de temps entre deux battements cardiaques. Un HRV plus élevé que sa propre moyenne habituelle signale en général un système nerveux bien reposé ; un HRV en baisse peut indiquer fatigue, stress ou début de maladie.",
-      "Ce qui compte, c'est la tendance par rapport à sa propre baseline — pas la valeur absolue, qui varie énormément d'une personne à l'autre.",
+      "Ce qui compte, c'est la tendance par rapport à sa propre baseline sur plusieurs jours — pas la valeur absolue, qui varie énormément d'une personne à l'autre, et surtout pas une seule mesure isolée d'un jour sur l'autre : le sens d'une variation de HRV est ambigu, même chez un athlète entraîné une hausse comme une baisse peuvent signaler une adaptation négative (R25) — le HRV ne décide jamais seul.",
     ],
     goodDirection: 'higher',
   },
