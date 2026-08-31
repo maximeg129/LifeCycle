@@ -13,7 +13,7 @@ import { useCoachMemory } from '@/components/cycling/use-coach-memory'
 import { useKJBudget } from '@/components/cycling/use-kj-budget'
 import { useGovernor } from '@/components/cycling/use-governor'
 import { usePowerCurve } from '@/components/cycling/use-power-curve'
-import { fitPowerDurationCurve, type PowerRecord } from '@/components/cycling/riegel-types'
+import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/endurance'
 import { buildCoachContext } from '@/components/cycling/coach-context'
 import { describeActionDispatchError } from '@/lib/utils'
 
@@ -33,7 +33,7 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
   const governor = useGovernor()
   const budget = useKJBudget(governor.status, athlete.data?.weight)
   const powerCurve = usePowerCurve()
-  const enduranceIndex = fitPowerDurationCurve(
+  const enduranceIndex = fitEnduranceCurve(
     [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
   )?.enduranceIndex ?? null
   const [result, setResult] = useState<RecoveryInsightOutput | null>(null)

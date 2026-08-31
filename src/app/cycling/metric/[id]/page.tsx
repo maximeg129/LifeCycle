@@ -30,7 +30,7 @@ import { cn } from '@/lib/utils'
 import { useAthlete, useFitnessChart } from '@/hooks/use-intervals'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { usePowerCurve } from '@/components/cycling/use-power-curve'
-import { fitPowerDurationCurve, type PowerRecord } from '@/components/cycling/riegel-types'
+import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/endurance'
 import { PowerCurveCard } from '@/components/cycling/power-curve-card'
 import { METRIC_INFO, type MetricId } from '@/components/cycling/metric-info'
 import { tsbZone, TSB_ZONES_ORDERED } from '@/components/cycling/tsb-zones'
@@ -93,7 +93,7 @@ export default function MetricDetailPage() {
   const lifestyle = useLifestyleData(TREND_DAYS)
   const powerCurve = usePowerCurve()
 
-  const enduranceIndex = fitPowerDurationCurve(
+  const enduranceIndex = fitEnduranceCurve(
     [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
   )?.enduranceIndex ?? null
 
