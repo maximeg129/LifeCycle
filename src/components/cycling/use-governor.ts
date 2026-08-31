@@ -24,6 +24,7 @@ import {
   type WellnessLike,
 } from '@/components/lifestyle/lifestyle-types'
 import type { GovernorStatus } from './load-types'
+import { computeSessionRPE, computeMonotony, computeStrain } from '@/domain/cycling/metrics/load'
 
 const today = new Date()
 const newest = format(today, 'yyyy-MM-dd')
@@ -33,14 +34,29 @@ oldestDate.setHours(0, 0, 0, 0)
 // Same 36-day span (today + 35 days back) as the wellness/healthMetrics
 // queries above, as day-ids for buildMergedDailySeries below.
 const sleepDayIds = getLastDayIds(36, today)
+// 7 jours glissants pour la charge d'entraînement (session-RPE/monotonie/
+// strain, R21) — la fenêtre que Foster (1998/2001) utilise pour ces deux
+// métriques, distincte des fenêtres 7j/21j des 6 signaux du gouverneur.
+const last7DayIds = getLastDayIds(7, today)
 
 // Rides below this Intervals.icu intensity are treated as low-intensity/endurance,
 // where HR drift at a stable effort is a meaningful recovery signal.
 const LOW_INTENSITY_THRESHOLD = 75
 
+export interface TrainingLoadSummary {
+  /** Somme des session-RPE (RPE × durée) des 7 derniers jours. */
+  weeklySessionRPE: number
+  /** Moyenne/écart-type de la charge quotidienne sur ces 7 jours — `null` si non calculable (voir computeMonotony). Nombre descriptif, jamais un verdict favorable/défavorable : aucun seuil sourcé ne permet de classer "haute" monotonie (voir docs/OPEN_QUESTIONS.md Q7). */
+  monotony: number | null
+  /** Charge hebdomadaire × monotonie — `null` si la monotonie ne l'est pas. Même réserve que monotony ci-dessus. */
+  strain: number | null
+}
+
 export interface GovernorResult {
   status: GovernorStatus
   signals: GovernorSignals
+  /** `null` tant qu'aucune activité n'a de RPE ET de durée sur les 7 derniers jours (voir le calcul plus bas — jamais une durée inventée pour un feedback local sans activité liée). */
+  trainingLoad: TrainingLoadSummary | null
   isLoading: boolean
 }
 
@@ -137,9 +153,39 @@ export function useGovernor(): GovernorResult {
       sleepRecovery: windowedTrendSignal(sleepSeries, newest, 'higher'),
     }
 
+    // Charge d'entraînement — session-RPE/monotonie/strain (R21, load.ts).
+    // Nécessite RPE ET durée sur la MÊME séance : seules les activités
+    // Intervals.icu (qui portent moving_time) avec un RPE réel (bestRpe)
+    // sont utilisées — un feedback local (sessionFeedback) sans activité
+    // liée n'a pas de durée associée, jamais une durée inventée pour
+    // combler ce trou (contrairement à rpeSeries plus haut, qui n'a pas
+    // besoin de durée et peut donc inclure le feedback local).
+    const dailyLoadByDate = new Map<string, number>()
+    for (const a of activities.data) {
+      const rpe = bestRpe(a)
+      const durationMinutes = a.moving_time != null ? a.moving_time / 60 : null
+      if (rpe == null || durationMinutes == null || !a.start_date_local) continue
+      const date = a.start_date_local.slice(0, 10)
+      const sessionRPE = computeSessionRPE(rpe, durationMinutes)
+      dailyLoadByDate.set(date, (dailyLoadByDate.get(date) ?? 0) + sessionRPE)
+    }
+    const dailyLoads = last7DayIds.map((d) => dailyLoadByDate.get(d) ?? 0)
+    const hasAnyLoad = dailyLoads.some((v) => v > 0)
+    const trainingLoad: TrainingLoadSummary | null = hasAnyLoad
+      ? {
+          weeklySessionRPE: Math.round(dailyLoads.reduce((sum, v) => sum + v, 0)),
+          monotony: computeMonotony(dailyLoads),
+          strain: (() => {
+            const strain = computeStrain(dailyLoads)
+            return strain != null ? Math.round(strain) : null
+          })(),
+        }
+      : null
+
     return {
       status: computeInternalLoadStatus(signals),
       signals,
+      trainingLoad,
       isLoading: wellness.isLoading || activities.isLoading || loadingFeedback || loadingHealthMetrics,
     }
   }, [wellness.data, wellness.isLoading, activities.data, activities.isLoading, feedback, loadingFeedback, healthMetrics, loadingHealthMetrics])
