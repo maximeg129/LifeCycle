@@ -49,6 +49,7 @@ export const METRIC_INFO: Record<MetricId, MetricInfo> = {
     explanation: [
       "L'ATL (Acute Training Load) est la même moyenne mobile que le CTL, mais sur une fenêtre courte (~7 jours) — elle réagit vite à une grosse semaine ou à une semaine de repos. C'est le pendant \"court terme\" du CTL.",
       "Un ATL qui grimpe beaucoup plus vite que le CTL est le signal classique d'une charge trop agressive par rapport à ce que le corps a l'habitude d'encaisser — c'est exactement ce que le TSB (CTL − ATL) traduit en un seul chiffre.",
+      "Même réserve que pour le CTL : ce chiffre vient du même modèle impulsion-réponse à fenêtres convention (pas une calibration individuelle validée) — pas comparable d'un athlète à l'autre ni d'un outil à l'autre (R03). C'est la trajectoire — la courbe ci-dessous — qui compte, pas le nombre isolé du jour.",
     ],
     goodDirection: 'context',
   },

@@ -38,9 +38,13 @@ import { SourceCitation } from '@/components/coach/source-citation'
 
 // Source-au-clic (Phase 5/UI) — premier déploiement sur les 3 tuiles
 // explicitement corrigées suite à l'audit (docs/AUDIT_CYCLING.md §1) :
-// HRV/CTL/TSB. Le reste des métriques suivra dans une PR de suivi.
+// HRV/CTL/TSB. Le reste des métriques suit progressivement (ex. ATL,
+// PR de suivi — même réserve R03 que CTL : les deux viennent du même
+// modèle impulsion-réponse à fenêtres convention, jamais comparables
+// d'un athlète/outil à l'autre).
 const SOURCE_RULE_IDS: Partial<Record<MetricId, string[]>> = {
   ctl: ['fitness-fatigue-show-trajectory-not-absolute'],
+  atl: ['fitness-fatigue-show-trajectory-not-absolute'],
   tsb: ['forbidden-tsb-universal-optimal'],
   hrv: ['principle-3-hrv-sign-ambiguous', 'forbidden-hrv-sign-fatigue-freshness'],
 }

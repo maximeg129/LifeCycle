@@ -165,6 +165,10 @@ export function PowerCurveCard() {
             <div className="flex items-baseline gap-2">
               <span className="text-3xl font-bold">{curve.enduranceIndex.toFixed(2)}</span>
               <span className="text-sm text-muted-foreground">indice d&apos;endurance</span>
+              <SourceCitation
+                ruleIds={['riegel-calibrate-individual-exponent', 'riegel-validity-domain']}
+                label="Source de l'indice d'endurance"
+              />
             </div>
             <div className="space-y-2">
               <Label className="text-xs">Calculer le TTE à une puissance cible</Label>
