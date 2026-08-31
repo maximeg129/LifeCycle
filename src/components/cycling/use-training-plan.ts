@@ -19,6 +19,9 @@ import { useCoachMemory } from './use-coach-memory'
 import { buildCoachContext } from './coach-context'
 import { useGovernor } from './use-governor'
 import { useKJBudget } from './use-kj-budget'
+import { usePowerCurve } from './use-power-curve'
+import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/endurance'
+import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { trainingPlanGeneration } from '@/ai/flows/training-plan-generation-flow'
 import { planWeekSessions, type PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 import {
@@ -124,6 +127,15 @@ export function useTrainingPlan() {
   const memory = useCoachMemory()
   const governor = useGovernor()
   const budget = useKJBudget(governor.status, athlete.data?.weight)
+  // Retour utilisateur : "on utilise tous les indicateurs qu'on a développé
+  // précédemment... en croisant le plus de données disponibles" — mêmes
+  // indices (endurance/CP-W′) que les autres flows coach, calculés une
+  // seule fois ici et réutilisés par les 3 appels buildCoachContext de ce
+  // hook (génération, recalibration, séances type d'une semaine).
+  const powerCurve = usePowerCurve()
+  const powerRecords = [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
+  const enduranceIndex = fitEnduranceCurve(powerRecords)?.enduranceIndex ?? null
+  const criticalPowerModel = fitCriticalPower(powerRecords)
 
   const plansQuery = useMemoFirebase(() => {
     if (!user || !db) return null
@@ -167,8 +179,11 @@ export function useTrainingPlan() {
         lifestyle: memory.lifestyle,
         goals: memory.goals,
         rememberedFacts: memory.rememberedFacts,
-        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline, trend: budget.trend, exceedsThresholdKJPerKg: budget.exceedsThresholdKJPerKg },
         governorStatus: governor.status,
+        trainingLoad: governor.trainingLoad,
+        enduranceIndex,
+        criticalPower: criticalPowerModel ? { cpWatts: criticalPowerModel.cpWatts, wPrimeKJ: criticalPowerModel.wPrimeJoules / 1000 } : null,
       })
 
       const result = await trainingPlanGeneration({
@@ -236,7 +251,7 @@ export function useTrainingPlan() {
     } finally {
       setIsGenerating(false)
     }
-  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data, toast])
+  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, athlete.isConfigured, athlete.data, toast])
 
   // ── Recalibration automatique — retour utilisateur du 31 août 2026 ──────
   //
@@ -271,8 +286,11 @@ export function useTrainingPlan() {
         lifestyle: memory.lifestyle,
         goals: memory.goals,
         rememberedFacts: memory.rememberedFacts,
-        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline, trend: budget.trend, exceedsThresholdKJPerKg: budget.exceedsThresholdKJPerKg },
         governorStatus: governor.status,
+        trainingLoad: governor.trainingLoad,
+        enduranceIndex,
+        criticalPower: criticalPowerModel ? { cpWatts: criticalPowerModel.cpWatts, wPrimeKJ: criticalPowerModel.wPrimeJoules / 1000 } : null,
       })
 
       const result = await trainingPlanRecalibration({
@@ -340,7 +358,7 @@ export function useTrainingPlan() {
     } finally {
       recalibratingRef.current = false
     }
-  }, [user, db, planActivities.data, todayId, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data])
+  }, [user, db, planActivities.data, todayId, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, athlete.isConfigured, athlete.data])
 
   useEffect(() => {
     if (!activePlan || isLoadingPlan || planActivities.isLoading) return
@@ -381,8 +399,11 @@ export function useTrainingPlan() {
         lifestyle: memory.lifestyle,
         goals: memory.goals,
         rememberedFacts: memory.rememberedFacts,
-        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline, trend: budget.trend, exceedsThresholdKJPerKg: budget.exceedsThresholdKJPerKg },
         governorStatus: governor.status,
+        trainingLoad: governor.trainingLoad,
+        enduranceIndex,
+        criticalPower: criticalPowerModel ? { cpWatts: criticalPowerModel.cpWatts, wPrimeKJ: criticalPowerModel.wPrimeJoules / 1000 } : null,
       })
 
       const result = await planWeekSessions({
@@ -422,7 +443,7 @@ export function useTrainingPlan() {
     } finally {
       setGeneratingSessionsForWeek(null)
     }
-  }, [user, db, activePlan, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data, toast])
+  }, [user, db, activePlan, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, athlete.isConfigured, athlete.data, toast])
 
   /** Pushes one plan-week sample session to Intervals.icu on a chosen date — same event path as "Proposition du jour", with a date-independent externalId so re-picking the date moves rather than duplicates the entry. */
   const sendSessionToIntervals = useCallback(async (

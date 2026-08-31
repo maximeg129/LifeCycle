@@ -30,15 +30,41 @@ describe('buildCoachContext', () => {
     expect(text).toContain("Objectif aujourd'hui (2026-08-30, priorité 3, aujourd'hui)")
   })
 
-  it('includes the kJ budget and governor status', () => {
+  it('includes the kJ/kg budget and governor status', () => {
     const text = buildCoachContext({
       ...baseInput,
-      kjBudget: { realized: 450, target: 1200, baseline: 1100 },
+      kjBudget: { realized: 45, target: 60, baseline: 55 },
       governorStatus: 'vert',
     })
-    expect(text).toContain('450 kJ réalisés / 1200 kJ cible')
-    expect(text).toContain('base 8 semaines : 1100 kJ')
+    expect(text).toContain('45 kJ/kg réalisés / 60 kJ/kg cible')
+    expect(text).toContain('base 8 semaines : 55 kJ/kg')
     expect(text).toContain('🟢 Favorable')
+  })
+
+  it('includes the kJ/kg trend only when provided', () => {
+    expect(buildCoachContext(baseInput)).not.toContain('Tendance kJ/kg')
+    const text = buildCoachContext({ ...baseInput, kjBudget: { ...baseInput.kjBudget, trend: { direction: 'up', pctChange: 12 } } })
+    expect(text).toContain('Tendance kJ/kg (8 semaines) : en hausse (+12%)')
+  })
+
+  it('includes the durability ceiling only when a threshold is actually exceeded', () => {
+    expect(buildCoachContext({ ...baseInput, kjBudget: { ...baseInput.kjBudget, exceedsThresholdKJPerKg: null } })).not.toContain('Palier de durabilité')
+    const text = buildCoachContext({ ...baseInput, kjBudget: { ...baseInput.kjBudget, exceedsThresholdKJPerKg: 20 } })
+    expect(text).toContain('Palier de durabilité dépassé cette semaine : 20 kJ/kg')
+    expect(text).toContain('jamais une cible')
+  })
+
+  it('includes weekly training load (session-RPE/monotony/strain) only when provided', () => {
+    expect(buildCoachContext(baseInput)).not.toContain('Charge d\'entraînement 7j')
+    const text = buildCoachContext({ ...baseInput, trainingLoad: { weeklySessionRPE: 850, monotony: 1.8, strain: 1530 } })
+    expect(text).toContain("Charge d'entraînement 7j (R21) : session-RPE hebdo 850, monotonie 1.80, strain 1530")
+    expect(text).toContain('aucun seuil sourcé')
+  })
+
+  it('includes critical power/W\' only when provided', () => {
+    expect(buildCoachContext(baseInput)).not.toContain('Puissance critique')
+    const text = buildCoachContext({ ...baseInput, criticalPower: { cpWatts: 285.4, wPrimeKJ: 18.3 } })
+    expect(text).toContain("Puissance critique (CP/W′, R14) : 285 W, réserve W′ 18.3 kJ")
   })
 
   it('lists active and resolved injuries with a correct active count', () => {

@@ -14,6 +14,7 @@ import { useKJBudget } from '@/components/cycling/use-kj-budget'
 import { useGovernor } from '@/components/cycling/use-governor'
 import { usePowerCurve } from '@/components/cycling/use-power-curve'
 import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/endurance'
+import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { buildCoachContext } from '@/components/cycling/coach-context'
 import { describeActionDispatchError } from '@/lib/utils'
 
@@ -33,9 +34,13 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
   const governor = useGovernor()
   const budget = useKJBudget(governor.status, athlete.data?.weight)
   const powerCurve = usePowerCurve()
-  const enduranceIndex = fitEnduranceCurve(
-    [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
-  )?.enduranceIndex ?? null
+  const powerRecords = [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
+  const enduranceIndex = fitEnduranceCurve(powerRecords)?.enduranceIndex ?? null
+  // Retour utilisateur : "on utilise tous les indicateurs qu'on a développé
+  // précédemment... en croisant le plus de données disponibles" — CP/W′
+  // (R14) réutilise les 3 mêmes records perso que l'indice d'endurance
+  // ci-dessus, aucune donnée supplémentaire nécessaire.
+  const criticalPowerModel = fitCriticalPower(powerRecords)
   const [result, setResult] = useState<RecoveryInsightOutput | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -48,9 +53,11 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
         lifestyle: memory.lifestyle,
         goals: memory.goals,
         rememberedFacts: memory.rememberedFacts,
-        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline, trend: budget.trend, exceedsThresholdKJPerKg: budget.exceedsThresholdKJPerKg },
         governorStatus: governor.status,
+        trainingLoad: governor.trainingLoad,
         enduranceIndex,
+        criticalPower: criticalPowerModel ? { cpWatts: criticalPowerModel.cpWatts, wPrimeKJ: criticalPowerModel.wPrimeJoules / 1000 } : null,
       })
       const flowResult = await recoveryInsight({
         dailyMetrics: dailySeries.map((d) => ({

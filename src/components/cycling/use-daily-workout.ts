@@ -23,6 +23,9 @@ import { useAthlete, useActivities } from '@/hooks/use-intervals'
 import { useCoachMemory } from './use-coach-memory'
 import { useGovernor } from './use-governor'
 import { useKJBudget } from './use-kj-budget'
+import { usePowerCurve } from './use-power-curve'
+import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/endurance'
+import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { buildCoachContext } from './coach-context'
 import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload } from './daily-workout-types'
@@ -64,6 +67,10 @@ export function useDailyWorkout() {
   // Santé — a bad night should measurably change today's proposal, not
   // just the training-load side of the decision.
   const lifestyle = useLifestyleData()
+  const powerCurve = usePowerCurve()
+  const powerRecords = [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
+  const enduranceIndex = fitEnduranceCurve(powerRecords)?.enduranceIndex ?? null
+  const criticalPowerModel = fitCriticalPower(powerRecords)
 
   const todayId = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
   const sessionsOldest = useMemo(() => format(subDays(new Date(), SESSIONS_WINDOW_DAYS), 'yyyy-MM-dd'), [])
@@ -112,8 +119,11 @@ export function useDailyWorkout() {
         lifestyle: memory.lifestyle,
         goals: memory.goals,
         rememberedFacts: memory.rememberedFacts,
-        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline, trend: budget.trend, exceedsThresholdKJPerKg: budget.exceedsThresholdKJPerKg },
         governorStatus: governor.status,
+        trainingLoad: governor.trainingLoad,
+        enduranceIndex,
+        criticalPower: criticalPowerModel ? { cpWatts: criticalPowerModel.cpWatts, wPrimeKJ: criticalPowerModel.wPrimeJoules / 1000 } : null,
       })
 
       const result = await dailyWorkoutRecommendation({
@@ -177,7 +187,7 @@ export function useDailyWorkout() {
     } finally {
       setIsGenerating(false)
     }
-  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, todayId, athlete.isConfigured, athlete.data, recentActivities.data, planWeek, lifestyle.latest, lifestyle.readiness, toast])
+  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, todayId, athlete.isConfigured, athlete.data, recentActivities.data, planWeek, lifestyle.latest, lifestyle.readiness, toast])
 
   const sendToIntervals = useCallback(async (proposal: DailyWorkoutRecommendationOutput): Promise<boolean> => {
     if (!creds?.intervalsAthleteId || !creds?.intervalsApiKey) {
