@@ -5,11 +5,24 @@
 // Coach Memory documents plus the current load-model metrics (kJ budget,
 // internal load governor, endurance index). The block is prefixed to the
 // system prompt of any Claude call concerning training.
+//
+// ⚠️ Le bloc "BASE DE CONNAISSANCES" (sources ajoutées librement par
+// l'athlète dans l'ancienne bibliothèque coach, coachLibrary Firestore) a
+// été retiré ici — décision utilisateur du 31 août 2026 (docs/OPEN_QUESTIONS.md,
+// Q4, réponse (c)) : coachLibrary est réorientée en lecture seule des 35
+// références (evidence/references.ts), plus de CRUD utilisateur libre.
+// Ces 6 flows (dailyWorkoutRecommendation, trainingPlanGeneration,
+// planWeekSessions, coachChat, rideAnalysis, recoveryInsight) sont de
+// toute façon déjà grounded dans RULES/REFERENCES via buildSystemPrompt
+// (src/ai/coach/, PR 8) — bien plus rigoureux que le résumé libre que ce
+// bloc injectait ici (une source pouvait être ajoutée sans revue, sans
+// niveau de preuve, sans garantie qu'elle ne contredise pas les 35
+// références). Voir coach-library-tab.tsx pour le nouvel affichage
+// lecture-seule.
 
 import { differenceInCalendarDays } from 'date-fns'
 import type { GovernorStatus } from './load-types'
 import type { InjuryStatus } from './coach-memory-types'
-import { buildLibraryContextBlock, type LibraryEntryLike } from './library-types'
 
 export interface CoachContextInjury {
   bodyRegion: string
@@ -52,18 +65,6 @@ export interface CoachContextInput {
   kjBudget: { realized: number; target: number; baseline: number }
   governorStatus: GovernorStatus
   enduranceIndex?: number | null
-  /**
-   * Sources (études/articles/notes de coach) que l'athlète a ajoutées à sa
-   * bibliothèque — retour utilisateur : "j'aimerais pouvoir completer le
-   * coaching avec des documents solide, des etudes, des articles realisé
-   * par des coachs, des entraineurs et des scientifique". Optionnel pour ne
-   * pas casser un appelant qui n'a pas encore été mis à jour ; chaque hook
-   * glue (use-daily-workout.ts, use-coach-chat.ts, use-training-plan.ts,
-   * recovery-insight-panel.tsx, use-ride-analysis.ts) le fournit via
-   * useCoachLibrary(). Seuls les résumés partent dans le prompt — jamais le
-   * texte intégral, voir library-types.ts.
-   */
-  references?: LibraryEntryLike[]
 }
 
 function governorStatusLabel(status: GovernorStatus): string {
@@ -129,9 +130,6 @@ export function buildCoachContext(input: CoachContextInput): string {
   } else {
     for (const f of input.rememberedFacts) lines.push(`- ${f}`)
   }
-
-  const libraryBlock = buildLibraryContextBlock(input.references ?? [])
-  if (libraryBlock) lines.push(libraryBlock)
 
   lines.push('', '=== FIN DU CONTEXTE COACH ===')
   return lines.join('\n')

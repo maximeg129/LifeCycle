@@ -29,7 +29,6 @@ import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { useAthlete } from '@/hooks/use-intervals'
 import { useCoachMemory } from './use-coach-memory'
-import { useCoachLibrary } from './use-coach-library'
 import { useGovernor } from './use-governor'
 import { useKJBudget } from './use-kj-budget'
 import { buildCoachContext } from './coach-context'
@@ -111,7 +110,6 @@ export function useCoachChat() {
   const { toast } = useToast()
   const athlete = useAthlete()
   const memory = useCoachMemory()
-  const library = useCoachLibrary()
   const governor = useGovernor()
   const budget = useKJBudget(governor.status)
   const lifestyle = useLifestyleData()
@@ -155,7 +153,6 @@ export function useCoachChat() {
         lifestyle: memory.lifestyle,
         goals: memory.goals,
         rememberedFacts: memory.rememberedFacts,
-        references: library.entries,
         kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
         governorStatus: governor.status,
       })
@@ -229,7 +226,7 @@ export function useCoachChat() {
     } finally {
       setIsSending(false)
     }
-  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, library.entries, budget.realized, budget.target, budget.baseline, governor.status, todayId, athlete.isConfigured, athlete.data, planWeek, lifestyle.latest, lifestyle.readiness, messages, toast])
+  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, todayId, athlete.isConfigured, athlete.data, planWeek, lifestyle.latest, lifestyle.readiness, messages, toast])
 
   const clearHistory = useCallback(async () => {
     if (!user || !db) return
