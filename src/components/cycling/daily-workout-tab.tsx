@@ -8,11 +8,13 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain } from 'lucide-react'
+import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { EmptyState } from '@/components/ui/empty-state'
+import { SourceCitation } from '@/components/coach/source-citation'
+import { cn } from '@/lib/utils'
 
 const DEFAULT_MINUTES = 60
 const DEFAULT_RIDE_TIME = '09:00'
@@ -233,6 +235,53 @@ export function DailyWorkoutTab() {
               </div>
             )}
 
+            {/* Verdict/motif/incertitude — champs du contrat de sortie coach
+                (withCoachOutputContract, ai/coach/outputContract.ts), déjà
+                calculés par invokeCoachJson sur chaque proposition mais
+                jusqu'ici jamais affichés. "reasons" EST le motif de chaque
+                ajustement de séance ; "verdict" distingue une proposition
+                qui suit les règles sans réserve (ok, pas de bandeau) d'une
+                qui porte une réserve à afficher (warn, jaune) ou qui
+                enfreindrait un red-flag si suivie telle quelle (block,
+                destructive — la séance ci-dessus reste affichée pour
+                transparence, mais l'envoi vers Intervals.icu est bloqué). */}
+            {draft.verdict !== 'ok' && (
+              <div
+                className={cn(
+                  'flex items-start gap-2 p-3 rounded-xl border text-sm',
+                  draft.verdict === 'block'
+                    ? 'bg-destructive/5 border-destructive/20'
+                    : 'bg-yellow-500/5 border-yellow-500/20'
+                )}
+              >
+                <ShieldAlert
+                  className={cn('w-4 h-4 shrink-0 mt-0.5', draft.verdict === 'block' ? 'text-destructive' : 'text-yellow-500')}
+                />
+                <span>{draft.recommendation}</span>
+              </div>
+            )}
+
+            {draft.reasons.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5" /> Motif de cette proposition
+                </p>
+                <ul className="space-y-1.5">
+                  {draft.reasons.map((r, i) => (
+                    <li key={i} className="flex items-start gap-1.5 text-sm text-muted-foreground">
+                      <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                      <span className="flex-1">{r.detail}</span>
+                      <SourceCitation ruleIds={[r.rule]} label="Voir la règle citée" className="shrink-0 mt-0.5" />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {draft.uncertainty && (
+              <p className="text-xs text-muted-foreground italic">Incertitude : {draft.uncertainty}</p>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="draft-structured">Script de la séance</Label>
               <Textarea
@@ -250,13 +299,16 @@ export function DailyWorkoutTab() {
                   <CheckCircle2 className="w-4 h-4" /> Envoyé sur Intervals.icu
                 </span>
               ) : <span />}
-              <Button onClick={handleSend} disabled={isSending || !canSendToIntervals} className="gap-2">
+              <Button onClick={handleSend} disabled={isSending || !canSendToIntervals || draft.verdict === 'block'} className="gap-2">
                 {isSending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 {wasSent ? 'Ré-envoyer sur Intervals.icu' : 'Envoyer sur Intervals.icu'}
               </Button>
             </div>
             {!canSendToIntervals && (
               <p className="text-xs text-muted-foreground text-right">Connectez Intervals.icu dans Réglages pour envoyer la séance.</p>
+            )}
+            {canSendToIntervals && draft.verdict === 'block' && (
+              <p className="text-xs text-destructive text-right">Envoi bloqué — voir le motif ci-dessus avant de continuer.</p>
             )}
           </CardContent>
         </Card>
