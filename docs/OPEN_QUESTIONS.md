@@ -86,3 +86,14 @@ Analyse technique : ce n'est pas une nouvelle affirmation scientifique à source
 2. **La CP elle-même n'est toujours pas calculée** dans l'app — reste `criticalPower.ts` (R14), prévu PR 6. Le volet CP-fit (régression à partir des 3 records de puissance déjà stockés dans `settings/powerCurve`) ne dépend PAS de la constante pending W′ (R15 ne sert qu'à la reconstitution) — livrable dans PR 6 sans attendre R15.
 
 **Plan retenu, à exécuter une fois PR 6 livré (pas dans cette PR) :** `kj.ts` recevra une fonction de pondération qui, pour chaque échantillon de puissance au-dessus de la CP estimée, compte `(P−CP)×t` en plus du kJ/kg ordinaire (poids 1 en dessous de CP) — formalisant "coefficient croissant" par la physique du modèle plutôt qu'un multiplicateur choisi à la main. Comment combiner exactement kJ "ordinaires" (sous CP) et kJ "W′" (au-dessus de CP) en un seul indice composite reste un choix d'implémentation qui sera documenté explicitement (même traitement que KJ_TARGET_NUDGE) au moment de coder cette fonction, pas avant.
+
+---
+
+## Q7 — Deux contrôles de `planValidator.ts` (PR 9) sans seuil chiffré sourcé
+
+`planValidator.ts` (PR 9) implémente les 9 contrôles de la section 4. Sept d'entre eux ont un seuil ou une comparaison directement exploitable depuis le texte déjà sourcé des règles (`evidence/rules.ts`) ou depuis une comparaison de données déjà disponibles (pas de constante à inventer). Deux ne le sont pas :
+
+- **plan-check-4 (monotonie, R21)** : Foster (2001, compagnon 1998) introduit la monotonie (moyenne/écart-type de la charge quotidienne) mais ne fixe aucun seuil "élevé" chiffré dans le document source. `checkMonotony()` accepte donc `monotonyThreshold` comme paramètre **obligatoire, sans valeur par défaut** — l'appelant (le futur `sessionArbiter.ts`/l'UI) doit le fournir consciemment. Un seuil couramment cité dans la littérature grand public (~2,0) existe, mais ce projet s'interdit de l'introduire sans qu'il soit sourcé dans les 35 références ou tranché explicitement par vous.
+- **plan-check-5 (volume d'intervalles, R19)** : Tønnessen et al. (2024) est un constat qualitatif (12 entraîneurs norvégiens interrogés, "plus volumineux, plus contrôlés, moins épuisants que les études d'intervention") sans aucun chiffre exploitable, et cette app n'a aucune base de données de "modèles d'entraîneurs de haut niveau" à comparer. `checkIntervalVolume()` renvoie donc toujours `insufficient_data` — ce contrôle reste une appréciation qualitative laissée au modèle (déjà grounded via `buildSystemPrompt`, scope `plan-validation`, PR 8), pas un calcul déterministe.
+
+**Votre réponse : (à venir)** — si vous avez un seuil de monotonie à trancher (une valeur sourcée ou une convention explicite) ou une base de comparaison pour le volume d'intervalles, je les câble ; sinon ces deux contrôles restent dans cet état honnête (paramètre obligatoire sans défaut / toujours insufficient_data).
