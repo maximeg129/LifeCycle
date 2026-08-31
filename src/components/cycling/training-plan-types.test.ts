@@ -7,7 +7,13 @@ import {
   mergePlanWeeks,
   currentPlanWeek,
   planSessionExternalId,
+  weekNeedsRecalibration,
+  computeActualWeeklyMinutes,
+  diffPlanWeeks,
+  applyRecalibration,
   type PlanWeekContent,
+  type PlanWeek,
+  type PlanWeekAdjustment,
 } from './training-plan-types'
 
 describe('clampWeeklyMinutes', () => {
@@ -151,5 +157,144 @@ describe('planSessionExternalId', () => {
     expect(planSessionExternalId('plan2', 3, 0)).not.toBe(base)
     expect(planSessionExternalId('plan1', 4, 0)).not.toBe(base)
     expect(planSessionExternalId('plan1', 3, 1)).not.toBe(base)
+  })
+})
+
+// 4 semaines, lundi 2026-08-24 : S1 [24-30 août], S2 [31 août-6 sept],
+// S3 [7-13 sept], S4 [14-20 sept].
+const fourWeeks: PlanWeek[] = mergePlanWeeks(buildPlanWeekSkeleton('2026-08-24', 4), [
+  { phase: 'base', focus: 'S1', targetWeeklyMinutes: 300 },
+  { phase: 'base', focus: 'S2', targetWeeklyMinutes: 330 },
+  { phase: 'build', focus: 'S3', targetWeeklyMinutes: 360 },
+  { phase: 'taper', focus: 'S4', targetWeeklyMinutes: 180 },
+])
+
+describe('weekNeedsRecalibration', () => {
+  it('flags the most recently completed week when nothing has been recalibrated yet', () => {
+    // Week 1 ended 08-30, today 09-01 → week 1 completed, weeks 2-4 still ahead.
+    expect(weekNeedsRecalibration(fourWeeks, undefined, '2026-09-01')).toBe(1)
+  })
+
+  it('returns null once already recalibrated through the only completed week', () => {
+    expect(weekNeedsRecalibration(fourWeeks, 1, '2026-09-01')).toBeNull()
+  })
+
+  it('picks up the latest completed week when several have finished since the last recalibration', () => {
+    // Weeks 1 and 2 both ended before 09-08.
+    expect(weekNeedsRecalibration(fourWeeks, undefined, '2026-09-08')).toBe(2)
+  })
+
+  it('returns null when no week has completed yet', () => {
+    expect(weekNeedsRecalibration(fourWeeks, undefined, '2026-08-25')).toBeNull()
+  })
+
+  it('returns null when every week is already completed — nothing left to adjust', () => {
+    expect(weekNeedsRecalibration(fourWeeks, undefined, '2026-12-01')).toBeNull()
+  })
+
+  it('returns null for an empty plan', () => {
+    expect(weekNeedsRecalibration([], undefined, '2026-09-01')).toBeNull()
+  })
+})
+
+describe('computeActualWeeklyMinutes', () => {
+  const week = fourWeeks[0] // 2026-08-24 to 2026-08-30
+
+  it('sums only activities within the week window', () => {
+    const activities = [
+      { startDate: '2026-08-25', durationMinutes: 60 },
+      { startDate: '2026-08-30', durationMinutes: 90 }, // last day, inclusive
+      { startDate: '2026-08-31', durationMinutes: 120 }, // next week, excluded
+      { startDate: '2026-08-23', durationMinutes: 45 }, // previous week, excluded
+    ]
+    expect(computeActualWeeklyMinutes(activities, week)).toBe(150)
+  })
+
+  it('returns 0 for no matching activities', () => {
+    expect(computeActualWeeklyMinutes([{ startDate: '2026-01-01', durationMinutes: 60 }], week)).toBe(0)
+  })
+
+  it('returns 0 for an empty activity list', () => {
+    expect(computeActualWeeklyMinutes([], week)).toBe(0)
+  })
+})
+
+describe('diffPlanWeeks', () => {
+  it('reports only the weeks whose content actually changed', () => {
+    const adjustments: PlanWeekAdjustment[] = [
+      { weekNumber: 2, phase: 'base', focus: 'S2', targetWeeklyMinutes: 330 }, // unchanged
+      { weekNumber: 3, phase: 'base', focus: 'S3 allégée', targetWeeklyMinutes: 300 }, // changed
+    ]
+    const changes = diffPlanWeeks(fourWeeks, adjustments)
+    expect(changes).toHaveLength(1)
+    expect(changes[0].weekNumber).toBe(3)
+    expect(changes[0].before).toEqual({ phase: 'build', focus: 'S3', targetWeeklyMinutes: 360 })
+    expect(changes[0].after).toEqual({ phase: 'base', focus: 'S3 allégée', targetWeeklyMinutes: 300 })
+  })
+
+  it('ignores an adjustment for a week that does not exist in `before`', () => {
+    const adjustments: PlanWeekAdjustment[] = [{ weekNumber: 99, phase: 'base', focus: 'x', targetWeeklyMinutes: 100 }]
+    expect(diffPlanWeeks(fourWeeks, adjustments)).toEqual([])
+  })
+
+  it('returns an empty array when nothing changed', () => {
+    const adjustments: PlanWeekAdjustment[] = fourWeeks.map((w) => ({
+      weekNumber: w.weekNumber,
+      phase: w.phase,
+      focus: w.focus,
+      targetWeeklyMinutes: w.targetWeeklyMinutes,
+    }))
+    expect(diffPlanWeeks(fourWeeks, adjustments)).toEqual([])
+  })
+})
+
+describe('applyRecalibration', () => {
+  it('updates only the adjusted weeks, leaving the rest untouched', () => {
+    const adjustments: PlanWeekAdjustment[] = [{ weekNumber: 3, phase: 'base', focus: 'S3 allégée', targetWeeklyMinutes: 300 }]
+    const result = applyRecalibration(fourWeeks, adjustments)
+    expect(result[2].focus).toBe('S3 allégée')
+    expect(result[2].targetWeeklyMinutes).toBe(300)
+    expect(result[2].phase).toBe('base')
+    // Untouched weeks keep their original content and identity of values.
+    expect(result[0]).toEqual(fourWeeks[0])
+    expect(result[3]).toEqual(fourWeeks[3])
+  })
+
+  it('never touches the week skeleton (dates/weekNumber)', () => {
+    const adjustments: PlanWeekAdjustment[] = [{ weekNumber: 3, phase: 'base', focus: 'S3 allégée', targetWeeklyMinutes: 300 }]
+    const result = applyRecalibration(fourWeeks, adjustments)
+    expect(result[2].startDate).toBe(fourWeeks[2].startDate)
+    expect(result[2].endDate).toBe(fourWeeks[2].endDate)
+    expect(result[2].weekNumber).toBe(fourWeeks[2].weekNumber)
+  })
+
+  it('clears cached sampleSessions on a week whose content changed', () => {
+    const withSessions: PlanWeek[] = fourWeeks.map((w, i) => (i === 2 ? { ...w, sampleSessions: [] } : w))
+    const adjustments: PlanWeekAdjustment[] = [{ weekNumber: 3, phase: 'base', focus: 'S3 allégée', targetWeeklyMinutes: 300 }]
+    const result = applyRecalibration(withSessions, adjustments)
+    expect(result[2].sampleSessions).toBeUndefined()
+  })
+
+  it('keeps cached sampleSessions on a week whose content did not change', () => {
+    const withSessions: PlanWeek[] = fourWeeks.map((w, i) => (i === 2 ? { ...w, sampleSessions: [] } : w))
+    const adjustments: PlanWeekAdjustment[] = [{ weekNumber: 3, phase: 'build', focus: 'S3', targetWeeklyMinutes: 360 }]
+    const result = applyRecalibration(withSessions, adjustments)
+    expect(result[2].sampleSessions).toEqual([])
+  })
+
+  it('applies an optional note, and drops a previous note when none is given', () => {
+    const withNote: PlanWeek[] = fourWeeks.map((w, i) => (i === 2 ? { ...w, notes: 'ancienne note' } : w))
+    const adjustments: PlanWeekAdjustment[] = [{ weekNumber: 3, phase: 'base', focus: 'S3 allégée', targetWeeklyMinutes: 300, notes: 'nouvelle note' }]
+    const result = applyRecalibration(withNote, adjustments)
+    expect(result[2].notes).toBe('nouvelle note')
+
+    const adjustmentsNoNote: PlanWeekAdjustment[] = [{ weekNumber: 3, phase: 'base', focus: 'S3 allégée', targetWeeklyMinutes: 300 }]
+    const result2 = applyRecalibration(withNote, adjustmentsNoNote)
+    expect(result2[2].notes).toBeUndefined()
+  })
+
+  it('leaves a week with no matching adjustment completely unchanged', () => {
+    const result = applyRecalibration(fourWeeks, [])
+    expect(result).toEqual(fourWeeks)
   })
 })

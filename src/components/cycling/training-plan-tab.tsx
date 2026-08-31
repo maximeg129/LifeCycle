@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2 } from 'lucide-react'
+import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -78,6 +78,24 @@ export function TrainingPlanTab() {
     () => (activePlan ? checkLoadProgressionWithoutDeload(activePlan.weeks) : null),
     [activePlan]
   )
+
+  // Retour utilisateur : "on garderais un trace du plan d'origine pour
+  // pouvoir comprendre les impacts des changement" — comparaison directe
+  // semaine par semaine avec originalWeeks (jamais retouché, voir
+  // use-training-plan.ts), pour un badge "ajusté" visible sans avoir à
+  // ouvrir le journal. Absent (Map vide) sur un plan créé avant cet ajout.
+  const adjustedWeekNumbers = useMemo(() => {
+    const set = new Set<number>()
+    if (!activePlan?.originalWeeks) return set
+    const { weeks, originalWeeks } = activePlan
+    for (const w of weeks) {
+      const orig = originalWeeks.find((o) => o.weekNumber === w.weekNumber)
+      if (orig && (orig.phase !== w.phase || orig.focus !== w.focus || orig.targetWeeklyMinutes !== w.targetWeeklyMinutes)) {
+        set.add(w.weekNumber)
+      }
+    }
+    return set
+  }, [activePlan])
 
   const NewPlanForm = (
     <Card className="bg-card/40 border-border">
@@ -264,7 +282,16 @@ export function TrainingPlanTab() {
                         <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
                           {format(new Date(`${w.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
                         </td>
-                        <td className="px-2 py-2"><Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge></td>
+                        <td className="px-2 py-2">
+                          <span className="inline-flex items-center gap-1">
+                            <Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge>
+                            {adjustedWeekNumbers.has(w.weekNumber) && (
+                              <Badge variant="outline" className="text-[9px] gap-0.5 text-primary border-primary/30" title="Recalibrée depuis le plan d'origine — voir le journal ci-dessous">
+                                <RefreshCw className="w-2.5 h-2.5" /> ajustée
+                              </Badge>
+                            )}
+                          </span>
+                        </td>
                         <td className="px-2 py-2">{w.focus}{w.notes && <span className="block text-xs text-muted-foreground">{w.notes}</span>}</td>
                         <td className="px-2 py-2 text-right whitespace-nowrap">{Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h</td>
                       </tr>
@@ -290,6 +317,68 @@ export function TrainingPlanTab() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Retour utilisateur : "penser à automatique mais documentée on
+          pourrait expliquer à l'athlète pourquoi le plan a changé". Chaque
+          fois qu'une semaine se termine, use-training-plan.ts recalibre
+          silencieusement les semaines restantes (pas de bouton, pas de
+          confirmation) mais journalise systématiquement le pourquoi —
+          cette carte EST la documentation demandée, pas une option cachée. */}
+      {activePlan.recalibrations && activePlan.recalibrations.length > 0 && (
+        <Card className="lc-card">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <History className="w-4 h-4 text-primary" /> Journal du plan
+            </CardTitle>
+            <CardDescription>
+              Le plan se recalibre automatiquement à la fin de chaque semaine, en comparant le volume réellement
+              réalisé au volume ciblé — chaque ajustement est expliqué ci-dessous. Les semaines déjà passées ne
+              sont jamais retouchées.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {[...activePlan.recalibrations].reverse().map((entry, i) => (
+              <div key={i} className={cn('space-y-3', i > 0 && 'pt-5 border-t border-border')}>
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    {format(new Date(`${entry.date}T00:00:00`), 'dd MMM yyyy', { locale: fr })} — après la semaine {entry.throughWeekNumber}
+                  </p>
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">{entry.summary}</p>
+                {entry.reasons.length > 0 && (
+                  <ul className="space-y-1.5">
+                    {entry.reasons.map((r, ri) => (
+                      <li key={ri} className="flex items-start gap-1.5 text-sm text-muted-foreground">
+                        <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                        <span className="flex-1">{r.detail}</span>
+                        <SourceCitation ruleIds={[r.rule]} label="Voir la règle citée" className="shrink-0 mt-0.5" />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {entry.changes.length === 0 ? (
+                  <p className="text-xs text-muted-foreground italic">Aucun changement — le plan initial restait adapté.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {entry.changes.map((c) => (
+                      <div key={c.weekNumber} className="flex items-center gap-2 flex-wrap text-xs p-2.5 rounded-lg bg-muted/40 border border-border">
+                        <span className="font-medium shrink-0">S{c.weekNumber}</span>
+                        <span className="text-muted-foreground line-through">
+                          {PHASE_LABELS[c.before.phase]} · {c.before.focus} · {Math.round(c.before.targetWeeklyMinutes / 60 * 10) / 10}h
+                        </span>
+                        <span className="text-muted-foreground">→</span>
+                        <span className="text-foreground font-medium">
+                          {PHASE_LABELS[c.after.phase]} · {c.after.focus} · {Math.round(c.after.targetWeeklyMinutes / 60 * 10) / 10}h
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }
