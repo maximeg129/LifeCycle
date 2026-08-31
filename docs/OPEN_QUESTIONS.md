@@ -50,3 +50,13 @@ Trois options :
 Je penche pour (a) — les deux répondent à des besoins différents et le mandat de ce prompt (les 35 références font autorité pour les *règles opérationnelles*) n'exclut pas qu'un athlète garde ses propres lectures à côté. Mais à confirmer.
 
 **Votre réponse : (c).** `coachLibrary` est réorientée en lecture seule : elle n'affiche plus que les 35 références de `references.ts`, plus de CRUD utilisateur libre. Implication concrète : `add-library-entry-dialog.tsx` (formulaire + import PDF, construit plus tôt cette session) et l'écriture Firestore `users/{uid}/coachLibrary` associée deviennent obsolètes une fois la Phase 5 (UI) livrée — `coach-library-tab.tsx` sera reconstruit pour lire `REFERENCES`/`RULES` depuis le code plutôt que Firestore. À traiter explicitement dans la PR 11 (UI), pas avant — l'audit ne supprime rien tant que le remplacement n'est pas prêt.
+
+---
+
+## Q5 — Bornes %FTP du modèle 3 zones (distribution, R18)
+
+`zones.ts` (PR 2) doit implémenter le double modèle de zones demandé section 3.4 : 3 zones pour la distribution d'intensité (R18, Seiler) en plus des 7 zones de prescription (R16, Coggan, déjà sourcées et déjà utilisées dans l'app). Problème : R18 définit ses 3 zones par seuil de lactate sanguin (~2mM), une mesure qu'aucune donnée power-only (Wahoo/Intervals.icu) ne peut reproduire directement — le document ne donne aucune borne %FTP pour ce modèle 3 zones.
+
+Plutôt que d'inventer une nouvelle borne %FTP pour approximer ce seuil lactate (exactement le genre de constante non sourcée que ce projet s'interdit), `zones.ts` **regroupe les 7 zones Coggan déjà sourcées (R16)** : zone1 = Coggan 1-2 (Récupération+Endurance), zone2 = Coggan 3-4 (Tempo+Seuil), zone3 = Coggan 5-7 (VO2max+Anaérobie+Neuromusculaire). C'est une décision de construction (regrouper des bornes déjà validées), pas une nouvelle affirmation scientifique — mais c'est un vrai choix, pas neutre : le regroupement 1-2/3-4/5-7 n'est pas explicitement dicté par le document.
+
+**Votre réponse :**
