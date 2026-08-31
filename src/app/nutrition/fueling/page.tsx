@@ -28,7 +28,7 @@
 import { useMemo } from 'react'
 import { format } from 'date-fns'
 import Link from 'next/link'
-import { ArrowLeft, Flame, UtensilsCrossed, Scale, Beef, Activity as ActivityIcon } from 'lucide-react'
+import { ArrowLeft, Flame, UtensilsCrossed, Scale, Beef, Activity as ActivityIcon, Wheat } from 'lucide-react'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { AuthGuard } from '@/components/layout/auth-guard'
 import { PageHeader } from '@/components/ui/page-header'
@@ -41,6 +41,8 @@ import { useNutritionData } from '@/components/nutrition/use-nutrition-data'
 import { useBiometrics } from '@/components/nutrition/use-biometrics'
 import { BiometricsCard } from '@/components/nutrition/biometrics-card'
 import { totalEnergyBurnedKcal, recoveryGap, proteinTargetRange, computeBMR } from '@/components/nutrition/fueling-types'
+import { carbIntakeGuidance } from '@/domain/cycling/metrics/nutrition'
+import { SourceCitation } from '@/components/coach/source-citation'
 
 export default function FuelingDetailPage() {
   const athlete = useAthlete()
@@ -59,6 +61,7 @@ export default function FuelingDetailPage() {
   const eaten = nutrition.totals.calories
   const gap = recoveryGap(eaten, totalBurned)
   const protein = weightKg ? proteinTargetRange(weightKg) : null
+  const carbGuidance = carbIntakeGuidance()
 
   return (
     <AuthGuard>
@@ -135,6 +138,33 @@ export default function FuelingDetailPage() {
         )}
 
         <BiometricsCard />
+
+        <Card className="bg-card/40 border-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
+              <Wheat className="w-3.5 h-3.5" /> Glucides à l&apos;effort
+              <SourceCitation ruleIds={['nutrition-carb-intake-guidance']} label="Source de ce repère" />
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-baseline gap-4">
+              <span className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-bold">{carbGuidance.maxGramsPerHour}</span>
+                <span className="text-xs text-muted-foreground">g/h max</span>
+              </span>
+              <span className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-bold">{carbGuidance.glucoseFructoseRatio[0]}:{carbGuidance.glucoseFructoseRatio[1]}</span>
+                <span className="text-xs text-muted-foreground">ratio glucose:fructose</span>
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed mt-2">
+              Repère de référence pour un effort intense — pas un calculateur personnalisé par durée/intensité
+              (aucune formule de ce type n&apos;est donnée par la source). Introduction progressive recommandée
+              (tolérance digestive) ; les deux transporteurs intestinaux distincts (glucose et fructose) permettent
+              une absorption combinée supérieure à un seul sucre à haut débit.
+            </p>
+          </CardContent>
+        </Card>
 
         <Card className="lc-card">
           <CardHeader>
