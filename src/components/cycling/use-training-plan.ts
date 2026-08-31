@@ -7,7 +7,7 @@
 // whichever plan was previously active rather than deleting it — keeps a
 // history without ambiguity about which plan is "the" plan.
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { collection, doc, getDocs, query, setDoc, updateDoc, where, serverTimestamp } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { useUser, useFirestore, useCollection, useDoc, useMemoFirebase } from '@/firebase'
@@ -28,11 +28,18 @@ import {
   buildPlanWeekSkeleton,
   mergePlanWeeks,
   planSessionExternalId,
+  weekNeedsRecalibration,
+  computeActualWeeklyMinutes,
+  diffPlanWeeks,
+  applyRecalibration,
   type PlanWeek,
+  type PlanWeekChange,
 } from './training-plan-types'
 import { buildWorkoutEventPayload } from './daily-workout-types'
 import type { CoachGoal } from './coach-memory-types'
 import type { CoachReason } from '@/ai/coach/outputContract'
+import { trainingPlanRecalibration } from '@/ai/flows/training-plan-recalibration-flow'
+import { useActivities } from '@/hooks/use-intervals'
 import { describeActionDispatchError } from '@/lib/utils'
 
 interface IntervalsCredentialsDoc {
@@ -61,6 +68,31 @@ export interface TrainingPlanDoc {
   summary?: string
   /** Règles citées derrière le plan (withCoachOutputContract) — même champ que daily-workout-tab.tsx, absent sur un plan ancien. */
   reasons?: CoachReason[]
+  /**
+   * Trace du plan tel que généré à l'origine — capturé UNE SEULE FOIS à la
+   * création, jamais retouché par une recalibration (retour utilisateur :
+   * "on garderais un trace du plan d'origine pour pouvoir comprendre les
+   * impacts des changement"). Absent sur un plan créé avant cet ajout.
+   */
+  originalWeeks?: PlanWeek[]
+  /**
+   * Journal des recalibrations automatiques (voir weekNeedsRecalibration/
+   * runRecalibration ci-dessous) — append-only, jamais réécrit. Absent tant
+   * qu'aucune recalibration n'a encore eu lieu.
+   */
+  recalibrations?: PlanRecalibrationEntry[]
+}
+
+export interface PlanRecalibrationEntry {
+  /** yyyy-MM-dd — quand cette recalibration a tourné. */
+  date: string
+  /** La semaine dont la fin a déclenché cette recalibration — jamais retouchée elle-même. */
+  throughWeekNumber: number
+  /** Explication (champ "summary" du contrat de sortie coach) — "pourquoi le plan a changé". */
+  summary: string
+  reasons: CoachReason[]
+  /** Uniquement les semaines dont le contenu a réellement changé — vide si la recalibration a confirmé le plan existant. */
+  changes: PlanWeekChange[]
 }
 
 type StoredPlan = TrainingPlanDoc & { id: string }
@@ -80,6 +112,14 @@ export function useTrainingPlan() {
   }, [db, user])
   const { data: activePlans, isLoading: isLoadingPlan } = useCollection<StoredPlan>(plansQuery)
   const activePlan = useMemo(() => activePlans?.[0] ?? null, [activePlans])
+
+  const todayId = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
+  // Activités réelles sur toute la durée du plan actif — servent uniquement
+  // à calculer le volume réellement réalisé par semaine pour la
+  // recalibration automatique (voir runRecalibration plus bas). Bornes
+  // dégradées sur todayId si aucun plan actif (la query ne sert alors à
+  // rien, mais useActivities exige des bornes non-optionnelles).
+  const planActivities = useActivities(activePlan?.startDate ?? todayId, todayId)
 
   // Intervals credentials — same direct-read pattern as use-daily-workout.ts
   // (IntervalsProvider deliberately doesn't expose the raw athleteId/apiKey).
@@ -153,6 +193,10 @@ export function useTrainingPlan() {
         warnings: output.warnings,
         summary: output.summary,
         reasons: output.reasons,
+        // Capturé une seule fois, ici, à la création — jamais retouché par
+        // une recalibration (voir runRecalibration plus bas), pour garder
+        // une vraie trace du plan d'origine.
+        originalWeeks: weeks,
         createdAt: serverTimestamp(),
       }
       try {
@@ -171,6 +215,118 @@ export function useTrainingPlan() {
       setIsGenerating(false)
     }
   }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data, toast])
+
+  // ── Recalibration automatique — retour utilisateur du 31 août 2026 ──────
+  //
+  // Déclenchement "automatique" tel que ce projet peut le faire : pas de
+  // cron serveur (Server Actions uniquement, voir CLAUDE.md) — donc dès que
+  // l'athlète ouvre l'onglet Plan (ce hook n'a qu'un seul appelant,
+  // training-plan-tab.tsx) et qu'une semaine vient de se terminer sans
+  // avoir encore été prise en compte (weekNeedsRecalibration), la
+  // recalibration tourne silencieusement — pas de bouton, pas de
+  // confirmation, mais le résultat est documenté (recalibrations[]) pour
+  // que l'athlète comprenne après coup pourquoi le plan a changé.
+  const recalibratingRef = useRef(false)
+
+  const runRecalibration = useCallback(async (plan: StoredPlan, throughWeekNumber: number) => {
+    if (!user || !db || recalibratingRef.current) return
+    const completedWeek = plan.weeks.find((w) => w.weekNumber === throughWeekNumber)
+    const remainingWeeks = plan.weeks.filter((w) => w.weekNumber > throughWeekNumber)
+    if (!completedWeek || remainingWeeks.length === 0) return
+
+    recalibratingRef.current = true
+    try {
+      const actualMinutes = computeActualWeeklyMinutes(
+        planActivities.data
+          .filter((a) => a.start_date_local)
+          .map((a) => ({ startDate: (a.start_date_local as string).slice(0, 10), durationMinutes: (a.moving_time ?? 0) / 60 })),
+        completedWeek
+      )
+
+      const coachContext = buildCoachContext({
+        today: todayId,
+        injuries: memory.injuries,
+        lifestyle: memory.lifestyle,
+        goals: memory.goals,
+        rememberedFacts: memory.rememberedFacts,
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
+        governorStatus: governor.status,
+      })
+
+      const result = await trainingPlanRecalibration({
+        today: todayId,
+        eventName: plan.eventName,
+        eventDate: plan.eventDate,
+        throughWeekNumber,
+        completedWeek: {
+          phase: completedWeek.phase,
+          focus: completedWeek.focus,
+          targetWeeklyMinutes: completedWeek.targetWeeklyMinutes,
+          actualMinutes: Math.round(actualMinutes),
+        },
+        remainingWeeks: remainingWeeks.map((w) => ({
+          weekNumber: w.weekNumber,
+          phase: w.phase,
+          focus: w.focus,
+          targetWeeklyMinutes: w.targetWeeklyMinutes,
+          notes: w.notes,
+        })),
+        training: athlete.isConfigured && athlete.data ? {
+          ctl: athlete.data.ctl,
+          atl: athlete.data.atl,
+          tsb: athlete.data.tsb,
+          ftp: athlete.data.ftp,
+          weightKg: athlete.data.weight,
+        } : undefined,
+        coachContext,
+      })
+      // Échec silencieux — pas de toast : ce n'est pas une action que
+      // l'athlète a demandée, un échec ne doit pas interrompre sa visite de
+      // l'onglet. La recalibration sera retentée à la prochaine ouverture
+      // (recalibratedThroughWeek n'a pas avancé).
+      if (!result.ok) {
+        console.error('[useTrainingPlan] recalibration failed:', result.error)
+        return
+      }
+      const output = result.data
+
+      const changes = diffPlanWeeks(plan.weeks, output.adjustedWeeks)
+      const updatedWeeks = applyRecalibration(plan.weeks, output.adjustedWeeks)
+      const entry: PlanRecalibrationEntry = {
+        date: todayId,
+        throughWeekNumber,
+        summary: output.summary,
+        reasons: output.reasons,
+        changes,
+      }
+
+      const ref = doc(db, `users/${user.uid}/trainingPlans/${plan.id}`)
+      const data = {
+        weeks: updatedWeeks,
+        recalibrations: [...(plan.recalibrations ?? []), entry],
+      }
+      try {
+        await updateDoc(ref, data)
+      } catch {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: data }))
+      }
+    } finally {
+      recalibratingRef.current = false
+    }
+  }, [user, db, planActivities.data, todayId, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data])
+
+  useEffect(() => {
+    if (!activePlan || isLoadingPlan || planActivities.isLoading) return
+    const dueThroughWeek = weekNeedsRecalibration(activePlan.weeks, activePlan.recalibrations?.at(-1)?.throughWeekNumber, todayId)
+    if (dueThroughWeek == null) return
+    runRecalibration(activePlan, dueThroughWeek)
+    // activePlan/planActivities change identity on every Firestore snapshot
+    // (even a no-op one) — depending on the full objects would re-fire this
+    // effect constantly. recalibratingRef + the recalibrations[] write
+    // itself (which moves the due week forward) are the real guards against
+    // duplicate/repeated runs, not this dependency array.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePlan?.id, activePlan?.weeks.length, todayId, isLoadingPlan, planActivities.isLoading])
 
   const archivePlan = useCallback(async (planId: string) => {
     if (!user || !db) return

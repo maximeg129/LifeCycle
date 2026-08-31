@@ -20,6 +20,7 @@ import { computePromptVersion } from './promptVersion'
 export type CoachFlowId =
   | 'dailyWorkoutRecommendation'
   | 'trainingPlanGeneration'
+  | 'trainingPlanRecalibration'
   | 'planWeekSessions'
   | 'coachChat'
   | 'rideAnalysis'
@@ -40,7 +41,8 @@ const UNIVERSAL_ID_PREFIXES = ['principle-', 'forbidden-', 'red-flag-']
  * métrique). Décision produit/architecture — pas elle-même une
  * affirmation scientifique — sur ce que chaque flow raisonne réellement :
  * - dailyWorkoutRecommendation décide une séance → session-arbitration.
- * - trainingPlanGeneration/planWeekSessions produisent un plan → plan-validation.
+ * - trainingPlanGeneration/trainingPlanRecalibration/planWeekSessions
+ *   produisent ou ajustent un plan → plan-validation.
  * - coachChat est conversationnel et peut toucher à n'importe quel sujet
  *   coach (y compris discuter d'une sortie passée ou d'un plan) → les 3
  *   scopes additionnels.
@@ -51,6 +53,7 @@ const UNIVERSAL_ID_PREFIXES = ['principle-', 'forbidden-', 'red-flag-']
 const FLOW_EXTRA_SCOPES: Record<CoachFlowId, CoachRule['scope'][]> = {
   dailyWorkoutRecommendation: ['session-arbitration'],
   trainingPlanGeneration: ['plan-validation'],
+  trainingPlanRecalibration: ['plan-validation'],
   planWeekSessions: ['plan-validation'],
   coachChat: ['plan-validation', 'session-arbitration', 'ride-analysis'],
   rideAnalysis: ['ride-analysis'],

@@ -5,6 +5,7 @@ import { RULES } from '@/domain/cycling/evidence/rules'
 const ALL_FLOW_IDS: CoachFlowId[] = [
   'dailyWorkoutRecommendation',
   'trainingPlanGeneration',
+  'trainingPlanRecalibration',
   'planWeekSessions',
   'coachChat',
   'rideAnalysis',
@@ -33,8 +34,8 @@ describe('selectRulesForFlow', () => {
     expect(scopes.has('plan-validation')).toBe(false)
   })
 
-  it('gives trainingPlanGeneration and planWeekSessions plan-validation rules but not session-arbitration ones', () => {
-    for (const flowId of ['trainingPlanGeneration', 'planWeekSessions'] as const) {
+  it('gives trainingPlanGeneration, trainingPlanRecalibration and planWeekSessions plan-validation rules but not session-arbitration ones', () => {
+    for (const flowId of ['trainingPlanGeneration', 'trainingPlanRecalibration', 'planWeekSessions'] as const) {
       const scopes = new Set(selectRulesForFlow(flowId).map((r) => r.scope))
       expect(scopes.has('plan-validation')).toBe(true)
       expect(scopes.has('session-arbitration')).toBe(false)

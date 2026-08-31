@@ -122,3 +122,119 @@ export function currentPlanWeek(weeks: PlanWeek[], todayIso: string): PlanWeek |
 export function planSessionExternalId(planId: string, weekNumber: number, sessionIndex: number): string {
   return `lifecycle-plan-${planId}-w${weekNumber}-s${sessionIndex}`
 }
+
+// ── Recalibration automatique — retour utilisateur du 31 août 2026 ────────
+//
+// "Serais t il possible de penser à automatique mais documentée on pourrais
+// expliquer à l'athlète pourquoi le plan a changé. Également on garderais
+// un trace du plan d'origine pour pouvoir comprendre les impacts des
+// changement." Trois pièces : (1) un déclenchement automatique — pas de
+// cron serveur dans cette app (Server Actions uniquement, voir CLAUDE.md),
+// donc le déclenchement se fait côté client quand l'athlète ouvre l'onglet
+// Plan, même patron que "Auto-trigger full sync on app load" déjà en place
+// ailleurs ; (2) une explication ("summary"/"reasons" du contrat de sortie
+// coach, même patron que le reste de cette PR) ; (3) une trace immuable du
+// plan d'origine (TrainingPlanDoc.originalWeeks, capturé une seule fois à
+// la création, jamais retouché par une recalibration).
+
+export interface PlanWeekChange {
+  weekNumber: number
+  before: { phase: PlanPhase; focus: string; targetWeeklyMinutes: number }
+  after: { phase: PlanPhase; focus: string; targetWeeklyMinutes: number }
+}
+
+/**
+ * Une semaine du plan est due pour recalibration dès qu'elle est terminée
+ * (endDate < todayIso) et qu'aucune recalibration précédente ne l'a déjà
+ * prise en compte (son numéro > le plus grand `throughWeekNumber` déjà
+ * traité) — ET qu'il reste au moins une semaine future à ajuster (sinon
+ * rien à recalibrer, pas la peine d'appeler l'IA). Retourne le numéro de
+ * la semaine la plus récente qui déclenche la recalibration, ou `null` si
+ * rien n'est dû.
+ */
+export function weekNeedsRecalibration(
+  weeks: PlanWeek[],
+  recalibratedThroughWeek: number | null | undefined,
+  todayIso: string
+): number | null {
+  const alreadyThrough = recalibratedThroughWeek ?? 0
+  const completedWeeks = weeks.filter((w) => w.endDate < todayIso && w.weekNumber > alreadyThrough)
+  if (completedWeeks.length === 0) return null
+
+  const dueThroughWeek = Math.max(...completedWeeks.map((w) => w.weekNumber))
+  const hasFutureWeek = weeks.some((w) => w.weekNumber > dueThroughWeek)
+  if (!hasFutureWeek) return null
+
+  return dueThroughWeek
+}
+
+/**
+ * Volume réellement réalisé (minutes) sur la fenêtre d'une semaine du plan
+ * — à partir des activités réelles Intervals.icu déjà récupérées ailleurs
+ * dans l'app (jamais recalculé depuis une source différente). Une activité
+ * "startDate" (yyyy-MM-dd) est comptée dans la semaine si elle tombe entre
+ * `week.startDate` et `week.endDate` inclus.
+ */
+export function computeActualWeeklyMinutes(
+  activities: { startDate: string; durationMinutes: number }[],
+  week: PlanWeekSkeleton
+): number {
+  return activities
+    .filter((a) => a.startDate >= week.startDate && a.startDate <= week.endDate)
+    .reduce((sum, a) => sum + a.durationMinutes, 0)
+}
+
+/** Contenu ajusté d'une semaine, tel que renvoyé par trainingPlanRecalibration — mêmes champs qu'une PlanWeekContent sans sampleSessions (jamais régénérées automatiquement par une recalibration). */
+export interface PlanWeekAdjustment {
+  weekNumber: number
+  phase: PlanPhase
+  focus: string
+  targetWeeklyMinutes: number
+  notes?: string
+}
+
+/**
+ * Ne retient que les semaines dont le contenu a réellement changé — une
+ * recalibration qui confirme le plan existant sans rien modifier ne doit
+ * pas produire un "changement" vide dans le journal.
+ */
+export function diffPlanWeeks(before: PlanWeek[], adjustments: PlanWeekAdjustment[]): PlanWeekChange[] {
+  const changes: PlanWeekChange[] = []
+  for (const adj of adjustments) {
+    const prev = before.find((w) => w.weekNumber === adj.weekNumber)
+    if (!prev) continue
+    const changed = prev.phase !== adj.phase || prev.focus !== adj.focus || prev.targetWeeklyMinutes !== adj.targetWeeklyMinutes
+    if (!changed) continue
+    changes.push({
+      weekNumber: adj.weekNumber,
+      before: { phase: prev.phase, focus: prev.focus, targetWeeklyMinutes: prev.targetWeeklyMinutes },
+      after: { phase: adj.phase, focus: adj.focus, targetWeeklyMinutes: adj.targetWeeklyMinutes },
+    })
+  }
+  return changes
+}
+
+/**
+ * Applique les ajustements aux semaines concernées — garde le squelette de
+ * dates intact (jamais retouché par l'IA, voir buildPlanWeekSkeleton), et
+ * vide `sampleSessions` sur toute semaine dont le contenu a changé : les
+ * séances type déjà mises en cache l'ont été pour l'ANCIEN targetWeeklyMinutes/
+ * phase, les laisser en place induirait en erreur plutôt que de simplement
+ * les régénérer à la prochaine ouverture (même patron lazy que la première
+ * génération, voir generateWeekSessions dans use-training-plan.ts). Les
+ * semaines déjà passées (weekNumber <= throughWeekNumber) ne sont jamais
+ * dans `adjustments` et donc jamais touchées.
+ */
+export function applyRecalibration(weeks: PlanWeek[], adjustments: PlanWeekAdjustment[]): PlanWeek[] {
+  const byWeekNumber = new Map(adjustments.map((a) => [a.weekNumber, a]))
+  return weeks.map((w) => {
+    const adj = byWeekNumber.get(w.weekNumber)
+    if (!adj) return w
+    const changed = w.phase !== adj.phase || w.focus !== adj.focus || w.targetWeeklyMinutes !== adj.targetWeeklyMinutes
+    const updated: PlanWeek = { ...w, phase: adj.phase, focus: adj.focus, targetWeeklyMinutes: adj.targetWeeklyMinutes }
+    if (adj.notes) updated.notes = adj.notes
+    else delete updated.notes
+    if (changed) delete updated.sampleSessions
+    return updated
+  })
+}
