@@ -9,13 +9,15 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Gauge, Loader2, Sparkles } from 'lucide-react'
+import { Gauge, Loader2, Sparkles, Zap } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { usePowerCurve } from './use-power-curve'
 import type { PowerRecord } from './riegel-types'
 import { fitEnduranceCurve, computeTTE, checkRiegelValidityDomain } from '@/domain/cycling/metrics/endurance'
+import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
+import { SourceCitation } from '@/components/coach/source-citation'
 
 function formatDuration(totalSeconds: number): string {
   const s = Math.round(totalSeconds)
@@ -44,10 +46,19 @@ export function PowerCurveCard() {
   }
   const anyAuto = isAuto.short || isAuto.medium || isAuto.long
 
-  const curve = useMemo(() => {
-    const records = [data?.shortRecord, data?.mediumRecord, data?.longRecord].filter((r): r is PowerRecord => !!r)
-    return fitEnduranceCurve(records)
-  }, [data])
+  const records = useMemo(
+    () => [data?.shortRecord, data?.mediumRecord, data?.longRecord].filter((r): r is PowerRecord => !!r),
+    [data]
+  )
+
+  const curve = useMemo(() => fitEnduranceCurve(records), [records])
+
+  // Modèle CP/W′ (R14) — l'alternative à privilégier côté vélo par rapport
+  // au fit Riegel ci-dessus (riegel-prefer-critical-power-side-cycling),
+  // physiologiquement fondée plutôt qu'un ajustement statistique pur.
+  // Régression sur les mêmes 3 records personnels, aucune donnée
+  // supplémentaire nécessaire.
+  const cpModel = useMemo(() => fitCriticalPower(records), [records])
 
   const tte = useMemo(() => {
     const watts = Number(targetWatts)
@@ -103,9 +114,9 @@ export function PowerCurveCard() {
     <Card className="bg-card/40 border-border">
       <CardHeader className="pb-2">
         <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
-          <Gauge className="w-3.5 h-3.5" /> Courbe puissance-durée (indice d&apos;endurance de Riegel)
+          <Gauge className="w-3.5 h-3.5" /> Courbe puissance-durée
         </CardTitle>
-        <CardDescription className="text-xs">3 records perso plutôt qu&apos;une puissance critique ou des seuils supposés fixes</CardDescription>
+        <CardDescription className="text-xs">3 records perso — indice de Riegel et modèle puissance critique/W′, calculés sur les mêmes records</CardDescription>
         {anyAuto && (
           <p className="text-xs text-primary flex items-center gap-1.5 pt-1">
             <Sparkles className="w-3 h-3" /> Calculés depuis votre courbe de puissance Intervals.icu — corrigez si besoin.
@@ -170,6 +181,32 @@ export function PowerCurveCard() {
                 </p>
               )}
             </div>
+
+            {cpModel && (
+              <div className="pt-4 border-t border-border space-y-1.5">
+                <div className="flex items-center gap-1.5">
+                  <p className="text-xs text-muted-foreground uppercase flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5" /> Modèle puissance critique (CP/W′)
+                  </p>
+                  <SourceCitation ruleIds={['riegel-prefer-critical-power-side-cycling']} label="Source du modèle CP/W′" />
+                </div>
+                <div className="flex items-baseline gap-4">
+                  <span className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-bold">{Math.round(cpModel.cpWatts)}</span>
+                    <span className="text-xs text-muted-foreground">W (CP)</span>
+                  </span>
+                  <span className="flex items-baseline gap-1.5">
+                    <span className="text-2xl font-bold">{(cpModel.wPrimeJoules / 1000).toFixed(1)}</span>
+                    <span className="text-xs text-muted-foreground">kJ (W′)</span>
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  CP : puissance théoriquement soutenable indéfiniment. W′ : réserve de travail finie disponible au-dessus
+                  de la CP. Alternative physiologiquement fondée à l&apos;indice de Riegel ci-dessus, à privilégier côté
+                  vélo — les deux modèles restent affichés le temps de comparer.
+                </p>
+              </div>
+            )}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground pt-2 border-t border-border">
