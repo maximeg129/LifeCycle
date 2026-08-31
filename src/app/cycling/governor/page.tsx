@@ -11,7 +11,7 @@
 // paraphrase approximative de ce que fait vraiment le calcul.
 
 import Link from 'next/link'
-import { ArrowLeft, HeartPulse, Activity, Gauge, MessageCircle, Smile, Moon } from 'lucide-react'
+import { ArrowLeft, HeartPulse, Activity, Gauge, MessageCircle, Smile, Moon, BarChart3 } from 'lucide-react'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { AuthGuard } from '@/components/layout/auth-guard'
 import { PageHeader } from '@/components/ui/page-header'
@@ -106,6 +106,40 @@ export default function GovernorDetailPage() {
           </Card>
         )}
 
+        {!governor.isLoading && governor.trainingLoad && (
+          <Card className="bg-card/40 border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
+                <BarChart3 className="w-3.5 h-3.5" /> Charge d&apos;entraînement (session-RPE)
+              </CardTitle>
+              <CardDescription className="text-xs">7 derniers jours — Foster (1998/2001, R21), distinct des 6 signaux ci-dessus</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <div className="text-2xl font-bold lc-data">{governor.trainingLoad.weeklySessionRPE}</div>
+                  <div className="text-xs text-muted-foreground">Charge hebdo (session-RPE)</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold lc-data">{governor.trainingLoad.monotony != null ? governor.trainingLoad.monotony.toFixed(2) : '—'}</div>
+                  <div className="text-xs text-muted-foreground">Monotonie</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold lc-data">{governor.trainingLoad.strain ?? '—'}</div>
+                  <div className="text-xs text-muted-foreground">Strain</div>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed mt-3">
+                Chiffres descriptifs uniquement — aucun seuil sourcé ne permet de classer une monotonie ou un strain donné
+                comme &laquo;&nbsp;élevé&nbsp;&raquo; (voir docs/OPEN_QUESTIONS.md, Q7), donc ni l&apos;un ni l&apos;autre
+                n&apos;entre dans le statut du gouverneur ci-dessus. Basé uniquement sur les activités Intervals.icu portant
+                à la fois un RPE et une durée — un feedback local sans activité liée n&apos;a pas de durée associée et
+                n&apos;est donc pas compté ici.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
         <Card className="lc-card">
           <CardHeader>
             <CardTitle className="text-base">Méthode de calcul</CardTitle>
@@ -125,6 +159,17 @@ export default function GovernorDetailPage() {
                   <p className="text-sm text-muted-foreground leading-relaxed">{explanation}</p>
                 </div>
               ))}
+              <div>
+                <div className="text-sm font-medium mb-1 flex items-center gap-1.5"><BarChart3 className="w-3.5 h-3.5 text-muted-foreground" /> Charge d&apos;entraînement (session-RPE)</div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Distinct des 6 signaux ci-dessus, pas un 7e signal du vote. Session-RPE d&apos;une séance = RPE (0-10)
+                  × durée en minutes (Foster 2001, R21). Monotonie = moyenne ÷ écart-type de la charge quotidienne sur
+                  les 7 derniers jours ; strain = charge hebdomadaire totale × monotonie (Foster 1998, compagnon cité
+                  dans R21). Aucun seuil chiffré sourcé ne permet de qualifier une monotonie/un strain donné
+                  d&apos;&laquo;&nbsp;élevé&nbsp;&raquo; — ces deux chiffres restent donc purement descriptifs, jamais
+                  intégrés au statut global.
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
