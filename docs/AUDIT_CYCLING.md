@@ -129,7 +129,7 @@ Glucides à l'effort (R34), croisement REDs (R35) : aucune fonctionnalité exist
 - **La capture RPE/ressenti existe déjà** (`sessionFeedback`, lu par le gouverneur) — bonne base pour `load.ts` (session-RPE/monotonie/strain), juste besoin d'une nouvelle fonction pure qui les agrège différemment.
 - **`computeNormalizedPower()`** (`ride-analysis-types.ts`) implémente déjà correctement l'algorithme de Coggan — à déplacer/réutiliser tel quel dans `domain/cycling/metrics/`, juste besoin de l'étiquetage R16 en UI.
 - **La pile de tests/CI existante** (Vitest, `tsc --noEmit`, ESLint, tous déjà bien rodés dans ce projet — 381 tests actuellement) — les nouveaux garde-fous demandés (Phase 1) s'ajoutent à ce pipeline existant, pas besoin de nouvel outillage.
-- **La "Bibliothèque du coach"** (`users/{uid}/coachLibrary`, construite plus tôt cette session) reste un mécanisme séparé et complémentaire — voir `docs/OPEN_QUESTIONS.md` Q4, ce n'est pas le bon endroit pour la base de 35 références versionnée.
+- **La "Bibliothèque du coach"** (`users/{uid}/coachLibrary`, construite plus tôt cette session) — décidé (Q4) : réorientée en lecture seule pour afficher les 35 références de `references.ts`, plus de CRUD utilisateur libre. `add-library-entry-dialog.tsx`/l'import PDF deviennent obsolètes, à retirer en PR 11 (UI) une fois le remplacement prêt, pas avant.
 
 ---
 
@@ -157,7 +157,7 @@ Seul point de contact réel avec la présente refonte : le poids de l'athlète (
 
 **Sur le plan Blaze/Spark** (votre note pratique) : `apphosting.yaml` existe et ce backend est déjà déployé via Firebase App Hosting — App Hosting est un produit qui **exige déjà le plan Blaze** (il provisionne Cloud Run/Cloud Build/Artifact Registry, tous facturables). Le projet est donc très probablement déjà sur Blaze aujourd'hui, indépendamment de la question Cloud Functions. Je ne peux pas vérifier le plan de facturation exact depuis ce terminal (pas d'accès à la console Firebase) — à confirmer de votre côté, mais l'inférence est forte.
 
-**La question qui reste réellement ouverte** n'est donc pas Spark/Blaze, mais **Cloud Functions vs Server Actions** comme mécanisme pour `invokeCoach`. Les deux exécutent côté serveur, aucun des deux n'expose la clé API ni le prompt au client. Migrer vers de vraies Cloud Functions callable est une infrastructure entièrement nouvelle à standing up (dossier `functions/`, SDK `firebase-functions`/`firebase-admin`, déploiement séparé `firebase deploy --only functions`, sa propre facturation par invocation) — alors que les Server Actions existantes remplissent déjà la propriété de sécurité demandée. Détail dans `docs/OPEN_QUESTIONS.md` Q1 — je ne tranche pas, j'attends votre décision avant la Phase 3.
+**Décidé (Q1, `docs/OPEN_QUESTIONS.md`) : Server Actions existantes, pas de nouvelles Cloud Functions.** `buildSystemPrompt.ts`/`promptVersion.ts`/`invokeCoach.ts` vivront dans `src/ai/coach/` (fichiers `'use server'`), pas dans un dossier `functions/`. Même propriété de sécurité (prompt et clé API jamais côté client), zéro nouvelle infrastructure à standing up.
 
 ---
 

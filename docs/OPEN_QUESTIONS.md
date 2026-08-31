@@ -14,7 +14,7 @@ Le prompt de cadrage demande une "Cloud Function callable Firebase" pour `invoke
 
 Je recommande (B) — même résultat de sécurité, zéro nouvelle infrastructure à faire fonctionner correctement du premier coup en production. Mais c'est votre choix : le plan Blaze est de toute façon déjà requis par App Hosting (voir audit §7), donc ce n'est plus un facteur de décision.
 
-**Votre réponse :**
+**Votre réponse : (B).** Server Actions Next.js existantes, pas de nouvelles Cloud Functions. `buildSystemPrompt.ts`/`promptVersion.ts`/`invokeCoach.ts` vivront dans `src/ai/coach/` (fichiers `'use server'`), pas dans un dossier `functions/`.
 
 ---
 
@@ -24,7 +24,7 @@ Je recommande (B) — même résultat de sécurité, zéro nouvelle infrastructu
 
 Les 10 principes non négociables et les affirmations interdites (section 8) ne concernent que l'entraînement/la récupération — les imposer au flow météo ou plantes n'aurait pas de sens. Mon hypothèse de travail, sauf avis contraire : le périmètre "coach" couvre les 6 flows d'entraînement/récupération listés ci-dessus, `cyclingOutfitRecommendation` et `identifyPlant` restent hors périmètre et gardent leur fonctionnement actuel.
 
-**Votre réponse :**
+**Votre réponse : confirmé.** Seulement les flows sujet cyclisme/entraînement (`dailyWorkoutRecommendation`, `trainingPlanGeneration`, `planWeekSessions`, `coachChat`, `rideAnalysis`, `recoveryInsight`) passent par `invokeCoach`. `cyclingOutfitRecommendation` (météo/tenue) et `identifyPlant` restent hors périmètre, inchangés.
 
 ---
 
@@ -34,7 +34,7 @@ Le gouverneur actuel (`governor-types.ts`) compare une fenêtre récente de 7 jo
 
 Faut-il aligner la fenêtre existante sur 28 jours minimum (changement mineur, cohérent avec le texte de la spec), ou est-ce que 21 jours reste acceptable en l'absence d'un `Rxx` qui donne un chiffre exact ?
 
-**Votre réponse :**
+**Votre réponse : aligner sur 28 jours.** `splitRecentBaseline()` (`governor-types.ts`, `baselineDays = 21` par défaut) passera à 28 — à faire dans la PR qui touche le gouverneur/l'arbitrage de séance (PR 10, `sessionArbiter.ts`), pas en Phase 0.
 
 ---
 
@@ -49,4 +49,4 @@ Trois options :
 
 Je penche pour (a) — les deux répondent à des besoins différents et le mandat de ce prompt (les 35 références font autorité pour les *règles opérationnelles*) n'exclut pas qu'un athlète garde ses propres lectures à côté. Mais à confirmer.
 
-**Votre réponse :**
+**Votre réponse : (c).** `coachLibrary` est réorientée en lecture seule : elle n'affiche plus que les 35 références de `references.ts`, plus de CRUD utilisateur libre. Implication concrète : `add-library-entry-dialog.tsx` (formulaire + import PDF, construit plus tôt cette session) et l'écriture Firestore `users/{uid}/coachLibrary` associée deviennent obsolètes une fois la Phase 5 (UI) livrée — `coach-library-tab.tsx` sera reconstruit pour lire `REFERENCES`/`RULES` depuis le code plutôt que Firestore. À traiter explicitement dans la PR 11 (UI), pas avant — l'audit ne supprime rien tant que le remplacement n'est pas prêt.
