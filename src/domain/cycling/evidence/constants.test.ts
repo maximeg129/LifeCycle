@@ -8,6 +8,7 @@ import {
   W_PRIME_RECONSTITUTION_CONSTANT,
   RIEGEL_CYCLING_FATIGUE_EXPONENT,
   KJ_TARGET_NUDGE,
+  RIEGEL_VALIDITY_DOMAIN,
   type PendingConstant,
 } from './constants'
 
@@ -84,5 +85,16 @@ describe('KJ_TARGET_NUDGE', () => {
   it('carries over the exact rate already in production (load-types.ts computeTargetKJ)', () => {
     expect(KJ_TARGET_NUDGE.value.greenPct).toBe(8)
     expect(KJ_TARGET_NUDGE.value.redPct).toBe(-12)
+  })
+})
+
+describe('RIEGEL_VALIDITY_DOMAIN', () => {
+  it('is sourced from R12', () => {
+    expect(RIEGEL_VALIDITY_DOMAIN.refs).toEqual(['R12'])
+  })
+
+  it('matches ~3.5 to 230 minutes, in seconds', () => {
+    expect(RIEGEL_VALIDITY_DOMAIN.value.minSeconds).toBe(210)
+    expect(RIEGEL_VALIDITY_DOMAIN.value.maxSeconds).toBe(13800)
   })
 })

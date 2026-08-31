@@ -116,6 +116,22 @@ export const KJ_DURABILITY_THRESHOLDS: SourcedConstant<KjDurabilityThresholds> =
     'non professionnel se dégrade plus tôt que ces seuils).',
 }
 
+// ── Indice d'endurance (Riegel) — domaine de validité du fit ──────────────
+
+export interface RiegelValidityDomain {
+  minSeconds: number
+  maxSeconds: number
+}
+
+export const RIEGEL_VALIDITY_DOMAIN: SourcedConstant<RiegelValidityDomain> = {
+  status: 'sourced',
+  refs: ['R12'],
+  value: { minSeconds: 3.5 * 60, maxSeconds: 230 * 60 }, // ~3,5 à 230 minutes
+  note:
+    "Domaine de validité du fit Riegel (règle riegel-validity-domain) — au-delà, avertir plutôt que masquer la valeur " +
+    '(le texte source dit "avertir", pas "refuser") : le fit reste calculable, mais moins fiable hors de cette plage.',
+}
+
 // ── Budget kJ/kg — nudge de cible hebdomadaire selon le gouverneur ────────
 
 export interface KjTargetNudge {
