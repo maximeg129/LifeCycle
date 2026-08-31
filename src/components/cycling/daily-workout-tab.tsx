@@ -245,7 +245,16 @@ export function DailyWorkoutTab() {
                 enfreindrait un red-flag si suivie telle quelle (block,
                 destructive — la séance ci-dessus reste affichée pour
                 transparence, mais l'envoi vers Intervals.icu est bloqué). */}
-            {draft.verdict !== 'ok' && (
+            {/* Champs du contrat de sortie coach (verdict/reasons/uncertainty)
+                gardés défensivement (draft.verdict && ..., (draft.reasons ?? [])
+                plutôt qu'un accès direct : une proposition déjà stockée dans
+                Firestore AVANT l'introduction de ce contrat (workoutProposals/
+                {yyyy-MM-dd}, un doc par jour, potentiellement ancien) n'a pas
+                ces champs — undefined.length/.map ferait planter toute la
+                page Coach au chargement, pas seulement afficher un vide. Bug
+                réel rencontré en production : premier accès à un draft ancien
+                après le déploiement de cet affichage. */}
+            {draft.verdict && draft.verdict !== 'ok' && (
               <div
                 className={cn(
                   'flex items-start gap-2 p-3 rounded-xl border text-sm',
@@ -261,13 +270,13 @@ export function DailyWorkoutTab() {
               </div>
             )}
 
-            {draft.reasons.length > 0 && (
+            {(draft.reasons ?? []).length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
                   <ShieldCheck className="w-3.5 h-3.5" /> Motif de cette proposition
                 </p>
                 <ul className="space-y-1.5">
-                  {draft.reasons.map((r, i) => (
+                  {(draft.reasons ?? []).map((r, i) => (
                     <li key={i} className="flex items-start gap-1.5 text-sm text-muted-foreground">
                       <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
                       <span className="flex-1">{r.detail}</span>
