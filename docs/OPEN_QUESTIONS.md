@@ -36,6 +36,8 @@ Faut-il aligner la fenêtre existante sur 28 jours minimum (changement mineur, c
 
 **Votre réponse : aligner sur 28 jours.** `splitRecentBaseline()` (`governor-types.ts`, `baselineDays = 21` par défaut) passera à 28 — à faire dans la PR qui touche le gouverneur/l'arbitrage de séance (PR 10, `sessionArbiter.ts`), pas en Phase 0.
 
+**Fait (PR 10) :** `splitRecentBaseline()`/`windowedTrendSignal()` (`governor-types.ts`) utilisent désormais `GOVERNOR_BASELINE_WINDOW.value.baselineDays` (`evidence/constants.ts`, déjà 28 depuis la PR 1) comme valeur par défaut, au lieu du littéral `21` — le gouverneur en production (`use-governor.ts`, qui appelle `windowedTrendSignal` sans fenêtre explicite) suit donc maintenant réellement 28 jours, pas seulement la constante déclarée. Un seul littéral `21` restait dans `governor-types.test.ts` (un appel EXPLICITE `splitRecentBaseline(series, ref, 7, 21)`, testant le mécanisme de découpage en général, pas la convention 28 jours de l'app) — laissé tel quel, plus un nouveau test dédié qui vérifie le défaut à 28 jours sans argument explicite.
+
 ---
 
 ## Q4 — Avenir de `users/{uid}/coachLibrary` (bibliothèque coach existante)
