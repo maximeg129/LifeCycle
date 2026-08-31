@@ -9,6 +9,7 @@ import {
   RIEGEL_CYCLING_FATIGUE_EXPONENT,
   KJ_TARGET_NUDGE,
   RIEGEL_VALIDITY_DOMAIN,
+  CARB_INTAKE_GUIDANCE,
   type PendingConstant,
 } from './constants'
 
@@ -96,5 +97,16 @@ describe('RIEGEL_VALIDITY_DOMAIN', () => {
   it('matches ~3.5 to 230 minutes, in seconds', () => {
     expect(RIEGEL_VALIDITY_DOMAIN.value.minSeconds).toBe(210)
     expect(RIEGEL_VALIDITY_DOMAIN.value.maxSeconds).toBe(13800)
+  })
+})
+
+describe('CARB_INTAKE_GUIDANCE', () => {
+  it('is sourced from R34', () => {
+    expect(CARB_INTAKE_GUIDANCE.refs).toEqual(['R34'])
+  })
+
+  it('matches the 120g/h ceiling and the ~1:0.8 glucose:fructose ratio', () => {
+    expect(CARB_INTAKE_GUIDANCE.value.maxGramsPerHour).toBe(120)
+    expect(CARB_INTAKE_GUIDANCE.value.glucoseFructoseRatio).toEqual([1, 0.8])
   })
 })
