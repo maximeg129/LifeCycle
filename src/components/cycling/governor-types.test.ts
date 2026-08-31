@@ -29,6 +29,17 @@ describe('splitRecentBaseline', () => {
     expect(recent).toEqual([3, 4])
     expect(baseline).toEqual([1, 2])
   })
+
+  it('defaults to a 28-day baseline window (docs/OPEN_QUESTIONS.md, Q3 — was 21 days)', () => {
+    const series = [
+      { date: '2026-02-14', value: 10 }, // 34 days before reference — inside a 28d baseline, outside a 21d one
+      { date: '2026-03-18', value: 20 }, // recent
+      { date: '2026-03-20', value: 30 }, // recent (reference)
+    ]
+    const { recent, baseline } = splitRecentBaseline(series, '2026-03-20', 7) // pas de baselineDays explicite
+    expect(recent).toEqual([20, 30])
+    expect(baseline).toEqual([10])
+  })
 })
 
 describe('windowedTrendSignal', () => {

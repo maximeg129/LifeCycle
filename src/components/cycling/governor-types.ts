@@ -6,9 +6,21 @@
 // rigid 16-week plan.
 
 import type { GovernorStatus } from './load-types'
+import { GOVERNOR_BASELINE_WINDOW, requireConstant } from '@/domain/cycling/evidence/constants'
 
 /** +1 favorable, 0 neutral, -1 unfavorable, null = not enough data to say. */
 export type Signal = 1 | 0 | -1 | null
+
+/**
+ * Fenêtre de baseline par défaut — 28 jours, GOVERNOR_BASELINE_WINDOW
+ * (evidence/constants.ts, convention). Remplace les 21 jours utilisés
+ * jusqu'ici (docs/OPEN_QUESTIONS.md, Q3 : "aligner sur 28 jours" —
+ * décision utilisateur du 31 août 2026) — évaluée par appel plutôt que
+ * mise en cache, pour rester réactive si la constante changeait un jour.
+ */
+function defaultBaselineDays(): number {
+  return requireConstant(GOVERNOR_BASELINE_WINDOW, 'GOVERNOR_BASELINE_WINDOW').baselineDays
+}
 
 export function averageOrNull(values: number[]): number | null {
   if (values.length === 0) return null
@@ -21,7 +33,7 @@ export interface DatedValue {
 }
 
 /** Splits a dated series into a recent window and the baseline window immediately preceding it. */
-export function splitRecentBaseline(series: DatedValue[], referenceIso: string, recentDays = 7, baselineDays = 21): { recent: number[]; baseline: number[] } {
+export function splitRecentBaseline(series: DatedValue[], referenceIso: string, recentDays = 7, baselineDays = defaultBaselineDays()): { recent: number[]; baseline: number[] } {
   const recentCutoff = shiftIso(referenceIso, -recentDays)
   const baselineCutoff = shiftIso(referenceIso, -(recentDays + baselineDays))
   const recent = series.filter((s) => s.date >= recentCutoff && s.date <= referenceIso).map((s) => s.value)
@@ -44,7 +56,7 @@ function shiftIso(iso: string, days: number): string {
  * Requires at least 2 points in each window, else returns null (honest — no signal).
  */
 export function windowedTrendSignal(series: DatedValue[], referenceIso: string, favorableDirection: 'lower' | 'higher', opts?: { recentDays?: number; baselineDays?: number; thresholdPct?: number }): Signal {
-  const { recent, baseline } = splitRecentBaseline(series, referenceIso, opts?.recentDays ?? 7, opts?.baselineDays ?? 21)
+  const { recent, baseline } = splitRecentBaseline(series, referenceIso, opts?.recentDays ?? 7, opts?.baselineDays ?? defaultBaselineDays())
   if (recent.length < 2 || baseline.length < 2) return null
   const recentAvg = averageOrNull(recent)
   const baselineAvg = averageOrNull(baseline)
