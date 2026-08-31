@@ -62,3 +62,19 @@ Plutôt que d'inventer une nouvelle borne %FTP pour approximer ce seuil lactate 
 **Votre réponse : résolu autrement, avec de vraies bornes.** Vous avez fourni deux documents supplémentaires (`POWER_ZONES.pdf`, `POLARIZED_TRAINING.pdf`) — voir `evidence/supplementary-sources.ts` (S01, S02). S01 corrobore simplement les bornes 7 zones déjà en place (R16), aucun changement. S02 donne enfin des bornes %FTP réelles pour le modèle 3 zones (attribué à Seiler) — mais se contredisait lui-même entre son tableau (60/80/100) et son texte (50/80/100). Vous avez tranché pour les valeurs du **texte : Zone 1 <80% FTP, Zone 2 80-100%, Zone 3 100%+**. `zones.ts` calcule maintenant directement le temps en zone 3-zones depuis le flux watts avec ces bornes (`computePowerZoneDistribution3`), plus besoin de regrouper les 7 zones. Le regroupement par 7-zones a été retiré.
 
 Point resté à ma discrétion, documenté en commentaire dans `zones.ts` plutôt que retranché à vous : le texte source dit "Zone 1 : 50-79%" sans préciser ce qui se passe en dessous de 50% — le plancher de zone1 est fixé à 0% pour que le temps en zone reste complet (rien silencieusement perdu sous 50%), un choix d'implémentation, pas une valeur sourcée.
+
+---
+
+## Q6 — Coefficient de pondération "kJ au-dessus de la puissance critique" (budget kJ/kg)
+
+`kj.ts` (PR 4) doit implémenter le budget kJ/kg pondéré par l'intensité, section 3.2 : deux règles le demandent explicitement — `kj-budget-unit-is-kj-per-kg-weighted` ("Unité : kJ/kg, jamais kJ bruts, **pondérée par l'intensité**") et `kj-budget-increasing-coefficient-above-cp` ("Le travail réalisé au-dessus de la puissance critique produit une dégradation supérieure pour un kJ accumulé inférieur — appliquer un **coefficient croissant par zone**").
+
+Problème : ni R09 ni R10 (les deux références citées) ne donnent de coefficient numérique ni de formule exacte. Les deux établissent le principe qualitatif — l'intensité du travail antérieur compte plus que son volume brut — mais aucun ne chiffre une pondération par zone. Deuxième obstacle, indépendant : la pondération est définie relativement à la **puissance critique (CP)** de l'athlète, une grandeur que l'app ne calcule pas encore (`criticalPower.ts`, R14/R15, prévu PR 6 — bloqué sur la constante pending de reconstitution W′, R15).
+
+Plutôt que d'inventer un coefficient par zone (exactement le genre de constante non sourcée que ce projet s'interdit), `kj.ts` livré en PR 4 expose :
+- le budget en **kJ/kg** (déjà une vraie amélioration sur l'unité — remplace les kJ bruts actuellement en production) ;
+- une vérification contre les paliers de durabilité déjà sourcés (`KJ_DURABILITY_THRESHOLDS`, R08/R10/R11) — plafonds de référence, pas des cibles.
+
+Mais **pas** la pondération par coefficient croissant au-dessus de CP elle-même — cette partie de la règle reste non implémentée tant que (a) une source chiffre un coefficient exploitable, ou (b) vous tranchez une convention explicite (comme le seuil zone1=0% de Q5, ou le nudge KJ_TARGET_NUDGE) et que criticalPower.ts (PR 6) existe pour fournir la CP elle-même.
+
+**Votre réponse : (à venir)**
