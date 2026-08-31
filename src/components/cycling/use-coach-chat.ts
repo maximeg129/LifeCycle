@@ -31,6 +31,9 @@ import { useAthlete } from '@/hooks/use-intervals'
 import { useCoachMemory } from './use-coach-memory'
 import { useGovernor } from './use-governor'
 import { useKJBudget } from './use-kj-budget'
+import { usePowerCurve } from './use-power-curve'
+import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/endurance'
+import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { buildCoachContext } from './coach-context'
 import { coachChat, type CoachChatMessage, type CoachChatToolCall } from '@/ai/flows/coach-chat-flow'
 import { describeActionDispatchError } from '@/lib/utils'
@@ -113,6 +116,10 @@ export function useCoachChat() {
   const governor = useGovernor()
   const budget = useKJBudget(governor.status, athlete.data?.weight)
   const lifestyle = useLifestyleData()
+  const powerCurve = usePowerCurve()
+  const powerRecords = [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
+  const enduranceIndex = fitEnduranceCurve(powerRecords)?.enduranceIndex ?? null
+  const criticalPowerModel = fitCriticalPower(powerRecords)
 
   const messagesQuery = useMemoFirebase(() => {
     if (!user || !db) return null
@@ -153,8 +160,11 @@ export function useCoachChat() {
         lifestyle: memory.lifestyle,
         goals: memory.goals,
         rememberedFacts: memory.rememberedFacts,
-        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline, trend: budget.trend, exceedsThresholdKJPerKg: budget.exceedsThresholdKJPerKg },
         governorStatus: governor.status,
+        trainingLoad: governor.trainingLoad,
+        enduranceIndex,
+        criticalPower: criticalPowerModel ? { cpWatts: criticalPowerModel.cpWatts, wPrimeKJ: criticalPowerModel.wPrimeJoules / 1000 } : null,
       })
 
       const history = trimChatHistoryForPrompt([...(messages ?? []), userMessage])
@@ -228,7 +238,7 @@ export function useCoachChat() {
     } finally {
       setIsSending(false)
     }
-  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, todayId, athlete.isConfigured, athlete.data, planWeek, lifestyle.latest, lifestyle.readiness, messages, toast])
+  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, todayId, athlete.isConfigured, athlete.data, planWeek, lifestyle.latest, lifestyle.readiness, messages, toast])
 
   const clearHistory = useCallback(async () => {
     if (!user || !db) return

@@ -23,6 +23,7 @@
 import { differenceInCalendarDays } from 'date-fns'
 import type { GovernorStatus } from './load-types'
 import type { InjuryStatus } from './coach-memory-types'
+import type { KJTrendDirection } from '@/domain/cycling/metrics/kj'
 
 export interface CoachContextInjury {
   bodyRegion: string
@@ -62,9 +63,27 @@ export interface CoachContextInput {
   lifestyle: CoachContextLifestyle | null
   goals: CoachContextGoal[]
   rememberedFacts: string[]
-  kjBudget: { realized: number; target: number; baseline: number }
+  kjBudget: {
+    realized: number
+    target: number
+    baseline: number
+    /** Tendance 8 semaines (kj.ts, computeKJPerKgTrend) — optionnel pour rester compatible avec un appelant qui ne l'a pas encore. */
+    trend?: { direction: KJTrendDirection; pctChange: number }
+    /** Palier de durabilité déjà sourcé (R08/R10/R11) dépassé cette semaine — plafond de référence, jamais une cible (kj.ts, checkAgainstDurabilityCeilings). `null` sous le premier seuil, absent si non calculé par l'appelant. */
+    exceedsThresholdKJPerKg?: number | null
+  }
   governorStatus: GovernorStatus
+  /**
+   * Session-RPE/monotonie/strain (R21, load.ts) sur les 7 derniers jours —
+   * même champ que use-governor.ts's `trainingLoad`, purement descriptif
+   * (aucun seuil sourcé ne qualifie une monotonie/un strain d'"élevé", voir
+   * Q7 docs/OPEN_QUESTIONS.md) : jamais un verdict, juste un chiffre réel de
+   * plus à croiser. `null`/absent si aucune séance qualifiante récente.
+   */
+  trainingLoad?: { weeklySessionRPE: number; monotony: number | null; strain: number | null } | null
   enduranceIndex?: number | null
+  /** Modèle puissance critique/W′ (R14, criticalPower.ts, fitCriticalPower sur les mêmes 3 records perso que l'indice d'endurance) — alternative physiologiquement fondée à privilégier côté vélo (riegel-prefer-critical-power-side-cycling). `null`/absent si non calculable (moins de 2 records). */
+  criticalPower?: { cpWatts: number; wPrimeKJ: number } | null
 }
 
 function governorStatusLabel(status: GovernorStatus): string {
@@ -76,6 +95,14 @@ function governorStatusLabel(status: GovernorStatus): string {
   }
 }
 
+function kjTrendLabel(direction: KJTrendDirection): string {
+  switch (direction) {
+    case 'up': return 'en hausse'
+    case 'down': return 'en baisse'
+    default: return 'stable'
+  }
+}
+
 /** Composes the structured coach-memory context block, in French, ready to prefix a system prompt. */
 export function buildCoachContext(input: CoachContextInput): string {
   const lines: string[] = ['=== CONTEXTE COACH (mémoire structurée) ===']
@@ -83,10 +110,33 @@ export function buildCoachContext(input: CoachContextInput): string {
   lines.push('', `AUJOURD'HUI : ${input.today}`)
 
   lines.push('', "CHARGE D'ENTRAÎNEMENT ACTUELLE :")
-  lines.push(`- Budget kJ de la semaine : ${input.kjBudget.realized} kJ réalisés / ${input.kjBudget.target || '?'} kJ cible (base 8 semaines : ${input.kjBudget.baseline} kJ)`)
+  // ⚠️ Corrigé au passage : ce champ est en kJ/kg depuis kj.ts (PR 11c,
+  // "jamais des kJ bruts", règle kj-budget-unit-is-kj-per-kg-weighted) mais
+  // le texte du prompt disait encore "kJ" — un vrai athlète peut brûler
+  // plusieurs milliers de kJ bruts sur une semaine, donc l'étiquette
+  // trompait potentiellement le raisonnement du modèle sur l'ordre de
+  // grandeur réel (quelques dizaines de kJ/kg, pas des centaines/milliers).
+  lines.push(`- Budget kJ/kg de la semaine : ${input.kjBudget.realized} kJ/kg réalisés / ${input.kjBudget.target || '?'} kJ/kg cible (base 8 semaines : ${input.kjBudget.baseline} kJ/kg)`)
+  if (input.kjBudget.trend) {
+    const t = input.kjBudget.trend
+    lines.push(`- Tendance kJ/kg (8 semaines) : ${kjTrendLabel(t.direction)} (${t.pctChange > 0 ? '+' : ''}${t.pctChange}%)`)
+  }
+  if (input.kjBudget.exceedsThresholdKJPerKg != null) {
+    lines.push(`- Palier de durabilité dépassé cette semaine : ${input.kjBudget.exceedsThresholdKJPerKg} kJ/kg (repère de référence R08/R10/R11 — jamais une cible, voir kj-budget-thresholds-are-ceilings-not-targets)`)
+  }
   lines.push(`- Gouverneur de charge interne : ${governorStatusLabel(input.governorStatus)}`)
+  if (input.trainingLoad) {
+    const tl = input.trainingLoad
+    const parts = [`session-RPE hebdo ${tl.weeklySessionRPE}`]
+    if (tl.monotony != null) parts.push(`monotonie ${tl.monotony.toFixed(2)}`)
+    if (tl.strain != null) parts.push(`strain ${tl.strain}`)
+    lines.push(`- Charge d'entraînement 7j (R21) : ${parts.join(', ')} — chiffres descriptifs, aucun seuil sourcé ne qualifie une valeur d'"élevée" (voir Q7)`)
+  }
   if (input.enduranceIndex != null) {
     lines.push(`- Indice d'endurance (Riegel) : ${input.enduranceIndex.toFixed(2)}`)
+  }
+  if (input.criticalPower) {
+    lines.push(`- Puissance critique (CP/W′, R14) : ${Math.round(input.criticalPower.cpWatts)} W, réserve W′ ${input.criticalPower.wPrimeKJ.toFixed(1)} kJ`)
   }
 
   const activeInjuries = input.injuries.filter((i) => i.status === 'active')

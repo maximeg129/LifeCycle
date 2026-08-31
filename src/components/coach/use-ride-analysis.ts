@@ -22,6 +22,9 @@ import { useAthlete } from '@/hooks/use-intervals'
 import { useCoachMemory } from '@/components/cycling/use-coach-memory'
 import { useGovernor } from '@/components/cycling/use-governor'
 import { useKJBudget } from '@/components/cycling/use-kj-budget'
+import { usePowerCurve } from '@/components/cycling/use-power-curve'
+import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/endurance'
+import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { buildCoachContext } from '@/components/cycling/coach-context'
 import { rideAnalysis, type RideAnalysisOutput } from '@/ai/flows/ride-analysis-flow'
 import { bestAverageWatts, bestRpe, feelToScore, type IntervalsActivity, type IntervalsActivityStream } from '@/lib/intervals-api'
@@ -71,6 +74,14 @@ export function useRideAnalysis(activityId: string | null) {
   const memory = useCoachMemory()
   const governor = useGovernor()
   const budget = useKJBudget(governor.status, athlete.data?.weight)
+  // Retour utilisateur : "on utilise tous les indicateurs qu'on a
+  // développé précédemment... en croisant le plus de données disponibles"
+  // — mêmes 3 records perso déjà stockés (settings/powerCurve), aucun
+  // nouveau fetch.
+  const powerCurve = usePowerCurve()
+  const powerRecords = [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
+  const enduranceIndex = fitEnduranceCurve(powerRecords)?.enduranceIndex ?? null
+  const criticalPowerModel = fitCriticalPower(powerRecords)
 
   const credsRef = useMemoFirebase(() => {
     if (!user || !db) return null
@@ -177,8 +188,11 @@ export function useRideAnalysis(activityId: string | null) {
         lifestyle: memory.lifestyle,
         goals: memory.goals,
         rememberedFacts: memory.rememberedFacts,
-        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline, trend: budget.trend, exceedsThresholdKJPerKg: budget.exceedsThresholdKJPerKg },
         governorStatus: governor.status,
+        trainingLoad: governor.trainingLoad,
+        enduranceIndex,
+        criticalPower: criticalPowerModel ? { cpWatts: criticalPowerModel.cpWatts, wPrimeKJ: criticalPowerModel.wPrimeJoules / 1000 } : null,
       })
 
       const result = await rideAnalysis({
@@ -235,7 +249,7 @@ export function useRideAnalysis(activityId: string | null) {
     } finally {
       setIsGenerating(false)
     }
-  }, [user, db, activityId, creds, athlete.data, athlete.isConfigured, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, toast])
+  }, [user, db, activityId, creds, athlete.data, athlete.isConfigured, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, toast])
 
   return {
     analysis: stored?.analysis ?? null,
