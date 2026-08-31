@@ -13,9 +13,11 @@
  */
 
 import { z } from 'zod';
-import { generateJson, type FlowResult } from '@/ai/anthropic';
+import { type FlowResult } from '@/ai/anthropic';
 import { fetchWeatherForecast, degreesToCompass, isSevereWeather, SEVERE_WIND_THRESHOLD_KMH } from '@/ai/weather';
 import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
+import { invokeCoachJson } from '@/ai/coach/invokeCoach';
+import { withCoachOutputContract } from '@/ai/coach/outputContract';
 
 /** Below this, wind isn't worth routing around — asking the AI for advice on a light breeze would just invent filler. */
 const WIND_ADVICE_THRESHOLD_KMH = 15;
@@ -57,7 +59,7 @@ const DailyWorkoutRecommendationInputSchema = z.object({
 
 export type DailyWorkoutRecommendationInput = z.infer<typeof DailyWorkoutRecommendationInputSchema>;
 
-const DailyWorkoutRecommendationOutputSchema = z.object({
+const DailyWorkoutRecommendationOutputSchema = withCoachOutputContract({
   title: z.string().describe('Short workout name, e.g. "Endurance 90min" or "Seuil 4x8min".'),
   sportType: z.string().describe('Intervals.icu sport type this workout is for, e.g. "Ride".'),
   durationMinutes: z.number().describe('Total planned duration including warmup/cooldown — must not exceed availableMinutes.'),
@@ -199,7 +201,10 @@ ${weatherIsSevere ? `- ALERTE MÉTÉO : la météo prévue pour la sortie est ju
 
 ${STRUCTURED_WORKOUT_SYNTAX}
 
-Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme :
+Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme
+(plus les champs de contrat obligatoires décrits plus haut — "summary" peut reprendre l'essentiel de
+"rationale" en une phrase, "recommendation" peut simplement pointer vers la séance elle-même, ex. "Fais la
+séance proposée : <title>") :
 {
   "title": "nom court de la séance",
   "sportType": "type Intervals.icu, ex. Ride",
@@ -213,8 +218,9 @@ Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, p
   "weatherAlert": "1-2 phrases si la météo a forcé un passage en home trainer, sinon null"
 }`;
 
-  return generateJson(DailyWorkoutRecommendationOutputSchema, {
-    system,
+  return invokeCoachJson(DailyWorkoutRecommendationOutputSchema, {
+    flowId: 'dailyWorkoutRecommendation',
+    taskSystemPrompt: system,
     messages: [{ role: 'user', content: sections.join('\n\n') }],
   });
   } catch (e) {

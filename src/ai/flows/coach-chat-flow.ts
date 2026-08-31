@@ -36,7 +36,8 @@
 
 import { z } from 'zod';
 import type Anthropic from '@anthropic-ai/sdk';
-import { anthropic, CLAUDE_MODEL, type FlowResult } from '@/ai/anthropic';
+import { type FlowResult } from '@/ai/anthropic';
+import { invokeCoachConversational } from '@/ai/coach/invokeCoach';
 
 const CoachChatMessageSchema = z.object({
   role: z.enum(['user', 'assistant']),
@@ -242,22 +243,24 @@ Limites importantes :
     });
   }
 
-  const response = await anthropic.messages.create({
-    model: CLAUDE_MODEL,
-    max_tokens: 1024,
-    system,
+  const result = await invokeCoachConversational({
+    flowId: 'coachChat',
+    taskSystemPrompt: system,
     tools: COACH_TOOLS,
     messages,
+    maxTokens: 1024,
   });
+  if (!result.ok) return result;
+  const { stopReason, content } = result.data;
 
-  if (response.stop_reason === 'tool_use') {
-    const calls: CoachChatToolCall[] = response.content
+  if (stopReason === 'tool_use') {
+    const calls: CoachChatToolCall[] = content
       .filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use')
       .map((b) => ({ id: b.id, name: b.name, input: b.input as Record<string, unknown> }));
-    return { ok: true, data: { type: 'tool_use', assistantContent: response.content, calls } };
+    return { ok: true, data: { type: 'tool_use', assistantContent: content, calls } };
   }
 
-  const textBlock = response.content.find((b): b is Anthropic.TextBlock => b.type === 'text');
+  const textBlock = content.find((b): b is Anthropic.TextBlock => b.type === 'text');
   if (!textBlock) return { ok: false, error: "Claude n'a renvoyé aucun texte." };
   return { ok: true, data: { type: 'text', text: textBlock.text } };
   } catch (e) {

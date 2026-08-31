@@ -14,7 +14,9 @@
  */
 
 import { z } from 'zod';
-import { generateJson, type FlowResult } from '@/ai/anthropic';
+import { type FlowResult } from '@/ai/anthropic';
+import { invokeCoachJson } from '@/ai/coach/invokeCoach';
+import { withCoachOutputContract } from '@/ai/coach/outputContract';
 
 const ZoneBucketSchema = z.object({
   zone: z.number(),
@@ -62,13 +64,13 @@ const RideAnalysisInputSchema = z.object({
 
 export type RideAnalysisInput = z.infer<typeof RideAnalysisInputSchema>;
 
-const RideAnalysisOutputSchema = z.object({
+const RideAnalysisOutputSchema = withCoachOutputContract({
   headline: z.string().describe('One short, specific title for this ride, e.g. "Sortie tempo bien négociée"'),
-  summary: z.string().describe('2-4 sentence narrative overview of how the ride went'),
+  summary: z.string().min(1).describe('2-4 sentence narrative overview of how the ride went'),
   strengths: z.array(z.string()).describe('1-4 short, specific positives, referencing real numbers when possible'),
   improvementAreas: z.array(z.string()).describe('1-4 short, specific things to work on next time — empty array if genuinely nothing stands out'),
   effortContext: z.string().describe("1-2 sentences on how this effort fits the athlete's current form (CTL/ATL/TSB) and any active goal"),
-  recommendation: z.string().describe('One concrete suggestion for the next session or for recovery'),
+  recommendation: z.string().min(1).describe('One concrete suggestion for the next session or for recovery'),
 }).describe('Output of the ride analysis flow.');
 
 export type RideAnalysisOutput = z.infer<typeof RideAnalysisOutputSchema>;
@@ -131,7 +133,8 @@ export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult
 
 Analyse les données ci-dessous et produis une analyse honnête, concrète et encourageante de cette sortie. Réfère-toi aux vrais chiffres fournis plutôt que de rester vague (par exemple "puissance normalisée de 210W bien tenue sur l'ensemble" plutôt que "bonne puissance"). Si peu de données sont disponibles (pas de puissance ni de FC), dis-le brièvement et analyse ce qui est disponible (durée, dénivelé, charge, ressenti) plutôt que d'inventer des observations sur la puissance ou la fréquence cardiaque.
 
-Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme exacte :
+Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme exacte
+(plus les champs de contrat obligatoires décrits plus haut) :
 {
   "headline": "titre court et parlant",
   "summary": "2-4 phrases de synthèse",
@@ -141,8 +144,9 @@ Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas d'autre tex
   "recommendation": "une suggestion concrète pour la suite (prochaine séance ou récupération)"
 }`;
 
-    return generateJson(RideAnalysisOutputSchema, {
-      system,
+    return invokeCoachJson(RideAnalysisOutputSchema, {
+      flowId: 'rideAnalysis',
+      taskSystemPrompt: system,
       messages: [{ role: 'user', content: sections.join('\n\n') }],
     });
   } catch (e) {

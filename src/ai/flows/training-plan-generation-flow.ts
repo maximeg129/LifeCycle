@@ -15,7 +15,9 @@
  */
 
 import { z } from 'zod';
-import { generateJson, type FlowResult } from '@/ai/anthropic';
+import { type FlowResult } from '@/ai/anthropic';
+import { invokeCoachJson } from '@/ai/coach/invokeCoach';
+import { withCoachOutputContract } from '@/ai/coach/outputContract';
 
 const TrainingPlanGenerationInputSchema = z.object({
   today: z.string().describe('yyyy-MM-dd'),
@@ -39,7 +41,7 @@ export type TrainingPlanGenerationInput = z.infer<typeof TrainingPlanGenerationI
 
 const PlanPhaseEnum = z.enum(['base', 'build', 'peak', 'taper', 'recovery']);
 
-const TrainingPlanGenerationOutputSchema = z.object({
+const TrainingPlanGenerationOutputSchema = withCoachOutputContract({
   planName: z.string().describe('Short plan name, e.g. "Préparation Marmotte 2026".'),
   weeks: z.array(z.object({
     phase: PlanPhaseEnum,
@@ -96,8 +98,10 @@ Principes de périodisation à respecter :
   qui ne tient pas dans le temps disponible.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
 
-Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme,
-et le tableau "weeks" doit contenir EXACTEMENT ${parsedInput.weekCount} éléments, dans l'ordre (semaine 1 en premier) :
+Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme
+(plus les champs de contrat obligatoires décrits plus haut — "summary" résume le plan en une phrase,
+"recommendation" donne un conseil pour bien démarrer), et le tableau "weeks" doit contenir EXACTEMENT
+${parsedInput.weekCount} éléments, dans l'ordre (semaine 1 en premier) :
 {
   "planName": "nom court du plan",
   "weeks": [
@@ -106,8 +110,9 @@ et le tableau "weeks" doit contenir EXACTEMENT ${parsedInput.weekCount} élémen
   "warnings": ["0 à 3 points d'attention courts, tableau vide si rien à signaler"]
 }`;
 
-  return generateJson(TrainingPlanGenerationOutputSchema, {
-    system,
+  return invokeCoachJson(TrainingPlanGenerationOutputSchema, {
+    flowId: 'trainingPlanGeneration',
+    taskSystemPrompt: system,
     messages: [{ role: 'user', content: sections.join('\n\n') }],
     maxTokens: 8192,
   });
