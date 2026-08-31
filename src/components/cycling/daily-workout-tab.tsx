@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin } from 'lucide-react'
+import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -188,6 +188,32 @@ export function DailyWorkoutTab() {
           </CardHeader>
           <CardContent className="space-y-5">
             <p className="text-sm text-muted-foreground leading-relaxed">{draft.rationale}</p>
+
+            {/* Bulletin météo réel — même chiffres/même principe (pré-fetch
+                déterministe, jamais inventé) que Météo & Tenue, affichés ici
+                sous forme compacte plutôt que les 4 grandes cartes de cet
+                onglet-là (retour utilisateur : "s'assurer que la météo
+                fonctionne de la même façon que dans météo et tenue"). */}
+            {draft.predictedWeather && (
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 p-3 rounded-xl bg-muted/50 border border-border text-sm">
+                <span className="flex items-center gap-1.5"><Thermometer className="w-3.5 h-3.5 text-muted-foreground" /> {draft.predictedWeather.temperatureCelsius}°C</span>
+                <span className="flex items-center gap-1.5"><Wind className="w-3.5 h-3.5 text-muted-foreground" /> {draft.predictedWeather.windSpeedKmh} km/h · {draft.predictedWeather.windDirectionCompass}</span>
+                <span className="flex items-center gap-1.5"><CloudSun className="w-3.5 h-3.5 text-muted-foreground" /> {draft.predictedWeather.conditions}</span>
+              </div>
+            )}
+
+            {/* Météo trop dégradée (vent fort, pluie/neige forte, orage) — la
+                séance ci-dessus a déjà été adaptée en home trainer par le flow
+                (retour utilisateur : "si le temps est vraiment dégradée...
+                l'IA pourrait proposer une alternative adaptée pour home
+                trainer"), ce bandeau explique pourquoi. Couleur destructive
+                pour le distinguer des warnings jaunes génériques ci-dessous. */}
+            {draft.weatherAlert && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-destructive/5 border border-destructive/20 text-sm">
+                <CloudRain className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
+                <span>{draft.weatherAlert}</span>
+              </div>
+            )}
 
             {draft.warnings.length > 0 && (
               <div className="space-y-2">

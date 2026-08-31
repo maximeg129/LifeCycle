@@ -257,6 +257,22 @@ disent déjà "LifeCycle" et surlignent "Cyclisme" comme page active — la page
 `pt-20` au lieu du `PageHeader` pour la clearance mobile) et le lien "Objectifs, analyse IA &
 historique complet" vers `/lifestyle` dans le panneau "Aujourd'hui" (`performance-bento.tsx`).
 
+**Boutons de plage sur le graphe de tendance** (`cycling/metric/[id]/page.tsx`) — retour
+utilisateur, capture d'écran de la page HRV à l'appui : "pouvons nous rajouter des petits boutons
+qui viendraient réduire/ajuster la vue a 1 semaine, 1 mois, 6 mois, all ?". Filtre purement
+client-side sur la série déjà chargée (`RANGE_OPTIONS`, état local `range`) — la fenêtre de fetch
+elle-même reste `TREND_DAYS` (180j) inchangée, donc "6 mois" et "Tout" affichent la même chose
+aujourd'hui, mais "Tout" reste un bucket sans borne de date plutôt qu'un alias codé en dur sur
+180, pour rester correct si la fenêtre de fetch s'élargit un jour. `TrendPoint` porte désormais un
+`rawDate` (yyyy-MM-dd, jamais affiché) à côté du `date` déjà formaté pour l'affichage, pour que le
+filtre compare sur la vraie date plutôt que de compter des éléments (fragile si la série a des
+trous — cas réel pour HRV/sommeil quand une journée n'a pas de donnée). `tsbYDomain` (bornes Y des
+5 zones de fraîcheur) suit désormais la série filtrée plutôt que la série complète, pour que le
+zoom recadre aussi l'échelle verticale. Boutons en pill switcher (même langage que le sélecteur
+Connexion/Inscription des pages d'auth) dans l'en-tête de la carte, masqués tant qu'il n'y a pas au
+moins 2 points à afficher (rien à filtrer sinon) ; absent sur Riegel (pas de courbe d'historique,
+voir plus haut).
+
 **`KJBudgetWidget` et `GovernorWidget` renvoient chacun vers leur propre page détail** (`/cycling/budget`,
 `/cycling/governor`) — même capture d'écran, cerclant ces deux widgets en vert cette fois avec la
 demande "crées de sous page qui donne du détails, méthode de calcul, compréhension, composition".
@@ -320,6 +336,16 @@ ce champ, même principe que `pickLatestWithData`) : vert = amélioration, rouge
 `'higher-better'` pour HRV). Affichée sur les tuiles FC repos et HRV pour l'instant (`MetricTile`
 accepte un prop `trend?`), pas sur Riegel/FTP/CTL/ATL qui n'ont pas de sens "mieux/moins bien" jour à
 jour aussi direct.
+
+**Icônes rouges sur les stats HRV/FC repos du panneau "Aujourd'hui"** (`StatChip` dans
+`performance-bento.tsx`) — retour utilisateur, capture d'écran du mockup `public/screenshots/cycling.png`
+(voir section Landing page) à l'appui : "j'aime beaucoup [ce format]... surtout les éléments pointés en
+rouge". `StatChip` n'affichait auparavant aucune icône (juste un libellé au-dessus, une valeur en dessous)
+— redessiné en layout icône + valeur inline centré, mirroring le mockup : `HeartPulse` pour HRV, `Activity`
+pour FC repos, toutes deux `text-destructive` (le seul token rouge de l'app, pas une couleur rose
+arbitraire) — une couleur "signe vital" fixe, indépendante de la tendance jour/veille (`TrendDot`, qui reste
+inchangée juste à côté). Libellé de FC repos raccourci à "repos" pour ce contexte (suffixe "48 bpm repos"
+comme le mockup) plutôt que "FC repos" en entier, l'icône cœur/pulsation portant déjà le sens "cardiaque".
 
 **Pas de décimales sur les tuiles** — même retour utilisateur. Les heures de sommeil ("7.5h", lu comme
 un possible "75h" au premier coup d'œil) sont formatées `formatSleepDuration()` (`lifestyle-types.ts`) en
@@ -625,13 +651,34 @@ inventés) et choisir la tenue.
   (`fetchWeatherForecast` dans `src/ai/weather.ts`, partagé avec `cyclingOutfitRecommendation`) — échoue en
   silence (pas de section météo dans le prompt) plutôt que de casser toute la génération si le lieu n'est pas
   géocodable.
-- Output : `{ title, sportType, durationMinutes, intensityLabel, rationale, structuredWorkout, warnings[], windAdvice }`
-  — `structuredWorkout` est le script texte du "workout builder" Intervals.icu que le site parse lui-même :
-  en-têtes de section (optionnellement suffixés `Nx` pour une répétition) suivis de lignes `- <durée> <cible%>`.
-  Le format inline `Nx (étape / étape)` n'est PAS reconnu par le parseur — voir le prompt du flow.
-  `windAdvice` (string ou null) : conseil de direction générale au départ pour avoir le vent dans le dos au
-  retour, rempli seulement quand `ride` est fourni ET que le vent prévu dépasse 15 km/h (seuil codé en dur,
-  pas laissé à l'appréciation du modèle) — sinon `null`, jamais un conseil inventé sans signal réel.
+- Output : `{ title, sportType, durationMinutes, intensityLabel, rationale, structuredWorkout, warnings[],
+  windAdvice, predictedWeather, weatherAlert }` — `structuredWorkout` est le script texte du "workout builder"
+  Intervals.icu que le site parse lui-même : en-têtes de section (optionnellement suffixés `Nx` pour une
+  répétition) suivis de lignes `- <durée> <cible%>`. Le format inline `Nx (étape / étape)` n'est PAS reconnu
+  par le parseur — voir le prompt du flow. `windAdvice` (string ou null) : conseil de direction générale au
+  départ pour avoir le vent dans le dos au retour, rempli seulement quand `ride` est fourni ET que le vent
+  prévu dépasse 15 km/h (seuil codé en dur, pas laissé à l'appréciation du modèle) — sinon `null`, jamais un
+  conseil inventé sans signal réel.
+- **`predictedWeather`/`weatherAlert` + bascule home trainer** — retour utilisateur : "s'assurer que la météo
+  fonctionne de la même façon que dans météo et tenue, de plus si le temps est vraiment dégradée... l'IA
+  pourrait proposer une alternative adaptée pour home trainer". Avant ce correctif, ce flow utilisait déjà la
+  météo réelle en interne (pour `windAdvice`) mais ne l'exposait jamais en sortie structurée — contrairement à
+  `cyclingOutfitRecommendation` dont `predictedWeather` est un vrai objet `{temperatureCelsius, windSpeedKmh,
+  windDirectionCompass, conditions}`. `predictedWeather` (même forme, nullable — absent quand aucun `ride`
+  n'a été fourni ou que le fetch a échoué) est maintenant inliné en JSON littéral dans le prompt (même
+  technique que `cyclingOutfitRecommendation` pour `predictedWeather` : le modèle ne fait que le recopier,
+  jamais générer ces chiffres) et affiché comme un bandeau compact (température/vent/conditions) dans
+  `daily-workout-tab.tsx`, sous la même donnée réelle que Météo & Tenue plutôt que buriée dans une phrase de
+  `rationale`. `isSevereWeather()` (`src/ai/weather.ts`, pur/testé) — vent ≥ `SEVERE_WIND_THRESHOLD_KMH`
+  (40 km/h) OU code météo Open-Meteo de pluie/neige forte ou orage (`weatherCode`, ajouté à `WeatherForecast`
+  pour ne pas dépendre du texte `conditions`, qui peut changer) — décide de façon déterministe si la sortie
+  est trop dégradée, jamais laissé à l'appréciation du modèle (même principe que le seuil de `windAdvice`) :
+  le flow lit ce verdict et, si vrai, instruit explicitement le modèle de proposer une séance équivalente en
+  `sportType: "VirtualRide"` plutôt qu'une sortie extérieure, remplit `weatherAlert` (string ou null) avec la
+  justification citant les vrais chiffres, et force `windAdvice` à `null` (pas de sens pour une séance
+  indoor). `weatherAlert` s'affiche dans un bandeau distinct (couleur destructive) des warnings jaunes
+  génériques, pour rester visible comme le changement structurel qu'il est plutôt qu'un simple point
+  d'attention.
 - Usage : `src/components/cycling/daily-workout-tab.tsx` (sous-onglet "Proposition du jour" de Coach — onglet par défaut)
 - Réutilise `buildCoachContext` (blessures/objectifs/style de vie/faits retenus/gouverneur/budget kJ) comme
   `recoveryInsight`, plus le CTL/ATL/TSB courant et les séances des 7 derniers jours (`summarizeRecentSessions`

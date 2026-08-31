@@ -12,7 +12,7 @@
 // la courbe de puissance actuelle, jamais stocké jour par jour) — la page
 // le dit honnêtement plutôt que d'inventer une tendance.
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { format, subDays, parseISO } from 'date-fns'
@@ -43,12 +43,30 @@ const oldest = format(subDays(today, TREND_DAYS), 'yyyy-MM-dd')
 
 interface TrendPoint {
   date: string // affichage, dd/MM
+  rawDate: string // yyyy-MM-dd, pour le filtre de plage — jamais affiché
   value: number
 }
 
 const chartConfig: ChartConfig = {
   value: { label: 'Valeur', color: 'hsl(var(--primary))' },
 }
+
+// Boutons "réduire/ajuster la vue" — retour utilisateur : "pouvons nous
+// rajouter des petits boutons qui viendraient réduire/ajuster la vue a 1
+// semaine, 1 mois, 6 mois, all ?" (capture d'écran de la page HRV à
+// l'appui). Filtre purement client-side sur la série déjà chargée — la
+// fenêtre de fetch elle-même reste TREND_DAYS (180j, ~6 mois), donc "Tout"
+// et "6 mois" affichent la même chose aujourd'hui ; "Tout" reste un bucket
+// distinct plutôt qu'un alias codé en dur, pour rester correct si la
+// fenêtre de fetch s'élargit un jour (voir CLAUDE.md, WELLNESS_WINDOW_DAYS/
+// FITNESS_WINDOW_DAYS).
+type RangeOption = '7d' | '30d' | '180d' | 'all'
+const RANGE_OPTIONS: { id: RangeOption; label: string; days: number | null }[] = [
+  { id: '7d', label: '1 semaine', days: 7 },
+  { id: '30d', label: '1 mois', days: 30 },
+  { id: '180d', label: '6 mois', days: 180 },
+  { id: 'all', label: 'Tout', days: null },
+]
 
 function safeRound(value: number | null | undefined): string {
   if (value == null || isNaN(value)) return '—'
@@ -74,19 +92,19 @@ export default function MetricDetailPage() {
     switch (id) {
       case 'tsb':
         return {
-          series: fitness.data.map((d) => ({ date: format(parseISO(d.date), 'dd/MM', { locale: fr }), value: Math.round(d.tsb) })),
+          series: fitness.data.map((d) => ({ date: format(parseISO(d.date), 'dd/MM', { locale: fr }), rawDate: d.date, value: Math.round(d.tsb) })),
           currentValue: athlete.data?.tsb != null ? safeRound(athlete.data.tsb) : '—',
           isLoading: fitness.isLoading || athlete.isLoading,
         }
       case 'ctl':
         return {
-          series: fitness.data.map((d) => ({ date: format(parseISO(d.date), 'dd/MM', { locale: fr }), value: Math.round(d.ctl) })),
+          series: fitness.data.map((d) => ({ date: format(parseISO(d.date), 'dd/MM', { locale: fr }), rawDate: d.date, value: Math.round(d.ctl) })),
           currentValue: safeRound(athlete.data?.ctl),
           isLoading: fitness.isLoading || athlete.isLoading,
         }
       case 'atl':
         return {
-          series: fitness.data.map((d) => ({ date: format(parseISO(d.date), 'dd/MM', { locale: fr }), value: Math.round(d.atl) })),
+          series: fitness.data.map((d) => ({ date: format(parseISO(d.date), 'dd/MM', { locale: fr }), rawDate: d.date, value: Math.round(d.atl) })),
           currentValue: safeRound(athlete.data?.atl),
           isLoading: fitness.isLoading || athlete.isLoading,
         }
@@ -94,7 +112,7 @@ export default function MetricDetailPage() {
         return {
           series: lifestyle.dailySeries
             .filter((d) => d.sleepHours != null)
-            .map((d) => ({ date: format(parseISO(d.dayId), 'dd/MM', { locale: fr }), value: d.sleepHours as number })),
+            .map((d) => ({ date: format(parseISO(d.dayId), 'dd/MM', { locale: fr }), rawDate: d.dayId, value: d.sleepHours as number })),
           currentValue: lifestyle.latest?.sleepHours != null ? String(lifestyle.latest.sleepHours) : '—',
           isLoading: lifestyle.isLoading,
         }
@@ -102,7 +120,7 @@ export default function MetricDetailPage() {
         return {
           series: lifestyle.dailySeries
             .filter((d) => d.hrv != null)
-            .map((d) => ({ date: format(parseISO(d.dayId), 'dd/MM', { locale: fr }), value: Math.round(d.hrv as number) })),
+            .map((d) => ({ date: format(parseISO(d.dayId), 'dd/MM', { locale: fr }), rawDate: d.dayId, value: Math.round(d.hrv as number) })),
           currentValue: lifestyle.latest?.hrv != null ? safeRound(lifestyle.latest.hrv) : '—',
           isLoading: lifestyle.isLoading,
         }
@@ -110,13 +128,13 @@ export default function MetricDetailPage() {
         return {
           series: lifestyle.dailySeries
             .filter((d) => d.restingHR != null)
-            .map((d) => ({ date: format(parseISO(d.dayId), 'dd/MM', { locale: fr }), value: Math.round(d.restingHR as number) })),
+            .map((d) => ({ date: format(parseISO(d.dayId), 'dd/MM', { locale: fr }), rawDate: d.dayId, value: Math.round(d.restingHR as number) })),
           currentValue: lifestyle.latest?.restingHR != null ? safeRound(lifestyle.latest.restingHR) : '—',
           isLoading: lifestyle.isLoading,
         }
       case 'readiness':
         return {
-          series: lifestyle.readinessSeries.map((d) => ({ date: format(parseISO(d.dayId), 'dd/MM', { locale: fr }), value: d.value })),
+          series: lifestyle.readinessSeries.map((d) => ({ date: format(parseISO(d.dayId), 'dd/MM', { locale: fr }), rawDate: d.dayId, value: d.value })),
           currentValue: lifestyle.readiness != null ? String(lifestyle.readiness) : '—',
           isLoading: lifestyle.isLoading,
         }
@@ -128,6 +146,15 @@ export default function MetricDetailPage() {
         return { series: null, currentValue: '—', isLoading: false }
     }
   }, [id, fitness.data, fitness.isLoading, athlete.data, athlete.isLoading, lifestyle.dailySeries, lifestyle.latest, lifestyle.readiness, lifestyle.readinessSeries, lifestyle.isLoading, enduranceIndex, powerCurve.isLoading])
+
+  const [range, setRange] = useState<RangeOption>('all')
+  const visibleSeries = useMemo(() => {
+    if (!series) return null
+    const days = RANGE_OPTIONS.find((r) => r.id === range)?.days
+    if (days == null) return series // 'all' — pas de filtre, la fenêtre de fetch (TREND_DAYS) reste la seule borne
+    const cutoff = format(subDays(today, days), 'yyyy-MM-dd')
+    return series.filter((p) => p.rawDate >= cutoff)
+  }, [series, range])
 
   const trendIcon = useMemo(() => {
     if (!series || series.length < 4) return null
@@ -148,10 +175,10 @@ export default function MetricDetailPage() {
   // une bande en cours.
   const currentZone = id === 'tsb' && athlete.data?.tsb != null ? tsbZone(athlete.data.tsb) : null
   const tsbYDomain = useMemo((): [number, number] => {
-    if (id !== 'tsb' || !series || series.length === 0) return [-35, 25]
-    const values = series.map((p) => p.value)
+    if (id !== 'tsb' || !visibleSeries || visibleSeries.length === 0) return [-35, 25]
+    const values = visibleSeries.map((p) => p.value)
     return [Math.min(...values, -35), Math.max(...values, 25)]
-  }, [id, series])
+  }, [id, visibleSeries])
 
   if (!info) {
     return (
@@ -209,16 +236,35 @@ export default function MetricDetailPage() {
           <PowerCurveCard />
         ) : (
         <Card className="lc-card">
-          <CardHeader>
-            <CardTitle className="text-base">Sur les {TREND_DAYS} derniers jours</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between gap-3 flex-wrap space-y-0">
+            <CardTitle className="text-base">
+              {range === 'all' ? `Sur les ${TREND_DAYS} derniers jours` : `Sur ${RANGE_OPTIONS.find((r) => r.id === range)?.label.toLowerCase()}`}
+            </CardTitle>
+            {series && series.length > 1 && (
+              <div className="flex gap-0.5 rounded-full bg-muted p-0.5">
+                {RANGE_OPTIONS.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setRange(r.id)}
+                    className={cn(
+                      'px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors',
+                      range === r.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </CardHeader>
           <CardContent>
             {isLoading ? (
               <Skeleton className="h-[240px] w-full rounded-lg" />
-            ) : series && series.length > 1 ? (
+            ) : visibleSeries && visibleSeries.length > 1 ? (
               <>
                 <ChartContainer config={chartConfig} className="h-[240px] w-full">
-                  <LineChart data={series}>
+                  <LineChart data={visibleSeries}>
                     {id === 'tsb' && TSB_ZONES_ORDERED.map((z) => (
                       <ReferenceArea
                         key={z.id}

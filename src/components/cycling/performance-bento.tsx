@@ -24,7 +24,7 @@
 
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { ChevronRight, Gauge, Zap } from 'lucide-react'
+import { ChevronRight, Gauge, Zap, HeartPulse, Activity, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { IntervalsAthlete } from '@/lib/intervals-api'
 import { usePowerCurve } from './use-power-curve'
@@ -113,23 +113,34 @@ function RingItem({ href, label, percent, color, centerValue, sublabel }: RingIt
 
 interface StatChipProps {
   href: string
+  icon: LucideIcon
   label: string
   value: ReactNode
   unit?: string
   trend?: VitalTrend | null
 }
 
-function StatChip({ href, label, value, unit, trend }: StatChipProps) {
+// Icon + inline value/unit/label, centered — retro-fitted from the icon
+// treatment on the landing-page mockup (public/screenshots/cycling.png),
+// which the user singled out by name as their favorite part of that
+// screenshot ("j'aime beaucoup... surtout les éléments pointés en rouge").
+// Replaces the earlier label-above/value-below chip with no icon at all.
+// The icon is a fixed "vital sign" red (text-destructive, the app's one
+// red token) regardless of trend — the trend LED next to the label is
+// still the good/bad/neutral-vs-yesterday signal, unchanged.
+function StatChip({ href, icon: Icon, label, value, unit, trend }: StatChipProps) {
   return (
-    <Link href={href} className="flex-1 group">
-      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-        {label}
-        <TrendDot trend={trend} />
+    <Link href={href} className="flex-1 flex items-center justify-center gap-2 group">
+      <Icon className="w-4 h-4 text-destructive shrink-0" />
+      <span className="font-data text-sm font-bold text-foreground">
+        {value}
+        {(unit || label) && (
+          <span className="font-body text-[11px] font-normal text-muted-foreground normal-case tracking-normal ml-1">
+            {unit}{unit && label ? ' ' : ''}{label}
+          </span>
+        )}
       </span>
-      <div className="flex items-baseline gap-1">
-        <span className="font-data text-xl font-bold text-foreground">{value}</span>
-        {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
-      </div>
+      <TrendDot trend={trend} />
     </Link>
   )
 }
@@ -194,6 +205,7 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
           <div className="flex gap-4">
             <StatChip
               href="/cycling/metric/hrv"
+              icon={HeartPulse}
               label="HRV"
               value={lifestyle.latest?.hrv != null ? Math.round(lifestyle.latest.hrv) : '—'}
               unit={lifestyle.latest?.hrv != null ? 'ms' : undefined}
@@ -201,7 +213,8 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
             />
             <StatChip
               href="/cycling/metric/restingHr"
-              label="FC repos"
+              icon={Activity}
+              label="repos"
               value={lifestyle.latest?.restingHR != null ? Math.round(lifestyle.latest.restingHR) : '—'}
               unit={lifestyle.latest?.restingHR != null ? 'bpm' : undefined}
               trend={lifestyle.latest?.restingHR != null ? vitalTrend(lifestyle.latest.restingHR, previousRestingHR, 'lower-better') : undefined}

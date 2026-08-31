@@ -14,7 +14,7 @@
 
 import { z } from 'zod';
 import { generateJson, type FlowResult } from '@/ai/anthropic';
-import { fetchWeatherForecast, degreesToCompass } from '@/ai/weather';
+import { fetchWeatherForecast, degreesToCompass, isSevereWeather, SEVERE_WIND_THRESHOLD_KMH } from '@/ai/weather';
 import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
 
 /** Below this, wind isn't worth routing around — asking the AI for advice on a light breeze would just invent filler. */
@@ -65,7 +65,14 @@ const DailyWorkoutRecommendationOutputSchema = z.object({
   rationale: z.string().describe('2-4 sentences in French explaining why this session fits today, grounded in the actual form/context data provided — not generic advice.'),
   structuredWorkout: z.string().describe('Intervals.icu workout-builder text script — section headers (optionally suffixed "Nx" for a repeat) each followed by "- " step lines. See system prompt for the exact syntax.'),
   warnings: z.array(z.string()).describe('0-3 short things the athlete should know before starting (injury caution, heavy week, etc). Empty array if nothing stands out.'),
-  windAdvice: z.string().nullable().describe('1-2 French sentences of wind-aware routing advice (which general direction to head out first so the wind ends up at your back on the return leg) — null when no ride location/time was given, the forecast could not be fetched, or the wind is too light to matter.'),
+  windAdvice: z.string().nullable().describe('1-2 French sentences of wind-aware routing advice (which general direction to head out first so the wind ends up at your back on the return leg) — null when no ride location/time was given, the forecast could not be fetched, the wind is too light to matter, or the weather was severe enough to switch the session indoors (no route to advise on).'),
+  predictedWeather: z.object({
+    temperatureCelsius: z.number().describe('Real temperature from the Open-Meteo forecast.'),
+    windSpeedKmh: z.number().describe('Real wind speed from the Open-Meteo forecast.'),
+    windDirectionCompass: z.string().describe('French 8-point compass label for the direction the wind is blowing FROM.'),
+    conditions: z.string().describe('Real weather conditions from the forecast (e.g. "Pluie modérée", "Ciel dégagé").'),
+  }).nullable().describe('The real weather fetched via Open-Meteo for the ride, same numbers and same "always a real pre-fetch, never invented" principle as Météo & Tenue (cyclingOutfitRecommendation) — null when no ride location/time was given or the forecast could not be fetched.'),
+  weatherAlert: z.string().nullable().describe('Non-null ONLY when the real forecast is severe (heavy rain/snow, thunderstorm, or wind ≥ 40km/h) — 1-2 French sentences citing the real numbers, explaining that an outdoor ride is not advisable and that the session below has been adapted for a home trainer instead. Null when the weather is fine or no ride location/time was given.'),
 }).describe('Output of the daily workout recommendation flow.');
 
 export type DailyWorkoutRecommendationOutput = z.infer<typeof DailyWorkoutRecommendationOutputSchema>;
@@ -122,21 +129,35 @@ export async function dailyWorkoutRecommendation(input: DailyWorkoutRecommendati
     ].join('\n'));
   }
 
-  // Wind-aware routing: only fetched when the athlete gave a departure
-  // location/time (Coach > Proposition du jour, champs optionnels). Fails
-  // soft — a geocoding/forecast error just means no weather section (and no
-  // windAdvice) rather than breaking the whole proposal.
+  // Wind-aware routing + severe-weather → home-trainer: only fetched when
+  // the athlete gave a departure location/time (Coach > Proposition du
+  // jour, champs optionnels). Fails soft — a geocoding/forecast error just
+  // means no weather section (and no windAdvice/weatherAlert) rather than
+  // breaking the whole proposal — this flow's weather is additive context,
+  // unlike cyclingOutfitRecommendation where it's the entire point (see
+  // that flow's own fail-hard behavior).
   let windIsSignificant = false;
+  let weatherIsSevere = false;
+  let predictedWeather: DailyWorkoutRecommendationOutput['predictedWeather'] = null;
   if (parsedInput.ride) {
     const forecast = await fetchWeatherForecast(parsedInput.ride.location, parsedInput.ride.departureDateTime);
     if (!forecast.error) {
       windIsSignificant = forecast.windSpeedKmh >= WIND_ADVICE_THRESHOLD_KMH;
+      weatherIsSevere = isSevereWeather(forecast);
+      const windDirectionCompass = degreesToCompass(forecast.windDirectionDeg);
+      predictedWeather = {
+        temperatureCelsius: forecast.temperatureCelsius,
+        windSpeedKmh: forecast.windSpeedKmh,
+        windDirectionCompass,
+        conditions: forecast.conditions,
+      };
       sections.push([
         `MÉTÉO PRÉVUE POUR LA SORTIE (${parsedInput.ride.location}, départ ${parsedInput.ride.departureDateTime}) :`,
         `Température : ${forecast.temperatureCelsius}°C`,
-        `Vent : ${forecast.windSpeedKmh} km/h, venant du ${degreesToCompass(forecast.windDirectionDeg)}`,
+        `Vent : ${forecast.windSpeedKmh} km/h, venant du ${windDirectionCompass}`,
         `Conditions : ${forecast.conditions}`,
-      ].join('\n'));
+        weatherIsSevere ? `ALERTE : ces conditions sont jugées trop dégradées pour rouler dehors (seuil vent ${SEVERE_WIND_THRESHOLD_KMH}+ km/h et/ou pluie/neige forte/orage).` : '',
+      ].filter(Boolean).join('\n'));
     }
   }
 
@@ -164,11 +185,17 @@ Règles impératives :
   seuil/VO2max), et dis-le explicitement dans rationale — la récupération prime sur la programmation quand
   les deux sont en tension.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
-${windIsSignificant ? `- Une météo de sortie avec du vent significatif (${WIND_ADVICE_THRESHOLD_KMH}+ km/h) est fournie ci-dessus : remplis
+${weatherIsSevere ? `- ALERTE MÉTÉO : la météo prévue pour la sortie est jugée trop dégradée pour rouler dehors (vent
+  ${SEVERE_WIND_THRESHOLD_KMH}+ km/h et/ou pluie/neige forte/orage — voir la météo fournie ci-dessus). Propose à la
+  place une séance ADAPTÉE EN HOME TRAINER : sportType doit être "VirtualRide", et le contenu (durée, intensité,
+  structuredWorkout) doit rester cohérent avec la forme du jour comme n'importe quelle autre proposition — ce
+  n'est pas une simple annulation, c'est une vraie séance indoor équivalente. Remplis weatherAlert avec 1-2
+  phrases citant les chiffres réels et expliquant que la séance a été adaptée pour cette raison, et mentionne
+  aussi ce changement dans warnings. Mets windAdvice à null (pas de sens pour une séance indoor).` : windIsSignificant ? `- Une météo de sortie avec du vent significatif (${WIND_ADVICE_THRESHOLD_KMH}+ km/h) est fournie ci-dessus : remplis
   windAdvice avec 1-2 phrases indiquant la direction générale à prendre AU DÉPART pour avoir le vent de face
   à l'aller et dans le dos au retour (ex. "Partez vers le Nord-Ouest à l'aller, vous aurez le vent dans le
   dos sur le retour"). C'est un conseil de direction générale, pas un itinéraire précis — tu ne connais pas
-  les routes locales.` : '- Mets windAdvice à null : soit aucune météo de sortie n\'a été fournie, soit le vent prévu est trop faible pour justifier un conseil d\'itinéraire.'}
+  les routes locales. Mets weatherAlert à null : la météo n'est pas dégradée.` : '- Mets windAdvice et weatherAlert à null : soit aucune météo de sortie n\'a été fournie, soit le vent prévu est trop faible pour justifier un conseil d\'itinéraire et la météo n\'est pas dégradée.'}
 
 ${STRUCTURED_WORKOUT_SYNTAX}
 
@@ -181,7 +208,9 @@ Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, p
   "rationale": "2 à 4 phrases justifiant ce choix à partir du contexte réel fourni",
   "structuredWorkout": "script structuré en sections + étapes, voir le format ci-dessus",
   "warnings": ["0 à 3 points d'attention courts, tableau vide si rien à signaler"],
-  "windAdvice": "conseil de direction pour avoir le vent dans le dos au retour, ou null"
+  "windAdvice": "conseil de direction pour avoir le vent dans le dos au retour, ou null",
+  "predictedWeather": ${predictedWeather ? JSON.stringify(predictedWeather) : 'null'},
+  "weatherAlert": "1-2 phrases si la météo a forcé un passage en home trainer, sinon null"
 }`;
 
   return generateJson(DailyWorkoutRecommendationOutputSchema, {

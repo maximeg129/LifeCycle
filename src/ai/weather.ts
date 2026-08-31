@@ -11,6 +11,8 @@ export interface WeatherForecast {
   /** Meteorological convention — the compass bearing the wind is blowing FROM (0=N, 90=E, 180=S, 270=W), not the direction it's heading toward. */
   windDirectionDeg: number
   conditions: string
+  /** Raw Open-Meteo weather code behind `conditions` — kept alongside the French label so severity checks (isSevereWeather) can match on the stable numeric code rather than string-matching a label that could change. Absent only on the error fallback, where there's no real code to report. */
+  weatherCode?: number
   error?: string
 }
 
@@ -64,6 +66,7 @@ export async function fetchWeatherForecast(location: string, dateTime: string): 
       windSpeedKmh: weatherData.hourly.windspeed_10m[safeIndex],
       windDirectionDeg: weatherData.hourly.winddirection_10m[safeIndex],
       conditions: WEATHER_CODES[weatherData.hourly.weathercode[safeIndex]] || 'Conditions variables',
+      weatherCode: weatherData.hourly.weathercode[safeIndex],
     }
   } catch (e) {
     return {
@@ -83,4 +86,25 @@ export function degreesToCompass(deg: number): string {
   const normalized = ((deg % 360) + 360) % 360
   const index = Math.round(normalized / 45) % 8
   return COMPASS_LABELS[index]
+}
+
+// ── "Météo dégradée → home trainer" — retour utilisateur : "si le temps est
+// vraiment dégradée, trop de pluie, trop de vent, l'IA pourrait proposer une
+// alternative adaptée pour home trainer". Seuils déterministes en code
+// (jamais laissés à l'appréciation du modèle — même principe que
+// WIND_ADVICE_THRESHOLD_KMH dans daily-workout-recommendation-flow.ts, qui
+// décide déjà si le vent "mérite" un conseil de direction) : dailyWorkout-
+// RecommendationFlow lit ce verdict et instruit explicitement le modèle de
+// basculer la séance en indoor plutôt que de le lui laisser deviner depuis
+// les chiffres bruts.
+export const SEVERE_WIND_THRESHOLD_KMH = 40
+
+/** Open-Meteo weather codes considered too degraded for an outdoor ride: heavy/violent rain or snow, any thunderstorm. Moderate rain/snow and plain fog are left out — inconvenient, not unsafe/unrideable on their own. */
+const SEVERE_WEATHER_CODES = new Set([65, 75, 82, 95, 96, 99])
+
+/** True when the forecast is bad enough that an outdoor ride should be swapped for an indoor/home-trainer alternative — wind at or above SEVERE_WIND_THRESHOLD_KMH, or a weather code for heavy rain/snow/thunderstorm. Never guesses off an error fallback (no real data to judge). */
+export function isSevereWeather(forecast: WeatherForecast): boolean {
+  if (forecast.error) return false
+  if (forecast.windSpeedKmh >= SEVERE_WIND_THRESHOLD_KMH) return true
+  return forecast.weatherCode != null && SEVERE_WEATHER_CODES.has(forecast.weatherCode)
 }
