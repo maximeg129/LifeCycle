@@ -31,7 +31,7 @@ export function RecoveryInsightPanel({ dailySeries, goals }: Props) {
   const athlete = useAthlete()
   const memory = useCoachMemory()
   const governor = useGovernor()
-  const budget = useKJBudget(governor.status)
+  const budget = useKJBudget(governor.status, athlete.data?.weight)
   const powerCurve = usePowerCurve()
   const enduranceIndex = fitPowerDurationCurve(
     [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
