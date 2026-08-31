@@ -57,7 +57,7 @@ export function useDailyWorkout() {
   const athlete = useAthlete()
   const memory = useCoachMemory()
   const governor = useGovernor()
-  const budget = useKJBudget(governor.status)
+  const budget = useKJBudget(governor.status, athlete.data?.weight)
   // Same merged (auto-synced Intervals.icu + manual) daily series as Vie &
   // Santé — a bad night should measurably change today's proposal, not
   // just the training-load side of the decision.

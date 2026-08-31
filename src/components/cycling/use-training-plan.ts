@@ -61,7 +61,7 @@ export function useTrainingPlan() {
   const athlete = useAthlete()
   const memory = useCoachMemory()
   const governor = useGovernor()
-  const budget = useKJBudget(governor.status)
+  const budget = useKJBudget(governor.status, athlete.data?.weight)
 
   const plansQuery = useMemoFirebase(() => {
     if (!user || !db) return null

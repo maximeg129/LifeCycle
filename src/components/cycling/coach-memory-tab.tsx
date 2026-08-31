@@ -20,6 +20,7 @@ import { AddCoachGoalDialog } from './add-coach-goal-dialog'
 import { INJURY_STATUS_LABELS, GOAL_PRIORITY_LABELS, countActiveInjuries, type CoachLifestyle } from './coach-memory-types'
 import type { GovernorStatus } from './load-types'
 import { EmptyState } from '@/components/ui/empty-state'
+import { useAthlete } from '@/hooks/use-intervals'
 
 const GOVERNOR_BADGE: Record<GovernorStatus, { emoji: string; label: string }> = {
   vert: { emoji: '🟢', label: 'Favorable' },
@@ -30,7 +31,8 @@ const GOVERNOR_BADGE: Record<GovernorStatus, { emoji: string; label: string }> =
 
 export function CoachMemoryTab({ governorStatus }: { governorStatus: GovernorStatus }) {
   const memory = useCoachMemory()
-  const budget = useKJBudget(governorStatus)
+  const athlete = useAthlete()
+  const budget = useKJBudget(governorStatus, athlete.data?.weight)
   const activeInjuries = countActiveInjuries(memory.injuries)
   const gov = GOVERNOR_BADGE[governorStatus]
 
@@ -42,7 +44,7 @@ export function CoachMemoryTab({ governorStatus }: { governorStatus: GovernorSta
           <div className="flex items-center gap-2 font-medium">
             <BrainCircuit className="w-4 h-4 text-primary" /> Contexte coach
           </div>
-          <span>Budget kJ {budget.realized}/{budget.target || '—'}</span>
+          <span>Budget kJ/kg {budget.realized.toFixed(1)}/{budget.target ? budget.target.toFixed(1) : '—'}</span>
           <span>Charge interne {gov.emoji} {gov.label}</span>
           <span>{activeInjuries} blessure{activeInjuries > 1 ? 's' : ''} active{activeInjuries > 1 ? 's' : ''}</span>
           <span>{memory.goals.length} objectif{memory.goals.length > 1 ? 's' : ''}</span>

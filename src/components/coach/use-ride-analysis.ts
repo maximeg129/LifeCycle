@@ -56,7 +56,7 @@ export function useRideAnalysis(activityId: string | null) {
   const athlete = useAthlete()
   const memory = useCoachMemory()
   const governor = useGovernor()
-  const budget = useKJBudget(governor.status)
+  const budget = useKJBudget(governor.status, athlete.data?.weight)
 
   const credsRef = useMemoFirebase(() => {
     if (!user || !db) return null

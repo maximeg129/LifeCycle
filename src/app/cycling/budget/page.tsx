@@ -22,12 +22,14 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useKJBudget } from '@/components/cycling/use-kj-budget'
 import { useGovernor } from '@/components/cycling/use-governor'
+import { useAthlete } from '@/hooks/use-intervals'
 
 const trendIcon: Record<string, typeof TrendingUp> = { up: TrendingUp, down: TrendingDown, flat: Minus }
 
 export default function BudgetDetailPage() {
   const governor = useGovernor()
-  const budget = useKJBudget(governor.status)
+  const athlete = useAthlete()
+  const budget = useKJBudget(governor.status, athlete.data?.weight)
 
   const TrendIcon = trendIcon[budget.trend.direction]
   const pct = budget.target > 0 ? Math.min(100, Math.round((budget.realized / budget.target) * 100)) : 0
@@ -45,7 +47,7 @@ export default function BudgetDetailPage() {
         <PageHeader
           category="Entraînement"
           title="Budget de la semaine"
-          description="Travail mécanique réel (puissance × durée), pas un TSS pondéré arbitrairement"
+          description="Travail mécanique réel par kg de poids de corps — jamais des kJ bruts, pondérés par le poids (R09/R10)"
         />
 
         {budget.isLoading ? (
@@ -59,18 +61,18 @@ export default function BudgetDetailPage() {
         ) : (
           <MetricCard
             title="Budget de la semaine"
-            description="Travail mécanique réel (puissance × durée), pas un TSS pondéré arbitrairement"
+            description="Travail mécanique réel par kg de poids de corps — jamais des kJ bruts, pondérés par le poids (R09/R10)"
             icon={Flame}
             isAvailable={budget.isAvailable}
-            requiredInputs={["Puissance (watts) enregistrée sur au moins une séance récente"]}
+            requiredInputs={['Puissance (watts) enregistrée sur au moins une séance récente', 'Poids (Intervals.icu)']}
           >
             <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-bold">{budget.realized}</span>
-              <span className="text-lg text-muted-foreground">/ {budget.target || '—'} kJ</span>
+              <span className="text-4xl font-bold">{budget.realized.toFixed(1)}</span>
+              <span className="text-lg text-muted-foreground">/ {budget.target ? budget.target.toFixed(1) : '—'} kJ/kg</span>
             </div>
             <Progress value={pct} className="h-1.5 mt-3" />
             <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Base 8 sem. : {budget.baseline || '—'} kJ</span>
+              <span>Base 8 sem. : {budget.baseline ? budget.baseline.toFixed(1) : '—'} kJ/kg</span>
               {budget.trend.direction !== 'flat' ? (
                 <span className={`flex items-center gap-1 ${budget.trend.direction === 'up' ? 'text-green-400' : 'text-red-400'}`}>
                   <TrendIcon className="w-3 h-3" /> {budget.trend.pctChange > 0 ? '+' : ''}{budget.trend.pctChange}% / 8 sem.
@@ -79,6 +81,12 @@ export default function BudgetDetailPage() {
                 <span className="flex items-center gap-1"><Minus className="w-3 h-3" /> Stable</span>
               )}
             </div>
+            {budget.exceedsThresholdKJPerKg != null && (
+              <p className="mt-2 text-[11px] text-muted-foreground">
+                Palier de durabilité de référence dépassé cette semaine : {budget.exceedsThresholdKJPerKg} kJ/kg — un plafond de
+                référence (R08/R10/R11), jamais une cible à atteindre.
+              </p>
+            )}
           </MetricCard>
         )}
 
@@ -88,24 +96,28 @@ export default function BudgetDetailPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <div className="text-sm font-medium mb-1">kJ d&apos;une séance</div>
+              <div className="text-sm font-medium mb-1">kJ/kg d&apos;une séance</div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Watts moyens de la séance × durée en mouvement (secondes), divisé par 1000. C&apos;est du travail
-                mécanique réel — pas un score pondéré comme le TSS, qui suppose des relations puissance/effort
-                fixées à l&apos;avance. Une séance sans capteur de puissance ne compte pas dans le budget (elle
-                n&apos;a pas de watts moyens exploitables).
+                Watts moyens de la séance × durée en mouvement (secondes), divisé par 1000 puis par le poids de
+                l&apos;athlète (kg, Intervals.icu). C&apos;est du travail mécanique réel rapporté au poids — jamais des
+                kJ bruts (règle kj-budget-unit-is-kj-per-kg-weighted, R09/R10 : un budget non pondéré par le poids
+                sous-estime systématiquement la fatigue) ni un score pondéré comme le TSS, qui suppose des relations
+                puissance/effort fixées à l&apos;avance. Une séance sans capteur de puissance ne compte pas dans le
+                budget (elle n&apos;a pas de watts moyens exploitables).
               </p>
             </div>
             <div>
               <div className="text-sm font-medium mb-1">Réalisé</div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Somme des kJ de toutes les séances avec puissance depuis le lundi de la semaine en cours.
+                Somme des kJ/kg de toutes les séances avec puissance depuis le lundi de la semaine en cours. Situé
+                par rapport aux paliers de durabilité déjà sourcés (R08/R10/R11, 10/20/30/40 kJ/kg) quand le total
+                de la semaine en dépasse un — des plafonds de référence, jamais des cibles à atteindre.
               </p>
             </div>
             <div>
               <div className="text-sm font-medium mb-1">Référence (base 8 sem.)</div>
               <p className="text-sm text-muted-foreground leading-relaxed">
-                Moyenne des kJ hebdomadaires des 8 dernières semaines complètes (semaines avec au moins une
+                Moyenne des kJ/kg hebdomadaires des 8 dernières semaines complètes (semaines avec au moins une
                 séance avec puissance). Une semaine en cours ou sans donnée exploitable n&apos;entre pas dans
                 cette moyenne.
               </p>

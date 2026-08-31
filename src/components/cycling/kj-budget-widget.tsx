@@ -7,11 +7,13 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Flame, TrendingUp, TrendingDown, Minus, ChevronRight } from 'lucide-react'
 import { useKJBudget } from './use-kj-budget'
 import type { GovernorStatus } from './load-types'
+import { useAthlete } from '@/hooks/use-intervals'
 
 const trendIcon: Record<string, typeof TrendingUp> = { up: TrendingUp, down: TrendingDown, flat: Minus }
 
 export function KJBudgetWidget({ governorStatus }: { governorStatus: GovernorStatus }) {
-  const budget = useKJBudget(governorStatus)
+  const athlete = useAthlete()
+  const budget = useKJBudget(governorStatus, athlete.data?.weight)
 
   if (budget.isLoading) {
     return (
@@ -33,19 +35,19 @@ export function KJBudgetWidget({ governorStatus }: { governorStatus: GovernorSta
       <ChevronRight className="absolute top-4 right-4 w-3.5 h-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform z-10" />
       <MetricCard
         title="Budget de la semaine"
-        description="Travail mécanique réel (puissance × durée), pas un TSS pondéré arbitrairement"
+        description="Travail mécanique réel par kg de poids de corps (puissance × durée / poids) — jamais des kJ bruts, pondérés par le poids (R09/R10)"
         icon={Flame}
         isAvailable={budget.isAvailable}
-        requiredInputs={["Puissance (watts) enregistrée sur au moins une séance récente"]}
+        requiredInputs={['Puissance (watts) enregistrée sur au moins une séance récente', 'Poids (Intervals.icu)']}
         className="group-hover:border-primary/40 transition-colors"
       >
         <div className="flex items-baseline gap-2">
-          <span className="text-4xl font-bold">{budget.realized}</span>
-          <span className="text-lg text-muted-foreground">/ {budget.target || '—'} kJ</span>
+          <span className="text-4xl font-bold">{budget.realized.toFixed(1)}</span>
+          <span className="text-lg text-muted-foreground">/ {budget.target ? budget.target.toFixed(1) : '—'} kJ/kg</span>
         </div>
         <Progress value={pct} className="h-1.5 mt-3" />
         <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-          <span>Base 8 sem. : {budget.baseline || '—'} kJ</span>
+          <span>Base 8 sem. : {budget.baseline ? budget.baseline.toFixed(1) : '—'} kJ/kg</span>
           {budget.trend.direction !== 'flat' ? (
             <span className={`flex items-center gap-1 ${budget.trend.direction === 'up' ? 'text-green-400' : 'text-red-400'}`}>
               <TrendIcon className="w-3 h-3" /> {budget.trend.pctChange > 0 ? '+' : ''}{budget.trend.pctChange}% / 8 sem.
@@ -54,6 +56,11 @@ export function KJBudgetWidget({ governorStatus }: { governorStatus: GovernorSta
             <span className="flex items-center gap-1"><Minus className="w-3 h-3" /> Stable</span>
           )}
         </div>
+        {budget.exceedsThresholdKJPerKg != null && (
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            Palier de durabilité de référence dépassé cette semaine : {budget.exceedsThresholdKJPerKg} kJ/kg (plafond, pas une cible).
+          </p>
+        )}
       </MetricCard>
     </Link>
   )
