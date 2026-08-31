@@ -33,7 +33,9 @@ const TrainingPlanGenerationInputSchema = z.object({
     ctl: z.number().optional().describe('Chronic Training Load (fitness)'),
     atl: z.number().optional().describe('Acute Training Load (fatigue)'),
     tsb: z.number().optional().describe('Training Stress Balance (form) = ctl - atl'),
-  }).optional().describe('Current Intervals.icu training load, if connected.'),
+    ftp: z.number().optional().describe('Functional Threshold Power (W), from Intervals.icu — the current physiological reference for intensity, useful context for how aggressive a progression is realistic.'),
+    weightKg: z.number().optional().describe('Athlete weight (kg), from Intervals.icu.'),
+  }).optional().describe('Current Intervals.icu training load and physiological reference values, if connected.'),
   coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, lifestyle, goals, remembered facts, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
 }).describe('Input for the training plan generation flow.');
 
@@ -43,6 +45,22 @@ const PlanPhaseEnum = z.enum(['base', 'build', 'peak', 'taper', 'recovery']);
 
 const TrainingPlanGenerationOutputSchema = withCoachOutputContract({
   planName: z.string().describe('Short plan name, e.g. "Préparation Marmotte 2026".'),
+  // Redéfinit "summary" du socle (withCoachOutputContract) avec un sens plus
+  // précis pour ce flow — retour utilisateur : "un paragraphe qui explique
+  // les raisons... quelle base il prend pour proposer ce plan... et quelles
+  // sont les attentes physiologiques". Le socle décrit "un aperçu en une ou
+  // deux phrases" (trop court pour ce besoin) ; garde `.min(1)` comme
+  // l'exige outputContract.test.ts pour toute redéfinition.
+  summary: z
+    .string()
+    .min(1)
+    .describe(
+      "Un vrai paragraphe (4-6 phrases) expliquant la logique du plan : sur quelles données réelles il s'appuie " +
+        '(CTL/ATL/TSB, FTP, charge récente, objectif et sa date), quelle progression physiologique attendue ' +
+        "(ex: pourquoi cette durée de phase base avant d'attaquer le build, pourquoi ce nombre de semaines " +
+        "recovery) — pas un aperçu générique, une vraie justification que l'athlète peut lire pour comprendre " +
+        "POURQUOI ce plan-là plutôt qu'un autre."
+    ),
   weeks: z.array(z.object({
     phase: PlanPhaseEnum,
     focus: z.string().describe('One short sentence: the week\'s training focus.'),
@@ -72,6 +90,8 @@ export async function trainingPlanGeneration(input: TrainingPlanGenerationInput)
       `CTL (fitness) : ${t.ctl ?? 'n/a'}`,
       `ATL (fatigue) : ${t.atl ?? 'n/a'}`,
       `TSB (forme) : ${t.tsb ?? 'n/a'}`,
+      `FTP : ${t.ftp != null ? `${t.ftp} W` : 'n/a'}`,
+      `Poids : ${t.weightKg != null ? `${t.weightKg} kg` : 'n/a'}`,
     ].join('\n'));
   }
 
@@ -96,6 +116,10 @@ Principes de périodisation à respecter :
 - Si le plan est très court (moins de 4 semaines), simplifie : pas de vraie phase "base", concentre-toi sur
   l'affûtage et la spécificité, et dis-le dans warnings plutôt que d'inventer une périodisation classique
   qui ne tient pas dans le temps disponible.
+- Si la FTP et le CTL actuels sont fournis, utilise-les pour juger si la progression proposée est
+  physiologiquement réaliste pour ce niveau de départ (un athlète avec un CTL bas ne peut pas absorber la
+  même hausse hebdomadaire qu'un athlète avec un CTL déjà élevé) — mentionne-le dans warnings si le volume
+  demandé (weeklyAvailableMinutes) semble agressif compte tenu du niveau actuel.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
 
 Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme

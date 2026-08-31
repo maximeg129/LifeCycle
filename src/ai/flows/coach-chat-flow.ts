@@ -63,7 +63,9 @@ const CoachChatInputSchema = z.object({
     ctl: z.number().optional(),
     atl: z.number().optional(),
     tsb: z.number().optional(),
-  }).optional().describe('Current Intervals.icu training load, if connected.'),
+    ftp: z.number().optional().describe('Functional Threshold Power (W), from Intervals.icu.'),
+    weightKg: z.number().optional().describe('Athlete weight (kg), from Intervals.icu.'),
+  }).optional().describe('Current Intervals.icu training load and physiological reference values, if connected.'),
   planWeek: z.object({
     weekNumber: z.number(),
     phase: z.string(),
@@ -167,7 +169,7 @@ export async function coachChat(input: CoachChatInput): Promise<FlowResult<Coach
   const contextLines: string[] = [];
   if (parsedInput.training) {
     const t = parsedInput.training;
-    contextLines.push(`FORME ACTUELLE (Intervals.icu) : CTL ${t.ctl ?? 'n/a'}, ATL ${t.atl ?? 'n/a'}, TSB ${t.tsb ?? 'n/a'}`);
+    contextLines.push(`FORME ACTUELLE (Intervals.icu) : CTL ${t.ctl ?? 'n/a'}, ATL ${t.atl ?? 'n/a'}, TSB ${t.tsb ?? 'n/a'}, FTP ${t.ftp != null ? `${t.ftp}W` : 'n/a'}, Poids ${t.weightKg != null ? `${t.weightKg}kg` : 'n/a'}`);
   }
   if (parsedInput.planWeek) {
     const w = parsedInput.planWeek;

@@ -29,7 +29,9 @@ const PlanWeekSessionsInputSchema = z.object({
     ctl: z.number().optional(),
     atl: z.number().optional(),
     tsb: z.number().optional(),
-  }).optional().describe('Current Intervals.icu training load, if connected — general context, not a same-day snapshot.'),
+    ftp: z.number().optional().describe('Functional Threshold Power (W), from Intervals.icu.'),
+    weightKg: z.number().optional().describe('Athlete weight (kg), from Intervals.icu.'),
+  }).optional().describe('Current Intervals.icu training load and physiological reference values, if connected — general context, not a same-day snapshot.'),
   coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, lifestyle, goals, remembered facts, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
 }).describe('Input for the plan week sample sessions flow.');
 
@@ -79,6 +81,8 @@ export async function planWeekSessions(input: PlanWeekSessionsInput): Promise<Fl
       `CTL (fitness) : ${t.ctl ?? 'n/a'}`,
       `ATL (fatigue) : ${t.atl ?? 'n/a'}`,
       `TSB (forme) : ${t.tsb ?? 'n/a'}`,
+      `FTP : ${t.ftp != null ? `${t.ftp} W` : 'n/a'}`,
+      `Poids : ${t.weightKg != null ? `${t.weightKg} kg` : 'n/a'}`,
     ].join('\n'));
   }
 
@@ -100,6 +104,9 @@ Règles impératives :
   de soutien.
 - S'il y a une blessure active, adapte le contenu et mentionne l'adaptation dans le rationale de la
   séance concernée.
+- Si la FTP est fournie, utilise-la pour ancrer le rationale de chaque séance dans des chiffres réels
+  (ex: "seuil à 95% FTP, environ 260W" plutôt que "seuil" tout court) — le script structuré reste en % de
+  FTP. Si la FTP n'est pas fournie (n/a ci-dessus), reste en %/ressenti, ne l'invente jamais.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
 
 ${STRUCTURED_WORKOUT_SYNTAX}

@@ -31,7 +31,9 @@ const DailyWorkoutRecommendationInputSchema = z.object({
     atl: z.number().optional().describe('Acute Training Load (fatigue)'),
     tsb: z.number().optional().describe('Training Stress Balance (form) = ctl - atl'),
     rampRate: z.number().optional(),
-  }).optional().describe('Current Intervals.icu training load, if connected.'),
+    ftp: z.number().optional().describe('Functional Threshold Power (W), from Intervals.icu — the reference for intensity zones (e.g. seuil ≈ 90-105% FTP, VO2max ≈ 105-120% FTP).'),
+    weightKg: z.number().optional().describe('Athlete weight (kg), from Intervals.icu — for W/kg context.'),
+  }).optional().describe('Current Intervals.icu training load and physiological reference values, if connected.'),
   recentSessions: z.array(z.object({
     date: z.string().describe('yyyy-MM-dd'),
     type: z.string().optional(),
@@ -107,6 +109,8 @@ export async function dailyWorkoutRecommendation(input: DailyWorkoutRecommendati
       `ATL (fatigue) : ${t.atl ?? 'n/a'}`,
       `TSB (forme) : ${t.tsb ?? 'n/a'}`,
       `Ramp rate : ${t.rampRate ?? 'n/a'}`,
+      `FTP : ${t.ftp != null ? `${t.ftp} W` : 'n/a'}`,
+      `Poids : ${t.weightKg != null ? `${t.weightKg} kg` : 'n/a'}`,
     ].join('\n'));
   }
 
@@ -186,6 +190,10 @@ Règles impératives :
   autre chose, propose éventuellement une alternative (récupération active, endurance légère plutôt que
   seuil/VO2max), et dis-le explicitement dans rationale — la récupération prime sur la programmation quand
   les deux sont en tension.
+- Si la FTP est fournie, utilise-la pour ancrer rationale dans des chiffres réels (ex: "séance de seuil à
+  95% de la FTP, environ 260W" plutôt que "séance de seuil" tout court) — le script structuré lui-même reste
+  en % de FTP (voir la syntaxe ci-dessous, que l'app convertit déjà en watts côté Intervals.icu). Si la FTP
+  n'est pas fournie (n/a ci-dessus), reste en %/ressenti dans rationale, ne l'invente jamais.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
 ${weatherIsSevere ? `- ALERTE MÉTÉO : la météo prévue pour la sortie est jugée trop dégradée pour rouler dehors (vent
   ${SEVERE_WIND_THRESHOLD_KMH}+ km/h et/ou pluie/neige forte/orage — voir la météo fournie ci-dessus). Propose à la
