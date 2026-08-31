@@ -132,6 +132,25 @@ export const RIEGEL_VALIDITY_DOMAIN: SourcedConstant<RiegelValidityDomain> = {
     '(le texte source dit "avertir", pas "refuser") : le fit reste calculable, mais moins fiable hors de cette plage.',
 }
 
+// ── Nutrition — apport glucidique à l'effort ───────────────────────────────
+
+export interface CarbIntakeGuidance {
+  maxGramsPerHour: number
+  /** Ratio glucose:fructose — les deux transporteurs intestinaux distincts (glucose et fructose) permettent une absorption combinée supérieure à un seul sucre à haut débit. */
+  glucoseFructoseRatio: [number, number]
+}
+
+export const CARB_INTAKE_GUIDANCE: SourcedConstant<CarbIntakeGuidance> = {
+  status: 'sourced',
+  refs: ['R34'],
+  value: { maxGramsPerHour: 120, glucoseFructoseRatio: [1, 0.8] },
+  note:
+    "R34 (Podlogar & Wallis 2022) : apports jusqu'à 120g·h⁻¹ lors d'un effort intense, ratio glucose:fructose ~1:0,8, " +
+    "introduction progressive recommandée (tolérance digestive). Le document ne donne pas de formule reliant durée/" +
+    "intensité à un débit précis en g/h — cette constante reste donc le plafond de référence et le ratio, pas un " +
+    'calculateur personnalisé (jamais un barème inventé par tranche de durée).',
+}
+
 // ── Budget kJ/kg — nudge de cible hebdomadaire selon le gouverneur ────────
 
 export interface KjTargetNudge {
