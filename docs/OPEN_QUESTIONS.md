@@ -50,3 +50,15 @@ Trois options :
 Je penche pour (a) — les deux répondent à des besoins différents et le mandat de ce prompt (les 35 références font autorité pour les *règles opérationnelles*) n'exclut pas qu'un athlète garde ses propres lectures à côté. Mais à confirmer.
 
 **Votre réponse : (c).** `coachLibrary` est réorientée en lecture seule : elle n'affiche plus que les 35 références de `references.ts`, plus de CRUD utilisateur libre. Implication concrète : `add-library-entry-dialog.tsx` (formulaire + import PDF, construit plus tôt cette session) et l'écriture Firestore `users/{uid}/coachLibrary` associée deviennent obsolètes une fois la Phase 5 (UI) livrée — `coach-library-tab.tsx` sera reconstruit pour lire `REFERENCES`/`RULES` depuis le code plutôt que Firestore. À traiter explicitement dans la PR 11 (UI), pas avant — l'audit ne supprime rien tant que le remplacement n'est pas prêt.
+
+---
+
+## Q5 — Bornes %FTP du modèle 3 zones (distribution, R18)
+
+`zones.ts` (PR 2) doit implémenter le double modèle de zones demandé section 3.4 : 3 zones pour la distribution d'intensité (R18, Seiler) en plus des 7 zones de prescription (R16, Coggan, déjà sourcées et déjà utilisées dans l'app). Problème : R18 définit ses 3 zones par seuil de lactate sanguin (~2mM), une mesure qu'aucune donnée power-only (Wahoo/Intervals.icu) ne peut reproduire directement — le document ne donne aucune borne %FTP pour ce modèle 3 zones.
+
+Plutôt que d'inventer une nouvelle borne %FTP pour approximer ce seuil lactate (exactement le genre de constante non sourcée que ce projet s'interdit), la première version de `zones.ts` regroupait les 7 zones Coggan déjà sourcées (R16) : zone1 = Coggan 1-2, zone2 = Coggan 3-4, zone3 = Coggan 5-7.
+
+**Votre réponse : résolu autrement, avec de vraies bornes.** Vous avez fourni deux documents supplémentaires (`POWER_ZONES.pdf`, `POLARIZED_TRAINING.pdf`) — voir `evidence/supplementary-sources.ts` (S01, S02). S01 corrobore simplement les bornes 7 zones déjà en place (R16), aucun changement. S02 donne enfin des bornes %FTP réelles pour le modèle 3 zones (attribué à Seiler) — mais se contredisait lui-même entre son tableau (60/80/100) et son texte (50/80/100). Vous avez tranché pour les valeurs du **texte : Zone 1 <80% FTP, Zone 2 80-100%, Zone 3 100%+**. `zones.ts` calcule maintenant directement le temps en zone 3-zones depuis le flux watts avec ces bornes (`computePowerZoneDistribution3`), plus besoin de regrouper les 7 zones. Le regroupement par 7-zones a été retiré.
+
+Point resté à ma discrétion, documenté en commentaire dans `zones.ts` plutôt que retranché à vous : le texte source dit "Zone 1 : 50-79%" sans préciser ce qui se passe en dessous de 50% — le plancher de zone1 est fixé à 0% pour que le temps en zone reste complet (rien silencieusement perdu sous 50%), un choix d'implémentation, pas une valeur sourcée.
