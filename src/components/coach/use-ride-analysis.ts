@@ -26,6 +26,7 @@ import { buildCoachContext } from '@/components/cycling/coach-context'
 import { rideAnalysis, type RideAnalysisOutput } from '@/ai/flows/ride-analysis-flow'
 import { bestAverageWatts, bestRpe, feelToScore, type IntervalsActivity, type IntervalsActivityStream } from '@/lib/intervals-api'
 import { computeNormalizedPower, computePowerZoneDistribution, computeHrZoneDistribution, computeSplitAnalysis, average, type PowerZoneBucket, type HrZoneBucket } from './ride-analysis-types'
+import { computeDurabilityProfile } from '@/domain/cycling/metrics/durability'
 import { describeActionDispatchError } from '@/lib/utils'
 
 interface IntervalsCredentialsDoc {
@@ -129,6 +130,20 @@ export function useRideAnalysis(activityId: string | null) {
       const split = computeSplitAnalysis(watts)
       const avgCadence = cadence ? average(cadence) ?? undefined : undefined
 
+      // Durabilité (R07/R08/R10, ride-analysis-2-power-profile-by-accumulated-tier)
+      // — MMP à chaque palier de travail accumulé franchi PENDANT cette
+      // sortie. null sans flux watts ou sans poids athlète connu (le kJ/kg
+      // n'est pas calculable sans poids) ; le flow gère déjà l'absence
+      // proprement (aucune section durabilité dans le prompt).
+      const durabilityProfile = computeDurabilityProfile(watts, athlete.data?.weight)
+      const durability = durabilityProfile?.map((t) => ({
+        tierKJPerKg: t.tierKJPerKg,
+        reached: t.reachedAtSampleIndex != null,
+        mmp: Object.entries(t.mmpByDurationSeconds)
+          .filter((entry): entry is [string, number] => entry[1] != null)
+          .map(([durationSeconds, mmpWatts]) => ({ durationSeconds: Number(durationSeconds), watts: mmpWatts })),
+      }))
+
       const totalSeconds = activity.moving_time ?? watts?.length ?? heartrate?.length ?? 0
 
       const today = format(new Date(), 'yyyy-MM-dd')
@@ -170,6 +185,7 @@ export function useRideAnalysis(activityId: string | null) {
           atl: athlete.data.atl,
           tsb: athlete.data.tsb,
         } : undefined,
+        durability,
         coachContext,
       })
 
