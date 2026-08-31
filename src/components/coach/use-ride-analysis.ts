@@ -27,6 +27,7 @@ import { rideAnalysis, type RideAnalysisOutput } from '@/ai/flows/ride-analysis-
 import { bestAverageWatts, bestRpe, feelToScore, type IntervalsActivity, type IntervalsActivityStream } from '@/lib/intervals-api'
 import { computeNormalizedPower, computePowerZoneDistribution, computeHrZoneDistribution, computeSplitAnalysis, average, type PowerZoneBucket, type HrZoneBucket } from './ride-analysis-types'
 import { computeDurabilityProfile } from '@/domain/cycling/metrics/durability'
+import { computeDecoupling } from '@/domain/cycling/metrics/decoupling'
 import { describeActionDispatchError } from '@/lib/utils'
 
 interface IntervalsCredentialsDoc {
@@ -144,6 +145,11 @@ export function useRideAnalysis(activityId: string | null) {
           .map(([durationSeconds, mmpWatts]) => ({ durationSeconds: Number(durationSeconds), watts: mmpWatts })),
       }))
 
+      // Découplage Pw:HR (R06, ride-analysis-3-decoupling-context) — même
+      // flux watts/heartrate déjà récupérés ci-dessus, null si l'une des
+      // deux séries manque ou si elles n'ont pas la même longueur.
+      const decoupling = watts && heartrate ? computeDecoupling(watts, heartrate) ?? undefined : undefined
+
       const totalSeconds = activity.moving_time ?? watts?.length ?? heartrate?.length ?? 0
 
       const today = format(new Date(), 'yyyy-MM-dd')
@@ -179,6 +185,7 @@ export function useRideAnalysis(activityId: string | null) {
         powerZones: toZoneInput(powerZones, totalSeconds),
         hrZones: toZoneInput(hrZones, totalSeconds),
         split: split ?? undefined,
+        decoupling,
         athlete: athlete.isConfigured && athlete.data ? {
           ftp: athlete.data.ftp,
           ctl: athlete.data.ctl,
