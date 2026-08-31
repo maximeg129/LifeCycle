@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +17,8 @@ import { currentPlanWeek, type PlanPhase, type PlanWeek } from './training-plan-
 import { upcomingGoals } from './coach-memory-types'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
+import { checkLoadProgressionWithoutDeload } from '@/domain/cycling/validation/planValidator'
+import { SourceCitation } from '@/components/coach/source-citation'
 
 const DEFAULT_WEEKLY_MINUTES = 360
 
@@ -63,6 +65,19 @@ export function TrainingPlanTab() {
   }
 
   const week = activePlan ? currentPlanWeek(activePlan.weeks, today) : null
+
+  // plan-check-8 (R23, planValidator.ts) — le seul des 9 contrôles de plan
+  // directement calculable ici sans donnée qui n'existe pas encore dans
+  // l'app (les 7 autres ont chacun besoin d'une donnée absente à ce stade —
+  // distribution de zones planifiée, sommeil perçu individualisé, bilan
+  // énergétique jour par jour... — voir docs/OPEN_QUESTIONS.md Q7). Aucun
+  // seuil inventé : une hausse de volume sur 4 semaines glissantes sans
+  // aucune semaine "recovery" dans la fenêtre → WARN, directement depuis
+  // `weeks` tel que trainingPlanGeneration le produit déjà.
+  const loadProgressionCheck = useMemo(
+    () => (activePlan ? checkLoadProgressionWithoutDeload(activePlan.weeks) : null),
+    [activePlan]
+  )
 
   const NewPlanForm = (
     <Card className="bg-card/40 border-border">
@@ -170,6 +185,14 @@ export function TrainingPlanTab() {
                   <span>{w}</span>
                 </div>
               ))}
+            </div>
+          )}
+
+          {loadProgressionCheck && loadProgressionCheck.verdict === 'warn' && (
+            <div className="flex items-start gap-2 p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20 text-sm">
+              <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
+              <span className="flex-1">{loadProgressionCheck.detail}</span>
+              <SourceCitation ruleIds={['plan-check-8-load-progression']} label="Source du contrôle de charge" className="shrink-0" />
             </div>
           )}
 
