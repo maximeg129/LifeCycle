@@ -14,7 +14,8 @@ import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { usePowerCurve } from './use-power-curve'
-import { fitPowerDurationCurve, computeTTE, type PowerRecord } from './riegel-types'
+import type { PowerRecord } from './riegel-types'
+import { fitEnduranceCurve, computeTTE, checkRiegelValidityDomain } from '@/domain/cycling/metrics/endurance'
 
 function formatDuration(totalSeconds: number): string {
   const s = Math.round(totalSeconds)
@@ -45,7 +46,7 @@ export function PowerCurveCard() {
 
   const curve = useMemo(() => {
     const records = [data?.shortRecord, data?.mediumRecord, data?.longRecord].filter((r): r is PowerRecord => !!r)
-    return fitPowerDurationCurve(records)
+    return fitEnduranceCurve(records)
   }, [data])
 
   const tte = useMemo(() => {
@@ -53,6 +54,11 @@ export function PowerCurveCard() {
     if (!curve || !watts || watts <= 0) return null
     return computeTTE(watts, curve)
   }, [curve, targetWatts])
+
+  // Domaine de validité du fit Riegel (~3,5-230min, R12, riegel-validity-domain)
+  // — le texte source dit "avertir" hors de cette plage, jamais "refuser" :
+  // le TTE reste affiché, juste avec un avertissement en plus.
+  const tteValidity = tte != null ? checkRiegelValidityDomain(tte) : null
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -158,6 +164,11 @@ export function PowerCurveCard() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">Une séance proche de ce temps est une séance dure (RPE élevé), quelle que soit la puissance absolue.</p>
+              {tteValidity && !tteValidity.withinValidityDomain && (
+                <p className="text-xs text-amber-600">
+                  ⚠️ Hors du domaine de validité du fit Riegel (~3,5 à 230 min) — à cette durée, l&apos;estimation est moins fiable.
+                </p>
+              )}
             </div>
           </div>
         ) : (

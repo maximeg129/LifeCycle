@@ -28,7 +28,7 @@ import { ChevronRight, Gauge, Zap, HeartPulse, Activity, type LucideIcon } from 
 import { cn } from '@/lib/utils'
 import type { IntervalsAthlete } from '@/lib/intervals-api'
 import { usePowerCurve } from './use-power-curve'
-import { fitPowerDurationCurve, type PowerRecord } from './riegel-types'
+import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/endurance'
 import { RingGauge } from './ring-gauge'
 import { tsbRingPercent, tsbRingColor, readinessRingColor, sleepRingPercent, sleepRingColor } from './ring-metrics'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
@@ -149,7 +149,7 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
   const powerCurve = usePowerCurve()
   const lifestyle = useLifestyleData()
 
-  const enduranceIndex = fitPowerDurationCurve(
+  const enduranceIndex = fitEnduranceCurve(
     [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
   )?.enduranceIndex ?? null
 
