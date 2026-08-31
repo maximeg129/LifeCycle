@@ -28,6 +28,7 @@ import { bestAverageWatts, bestRpe, feelToScore, type IntervalsActivity, type In
 import { computeNormalizedPower, computePowerZoneDistribution, computeHrZoneDistribution, computeSplitAnalysis, average, type PowerZoneBucket, type HrZoneBucket } from './ride-analysis-types'
 import { computeDurabilityProfile } from '@/domain/cycling/metrics/durability'
 import { computeDecoupling } from '@/domain/cycling/metrics/decoupling'
+import { computePowerZoneDistribution3, type ThreeZoneBucket } from '@/domain/cycling/metrics/zones'
 import { describeActionDispatchError } from '@/lib/utils'
 
 interface IntervalsCredentialsDoc {
@@ -44,6 +45,17 @@ function toZoneInput(zones: (PowerZoneBucket | HrZoneBucket)[] | null, totalSeco
   if (!zones) return undefined
   return zones.map((z) => ({
     zone: z.zone,
+    label: z.label,
+    minutes: Math.round((z.seconds / 60) * 10) / 10,
+    pctOfRide: totalSeconds > 0 ? Math.round((z.seconds / totalSeconds) * 1000) / 10 : 0,
+  }))
+}
+
+/** Même conversion que toZoneInput, pour le modèle 3 zones (id-based plutôt que zone-number-based). */
+function toThreeZoneInput(zones: ThreeZoneBucket[] | null, totalSeconds: number) {
+  if (!zones) return undefined
+  return zones.map((z) => ({
+    id: z.id,
     label: z.label,
     minutes: Math.round((z.seconds / 60) * 10) / 10,
     pctOfRide: totalSeconds > 0 ? Math.round((z.seconds / totalSeconds) * 1000) / 10 : 0,
@@ -128,6 +140,12 @@ export function useRideAnalysis(activityId: string | null) {
         : undefined
       const powerZones = computePowerZoneDistribution(watts, ftp)
       const hrZones = computeHrZoneDistribution(heartrate, maxHr)
+      // Distribution 3 zones (R18, Seiler, domain/cycling/metrics/zones.ts)
+      // — même flux watts/FTP que powerZones (modèle 7 zones Coggan)
+      // ci-dessus, mais un modèle distinct : la cible ~80% basse intensité
+      // qu'il permet de vérifier n'a de sens que sur ce modèle-là, jamais
+      // sur les 7 zones (voir power-zones-3-zone-distribution-required).
+      const threeZoneBuckets = computePowerZoneDistribution3(watts, ftp)
       const split = computeSplitAnalysis(watts)
       const avgCadence = cadence ? average(cadence) ?? undefined : undefined
 
@@ -184,6 +202,7 @@ export function useRideAnalysis(activityId: string | null) {
         },
         powerZones: toZoneInput(powerZones, totalSeconds),
         hrZones: toZoneInput(hrZones, totalSeconds),
+        threeZoneDistribution: toThreeZoneInput(threeZoneBuckets, totalSeconds),
         split: split ?? undefined,
         decoupling,
         athlete: athlete.isConfigured && athlete.data ? {
