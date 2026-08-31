@@ -53,6 +53,8 @@ Je penche pour (a) — les deux répondent à des besoins différents et le mand
 
 **Votre réponse : (c).** `coachLibrary` est réorientée en lecture seule : elle n'affiche plus que les 35 références de `references.ts`, plus de CRUD utilisateur libre. Implication concrète : `add-library-entry-dialog.tsx` (formulaire + import PDF, construit plus tôt cette session) et l'écriture Firestore `users/{uid}/coachLibrary` associée deviennent obsolètes une fois la Phase 5 (UI) livrée — `coach-library-tab.tsx` sera reconstruit pour lire `REFERENCES`/`RULES` depuis le code plutôt que Firestore. À traiter explicitement dans la PR 11 (UI), pas avant — l'audit ne supprime rien tant que le remplacement n'est pas prêt.
 
+**Fait (PR 11b) :** `coach-library-tab.tsx` reconstruit — lecture seule des 35 `REFERENCES` (recherche par titre/auteur/id, badge niveau de preuve A/B/C, lien DOI/PubMed quand disponible), plus aucune écriture Firestore. Supprimés (obsolètes, plus aucun appelant) : `add-library-entry-dialog.tsx`, `use-coach-library.ts`, `library-types.ts` (+ son test), `/api/library/extract-pdf`. Le bloc "BASE DE CONNAISSANCES" que `buildLibraryContextBlock()` injectait dans `coach-context.ts` (donc dans les 6 flows coach) est retiré — ces flows sont déjà grounded dans `RULES`/`REFERENCES` via `buildSystemPrompt` (PR 8), un mécanisme plus rigoureux (revu, versionné, jamais une source ajoutée sans revue). Non touché : la dépendance `pdf-parse`/`@types/pdf-parse` reste dans `package.json` (devenue inutilisée) — retrait différé, pas de risque à la laisser, juste un nettoyage mineur pour plus tard.
+
 ---
 
 ## Q5 — Bornes %FTP du modèle 3 zones (distribution, R18)

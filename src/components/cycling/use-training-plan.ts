@@ -16,7 +16,6 @@ import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { useAthlete } from '@/hooks/use-intervals'
 import { useCoachMemory } from './use-coach-memory'
-import { useCoachLibrary } from './use-coach-library'
 import { buildCoachContext } from './coach-context'
 import { useGovernor } from './use-governor'
 import { useKJBudget } from './use-kj-budget'
@@ -61,7 +60,6 @@ export function useTrainingPlan() {
   const { toast } = useToast()
   const athlete = useAthlete()
   const memory = useCoachMemory()
-  const library = useCoachLibrary()
   const governor = useGovernor()
   const budget = useKJBudget(governor.status)
 
@@ -99,7 +97,6 @@ export function useTrainingPlan() {
         lifestyle: memory.lifestyle,
         goals: memory.goals,
         rememberedFacts: memory.rememberedFacts,
-        references: library.entries,
         kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
         governorStatus: governor.status,
       })
@@ -158,7 +155,7 @@ export function useTrainingPlan() {
     } finally {
       setIsGenerating(false)
     }
-  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, library.entries, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data, toast])
+  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data, toast])
 
   const archivePlan = useCallback(async (planId: string) => {
     if (!user || !db) return
@@ -186,7 +183,6 @@ export function useTrainingPlan() {
         lifestyle: memory.lifestyle,
         goals: memory.goals,
         rememberedFacts: memory.rememberedFacts,
-        references: library.entries,
         kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline },
         governorStatus: governor.status,
       })
@@ -226,7 +222,7 @@ export function useTrainingPlan() {
     } finally {
       setGeneratingSessionsForWeek(null)
     }
-  }, [user, db, activePlan, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, library.entries, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data, toast])
+  }, [user, db, activePlan, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, governor.status, athlete.isConfigured, athlete.data, toast])
 
   /** Pushes one plan-week sample session to Intervals.icu on a chosen date — same event path as "Proposition du jour", with a date-independent externalId so re-picking the date moves rather than duplicates the entry. */
   const sendSessionToIntervals = useCallback(async (

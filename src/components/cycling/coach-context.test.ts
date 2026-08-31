@@ -85,16 +85,12 @@ describe('buildCoachContext', () => {
     expect(buildCoachContext({ ...baseInput, enduranceIndex: 0.91 })).toContain("Indice d'endurance (Riegel) : 0.91")
   })
 
-  it('omits the knowledge-base section when there are no references', () => {
+  // Le bloc "BASE DE CONNAISSANCES" (coachLibrary Firestore libre) a été
+  // retiré — Q4 (docs/OPEN_QUESTIONS.md), réponse (c) : coachLibrary est
+  // réorientée en lecture seule des 35 références, ces flows sont déjà
+  // grounded via buildSystemPrompt (src/ai/coach/, PR 8). Garde-fou de
+  // non-régression : jamais réintroduit sans y repenser.
+  it('never emits a "BASE DE CONNAISSANCES" section — retired in favor of buildSystemPrompt grounding (PR 8)', () => {
     expect(buildCoachContext(baseInput)).not.toContain('BASE DE CONNAISSANCES')
-  })
-
-  it('includes the library sources when provided', () => {
-    const text = buildCoachContext({
-      ...baseInput,
-      references: [{ title: 'A systems model of training', authors: 'Banister et al.', sourceType: 'etude', summary: 'Modèle impulsion-réponse.' }],
-    })
-    expect(text).toContain('BASE DE CONNAISSANCES (1 source ajoutée')
-    expect(text).toContain('"A systems model of training" (Banister et al.)')
   })
 })
