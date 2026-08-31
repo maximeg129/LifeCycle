@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computePowerZoneDistribution7, to3ZoneDistribution, lowIntensityPct, POWER_ZONES_7, POWER_ZONES_3 } from './zones'
+import { computePowerZoneDistribution7, computePowerZoneDistribution3, lowIntensityPct, POWER_ZONES_7, POWER_ZONES_3 } from './zones'
 
 describe('computePowerZoneDistribution7', () => {
   it('buckets each watt sample into its Coggan zone (%FTP)', () => {
@@ -26,27 +26,37 @@ describe('computePowerZoneDistribution7', () => {
   })
 })
 
-describe('to3ZoneDistribution', () => {
-  it('groups Coggan zones 1-2 into zone1, 3-4 into zone2, 5-7 into zone3', () => {
-    expect(POWER_ZONES_3.find((z) => z.id === 'zone1')?.cogganZones).toEqual([1, 2])
-    expect(POWER_ZONES_3.find((z) => z.id === 'zone2')?.cogganZones).toEqual([3, 4])
-    expect(POWER_ZONES_3.find((z) => z.id === 'zone3')?.cogganZones).toEqual([5, 6, 7])
+describe('computePowerZoneDistribution3', () => {
+  // Bornes S02 (docs/OPEN_QUESTIONS.md Q5) : zone1 <80%, zone2 80-100%, zone3 100%+.
+  it('buckets each watt sample into its Seiler 3-zone bucket (%FTP)', () => {
+    const ftp = 200
+    const watts = [100, 150, 170, 200, 250] // 50%, 75%, 85%, 100%, 125%
+    const buckets = computePowerZoneDistribution3(watts, ftp)!
+    expect(buckets.find((b) => b.id === 'zone1')?.seconds).toBe(2) // 50%, 75%
+    expect(buckets.find((b) => b.id === 'zone2')?.seconds).toBe(1) // 85%
+    expect(buckets.find((b) => b.id === 'zone3')?.seconds).toBe(2) // 100%, 125%
   })
 
-  it('sums seconds correctly across the grouped zones', () => {
-    const sevenZone = POWER_ZONES_7.map((z) => ({ zone: z.zone, label: z.label, seconds: z.zone * 100 }))
-    // zone1 = z1+z2 = 100+200=300 ; zone2 = z3+z4 = 300+400=700 ; zone3 = z5+z6+z7 = 500+600+700=1800
-    const threeZone = to3ZoneDistribution(sevenZone)
-    expect(threeZone.find((z) => z.id === 'zone1')?.seconds).toBe(300)
-    expect(threeZone.find((z) => z.id === 'zone2')?.seconds).toBe(700)
-    expect(threeZone.find((z) => z.id === 'zone3')?.seconds).toBe(1800)
+  it('returns null without a watts stream or a known FTP', () => {
+    expect(computePowerZoneDistribution3(undefined, 200)).toBeNull()
+    expect(computePowerZoneDistribution3([100], null)).toBeNull()
   })
 
-  it('preserves the total time — no seconds lost or duplicated in the regrouping', () => {
-    const sevenZone = POWER_ZONES_7.map((z) => ({ zone: z.zone, label: z.label, seconds: 60 }))
-    const total7 = sevenZone.reduce((sum, b) => sum + b.seconds, 0)
-    const total3 = to3ZoneDistribution(sevenZone).reduce((sum, b) => sum + b.seconds, 0)
-    expect(total3).toBe(total7)
+  it('has exactly 3 zones, matching the boundaries decided for Q5 (50/80/100 reading)', () => {
+    expect(POWER_ZONES_3).toHaveLength(3)
+    expect(POWER_ZONES_3[0].maxPct).toBe(80)
+    expect(POWER_ZONES_3[1].minPct).toBe(80)
+    expect(POWER_ZONES_3[1].maxPct).toBe(100)
+    expect(POWER_ZONES_3[2].minPct).toBe(100)
+    expect(POWER_ZONES_3[2].maxPct).toBeNull()
+  })
+
+  it('preserves the total time — every sample lands in exactly one zone', () => {
+    const ftp = 250
+    const watts = [50, 100, 150, 200, 250, 300, 350, 400]
+    const buckets = computePowerZoneDistribution3(watts, ftp)!
+    const total = buckets.reduce((sum, b) => sum + b.seconds, 0)
+    expect(total).toBe(watts.length)
   })
 })
 
