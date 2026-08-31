@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw } from 'lucide-react'
+import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -96,6 +96,13 @@ export function TrainingPlanTab() {
     }
     return set
   }, [activePlan])
+
+  // Verdict affiché = le plus à jour : la dernière recalibration si le plan
+  // en a déjà une, sinon le verdict de la génération initiale. "verdict"
+  // est calculé par l'IA depuis la toute première PR du contrat de sortie
+  // coach mais n'était jusqu'ici jamais affiché dans cet onglet (vrai
+  // oubli, corrigé ici) — contrairement à la Proposition du jour.
+  const currentVerdict = activePlan?.recalibrations?.at(-1)?.verdict ?? activePlan?.verdict
 
   const NewPlanForm = (
     <Card className="bg-card/40 border-border">
@@ -195,6 +202,24 @@ export function TrainingPlanTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* verdict — calculé par le contrat de sortie coach depuis la
+              génération, jamais affiché jusqu'ici dans cet onglet. Reflète
+              la dernière recalibration si elle existe (currentVerdict),
+              sinon celui de la génération initiale. Rien n'est affiché
+              quand tout va bien (ok) — même langage visuel que la
+              Proposition du jour. */}
+          {currentVerdict && currentVerdict !== 'ok' && (
+            <div
+              className={cn(
+                'flex items-start gap-2 p-3 rounded-xl border text-sm',
+                currentVerdict === 'block' ? 'bg-destructive/5 border-destructive/20' : 'bg-yellow-500/5 border-yellow-500/20'
+              )}
+            >
+              <ShieldAlert className={cn('w-4 h-4 shrink-0 mt-0.5', currentVerdict === 'block' ? 'text-destructive' : 'text-yellow-500')} />
+              <span>{activePlan.recalibrations?.at(-1)?.recommendation ?? activePlan.recommendation}</span>
+            </div>
+          )}
+
           {/* Retour utilisateur : "un paragraphe qui explique les raisons...
               quelle base il prend pour proposer ce plan... et quelles sont les
               attentes physiologiques". "summary" est redéfini pour ce flow
@@ -343,8 +368,47 @@ export function TrainingPlanTab() {
                   <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
                     {format(new Date(`${entry.date}T00:00:00`), 'dd MMM yyyy', { locale: fr })} — après la semaine {entry.throughWeekNumber}
                   </p>
+                  {entry.verdict !== 'ok' && (
+                    <Badge variant="outline" className={cn('text-[10px] gap-1', entry.verdict === 'block' ? 'text-destructive border-destructive/30' : 'text-yellow-600 border-yellow-500/30')}>
+                      <ShieldAlert className="w-2.5 h-2.5" /> {entry.verdict === 'block' ? 'Bloquant' : 'Réserve'}
+                    </Badge>
+                  )}
                 </div>
                 <p className="text-sm text-muted-foreground leading-relaxed">{entry.summary}</p>
+
+                {/* Bilan critique — retour utilisateur : "le coach peut il
+                    émettre une critique sur le plan ou des recommendations
+                    scientifiquement détaillée qui permettraient à
+                    l'athlete d'atteindre ses objectif". strengths/risks
+                    (même idiome que rideAnalysis) jugent la TRAJECTOIRE
+                    ACTUELLE vers l'objectif, pas seulement l'ajustement de
+                    cette semaine — reasons ci-dessous cite les règles qui
+                    motivent chaque risque quand applicable. */}
+                {(entry.strengths.length > 0 || entry.risks.length > 0) && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {entry.strengths.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-green-600 flex items-center gap-1.5">
+                          <TrendingUp className="w-3.5 h-3.5" /> Points forts
+                        </p>
+                        <ul className="text-xs space-y-1 text-muted-foreground list-disc pl-4">
+                          {entry.strengths.map((s, si) => <li key={si}>{s}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {entry.risks.length > 0 && (
+                      <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-orange-600 flex items-center gap-1.5">
+                          <ShieldQuestion className="w-3.5 h-3.5" /> Risques pour l&apos;objectif
+                        </p>
+                        <ul className="text-xs space-y-1 text-muted-foreground list-disc pl-4">
+                          {entry.risks.map((r, ri) => <li key={ri}>{r}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {entry.reasons.length > 0 && (
                   <ul className="space-y-1.5">
                     {entry.reasons.map((r, ri) => (
