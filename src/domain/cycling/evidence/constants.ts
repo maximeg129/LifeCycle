@@ -116,6 +116,25 @@ export const KJ_DURABILITY_THRESHOLDS: SourcedConstant<KjDurabilityThresholds> =
     'non professionnel se dégrade plus tôt que ces seuils).',
 }
 
+// ── Budget kJ/kg — nudge de cible hebdomadaire selon le gouverneur ────────
+
+export interface KjTargetNudge {
+  /** % d'augmentation de la cible hebdomadaire quand le gouverneur est vert. */
+  greenPct: number
+  /** % de réduction de la cible hebdomadaire quand le gouverneur est rouge (négatif). */
+  redPct: number
+}
+
+export const KJ_TARGET_NUDGE: ConventionConstant<KjTargetNudge> = {
+  status: 'convention',
+  value: { greenPct: 8, redPct: -12 },
+  justification:
+    "Heuristique produit héritée telle quelle de l'ancien budget kJ bruts (load-types.ts, computeTargetKJ) — aucun Rxx ne fixe " +
+    "un taux de progression/repli hebdomadaire précis (R08/R09/R10/R11 documentent des seuils de dégradation, jamais une cadence " +
+    "de nudge). Conservée par continuité produit, explicitement étiquetée convention plutôt que scientifique — voir principle-9-" +
+    "traceable-constants.",
+}
+
 // ── Constantes PENDING — à extraire des sources primaires avant codage ────
 // Annexe B de docs/01_Base_Scientifique_Cyclisme.md. Trois constantes,
 // obligatoires au démarrage de la Phase 2 (endurance.ts / criticalPower.ts /

@@ -7,6 +7,7 @@ import {
   TEN_HAAF_COEFFICIENTS,
   W_PRIME_RECONSTITUTION_CONSTANT,
   RIEGEL_CYCLING_FATIGUE_EXPONENT,
+  KJ_TARGET_NUDGE,
   type PendingConstant,
 } from './constants'
 
@@ -72,5 +73,16 @@ describe('KJ_DURABILITY_THRESHOLDS', () => {
     expect(v.proDegradationKJPerKg).toBe(40)
     expect(v.womenDivergenceStartKJPerKg).toBe(20)
     expect(v.womenDivergenceAmplifiesKJPerKg).toBe(30)
+  })
+})
+
+describe('KJ_TARGET_NUDGE', () => {
+  it('is explicitly a convention, not a sourced scientific constant — no Rxx pretends to fix a weekly nudge rate', () => {
+    expect(KJ_TARGET_NUDGE.status).toBe('convention')
+  })
+
+  it('carries over the exact rate already in production (load-types.ts computeTargetKJ)', () => {
+    expect(KJ_TARGET_NUDGE.value.greenPct).toBe(8)
+    expect(KJ_TARGET_NUDGE.value.redPct).toBe(-12)
   })
 })
