@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck } from 'lucide-react'
+import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck, Home, TreePine } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -24,6 +24,7 @@ export function DailyWorkoutTab() {
     stored,
     storedAvailableMinutes,
     storedRide,
+    storedIndoorRequested,
     sentToIntervals,
     planWeek,
     recovery,
@@ -38,6 +39,11 @@ export function DailyWorkoutTab() {
   const [minutes, setMinutes] = useState(DEFAULT_MINUTES)
   const [rideLocation, setRideLocation] = useState('')
   const [rideTime, setRideTime] = useState(DEFAULT_RIDE_TIME)
+  // Retour utilisateur : "choisir si on veut faire la séance en intérieur
+  // ou en extérieur, si en intérieur du coup on n'a pas besoin de mettre la
+  // météo". Indépendant de la météo (voir daily-workout-recommendation-
+  // flow.ts, forceIndoor) — un choix délibéré, pas une réaction au temps.
+  const [indoorRequested, setIndoorRequested] = useState(false)
   const [draft, setDraft] = useState<DailyWorkoutRecommendationOutput | null>(null)
   const [wasSent, setWasSent] = useState(false)
 
@@ -53,16 +59,17 @@ export function DailyWorkoutTab() {
       setRideLocation(storedRide.location)
       setRideTime(storedRide.departureDateTime.slice(11, 16) || DEFAULT_RIDE_TIME)
     }
+    setIndoorRequested(storedIndoorRequested)
     // Only meant to run once the stored doc first resolves — not on every
     // render, or a user's in-progress edits would get clobbered.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoadingStored])
 
   const handleGenerate = async () => {
-    const ride = rideLocation.trim()
+    const ride = !indoorRequested && rideLocation.trim()
       ? { location: rideLocation.trim(), departureDateTime: buildRideDateTime(new Date(), rideTime) }
       : undefined
-    const proposal = await generate(minutes, ride)
+    const proposal = await generate(minutes, ride, indoorRequested)
     if (proposal) {
       setDraft(proposal)
       setWasSent(false)
@@ -121,37 +128,76 @@ export function DailyWorkoutTab() {
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="ride-location" className="flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Lieu de départ (optionnel)
-            </Label>
-            <Input
-              id="ride-location"
-              placeholder="ex: Mont Ventoux"
-              value={rideLocation}
-              onChange={(e) => setRideLocation(e.target.value)}
-              className="w-48"
-            />
+            <Label>Intérieur ou extérieur</Label>
+            <div className="flex gap-0.5 rounded-full bg-muted p-0.5 w-fit">
+              <button
+                type="button"
+                onClick={() => setIndoorRequested(false)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
+                  !indoorRequested ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <TreePine className="w-3.5 h-3.5" /> Extérieur
+              </button>
+              <button
+                type="button"
+                onClick={() => setIndoorRequested(true)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
+                  indoorRequested ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Home className="w-3.5 h-3.5" /> Intérieur
+              </button>
+            </div>
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="ride-time">Heure de départ</Label>
-            <Input
-              id="ride-time"
-              type="time"
-              value={rideTime}
-              onChange={(e) => setRideTime(e.target.value)}
-              disabled={!rideLocation.trim()}
-              className="w-28"
-            />
-          </div>
+          {/* Lieu/heure de départ n'ont de sens que pour une sortie extérieure
+              (météo réelle, conseil de vent) — masqués en intérieur plutôt que
+              désactivés, pour ne pas laisser croire qu'ils comptent encore. */}
+          {!indoorRequested && (
+            <>
+              <div className="space-y-2">
+                <Label htmlFor="ride-location" className="flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Lieu de départ (optionnel)
+                </Label>
+                <Input
+                  id="ride-location"
+                  placeholder="ex: Mont Ventoux"
+                  value={rideLocation}
+                  onChange={(e) => setRideLocation(e.target.value)}
+                  className="w-48"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ride-time">Heure de départ</Label>
+                <Input
+                  id="ride-time"
+                  type="time"
+                  value={rideTime}
+                  onChange={(e) => setRideTime(e.target.value)}
+                  disabled={!rideLocation.trim()}
+                  className="w-28"
+                />
+              </div>
+            </>
+          )}
           <Button onClick={handleGenerate} disabled={isGenerating} className="gap-2">
             {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             {draft ? 'Régénérer' : 'Proposer une séance'}
           </Button>
         </CardContent>
-        {rideLocation.trim() && (
+        {!indoorRequested && rideLocation.trim() && (
           <CardContent className="pt-0">
             <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
               <Wind className="w-3 h-3" /> Avec un lieu et une heure de départ, l&apos;IA récupère la météo réelle et conseille une direction pour avoir le vent dans le dos au retour.
+            </p>
+          </CardContent>
+        )}
+        {indoorRequested && (
+          <CardContent className="pt-0">
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+              <Home className="w-3 h-3" /> Séance adaptée pour home trainer (pas une copie de la séance extérieure — voir rationale une fois générée).
             </p>
           </CardContent>
         )}
@@ -174,6 +220,11 @@ export function DailyWorkoutTab() {
                 onChange={(e) => updateDraft({ title: e.target.value })}
                 className="text-lg font-bold border-none bg-transparent px-0 h-auto focus-visible:ring-0 flex-1 min-w-[200px]"
               />
+              {draft.sportType === 'VirtualRide' && (
+                <Badge variant="outline" className="gap-1">
+                  <Home className="w-3 h-3" /> Home trainer
+                </Badge>
+              )}
               <Badge variant="secondary">{draft.intensityLabel}</Badge>
             </div>
             <div className="flex items-center gap-2">
