@@ -26,6 +26,22 @@ const ZoneBucketSchema = z.object({
 });
 type ZoneBucketInput = z.infer<typeof ZoneBucketSchema>;
 
+// Durabilité (R07/R08/R10, ride-analysis-2-power-profile-by-accumulated-tier,
+// domain/cycling/metrics/durability.ts) — profil de puissance maximale
+// moyenne (MMP) à chaque palier de travail accumulé (kJ/kg) franchi PENDANT
+// cette sortie. Comparaison "à froid vs fatigué" DANS la même sortie (pas
+// de comparaison à l'historique d'autres sorties — non câblée, voir le
+// commentaire plus bas) mais déjà une vraie lecture de durabilité au sens
+// de la règle : jamais un seuil labo, jamais un autre athlète.
+const DurabilityTierSchema = z.object({
+  tierKJPerKg: z.number().describe('Palier de travail accumulé (kJ/kg) — 0 = à froid, en début de sortie.'),
+  reached: z.boolean().describe('Ce palier a-t-il été franchi pendant la sortie.'),
+  mmp: z
+    .array(z.object({ durationSeconds: z.number(), watts: z.number() }))
+    .describe('MMP (W) par durée testée sur le segment de la sortie APRÈS ce palier — seulement les durées calculables (segment assez long).'),
+});
+type DurabilityTierInput = z.infer<typeof DurabilityTierSchema>;
+
 const RideAnalysisInputSchema = z.object({
   activity: z.object({
     name: z.string().optional(),
@@ -59,6 +75,12 @@ const RideAnalysisInputSchema = z.object({
     atl: z.number().optional(),
     tsb: z.number().optional(),
   }).optional().describe("Athlete's current fitness state, for context — not necessarily the FTP that produced the zones above (see intensity/normalizedWatts, which already reflect it)."),
+  durability: z
+    .array(DurabilityTierSchema)
+    .optional()
+    .describe(
+      'Profil de durabilité (MMP par palier de travail accumulé kJ/kg franchi pendant cette sortie) — voir domain/cycling/metrics/durability.ts. Absent si pas de flux watts ou pas de poids athlète connu.'
+    ),
   coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, goals, lifestyle, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
 }).describe('Input for the ride analysis flow.');
 
@@ -80,6 +102,23 @@ function formatZones(zones: ZoneBucketInput[] | undefined, label: string): strin
   const lines = zones.filter((z) => z.minutes > 0).map((z) => `  - Z${z.zone} ${z.label} : ${z.minutes} min (${z.pctOfRide}%)`);
   if (lines.length === 0) return '';
   return `${label} :\n${lines.join('\n')}`;
+}
+
+function formatDurationLabel(seconds: number): string {
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.round(seconds / 60)}min`;
+}
+
+/** Ne garde que les paliers réellement franchis avec au moins une durée de MMP calculable — un palier non atteint n'apporte rien au prompt. */
+function formatDurability(tiers: DurabilityTierInput[] | undefined): string {
+  if (!tiers || tiers.length === 0) return '';
+  const reached = tiers.filter((t) => t.reached && t.mmp.length > 0);
+  if (reached.length === 0) return '';
+  const lines = reached.map((t) => {
+    const mmpText = t.mmp.map((m) => `${formatDurationLabel(m.durationSeconds)} : ${Math.round(m.watts)}W`).join(', ');
+    return `  - ${t.tierKJPerKg} kJ/kg franchi : ${mmpText}`;
+  });
+  return `DURABILITÉ — puissance maximale moyenne (MMP) par palier de travail accumulé déjà franchi pendant cette sortie (comparaison à froid vs fatigué, DANS cette même sortie) :\n${lines.join('\n')}`;
 }
 
 export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult<RideAnalysisOutput>> {
@@ -127,11 +166,15 @@ export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult
       if (line) sections.push(`FORME ACTUELLE DE L'ATHLÈTE : ${line}`);
     }
 
+    const durabilityText = formatDurability(parsed.durability);
+    if (durabilityText) sections.push(durabilityText);
+
     const coachContextBlock = parsed.coachContext ? `${parsed.coachContext}\n\n` : '';
 
     const system = `${coachContextBlock}Tu es un coach cycliste expert qui analyse une sortie terminée pour l'athlète, à partir de vraies données Intervals.icu (jamais inventées). Réponds entièrement en français.
 
 Analyse les données ci-dessous et produis une analyse honnête, concrète et encourageante de cette sortie. Réfère-toi aux vrais chiffres fournis plutôt que de rester vague (par exemple "puissance normalisée de 210W bien tenue sur l'ensemble" plutôt que "bonne puissance"). Si peu de données sont disponibles (pas de puissance ni de FC), dis-le brièvement et analyse ce qui est disponible (durée, dénivelé, charge, ressenti) plutôt que d'inventer des observations sur la puissance ou la fréquence cardiaque.
+Si un profil de durabilité est fourni, commente si la puissance tient ou décline à mesure que le travail s'accumule pendant la sortie (paliers kJ/kg) — c'est une lecture différente de la puissance moyenne globale, jamais interchangeable avec elle. Cette comparaison reste interne à CETTE sortie (à froid vs fatigué) : ne prétends JAMAIS comparer à l'historique de l'athlète ou à un seuil labo/un autre athlète, aucune de ces deux comparaisons n'est fournie ici.
 
 Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme exacte
 (plus les champs de contrat obligatoires décrits plus haut) :
