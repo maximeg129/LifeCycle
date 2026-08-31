@@ -69,6 +69,14 @@ const RideAnalysisInputSchema = z.object({
     fade: z.enum(['negative', 'positive', 'even']),
     fadePct: z.number(),
   }).optional(),
+  decoupling: z
+    .object({
+      efficiencyFirstHalf: z.number().describe('Puissance/FC moyenne, 1ère moitié.'),
+      efficiencySecondHalf: z.number().describe('Puissance/FC moyenne, 2e moitié.'),
+      decouplingPct: z.number().describe('% de perte d\'efficience entre les deux moitiés — positif = dérive cardiaque, négatif = amélioration.'),
+    })
+    .optional()
+    .describe('Découplage Pw:HR (R06, domain/cycling/metrics/decoupling.ts) — absent si pas de flux watts ET FC de même longueur.'),
   athlete: z.object({
     ftp: z.number().optional(),
     ctl: z.number().optional(),
@@ -155,6 +163,14 @@ export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult
       sections.push(`PACING : 1ère moitié ${s.firstHalfAvgWatts} W vs 2e moitié ${s.secondHalfAvgWatts} W (${pacing})`);
     }
 
+    if (parsed.decoupling) {
+      const d = parsed.decoupling;
+      const direction = d.decouplingPct > 0 ? 'dérive cardiaque' : d.decouplingPct < 0 ? 'amélioration' : 'stable';
+      sections.push(
+        `DÉCOUPLAGE PUISSANCE:FC (Pw:HR) : efficience 1ère moitié ${d.efficiencyFirstHalf.toFixed(2)} W/bpm vs 2e moitié ${d.efficiencySecondHalf.toFixed(2)} W/bpm (${d.decouplingPct.toFixed(1)}%, ${direction})`
+      );
+    }
+
     if (parsed.athlete) {
       const t = parsed.athlete;
       const line = [
@@ -175,6 +191,7 @@ export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult
 
 Analyse les données ci-dessous et produis une analyse honnête, concrète et encourageante de cette sortie. Réfère-toi aux vrais chiffres fournis plutôt que de rester vague (par exemple "puissance normalisée de 210W bien tenue sur l'ensemble" plutôt que "bonne puissance"). Si peu de données sont disponibles (pas de puissance ni de FC), dis-le brièvement et analyse ce qui est disponible (durée, dénivelé, charge, ressenti) plutôt que d'inventer des observations sur la puissance ou la fréquence cardiaque.
 Si un profil de durabilité est fourni, commente si la puissance tient ou décline à mesure que le travail s'accumule pendant la sortie (paliers kJ/kg) — c'est une lecture différente de la puissance moyenne globale, jamais interchangeable avec elle. Cette comparaison reste interne à CETTE sortie (à froid vs fatigué) : ne prétends JAMAIS comparer à l'historique de l'athlète ou à un seuil labo/un autre athlète, aucune de ces deux comparaisons n'est fournie ici.
+Si un découplage puissance:FC est fourni, ne l'interprète JAMAIS automatiquement comme un signe de fatigue — contextualise (chaleur, hydratation/hypovolémie, dénivelé, intensité variable sur la sortie) plutôt que d'affirmer une cause précise que les données ne permettent pas de trancher.
 
 Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme exacte
 (plus les champs de contrat obligatoires décrits plus haut) :
