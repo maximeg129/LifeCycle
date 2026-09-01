@@ -27,12 +27,45 @@ export function signalToTrendLabel(signal: Signal): 'favorable' | 'stable' | 'de
   return null
 }
 
-/** Minimal shape buildWorkoutEventPayload() needs — DailyWorkoutRecommendationOutput and PlanWeekSession (plan-week-sessions-flow.ts) both satisfy it, so the same push-to-Intervals.icu path serves both "Proposition du jour" and a plan week's sample sessions. */
+/**
+ * Une séance de musculation type (plan-week-sessions-flow.ts) — retour
+ * utilisateur : "des seance de musculation dans le plan d'entrainement".
+ * `reps`/`loadGuidance` restent qualitatifs à dessein (voir
+ * strength-training-guidance.ts) : la recherche disponible ne donne pas de
+ * charge précise en kg pour un athlète donné, jamais inventée pour combler
+ * ce trou.
+ */
+export interface StrengthExercise {
+  name: string
+  sets: number
+  reps: string
+  loadGuidance: string
+  restSeconds?: number
+}
+
+/** Formats a strength session's exercises as a plain-text description — same role as structuredWorkout for a cycling session, but musculation has no %FTP workout-builder syntax to speak of. */
+export function formatStrengthExercisesAsText(exercises: StrengthExercise[]): string {
+  return exercises
+    .map((e) => `${e.name} : ${e.sets}x${e.reps} — ${e.loadGuidance}${e.restSeconds ? ` (repos ${e.restSeconds}s)` : ''}`)
+    .join('\n')
+}
+
+/**
+ * Minimal shape buildWorkoutEventPayload() needs — DailyWorkoutRecommendationOutput
+ * and PlanWeekSession (plan-week-sessions-flow.ts) both satisfy it, so the
+ * same push-to-Intervals.icu path serves both "Proposition du jour" and a
+ * plan week's sample sessions. `structuredWorkout`/`strengthExercises` are
+ * mutually exclusive in practice (a session is either a cycling workout-
+ * builder script or a musculation exercise list) — both optional here so
+ * either kind satisfies this shape; buildWorkoutEventPayload() below picks
+ * whichever is actually present.
+ */
 export interface WorkoutLike {
   title: string
   sportType: string
   durationMinutes: number
-  structuredWorkout: string
+  structuredWorkout?: string
+  strengthExercises?: StrengthExercise[]
 }
 
 const MIN_AVAILABLE_MINUTES = 15
@@ -102,12 +135,13 @@ export function buildWorkoutEventPayload(
   dateId: string,
   externalId: string = dailyWorkoutExternalId(dateId)
 ): PlannedWorkoutEvent {
+  const description = proposal.structuredWorkout ?? (proposal.strengthExercises ? formatStrengthExercisesAsText(proposal.strengthExercises) : '')
   return {
     externalId,
     name: proposal.title,
     sportType: proposal.sportType || 'Ride',
     startDateLocal: dateId,
-    description: proposal.structuredWorkout,
+    description,
     durationSeconds: proposal.durationMinutes > 0 ? proposal.durationMinutes * 60 : undefined,
   }
 }

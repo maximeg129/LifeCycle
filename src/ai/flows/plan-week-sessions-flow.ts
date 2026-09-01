@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { type FlowResult } from '@/ai/anthropic';
 import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
 import { ON_BIKE_FUELING_GUIDANCE } from './on-bike-fueling-guidance';
+import { STRENGTH_TRAINING_GUIDANCE } from './strength-training-guidance';
 import { invokeCoachJson } from '@/ai/coach/invokeCoach';
 import { withCoachOutputContract } from '@/ai/coach/outputContract';
 
@@ -26,6 +27,7 @@ const PlanWeekSessionsInputSchema = z.object({
   targetWeeklyMinutes: z.number().describe('This week\'s target training volume — the example sessions\' durations should sum to approximately this.'),
   notes: z.string().optional().describe('Any plan note specific to this week.'),
   sportType: z.string().optional().describe('Preferred Intervals.icu sport type (e.g. "Ride"). Defaults to "Ride".'),
+  targetStrengthMinutes: z.number().optional().describe('This week\'s target strength-training volume, from the plan (PlanWeek.targetStrengthMinutes) — present ONLY when the athlete requested musculation for this plan. When present, ALSO generate 1-3 strength sessions (sessionKind "strength") summing close to this, in ADDITION to the cycling sessions (never counted toward targetWeeklyMinutes). When absent, NEVER produce a strength session.'),
   training: z.object({
     ctl: z.number().optional(),
     atl: z.number().optional(),
@@ -38,24 +40,34 @@ const PlanWeekSessionsInputSchema = z.object({
 
 export type PlanWeekSessionsInput = z.infer<typeof PlanWeekSessionsInputSchema>;
 
+const StrengthExerciseSchema = z.object({
+  name: z.string().describe('e.g. "Squat", "Presse à cuisses", "Fentes bulgares".'),
+  sets: z.number(),
+  reps: z.string().describe('e.g. "5" or "8-10" — a count or range, never a specific kg load.'),
+  loadGuidance: z.string().describe('QUALITATIVE load guidance only, e.g. "charge lourde (RPE 8-9)" — NEVER a specific kg/%1RM number, the research provided does not give one for an individual athlete.'),
+  restSeconds: z.number().optional(),
+});
+
 const PlanWeekSessionSchema = z.object({
-  title: z.string().describe('Short session name, e.g. "Endurance 90min" or "Seuil 4x8min".'),
-  sportType: z.string().describe('Intervals.icu sport type, e.g. "Ride".'),
+  sessionKind: z.enum(['cycling', 'strength']).describe('"cycling" for a bike session (structuredWorkout/fueling apply), "strength" for a musculation session (strengthExercises applies instead) — see targetStrengthMinutes in the input.'),
+  title: z.string().describe('Short session name, e.g. "Endurance 90min" or "Force bas du corps".'),
+  sportType: z.string().describe('Intervals.icu sport type — "Ride" (or similar) for cycling, "WeightTraining" for strength.'),
   durationMinutes: z.number().describe('Total planned duration including warmup/cooldown.'),
-  intensityLabel: z.string().describe('One or two words, e.g. "Endurance", "Seuil", "Récupération active".'),
+  intensityLabel: z.string().describe('One or two words, e.g. "Endurance", "Seuil", "Récupération active", "Force".'),
   rationale: z.string().describe('1-2 sentences in French: why this session fits the week\'s phase/focus.'),
-  structuredWorkout: z.string().describe('Intervals.icu workout-builder text script — see system prompt for the exact syntax.'),
+  structuredWorkout: z.string().optional().describe('CYCLING ONLY (sessionKind "cycling") — Intervals.icu workout-builder text script, see system prompt for the exact syntax. Absent for a strength session.'),
+  strengthExercises: z.array(StrengthExerciseSchema).optional().describe('STRENGTH ONLY (sessionKind "strength") — 3-6 exercises. Absent for a cycling session.'),
   fueling: z.object({
     neededOnBike: z.boolean().describe("false quand la durée/intensité de CETTE séance ne justifie pas un apport glucidique pendant l'effort (repères S03/S04 : sous ~60-75min à intensité modérée, bénéfice non démontré) — jamais un apport inventé pour une séance courte."),
     carbGramsPerHourMin: z.number().nullable().describe('Borne basse de la fourchette de glucides recommandée (g/h) pour CETTE séance. Null si neededOnBike est false.'),
     carbGramsPerHourMax: z.number().nullable().describe('Borne haute — ne doit JAMAIS dépasser 120 (plafond sourcé R34). Null si neededOnBike est false.'),
     hydrationNote: z.string().nullable().describe("1 phrase de rappel hydratation/électrolytes si la durée le justifie (>60-70min), sinon null."),
     rationale: z.string().describe("1-2 phrases expliquant la fourchette choisie à partir de la durée/intensité RÉELLES de cette séance — jamais un chiffre générique."),
-  }).describe("Alimentation à avoir sur le vélo pendant la séance — ancrée dans la recherche fournie (voir guidage ci-dessous et S03/S04, la règle nutrition-carb-intake-guidance/R34), jamais un chiffre au hasard."),
+  }).optional().describe("CYCLING ONLY (sessionKind \"cycling\") — alimentation à avoir sur le vélo, ancrée dans la recherche fournie (voir guidage ci-dessous et S03/S04, la règle nutrition-carb-intake-guidance/R34), jamais un chiffre au hasard. Absent pour une séance de musculation."),
 });
 
 const PlanWeekSessionsOutputSchema = withCoachOutputContract({
-  sessions: z.array(PlanWeekSessionSchema).describe('2 to 5 example sessions for the week, varied in type, whose durationMinutes sum to approximately targetWeeklyMinutes (±20%).'),
+  sessions: z.array(PlanWeekSessionSchema).describe('2 to 5 cycling example sessions (sessionKind "cycling"), varied in type, whose durationMinutes sum to approximately targetWeeklyMinutes (±20%) — PLUS 1-3 strength sessions (sessionKind "strength") ONLY when targetStrengthMinutes was provided in the input.'),
 }).describe('Output of the plan week sample sessions flow.');
 
 export type PlanWeekSessionsOutput = z.infer<typeof PlanWeekSessionsOutputSchema>;
@@ -81,6 +93,9 @@ export async function planWeekSessions(input: PlanWeekSessionsInput): Promise<Fl
     `SPORT PRÉFÉRÉ : ${parsedInput.sportType || 'Ride'}`,
   ];
   if (parsedInput.notes) sections.push(`NOTE SPÉCIFIQUE À CETTE SEMAINE : ${parsedInput.notes}`);
+  if (parsedInput.targetStrengthMinutes != null) {
+    sections.push(`MUSCULATION DEMANDÉE POUR CE PLAN : INCLURE_MUSCULATION=true — volume cible cette semaine : ${parsedInput.targetStrengthMinutes} minutes, séparé du volume vélo ci-dessus.`);
+  }
 
   if (parsedInput.training) {
     const t = parsedInput.training;
@@ -104,8 +119,9 @@ du moment — c'est la recommandation du coach pour "à quoi ressemblerait une s
 l'athlète pourra ensuite envoyer sur Intervals.icu s'il peut vraiment la faire tel quel.
 
 Règles impératives :
-- La somme des durationMinutes de toutes les séances doit être proche de VOLUME CIBLE DE LA SEMAINE
-  (±20% maximum).
+- La somme des durationMinutes des séances "cycling" (uniquement) doit être proche de VOLUME CIBLE DE LA
+  SEMAINE (±20% maximum) — les séances "strength" ont leur propre budget (targetStrengthMinutes ci-dessus,
+  jamais mélangé au calcul du volume vélo).
 - Varie le type de séance (pas 3x la même chose) — un mélange cohérent avec la phase (voir guidance
   ci-dessus) : par exemple en phase base, 2-3 sorties d'endurance de durées différentes plutôt qu'une
   seule très longue ; en phase build/peak, mélange une séance d'intensité avec des séances d'endurance
@@ -116,7 +132,11 @@ Règles impératives :
   (ex: "seuil à 95% FTP, environ 260W" plutôt que "seuil" tout court) — le script structuré reste en % de
   FTP. Si la FTP n'est pas fournie (n/a ci-dessus), reste en %/ressenti, ne l'invente jamais.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
+- Chaque séance a un "sessionKind" ("cycling" ou "strength") : une séance "cycling" porte structuredWorkout et
+  fueling (jamais strengthExercises) ; une séance "strength" porte strengthExercises (jamais structuredWorkout
+  ni fueling — l'alimentation à l'effort ne s'applique pas à une séance de musculation).
 - ${ON_BIKE_FUELING_GUIDANCE}
+${parsedInput.targetStrengthMinutes != null ? `- ${STRENGTH_TRAINING_GUIDANCE}` : "- Musculation non demandée pour ce plan : ne produis JAMAIS de séance sessionKind=\"strength\"."}
 
 ${STRUCTURED_WORKOUT_SYNTAX}
 
@@ -126,6 +146,7 @@ en une phrase, "recommendation" indique quelle séance prioriser si le temps man
 {
   "sessions": [
     {
+      "sessionKind": "cycling",
       "title": "nom court de la séance",
       "sportType": "type Intervals.icu, ex. Ride",
       "durationMinutes": nombre,
@@ -137,9 +158,20 @@ en une phrase, "recommendation" indique quelle séance prioriser si le temps man
         "carbGramsPerHourMin": nombre ou null,
         "carbGramsPerHourMax": nombre ou null,
         "hydrationNote": "rappel court ou null",
-        "rationale": "1-2 phrases ancrées dans la durée/intensité réelles de cette séance"
+        "rationale": "1-2 phrases ancrées sur la durée/intensité réelles de cette séance"
       }
-    }
+    }${parsedInput.targetStrengthMinutes != null ? `,
+    {
+      "sessionKind": "strength",
+      "title": "nom court de la séance",
+      "sportType": "WeightTraining",
+      "durationMinutes": nombre,
+      "intensityLabel": "ex. Force",
+      "rationale": "1 à 2 phrases",
+      "strengthExercises": [
+        { "name": "ex. Squat", "sets": nombre, "reps": "ex. 5 ou 8-10", "loadGuidance": "qualitatif seulement, ex. charge lourde (RPE 8-9)", "restSeconds": "optionnel" }
+      ]
+    }` : ''}
   ]
 }`;
 

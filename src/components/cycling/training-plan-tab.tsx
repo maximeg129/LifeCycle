@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion, Apple } from 'lucide-react'
+import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion, Apple, Dumbbell } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -583,11 +583,11 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
               </div>
               {/* Alimentation sur le vélo — même traitement que la
                   Proposition du jour (daily-workout-tab.tsx) : fourchette
-                  sourcée (S03/S04), jamais un chiffre unique. session.fueling
-                  gardé optionnel : une semaine générée avant l'introduction
-                  de ce champ (week.sampleSessions déjà en cache Firestore)
-                  n'en a pas. */}
-              {session.fueling && session.fueling.neededOnBike && (
+                  sourcée (S03/S04), jamais un chiffre unique. N'a de sens
+                  que pour une séance vélo — session.sessionKind absent
+                  (semaine mise en cache avant l'introduction de ce champ)
+                  traité comme "cycling" par défaut pour rester compatible. */}
+              {session.fueling && session.fueling.neededOnBike && (!session.sessionKind || session.sessionKind === 'cycling') && (
                 <div className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20 text-xs">
                   <Apple className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
                   <div className="space-y-0.5">
@@ -598,6 +598,24 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
                     </p>
                     {session.fueling.hydrationNote && <p className="text-muted-foreground">{session.fueling.hydrationNote}</p>}
                   </div>
+                </div>
+              )}
+              {/* Séance de musculation — retour utilisateur : "des seance
+                  de musculation dans le plan d'entrainement", mêlées aux
+                  séances vélo dans la même liste (décision de clarification
+                  utilisateur). Exercices affichés en liste plutôt qu'un
+                  script %FTP, qui n'a pas de sens ici. */}
+              {session.sessionKind === 'strength' && session.strengthExercises && session.strengthExercises.length > 0 && (
+                <div className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20 text-xs">
+                  <Dumbbell className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                  <ul className="space-y-0.5">
+                    {session.strengthExercises.map((ex, exIndex) => (
+                      <li key={exIndex}>
+                        <span className="font-medium">{ex.name}</span> : {ex.sets}x{ex.reps} — {ex.loadGuidance}
+                        {ex.restSeconds ? ` (repos ${ex.restSeconds}s)` : ''}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
               <div className="flex items-center gap-2 flex-wrap">

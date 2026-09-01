@@ -417,6 +417,7 @@ export function useTrainingPlan() {
         phase: week.phase,
         focus: week.focus,
         targetWeeklyMinutes: week.targetWeeklyMinutes,
+        targetStrengthMinutes: week.targetStrengthMinutes,
         notes: week.notes,
         training: athlete.isConfigured && athlete.data ? {
           ctl: athlete.data.ctl,

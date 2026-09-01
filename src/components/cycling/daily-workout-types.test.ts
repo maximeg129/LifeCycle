@@ -5,6 +5,7 @@ import {
   buildRideDateTime,
   dailyWorkoutExternalId,
   buildWorkoutEventPayload,
+  formatStrengthExercisesAsText,
   signalToTrendLabel,
   type ActivityLike,
 } from './daily-workout-types'
@@ -143,5 +144,44 @@ describe('buildWorkoutEventPayload', () => {
   it('uses the same externalId as dailyWorkoutExternalId for the same date, so re-sending upserts', () => {
     const event = buildWorkoutEventPayload(proposal, '2026-08-28')
     expect(event.externalId).toBe(dailyWorkoutExternalId('2026-08-28'))
+  })
+
+  it('falls back to a formatted exercise list when structuredWorkout is absent (a strength session)', () => {
+    const strengthProposal = {
+      title: 'Force bas du corps',
+      sportType: 'WeightTraining',
+      durationMinutes: 45,
+      strengthExercises: [{ name: 'Squat', sets: 4, reps: '5', loadGuidance: 'charge lourde (RPE 8)' }],
+    }
+    const event = buildWorkoutEventPayload(strengthProposal, '2026-08-28')
+    expect(event.description).toBe('Squat : 4x5 — charge lourde (RPE 8)')
+  })
+
+  it('produces an empty description when neither structuredWorkout nor strengthExercises is given', () => {
+    const bareProposal = { title: 'x', sportType: 'Ride', durationMinutes: 30 }
+    const event = buildWorkoutEventPayload(bareProposal, '2026-08-28')
+    expect(event.description).toBe('')
+  })
+})
+
+describe('formatStrengthExercisesAsText', () => {
+  it('formats one exercise as "name : setsxreps — loadGuidance"', () => {
+    expect(formatStrengthExercisesAsText([{ name: 'Squat', sets: 4, reps: '5', loadGuidance: 'charge lourde' }])).toBe('Squat : 4x5 — charge lourde')
+  })
+
+  it('appends rest time when given', () => {
+    expect(formatStrengthExercisesAsText([{ name: 'Squat', sets: 4, reps: '5', loadGuidance: 'charge lourde', restSeconds: 120 }])).toBe('Squat : 4x5 — charge lourde (repos 120s)')
+  })
+
+  it('joins several exercises with newlines, in order', () => {
+    const text = formatStrengthExercisesAsText([
+      { name: 'Squat', sets: 4, reps: '5', loadGuidance: 'charge lourde' },
+      { name: 'Fentes bulgares', sets: 3, reps: '8-10', loadGuidance: 'charge modérée' },
+    ])
+    expect(text).toBe('Squat : 4x5 — charge lourde\nFentes bulgares : 3x8-10 — charge modérée')
+  })
+
+  it('returns an empty string for an empty list', () => {
+    expect(formatStrengthExercisesAsText([])).toBe('')
   })
 })
