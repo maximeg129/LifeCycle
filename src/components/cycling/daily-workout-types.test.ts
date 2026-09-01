@@ -5,6 +5,7 @@ import {
   buildRideDateTime,
   dailyWorkoutExternalId,
   buildWorkoutEventPayload,
+  signalToTrendLabel,
   type ActivityLike,
 } from './daily-workout-types'
 
@@ -88,6 +89,24 @@ describe('dailyWorkoutExternalId', () => {
 
   it('differs across dates', () => {
     expect(dailyWorkoutExternalId('2026-08-28')).not.toBe(dailyWorkoutExternalId('2026-08-29'))
+  })
+})
+
+describe('signalToTrendLabel', () => {
+  it('maps a favorable signal to "favorable"', () => {
+    expect(signalToTrendLabel(1)).toBe('favorable')
+  })
+
+  it('maps an unfavorable signal to "defavorable"', () => {
+    expect(signalToTrendLabel(-1)).toBe('defavorable')
+  })
+
+  it('maps a neutral signal to "stable"', () => {
+    expect(signalToTrendLabel(0)).toBe('stable')
+  })
+
+  it('maps null (insufficient history) to null rather than guessing', () => {
+    expect(signalToTrendLabel(null)).toBeNull()
   })
 })
 

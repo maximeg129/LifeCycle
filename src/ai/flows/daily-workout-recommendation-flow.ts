@@ -51,9 +51,12 @@ const DailyWorkoutRecommendationInputSchema = z.object({
   recovery: z.object({
     sleepHours: z.number().optional(),
     sleepQuality: z.number().optional().describe('0-100'),
-    hrv: z.number().optional().describe('ms'),
-    readiness: z.number().optional().describe('0-100, device-reported recovery/readiness score when available (e.g. WHOOP via Intervals.icu), otherwise a lightweight local heuristic.'),
-  }).optional().describe('Last night\'s sleep/HRV/readiness, auto-synced from Intervals.icu (or manually logged) — a bad night should measurably change today\'s proposal, not just training load.'),
+    hrv: z.number().optional().describe('ms — dernière valeur brute connue, ne permet PAS à lui seul de juger une tendance.'),
+    hrvTrend: z.enum(['favorable', 'stable', 'defavorable']).nullable().optional().describe('Tendance HRV réelle, 7 derniers jours vs 28 jours de référence (même calcul que le gouverneur de charge interne, governor-types.ts/windowedTrendSignal) — jamais à deviner depuis la valeur brute ci-dessus. Absent/null si historique insuffisant pour statuer.'),
+    restingHR: z.number().optional().describe('bpm — FC repos de la nuit dernière.'),
+    restingHRTrend: z.enum(['favorable', 'stable', 'defavorable']).nullable().optional().describe('Tendance FC repos réelle, même fenêtre 7j vs 28j que hrvTrend — favorable = FC repos en baisse.'),
+    readiness: z.number().optional().describe('0-100, score de récupération du device quand disponible (ex. WHOOP via Intervals.icu), sinon un heuristique local léger — un complément, jamais le seul signal à considérer : privilégie hrv/hrvTrend/restingHR/restingHRTrend, plus vérifiables.'),
+  }).optional().describe('Last night\'s sleep/HRV/resting HR/readiness, auto-synced from Intervals.icu (or manually logged) — a bad night should measurably change today\'s proposal, not just training load.'),
   coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, lifestyle, goals, remembered facts, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
   ride: z.object({
     location: z.string().describe('Departure location — city/place name, or "lat,lon".'),
@@ -168,11 +171,13 @@ export async function dailyWorkoutRecommendation(input: DailyWorkoutRecommendati
 
   if (parsedInput.recovery) {
     const r = parsedInput.recovery;
+    const trendLabel = (t: typeof r.hrvTrend) => t === 'favorable' ? 'favorable (7j vs 28j)' : t === 'defavorable' ? 'défavorable (7j vs 28j)' : t === 'stable' ? 'stable (7j vs 28j)' : 'non disponible (historique insuffisant)';
     sections.push([
-      'RÉCUPÉRATION (nuit dernière) :',
+      'RÉCUPÉRATION (nuit dernière + tendances réelles, jamais à déduire toi-même) :',
       `Sommeil : ${r.sleepHours != null ? `${r.sleepHours}h` : 'n/a'}${r.sleepQuality != null ? ` (qualité ${r.sleepQuality}%)` : ''}`,
-      `HRV : ${r.hrv != null ? `${r.hrv}ms` : 'n/a'}`,
-      `Readiness : ${r.readiness != null ? `${r.readiness}/100` : 'n/a'}`,
+      `HRV : ${r.hrv != null ? `${r.hrv}ms` : 'n/a'} — tendance : ${trendLabel(r.hrvTrend)}`,
+      `FC repos : ${r.restingHR != null ? `${r.restingHR} bpm` : 'n/a'} — tendance : ${trendLabel(r.restingHRTrend)}`,
+      `Readiness (complément, device/heuristique) : ${r.readiness != null ? `${r.readiness}/100` : 'n/a'}`,
     ].join('\n'));
   }
 
@@ -234,11 +239,14 @@ Règles impératives :
   de la semaine en cours (ex: en phase "base", privilégie l'endurance même si le temps disponible permettrait
   une séance plus intense ; en phase "taper", réduis délibérément l'intensité et le volume). Le plan prime
   sur une proposition générique.
-- Si la récupération de la nuit dernière est mauvaise (sommeil court ou de faible qualité, HRV en baisse
-  nette, readiness basse), RÉDUIS l'intensité prévue même si la charge d'entraînement et le plan suggéreraient
-  autre chose, propose éventuellement une alternative (récupération active, endurance légère plutôt que
-  seuil/VO2max), et dis-le explicitement dans rationale — la récupération prime sur la programmation quand
-  les deux sont en tension.
+- Si la récupération de la nuit dernière est mauvaise, RÉDUIS l'intensité prévue même si la charge
+  d'entraînement et le plan suggéreraient autre chose, propose éventuellement une alternative (récupération
+  active, endurance légère plutôt que seuil/VO2max), et dis-le explicitement dans rationale — la récupération
+  prime sur la programmation quand les deux sont en tension. Base ce jugement sur les TENDANCES RÉELLES
+  fournies (hrvTrend/restingHRTrend, déjà calculées sur 7j vs 28j — jamais à déduire toi-même d'une valeur
+  brute isolée) plutôt que sur readiness seule : un hrvTrend/restingHRTrend "defavorable", ou un sommeil court/
+  de faible qualité, sont des signaux plus fiables qu'un seul score composite. Si hrvTrend/restingHRTrend sont
+  absents (historique insuffisant), rabats-toi sur readiness/sommeil sans l'inventer non plus.
 - Si la FTP est fournie, utilise-la pour ancrer rationale dans des chiffres réels (ex: "séance de seuil à
   95% de la FTP, environ 260W" plutôt que "séance de seuil" tout court) — le script structuré lui-même reste
   en % de FTP (voir la syntaxe ci-dessous, que l'app convertit déjà en watts côté Intervals.icu). Si la FTP

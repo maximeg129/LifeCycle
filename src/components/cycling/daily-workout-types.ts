@@ -8,6 +8,24 @@
 import { format, subDays } from 'date-fns'
 import type { PlannedWorkoutEvent } from '@/lib/intervals-api'
 import type { DailyWorkoutRecommendationInput } from '@/ai/flows/daily-workout-recommendation-flow'
+import type { Signal } from './governor-types'
+
+/**
+ * Traduit un Signal du gouverneur (1/0/-1/null, fenêtre 7j vs 28j — voir
+ * windowedTrendSignal dans governor-types.ts) en tendance lisible pour le
+ * prompt IA. Retour utilisateur : le flow demandait au modèle de juger une
+ * "HRV en baisse nette" à partir d'une seule valeur brute, sans historique —
+ * impossible à faire honnêtement. Réutilise le MÊME calcul déjà fait pour le
+ * gouverneur (governor.signals.hrvTrend/restingHR) plutôt que d'en refaire
+ * un nouveau : jamais deux notions de tendance différentes pour la même
+ * métrique dans l'app.
+ */
+export function signalToTrendLabel(signal: Signal): 'favorable' | 'stable' | 'defavorable' | null {
+  if (signal === 1) return 'favorable'
+  if (signal === -1) return 'defavorable'
+  if (signal === 0) return 'stable'
+  return null
+}
 
 /** Minimal shape buildWorkoutEventPayload() needs — DailyWorkoutRecommendationOutput and PlanWeekSession (plan-week-sessions-flow.ts) both satisfy it, so the same push-to-Intervals.icu path serves both "Proposition du jour" and a plan week's sample sessions. */
 export interface WorkoutLike {

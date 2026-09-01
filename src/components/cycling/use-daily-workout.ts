@@ -28,7 +28,7 @@ import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/en
 import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { buildCoachContext } from './coach-context'
 import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
-import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload } from './daily-workout-types'
+import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload, signalToTrendLabel } from './daily-workout-types'
 import { currentPlanWeek, type PlanWeek } from './training-plan-types'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { describeActionDispatchError } from '@/lib/utils'
@@ -148,6 +148,12 @@ export function useDailyWorkout() {
           sleepHours: lifestyle.latest.sleepHours,
           sleepQuality: lifestyle.latest.sleepQuality,
           hrv: lifestyle.latest.hrv,
+          // Tendances réelles 7j vs 28j (même calcul que le gouverneur, voir
+          // signalToTrendLabel) — retour utilisateur : ne pas laisser le
+          // modèle deviner une "baisse" à partir d'une seule valeur brute.
+          hrvTrend: signalToTrendLabel(governor.signals.hrvTrend),
+          restingHR: lifestyle.latest.restingHR,
+          restingHRTrend: signalToTrendLabel(governor.signals.restingHR),
           readiness: lifestyle.readiness ?? undefined,
         } : undefined,
         coachContext,
@@ -187,7 +193,7 @@ export function useDailyWorkout() {
     } finally {
       setIsGenerating(false)
     }
-  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, todayId, athlete.isConfigured, athlete.data, recentActivities.data, planWeek, lifestyle.latest, lifestyle.readiness, toast])
+  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, governor.signals.hrvTrend, governor.signals.restingHR, enduranceIndex, criticalPowerModel, todayId, athlete.isConfigured, athlete.data, recentActivities.data, planWeek, lifestyle.latest, lifestyle.readiness, toast])
 
   const sendToIntervals = useCallback(async (proposal: DailyWorkoutRecommendationOutput): Promise<boolean> => {
     if (!creds?.intervalsAthleteId || !creds?.intervalsApiKey) {

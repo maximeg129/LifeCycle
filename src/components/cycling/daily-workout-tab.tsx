@@ -104,10 +104,11 @@ export function DailyWorkoutTab() {
                 Semaine {planWeek.weekNumber} du plan · {planWeek.focus}
               </Badge>
             )}
-            {recovery && (recovery.sleepHours != null || recovery.hrv != null || recovery.readiness != null) && (
+            {recovery && (recovery.sleepHours != null || recovery.hrv != null || recovery.restingHR != null || recovery.readiness != null) && (
               <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
                 Récup {recovery.sleepHours != null ? `${recovery.sleepHours}h` : ''}
                 {recovery.hrv != null ? ` · HRV ${recovery.hrv}ms` : ''}
+                {recovery.restingHR != null ? ` · FC repos ${recovery.restingHR}bpm` : ''}
                 {recovery.readiness != null ? ` · Readiness ${recovery.readiness}/100` : ''}
               </Badge>
             )}
