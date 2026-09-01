@@ -246,6 +246,22 @@ service cloud.firestore {
       }
 
       /**
+       * @description Suivi détaillé (séries/répétitions/charge réellement
+       * faites) d'une séance de musculation — retour utilisateur : "suivi
+       * détaillé par exercice". Distinct de sessionFeedback (RPE/ressenti
+       * générique, déjà utilisé pour le vélo) : ici, les vrais chiffres par
+       * exercice, saisis par l'athlète après la séance, pour suivre une
+       * vraie progression de charge dans le temps.
+       * @path /users/{userId}/strengthSessionLogs/{logId}
+       */
+      match /strengthSessionLogs/{logId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
        * @description Daily AI workout proposals ("Proposition du jour"),
        * keyed by `{yyyy-MM-dd}` — one per day, overwritten on regenerate.
        * @path /users/{userId}/workoutProposals/{dateId}

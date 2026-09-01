@@ -15,6 +15,7 @@ import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { useTrainingPlan } from './use-training-plan'
 import { useTrainingPreferences } from './use-training-preferences'
+import { LogStrengthSessionDialog } from './log-strength-session-dialog'
 import { currentPlanWeek, type PlanPhase, type PlanWeek } from './training-plan-types'
 import { upcomingGoals } from './coach-memory-types'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -637,6 +638,7 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
                   {isSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   Envoyer sur Intervals.icu
                 </Button>
+                {session.sessionKind === 'strength' && <LogStrengthSessionDialog session={session} weekNumber={week.weekNumber} />}
               </div>
             </div>
           )
