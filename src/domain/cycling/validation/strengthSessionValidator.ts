@@ -136,14 +136,34 @@ export function checkCorePlanes(patterns: MovementPattern[]): PlanCheckResult {
 
 // ── strength-check-4 — matrice charge/reps/repos ────────────────────────────
 
-/** Chaque exercice cohérent avec la matrice de sa phase déclarée (S05 §2) — tolérant au chevauchement de plage plutôt qu'une correspondance exacte. */
+/**
+ * Patterns exemptés de la matrice numérique — trouvaille de la vérification
+ * "à blanc" du pipeline (fixture réaliste incluant une planche/un Pallof
+ * press) : S05 §2 donne une matrice pensée pour les lifts principaux
+ * (squat, hip-hinge, unilatéral), exprimée en répétitions et %1RM — un
+ * gainage isométrique (secondes tenues, pas de charge externe comparable à
+ * un %1RM) ou un travail cheville/mollet léger ne s'y prête pas
+ * physiologiquement. [Convention] — S05 ne le dit pas explicitement, mais
+ * appliquer littéralement "3-6 répétitions à 85-92% 1RM" à une planche
+ * n'a pas de sens et signalerait à tort une séance par ailleurs conforme.
+ */
+const MATRIX_EXEMPT_PATTERNS: MovementPattern[] = ['anti-extension', 'anti-rotation-lateral', 'ankle-calf']
+
+/** Chaque exercice des patterns "lift principal" (bilatéral lourd/hip-hinge/unilatéral) cohérent avec la matrice de sa phase déclarée (S05 §2) — tolérant au chevauchement de plage plutôt qu'une correspondance exacte. Gainage/cheville exemptés, voir MATRIX_EXEMPT_PATTERNS. */
 export function checkLoadRepsRestConsistency(strengthPhase: StrengthPhase, exercises: StrengthExerciseForValidation[]): PlanCheckResult {
   const checkId = 'strength-check-4-load-reps-rest-matrix'
-  if (exercises.length === 0) return { checkId, verdict: 'insufficient_data', detail: 'Aucun exercice à évaluer.' }
+  const applicable = exercises.filter((ex) => !MATRIX_EXEMPT_PATTERNS.includes(ex.pattern))
+  if (applicable.length === 0) {
+    return {
+      checkId,
+      verdict: 'insufficient_data',
+      detail: exercises.length === 0 ? 'Aucun exercice à évaluer.' : 'Aucun exercice concerné par la matrice (uniquement du gainage/cheville, exemptés — voir MATRIX_EXEMPT_PATTERNS).',
+    }
+  }
 
   const bounds = STRENGTH_PHASE_MATRIX[strengthPhase]
   const violations: string[] = []
-  for (const ex of exercises) {
+  for (const ex of applicable) {
     if (ex.sets < bounds.setsMin || ex.sets > bounds.setsMax) {
       violations.push(`${ex.pattern} : ${ex.sets} séries hors ${bounds.setsMin}-${bounds.setsMax}`)
     }
