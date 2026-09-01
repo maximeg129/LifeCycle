@@ -9,13 +9,14 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion, Apple, Dumbbell } from 'lucide-react'
+import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion, Apple, Dumbbell, PlayCircle } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { useTrainingPlan } from './use-training-plan'
 import { useTrainingPreferences } from './use-training-preferences'
 import { LogStrengthSessionDialog } from './log-strength-session-dialog'
+import { LiveStrengthSessionView } from './live-strength-session-view'
 import { currentPlanWeek, type PlanPhase, type PlanWeek } from './training-plan-types'
 import { upcomingGoals } from './coach-memory-types'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -532,6 +533,10 @@ interface WeekSessionsPanelProps {
 function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToIntervals, onRegenerate, onSend }: WeekSessionsPanelProps) {
   const [dates, setDates] = useState<Record<number, string>>({})
   const getDate = (index: number) => dates[index] ?? week.startDate
+  // Retour utilisateur : "un système de suivi de la seance a la salle, avec
+  // chronometre, temps de repos" — vue plein écran gardée en state local
+  // plutôt qu'un Dialog, pour couvrir tout l'écran pendant la séance.
+  const [liveSession, setLiveSession] = useState<PlanWeekSession | null>(null)
 
   if (isGenerating) {
     return (
@@ -673,12 +678,20 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
                   {isSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
                   Envoyer sur Intervals.icu
                 </Button>
+                {session.sessionKind === 'strength' && session.strengthExercises && session.strengthExercises.length > 0 && (
+                  <Button size="sm" variant="outline" onClick={() => setLiveSession(session)} className="gap-1.5 h-8">
+                    <PlayCircle className="w-3.5 h-3.5" /> Démarrer la séance
+                  </Button>
+                )}
                 {session.sessionKind === 'strength' && <LogStrengthSessionDialog session={session} weekNumber={week.weekNumber} />}
               </div>
             </div>
           )
         })}
       </div>
+      {liveSession && (
+        <LiveStrengthSessionView session={liveSession} weekNumber={week.weekNumber} onClose={() => setLiveSession(null)} />
+      )}
     </div>
   )
 }

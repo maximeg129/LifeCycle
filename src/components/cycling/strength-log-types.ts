@@ -7,6 +7,12 @@
 // force dans le temps, exercice par exercice. Jamais un score de force
 // inventé (ex. un 1RM calculé) : juste les chiffres réels tels que saisis.
 
+export interface LoggedSetDetail {
+  reps: number
+  /** Charge en kg — absente pour un exercice au poids du corps/élastique. */
+  loadKg?: number
+}
+
 export interface LoggedExercise {
   name: string
   sets: number
@@ -14,6 +20,35 @@ export interface LoggedExercise {
   /** Charge en kg — optionnelle (poids du corps, élastique, ou simplement non renseignée). */
   loadKg?: number
   notes?: string
+  /**
+   * Détail série par série — retour utilisateur : "un système de suivi de
+   * la séance à la salle, avec chronomètre, temps de repos, détails de
+   * l'exercice charge". Présent UNIQUEMENT pour une séance loguée via le
+   * suivi en direct (live-strength-session-view.tsx) ; absent pour une
+   * séance loguée via le formulaire simple (log-strength-session-dialog.tsx)
+   * — sets/reps/loadKg ci-dessus restent alors la seule donnée disponible,
+   * dérivée de setsDetail par summarizeSetsDetail() quand il est présent.
+   */
+  setsDetail?: LoggedSetDetail[]
+}
+
+/**
+ * Réduit le détail série par série à un résumé (sets/reps/loadKg) — la
+ * "série de travail" retenue est celle à la charge la plus lourde
+ * (convention courante en musculation : c'est elle qui représente
+ * vraiment l'effort de l'exercice), ou la dernière série si aucune charge
+ * n'a été saisie (poids du corps). Jamais un score inventé (1RM estimé,
+ * volume total...) — juste un résumé fidèle des chiffres réels saisis.
+ */
+export function summarizeSetsDetail(details: LoggedSetDetail[]): { sets: number; reps: string; loadKg?: number } {
+  if (details.length === 0) return { sets: 0, reps: '0' }
+  const withLoad = details.filter((d) => d.loadKg != null)
+  if (withLoad.length > 0) {
+    const top = withLoad.reduce((max, d) => (d.loadKg! > max.loadKg! ? d : max))
+    return { sets: details.length, reps: String(top.reps), loadKg: top.loadKg }
+  }
+  const last = details[details.length - 1]
+  return { sets: details.length, reps: String(last.reps) }
 }
 
 export interface StrengthSessionLog {
@@ -66,4 +101,21 @@ export function distinctExerciseNames(logs: StrengthSessionLogWithId[]): string[
     }
   }
   return [...seen.values()]
+}
+
+/**
+ * Formate un nombre de secondes en "m:ss" (ou "h:mm:ss" au-delà d'une
+ * heure) — retour utilisateur : "un système de suivi... avec chronomètre,
+ * temps de repos". Négatif traité comme 0 plutôt que d'afficher un signe
+ * moins (un décompte de repos ne va jamais sous 0 dans l'UI, mais un
+ * setInterval peut ponctuellement dépasser la cible d'une fraction de
+ * seconde avant que le clear ne s'applique).
+ */
+export function formatTimer(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.round(totalSeconds))
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
 }
