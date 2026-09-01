@@ -119,16 +119,22 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
           <div className="divide-y divide-border">
             {journalEntries.slice(0, 20).map((entry) =>
               entry.kind === 'strength' ? (
-                <div key={`s-${entry.log.id}`} className="flex items-center justify-between p-4">
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                <div key={`s-${entry.log.id}`} className="flex items-center justify-between gap-3 p-4">
+                  {/* min-w-0 sur chaque niveau flex + truncate sur le titre
+                      — retour utilisateur : "vérifie sur mobile que les
+                      autres onglets sont cohérents". Sans ce min-w-0 en
+                      cascade (même piège que le header du dialogue recette,
+                      voir CLAUDE.md), un titre de séance long pousse toute
+                      la ligne plus large que l'écran au lieu de tronquer. */}
+                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                    <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
                       <Dumbbell className="w-5 h-5" />
                     </div>
-                    <div>
-                      <div className="font-semibold flex items-center gap-2 flex-wrap">
-                        {entry.log.title}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-semibold truncate">{entry.log.title}</span>
                         {entry.log.planWeekNumber != null && (
-                          <Badge variant="outline" className="text-[10px]">Plan S{entry.log.planWeekNumber}</Badge>
+                          <Badge variant="outline" className="text-[10px] shrink-0">Plan S{entry.log.planWeekNumber}</Badge>
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground">
@@ -136,7 +142,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                       </div>
                     </div>
                   </div>
-                  <div className="hidden md:flex flex-col items-end">
+                  <div className="hidden md:flex flex-col items-end shrink-0">
                     <span className="text-sm font-medium">{entry.log.exercises.length} exercice{entry.log.exercises.length > 1 ? 's' : ''}</span>
                     <span className="text-[10px] text-muted-foreground">
                       {entry.log.exercises.reduce((sum, e) => sum + e.sets, 0)} série{entry.log.exercises.reduce((sum, e) => sum + e.sets, 0) > 1 ? 's' : ''}
@@ -153,17 +159,22 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                   href={`https://intervals.icu/activities/${ride.id}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="flex items-center justify-between p-4 hover:bg-muted/30 transition-colors cursor-pointer group"
+                  className="flex items-center justify-between gap-3 p-4 hover:bg-muted/30 transition-colors cursor-pointer group"
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                  {/* min-w-0 en cascade + truncate — un nom de sortie Strava
+                      peut être long (texte libre), sans ça la ligne entière
+                      poussait plus large que l'écran sur mobile au lieu de
+                      tronquer (même piège que le header du dialogue
+                      recette, voir CLAUDE.md). */}
+                  <div className="flex items-center gap-4 min-w-0 flex-1">
+                    <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
                       <Bike className="w-5 h-5" />
                     </div>
-                    <div>
-                      <div className="font-semibold">
+                    <div className="min-w-0">
+                      <div className="font-semibold truncate">
                         {ride.name || (dateStr ? format(parseISO(dateStr), 'EEEE d MMMM', { locale: fr }) : 'Activité')}
                       </div>
-                      <div className="text-xs text-muted-foreground">
+                      <div className="text-xs text-muted-foreground truncate">
                         {ride.start_date_local
                           ? formatDistanceToNow(parseISO(ride.start_date_local), { addSuffix: true, locale: fr })
                           : 'Date inconnue'}
@@ -173,7 +184,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-6">
+                  <div className="flex items-center gap-6 shrink-0">
                     {ride.distance ? (
                       <div className="hidden md:flex flex-col items-end">
                         <span className="text-sm font-medium">{formatDistance(ride.distance)}</span>
