@@ -27,7 +27,7 @@ import { useUser, useFirestore } from '@/firebase'
 import { useCrudSubmit } from '@/hooks/use-crud-submit'
 import { cn } from '@/lib/utils'
 import { useStrengthLogs } from './use-strength-logs'
-import { exerciseHistory, formatTimer, isDraftUsable, summarizeSetsDetail, type LoggedExercise, type LoggedSetDetail, type StrengthSessionLog } from './strength-log-types'
+import { exerciseHistory, formatTimer, isDraftUsable, isHoldReps, parseDurationInput, summarizeSetsDetail, type LoggedExercise, type LoggedSetDetail, type StrengthSessionLog } from './strength-log-types'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 
 /** Repos par défaut si l'exercice n'en porte pas (séance mise en cache avant l'introduction de restSeconds dans le schéma). */
@@ -303,7 +303,16 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
       )}
 
       <div className="p-4 space-y-4 max-w-2xl mx-auto">
-        {progress.map((ex, exIndex) => (
+        {progress.map((ex, exIndex) => {
+          // Retour utilisateur, capture d'écran d'une planche à l'appui :
+          // "on devrais seulement mettre le temps en minute:seconde" — un
+          // exercice de gainage isométrique (planche, Pallof press tenu...)
+          // se mesure en secondes tenues, pas en répétitions ; le "reps ×"
+          // par défaut était trompeur. isHoldReps() détecte le suffixe "s"
+          // déjà utilisé par convention pour ces exercices ("30-45s") — pas
+          // de champ dédié dans le schéma IA, voir isHoldReps.
+          const isHold = isHoldReps(exercises[exIndex]?.reps ?? '')
+          return (
           <div key={exIndex} className="lc-card p-4 space-y-3">
             <div className="flex items-center gap-2">
               <Dumbbell className="w-4 h-4 text-primary shrink-0" />
@@ -313,15 +322,27 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
               {ex.sets.map((set, setIndex) => (
                 <div key={setIndex} className={cn('flex items-center gap-2 p-2 rounded-lg border', set.done ? 'bg-primary/5 border-primary/20' : 'border-border')}>
                   <span className="text-xs text-muted-foreground w-14 shrink-0">Série {setIndex + 1}</span>
-                  <Input
-                    type="number"
-                    value={set.reps}
-                    onChange={(e) => updateSet(exIndex, setIndex, { reps: Number(e.target.value) })}
-                    className="h-9 w-16 text-center"
-                    disabled={set.done}
-                    aria-label={`Répétitions, série ${setIndex + 1}`}
-                  />
-                  <span className="text-xs text-muted-foreground shrink-0">reps ×</span>
+                  {isHold ? (
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      value={formatTimer(set.reps)}
+                      onChange={(e) => updateSet(exIndex, setIndex, { reps: parseDurationInput(e.target.value) })}
+                      className="h-9 w-20 text-center"
+                      disabled={set.done}
+                      aria-label={`Temps tenu, série ${setIndex + 1}`}
+                    />
+                  ) : (
+                    <Input
+                      type="number"
+                      value={set.reps}
+                      onChange={(e) => updateSet(exIndex, setIndex, { reps: Number(e.target.value) })}
+                      className="h-9 w-16 text-center"
+                      disabled={set.done}
+                      aria-label={`Répétitions, série ${setIndex + 1}`}
+                    />
+                  )}
+                  <span className="text-xs text-muted-foreground shrink-0">{isHold ? 'tenu ×' : 'reps ×'}</span>
                   <Input
                     type="number"
                     step="0.5"
@@ -345,7 +366,8 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
               ))}
             </div>
           </div>
-        ))}
+          )
+        })}
 
         <Button onClick={handleFinish} disabled={isSaving} size="lg" className="w-full gap-2">
           <Flag className="w-4 h-4" /> Terminer la séance
