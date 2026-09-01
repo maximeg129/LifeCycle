@@ -116,6 +116,18 @@ describe('mergePlanWeeks', () => {
     expect('notes' in weeks[0]).toBe(false)
     expect(JSON.stringify(weeks[0])).not.toContain('notes')
   })
+
+  it('carries targetStrengthMinutes through when the AI content includes it (musculation requested)', () => {
+    const withStrength: PlanWeekContent[] = [{ phase: 'base', focus: 'Endurance', targetWeeklyMinutes: 300, targetStrengthMinutes: 60 }]
+    const weeks = mergePlanWeeks(skeleton, withStrength)
+    expect(weeks[0].targetStrengthMinutes).toBe(60)
+  })
+
+  it('omits targetStrengthMinutes entirely (not 0/undefined) when musculation was not requested — same Firestore-undefined trap as notes', () => {
+    const weeks = mergePlanWeeks(skeleton, [content[0]]) // no targetStrengthMinutes
+    expect('targetStrengthMinutes' in weeks[0]).toBe(false)
+    expect(JSON.stringify(weeks[0])).not.toContain('targetStrengthMinutes')
+  })
 })
 
 describe('currentPlanWeek', () => {
@@ -246,6 +258,15 @@ describe('diffPlanWeeks', () => {
     }))
     expect(diffPlanWeeks(fourWeeks, adjustments)).toEqual([])
   })
+
+  it('flags a week whose only change is targetStrengthMinutes', () => {
+    const withStrength: PlanWeek[] = fourWeeks.map((w, i) => (i === 2 ? { ...w, targetStrengthMinutes: 60 } : w))
+    const adjustments: PlanWeekAdjustment[] = [{ weekNumber: 3, phase: 'build', focus: 'S3', targetWeeklyMinutes: 360, targetStrengthMinutes: 30 }]
+    const changes = diffPlanWeeks(withStrength, adjustments)
+    expect(changes).toHaveLength(1)
+    expect(changes[0].before.targetStrengthMinutes).toBe(60)
+    expect(changes[0].after.targetStrengthMinutes).toBe(30)
+  })
 })
 
 describe('applyRecalibration', () => {
@@ -296,5 +317,16 @@ describe('applyRecalibration', () => {
   it('leaves a week with no matching adjustment completely unchanged', () => {
     const result = applyRecalibration(fourWeeks, [])
     expect(result).toEqual(fourWeeks)
+  })
+
+  it('applies an adjusted targetStrengthMinutes, and drops a previous one when none is given', () => {
+    const withStrength: PlanWeek[] = fourWeeks.map((w, i) => (i === 2 ? { ...w, targetStrengthMinutes: 60 } : w))
+    const adjustments: PlanWeekAdjustment[] = [{ weekNumber: 3, phase: 'build', focus: 'S3', targetWeeklyMinutes: 360, targetStrengthMinutes: 30 }]
+    const result = applyRecalibration(withStrength, adjustments)
+    expect(result[2].targetStrengthMinutes).toBe(30)
+
+    const adjustmentsNoStrength: PlanWeekAdjustment[] = [{ weekNumber: 3, phase: 'build', focus: 'S3 sans muscu', targetWeeklyMinutes: 360 }]
+    const result2 = applyRecalibration(withStrength, adjustmentsNoStrength)
+    expect(result2[2].targetStrengthMinutes).toBeUndefined()
   })
 })

@@ -69,6 +69,17 @@ export interface PlanWeekContent {
   targetWeeklyMinutes: number
   notes?: string
   /**
+   * Volume hebdo de musculation (minutes), séparé du volume vélo — retour
+   * utilisateur : "inclus des seance de musculation dans le plan
+   * d'entrainement", décision (question de clarification) : volume
+   * additionnel, jamais grignoté sur targetWeeklyMinutes (dont la logique
+   * budget kJ/TSS suppose un entraînement 100% vélo). Absent quand la
+   * musculation n'a pas été demandée pour ce plan — jamais 0 par défaut
+   * (0 voudrait dire "demandée mais nulle cette semaine", pas "non
+   * demandée").
+   */
+  targetStrengthMinutes?: number
+  /**
    * The coach's example sessions for this week — generated lazily (on
    * first expand, see useTrainingPlan.generateWeekSessions) and cached
    * here so re-opening the week doesn't re-call the AI. Absent until
@@ -104,6 +115,7 @@ export function mergePlanWeeks(skeleton: PlanWeekSkeleton[], content: PlanWeekCo
     // spreads this object back) fail for any plan where at least one week
     // came back without a note — which is the common case, not the edge case.
     if (c?.notes) merged.notes = c.notes
+    if (c?.targetStrengthMinutes != null) merged.targetStrengthMinutes = c.targetStrengthMinutes
     return merged
   })
 }
@@ -139,8 +151,8 @@ export function planSessionExternalId(planId: string, weekNumber: number, sessio
 
 export interface PlanWeekChange {
   weekNumber: number
-  before: { phase: PlanPhase; focus: string; targetWeeklyMinutes: number }
-  after: { phase: PlanPhase; focus: string; targetWeeklyMinutes: number }
+  before: { phase: PlanPhase; focus: string; targetWeeklyMinutes: number; targetStrengthMinutes?: number }
+  after: { phase: PlanPhase; focus: string; targetWeeklyMinutes: number; targetStrengthMinutes?: number }
 }
 
 /**
@@ -191,6 +203,7 @@ export interface PlanWeekAdjustment {
   focus: string
   targetWeeklyMinutes: number
   notes?: string
+  targetStrengthMinutes?: number
 }
 
 /**
@@ -203,13 +216,13 @@ export function diffPlanWeeks(before: PlanWeek[], adjustments: PlanWeekAdjustmen
   for (const adj of adjustments) {
     const prev = before.find((w) => w.weekNumber === adj.weekNumber)
     if (!prev) continue
-    const changed = prev.phase !== adj.phase || prev.focus !== adj.focus || prev.targetWeeklyMinutes !== adj.targetWeeklyMinutes
+    const changed = prev.phase !== adj.phase || prev.focus !== adj.focus || prev.targetWeeklyMinutes !== adj.targetWeeklyMinutes || prev.targetStrengthMinutes !== adj.targetStrengthMinutes
     if (!changed) continue
-    changes.push({
-      weekNumber: adj.weekNumber,
-      before: { phase: prev.phase, focus: prev.focus, targetWeeklyMinutes: prev.targetWeeklyMinutes },
-      after: { phase: adj.phase, focus: adj.focus, targetWeeklyMinutes: adj.targetWeeklyMinutes },
-    })
+    const before_: PlanWeekChange['before'] = { phase: prev.phase, focus: prev.focus, targetWeeklyMinutes: prev.targetWeeklyMinutes }
+    if (prev.targetStrengthMinutes != null) before_.targetStrengthMinutes = prev.targetStrengthMinutes
+    const after_: PlanWeekChange['after'] = { phase: adj.phase, focus: adj.focus, targetWeeklyMinutes: adj.targetWeeklyMinutes }
+    if (adj.targetStrengthMinutes != null) after_.targetStrengthMinutes = adj.targetStrengthMinutes
+    changes.push({ weekNumber: adj.weekNumber, before: before_, after: after_ })
   }
   return changes
 }
@@ -230,10 +243,12 @@ export function applyRecalibration(weeks: PlanWeek[], adjustments: PlanWeekAdjus
   return weeks.map((w) => {
     const adj = byWeekNumber.get(w.weekNumber)
     if (!adj) return w
-    const changed = w.phase !== adj.phase || w.focus !== adj.focus || w.targetWeeklyMinutes !== adj.targetWeeklyMinutes
+    const changed = w.phase !== adj.phase || w.focus !== adj.focus || w.targetWeeklyMinutes !== adj.targetWeeklyMinutes || w.targetStrengthMinutes !== adj.targetStrengthMinutes
     const updated: PlanWeek = { ...w, phase: adj.phase, focus: adj.focus, targetWeeklyMinutes: adj.targetWeeklyMinutes }
     if (adj.notes) updated.notes = adj.notes
     else delete updated.notes
+    if (adj.targetStrengthMinutes != null) updated.targetStrengthMinutes = adj.targetStrengthMinutes
+    else delete updated.targetStrengthMinutes
     if (changed) delete updated.sampleSessions
     return updated
   })

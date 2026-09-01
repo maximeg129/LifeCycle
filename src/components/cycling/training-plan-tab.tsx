@@ -1,10 +1,11 @@
 "use client"
 
-import React, { useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -13,6 +14,7 @@ import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { useTrainingPlan } from './use-training-plan'
+import { useTrainingPreferences } from './use-training-preferences'
 import { currentPlanWeek, type PlanPhase, type PlanWeek } from './training-plan-types'
 import { upcomingGoals } from './coach-memory-types'
 import { EmptyState } from '@/components/ui/empty-state'
@@ -46,10 +48,28 @@ export function TrainingPlanTab() {
   const today = format(new Date(), 'yyyy-MM-dd')
   const upcoming = upcomingGoals(goals, today)
 
+  // Retour utilisateur : "si l'athlete le demande inclus des seance de
+  // musculation dans le plan" — préférence partagée (settings/
+  // trainingPreferences) entre CE toggle et le futur outil Stella, "les
+  // deux" déclencheurs répondant à la même question de clarification.
+  const trainingPrefs = useTrainingPreferences()
   const [selectedGoalId, setSelectedGoalId] = useState<string>('')
   const [weeklyMinutes, setWeeklyMinutes] = useState(DEFAULT_WEEKLY_MINUTES)
+  const [includeStrength, setIncludeStrength] = useState(false)
+  const [strengthMinutes, setStrengthMinutes] = useState(60)
   const [showNewPlanForm, setShowNewPlanForm] = useState(false)
   const [expandedWeek, setExpandedWeek] = useState<number | null>(null)
+
+  // Préremplit le formulaire depuis la préférence Firestore une fois
+  // chargée (jamais si l'athlète a déjà touché le toggle cette session —
+  // sinon rouvrir le formulaire écraserait un choix qu'il vient de faire).
+  const prefsAppliedRef = useRef(false)
+  useEffect(() => {
+    if (prefsAppliedRef.current || !trainingPrefs.data) return
+    prefsAppliedRef.current = true
+    if (trainingPrefs.data.includeStrengthTraining) setIncludeStrength(true)
+    if (trainingPrefs.data.strengthWeeklyMinutes) setStrengthMinutes(trainingPrefs.data.strengthWeeklyMinutes)
+  }, [trainingPrefs.data])
 
   const toggleWeek = (w: PlanWeek) => {
     const opening = expandedWeek !== w.weekNumber
@@ -60,8 +80,20 @@ export function TrainingPlanTab() {
   const handleGenerate = async () => {
     const goal = upcoming.find((g) => g.id === selectedGoalId)
     if (!goal) return
-    const ok = await generate(goal, weeklyMinutes)
+    const ok = await generate(goal, weeklyMinutes, { include: includeStrength, weeklyMinutes: strengthMinutes })
     if (ok) setShowNewPlanForm(false)
+  }
+
+  // Écrit immédiatement dans settings/trainingPreferences — même source de
+  // vérité que le futur outil Stella, effet immédiat sans attendre un
+  // round-trip (même patron que LanguageCard, voir CLAUDE.md i18n).
+  const handleToggleStrength = (checked: boolean) => {
+    setIncludeStrength(checked)
+    trainingPrefs.setPreferences({ includeStrengthTraining: checked })
+  }
+  const handleStrengthMinutesChange = (minutes: number) => {
+    setStrengthMinutes(minutes)
+    trainingPrefs.setPreferences({ strengthWeeklyMinutes: minutes })
   }
 
   const week = activePlan ? currentPlanWeek(activePlan.weeks, today) : null
@@ -148,6 +180,31 @@ export function TrainingPlanTab() {
                 value={weeklyMinutes}
                 onChange={(e) => setWeeklyMinutes(Number(e.target.value))}
               />
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox id="include-strength" checked={includeStrength} onCheckedChange={(c) => handleToggleStrength(c === true)} />
+                <Label htmlFor="include-strength" className="font-normal cursor-pointer">
+                  Inclure des séances de musculation en complément
+                </Label>
+              </div>
+              {includeStrength && (
+                <div className="space-y-2 max-w-[220px] pl-6">
+                  <Label htmlFor="strength-minutes">Volume musculation hebdo (min)</Label>
+                  <Input
+                    id="strength-minutes"
+                    type="number"
+                    min={15}
+                    max={360}
+                    step={15}
+                    value={strengthMinutes}
+                    onChange={(e) => handleStrengthMinutesChange(Number(e.target.value))}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Volume additionnel, séparé du volume vélo ci-dessus — travail de force lourd en complément, jamais à la place d&apos;une séance vélo clé.
+                  </p>
+                </div>
+              )}
             </div>
             <div className="flex gap-2">
               <Button onClick={handleGenerate} disabled={isGenerating || !selectedGoalId} className="gap-2">
@@ -318,7 +375,12 @@ export function TrainingPlanTab() {
                           </span>
                         </td>
                         <td className="px-2 py-2">{w.focus}{w.notes && <span className="block text-xs text-muted-foreground">{w.notes}</span>}</td>
-                        <td className="px-2 py-2 text-right whitespace-nowrap">{Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h</td>
+                        <td className="px-2 py-2 text-right whitespace-nowrap">
+                          {Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h
+                          {w.targetStrengthMinutes != null && (
+                            <span className="block text-[10px] text-muted-foreground font-normal">+ {Math.round(w.targetStrengthMinutes / 60 * 10) / 10}h muscu</span>
+                          )}
+                        </td>
                       </tr>
                       {isExpanded && (
                         <tr className="border-b border-border/50 bg-muted/20">
@@ -429,10 +491,12 @@ export function TrainingPlanTab() {
                         <span className="font-medium shrink-0">S{c.weekNumber}</span>
                         <span className="text-muted-foreground line-through">
                           {PHASE_LABELS[c.before.phase]} · {c.before.focus} · {Math.round(c.before.targetWeeklyMinutes / 60 * 10) / 10}h
+                          {c.before.targetStrengthMinutes != null && ` + ${Math.round(c.before.targetStrengthMinutes / 60 * 10) / 10}h muscu`}
                         </span>
                         <span className="text-muted-foreground">→</span>
                         <span className="text-foreground font-medium">
                           {PHASE_LABELS[c.after.phase]} · {c.after.focus} · {Math.round(c.after.targetWeeklyMinutes / 60 * 10) / 10}h
+                          {c.after.targetStrengthMinutes != null && ` + ${Math.round(c.after.targetStrengthMinutes / 60 * 10) / 10}h muscu`}
                         </span>
                       </div>
                     ))}
