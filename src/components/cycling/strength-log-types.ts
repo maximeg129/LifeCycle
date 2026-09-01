@@ -69,6 +69,26 @@ export interface StrengthSessionLog {
    * loguée librement sans passer par une séance type du plan.
    */
   planSessionIndex?: number
+  /**
+   * Durée réelle de la séance en secondes — retour utilisateur : "seras
+   * t il possible d'exporter la séance de muscu vers... intervals". Le
+   * chrono de LiveStrengthSessionView existait déjà mais n'était jusqu'ici
+   * jamais persisté ; nécessaire pour renseigner `moving_time` à l'export
+   * (voir exportStrengthLogToIntervals, use-strength-log-export.ts). Absent
+   * pour une séance loguée via le formulaire rétroactif
+   * (log-strength-session-dialog.tsx), qui ne suit pas le temps.
+   */
+  durationSeconds?: number
+  /**
+   * Id de l'activité Intervals.icu créée pour cette séance, une fois
+   * exportée — l'API manuelle d'Intervals.icu n'a pas d'upsert-par-id
+   * (contrairement à /events pour les séances planifiées) : renvoyer
+   * exporterait un DOUBLON plutôt que de mettre à jour l'activité
+   * existante. Ce champ sert de garde côté UI (bouton désactivé une fois
+   * présent) plutôt que de compter sur l'athlète pour ne cliquer qu'une
+   * fois.
+   */
+  intervalsActivityId?: string
   createdAt?: unknown
 }
 
@@ -156,4 +176,33 @@ export function isDraftUsable(draftSavedAt: number, draftExerciseNames: string[]
   if (draftExerciseNames.length !== currentExerciseNames.length) return false
   const normalize = (n: string) => n.trim().toLowerCase()
   return draftExerciseNames.every((name, i) => normalize(name) === normalize(currentExerciseNames[i] ?? ''))
+}
+
+// ── Export vers Intervals.icu ────────────────────────────────────────────
+//
+// Retour utilisateur : "seras t il possible d'exporter la séance de muscu
+// vers Strava et/ou dans intervals". Intervals.icu N'A PAS de modèle
+// structuré séries/répétitions pour une activité "WeightTraining" créée
+// via l'API — confirmé par les retours de la communauté sur leur forum
+// (contrairement à un fichier FIT natif de montre/app dédiée), donc le
+// détail série par série est mis en texte libre dans `description`, seul
+// champ où Intervals.icu peut l'afficher. Jamais un score inventé — les
+// chiffres réels tels que loggués, une ligne par exercice.
+
+/**
+ * Une ligne par exercice, avec le détail série par série quand disponible
+ * (suivi en direct) ou le résumé sets/reps/loadKg sinon (saisie
+ * rétroactive) — voir summarizeSetsDetail ci-dessus pour la même
+ * dégradation utilisée ailleurs dans ce fichier.
+ */
+export function formatStrengthLogDescription(exercises: LoggedExercise[]): string {
+  return exercises
+    .map((ex) => {
+      const detail = ex.setsDetail && ex.setsDetail.length > 0
+        ? ex.setsDetail.map((d) => `${d.reps} reps${d.loadKg != null ? ` @ ${d.loadKg}kg` : ''}`).join(', ')
+        : `${ex.sets}x${ex.reps}${ex.loadKg != null ? ` @ ${ex.loadKg}kg` : ''}`
+      const notes = ex.notes ? ` (${ex.notes})` : ''
+      return `${ex.name}: ${detail}${notes}`
+    })
+    .join('\n')
 }

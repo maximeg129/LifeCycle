@@ -225,6 +225,40 @@ export interface PlannedWorkoutResult {
   id: string;
 }
 
+/**
+ * Une activité RÉALISÉE (pas une séance planifiée — voir PlannedWorkoutEvent
+ * ci-dessus) créée manuellement, sans fichier FIT/GPX à uploader — retour
+ * utilisateur : "seras t il possible d'exporter la séance de muscu vers...
+ * intervals". Endpoint corroboré via la documentation communautaire
+ * (forum Intervals.icu + spec OpenAPI tierce) plutôt que la doc officielle
+ * elle-même (inaccessible depuis ce sandbox, proxy réseau) — à vérifier au
+ * premier envoi réel ; l'erreur de l'API remonte telle quelle si le
+ * endpoint/schéma s'avère légèrement différent (voir postIntervals).
+ * Contrairement à /events (upsertOnUid), cette API n'a pas de notion
+ * d'upsert par id externe — renvoyer la même séance créerait un doublon,
+ * jamais une mise à jour ; c'est à l'appelant de ne jamais renvoyer une
+ * activité déjà exportée (voir intervalsActivityId, strength-log-types.ts).
+ */
+export interface ManualActivityInput {
+  name: string;
+  /** Intervals.icu's own type vocabulary — "WeightTraining" pour une séance de musculation. */
+  type: string;
+  /** yyyy-MM-dd — cette app ne suit pas d'heure de départ précise pour une séance muscu, seulement le jour ; l'heure est fixée à midi local plutôt que minuit pour éviter un horodatage trompeur. */
+  startDateLocal: string;
+  /**
+   * Détail texte libre — Intervals.icu n'a pas de modèle structuré
+   * séries/répétitions pour une activité créée via l'API (confirmé par les
+   * retours de la communauté), donc c'est ici que le détail exercice par
+   * exercice atterrit (voir formatStrengthLogDescription).
+   */
+  description: string;
+  durationSeconds?: number;
+}
+
+export interface ManualActivityResult {
+  id: string;
+}
+
 /** Explicit field list for GET /activities — see IntervalsActivity for why. */
 const ACTIVITY_FIELDS = [
   'id', 'name', 'type', 'source', 'start_date_local', 'moving_time', 'elapsed_time',
@@ -528,5 +562,18 @@ export class IntervalsService {
       ...(event.durationSeconds != null ? { moving_time: event.durationSeconds } : {}),
     };
     return this.postIntervals<PlannedWorkoutResult>('/events?upsertOnUid=true', body);
+  }
+
+  /** Voir ManualActivityInput pour le contexte (endpoint corroboré, pas d'upsert). */
+  async createManualActivity(activity: ManualActivityInput): Promise<ManualActivityResult> {
+    const body = {
+      type: activity.type,
+      name: activity.name,
+      start_date_local: `${activity.startDateLocal}T12:00:00`,
+      description: activity.description,
+      manual: true,
+      ...(activity.durationSeconds != null ? { moving_time: activity.durationSeconds } : {}),
+    };
+    return this.postIntervals<ManualActivityResult>('/activities/manual', body);
   }
 }

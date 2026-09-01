@@ -1,0 +1,100 @@
+"use client"
+
+// ── Export d'une séance muscu loguée vers Intervals.icu ─────────────────
+//
+// Retour utilisateur : "seras t il possible d'exporter la séance de muscu
+// vers Strava et/ou dans intervals". Strava nécessiterait une toute
+// nouvelle intégration OAuth (aucune app Strava enregistrée, aucun jeton
+// stocké nulle part dans cette app aujourd'hui — le seul "Strava" existant
+// est un badge d'affichage en lecture seule sur les activités déjà
+// synchronisées VIA Intervals.icu) — hors scope ici, prévu séparément une
+// fois l'application Strava créée côté athlète. Intervals.icu, en
+// revanche, réutilise l'authentification déjà en place (settings/intervals)
+// — voir createManualActivity (intervals-api.ts) pour le contexte sur
+// l'endpoint et sa limite (pas de sets/reps structurés, tout en texte
+// dans description).
+
+import { useCallback, useState } from 'react'
+import { doc, updateDoc } from 'firebase/firestore'
+import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
+import { useToast } from '@/hooks/use-toast'
+import { errorEmitter } from '@/firebase/error-emitter'
+import { FirestorePermissionError } from '@/firebase/errors'
+import { formatStrengthLogDescription, type StrengthSessionLogWithId } from './strength-log-types'
+
+interface IntervalsCredentialsDoc {
+  intervalsAthleteId?: string
+  intervalsApiKey?: string
+}
+
+export function useStrengthLogExport() {
+  const { user } = useUser()
+  const db = useFirestore()
+  const { toast } = useToast()
+  const [sendingLogId, setSendingLogId] = useState<string | null>(null)
+
+  const credsRef = useMemoFirebase(() => {
+    if (!user || !db) return null
+    return doc(db, `users/${user.uid}/settings/intervals`)
+  }, [db, user])
+  const { data: creds } = useDoc<IntervalsCredentialsDoc>(credsRef)
+  const canExport = !!creds?.intervalsAthleteId && !!creds?.intervalsApiKey
+
+  const exportLog = useCallback(async (log: StrengthSessionLogWithId): Promise<boolean> => {
+    if (!creds?.intervalsAthleteId || !creds?.intervalsApiKey) {
+      toast({ variant: 'destructive', title: 'Intervals.icu non connecté', description: 'Renseignez vos identifiants dans Réglages.' })
+      return false
+    }
+    // Pas d'upsert côté Intervals.icu pour une activité manuelle
+    // (contrairement à /events) — renvoyer créerait un doublon plutôt que
+    // de mettre à jour l'activité existante. intervalsActivityId, posé au
+    // premier envoi réussi, est la seule garde.
+    if (log.intervalsActivityId) {
+      toast({ title: 'Déjà exportée', description: 'Cette séance est déjà sur Intervals.icu.' })
+      return false
+    }
+    setSendingLogId(log.id)
+    try {
+      const activity = {
+        name: log.title,
+        type: 'WeightTraining',
+        startDateLocal: log.date,
+        description: formatStrengthLogDescription(log.exercises),
+        durationSeconds: log.durationSeconds,
+      }
+      const res = await fetch('/api/intervals/activities', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-intervals-athlete-id': creds.intervalsAthleteId,
+          'x-intervals-api-key': creds.intervalsApiKey,
+        },
+        body: JSON.stringify(activity),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Erreur ${res.status}`)
+      }
+      const result = await res.json() as { id: string }
+
+      if (user && db) {
+        const ref = doc(db, `users/${user.uid}/strengthSessionLogs/${log.id}`)
+        const patch = { intervalsActivityId: String(result.id) }
+        await updateDoc(ref, patch).catch(() => {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: patch }))
+        })
+      }
+
+      toast({ title: 'Envoyé sur Intervals.icu', description: log.title })
+      return true
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Erreur inconnue'
+      toast({ variant: 'destructive', title: "Échec de l'envoi", description: message })
+      return false
+    } finally {
+      setSendingLogId(null)
+    }
+  }, [creds, user, db, toast])
+
+  return { exportLog, sendingLogId, canExport }
+}

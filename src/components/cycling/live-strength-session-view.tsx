@@ -248,6 +248,11 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
       exercises: loggedExercises,
       planWeekNumber: weekNumber,
       planSessionIndex: sessionIndex,
+      // Retour utilisateur : "seras t il possible d'exporter la séance de
+      // muscu vers... intervals" — le chrono existait déjà (elapsedSeconds)
+      // mais n'était jusqu'ici jamais persisté ; nécessaire pour renseigner
+      // moving_time à l'export (voir use-strength-log-export.ts).
+      durationSeconds: elapsedSeconds,
       createdAt: serverTimestamp(),
     } satisfies StrengthSessionLog
     const ok = await submit(() => setDoc(ref, data), { path: ref.path, operation: 'create', requestResourceData: data })
