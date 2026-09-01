@@ -17,6 +17,7 @@ import { type FlowResult } from '@/ai/anthropic';
 import { fetchWeatherForecast, degreesToCompass, isSevereWeather, SEVERE_WIND_THRESHOLD_KMH } from '@/ai/weather';
 import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
 import { HOME_TRAINER_ADAPTATION_GUIDANCE } from './home-trainer-adaptation';
+import { ON_BIKE_FUELING_GUIDANCE } from './on-bike-fueling-guidance';
 import { invokeCoachJson } from '@/ai/coach/invokeCoach';
 import { withCoachOutputContract } from '@/ai/coach/outputContract';
 
@@ -82,6 +83,13 @@ const DailyWorkoutRecommendationOutputSchema = withCoachOutputContract({
     conditions: z.string().describe('Real weather conditions from the forecast (e.g. "Pluie modérée", "Ciel dégagé").'),
   }).nullable().describe('The real weather fetched via Open-Meteo for the ride, same numbers and same "always a real pre-fetch, never invented" principle as Météo & Tenue (cyclingOutfitRecommendation) — null when no ride location/time was given or the forecast could not be fetched.'),
   weatherAlert: z.string().nullable().describe('Non-null ONLY when the real forecast is severe (heavy rain/snow, thunderstorm, or wind ≥ 40km/h) — 1-2 French sentences citing the real numbers, explaining that an outdoor ride is not advisable and that the session below has been adapted for a home trainer instead. Null when the weather is fine or no ride location/time was given.'),
+  fueling: z.object({
+    neededOnBike: z.boolean().describe("false quand la durée/intensité de CETTE séance ne justifie pas un apport glucidique pendant l'effort (recherche : sous ~60-75min à intensité modérée, bénéfice non démontré) — jamais un apport inventé pour une sortie courte."),
+    carbGramsPerHourMin: z.number().nullable().describe('Borne basse de la fourchette de glucides recommandée (g/h) pour CETTE séance. Null si neededOnBike est false.'),
+    carbGramsPerHourMax: z.number().nullable().describe('Borne haute — ne doit JAMAIS dépasser 120 (plafond sourcé R34). Null si neededOnBike est false.'),
+    hydrationNote: z.string().nullable().describe("1 phrase de rappel hydratation/électrolytes si la durée le justifie (>60-70min), sinon null."),
+    rationale: z.string().describe("1-2 phrases expliquant la fourchette choisie à partir de la durée/intensité RÉELLES de cette séance — jamais un chiffre générique."),
+  }).describe("Alimentation à avoir sur le vélo pendant la séance — ancrée dans la recherche fournie (voir guidage ci-dessous et la règle nutrition-carb-intake-guidance/R34), jamais un chiffre au hasard."),
 }).describe('Output of the daily workout recommendation flow.');
 
 export type DailyWorkoutRecommendationOutput = z.infer<typeof DailyWorkoutRecommendationOutputSchema>;
@@ -252,6 +260,7 @@ Règles impératives :
   en % de FTP (voir la syntaxe ci-dessous, que l'app convertit déjà en watts côté Intervals.icu). Si la FTP
   n'est pas fournie (n/a ci-dessus), reste en %/ressenti dans rationale, ne l'invente jamais.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
+- ${ON_BIKE_FUELING_GUIDANCE}
 ${buildRideGuidance({ forceIndoor, weatherIsSevere, windIsSignificant })}
 
 ${STRUCTURED_WORKOUT_SYNTAX}
@@ -270,7 +279,14 @@ séance proposée : <title>") :
   "warnings": ["0 à 3 points d'attention courts, tableau vide si rien à signaler"],
   "windAdvice": "conseil de direction pour avoir le vent dans le dos au retour, ou null",
   "predictedWeather": ${predictedWeather ? JSON.stringify(predictedWeather) : 'null'},
-  "weatherAlert": "1-2 phrases si la météo a forcé un passage en home trainer, sinon null"
+  "weatherAlert": "1-2 phrases si la météo a forcé un passage en home trainer, sinon null",
+  "fueling": {
+    "neededOnBike": booléen,
+    "carbGramsPerHourMin": nombre ou null,
+    "carbGramsPerHourMax": nombre ou null,
+    "hydrationNote": "rappel court ou null",
+    "rationale": "1-2 phrases ancrées dans la durée/intensité réelles de cette séance"
+  }
 }`;
 
   return invokeCoachJson(DailyWorkoutRecommendationOutputSchema, {

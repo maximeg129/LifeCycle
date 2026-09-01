@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck, Home, TreePine } from 'lucide-react'
+import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck, Home, TreePine, Apple } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -284,6 +284,29 @@ export function DailyWorkoutTab() {
               <div className="flex items-start gap-2 p-3 rounded-xl bg-primary/5 border border-primary/20 text-sm">
                 <Wind className="w-4 h-4 text-primary shrink-0 mt-0.5" />
                 <span>{draft.windAdvice}</span>
+              </div>
+            )}
+
+            {/* Alimentation à avoir sur le vélo — retour utilisateur :
+                "il est important de baser cette alimentation sur des
+                recherches spécifiquement et pas de sortir un chiffre au
+                pif" (voir on-bike-fueling-guidance.ts). draft.fueling
+                gardé optionnel (draft.fueling &&) : une proposition stockée
+                avant l'introduction de ce champ (workoutProposals/
+                {yyyy-MM-dd}) n'en a pas, même précaution que verdict/
+                reasons ci-dessous. */}
+            {draft.fueling && draft.fueling.neededOnBike && (
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-primary/5 border border-primary/20 text-sm">
+                <Apple className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <p className="font-medium">
+                    {draft.fueling.carbGramsPerHourMin}
+                    {draft.fueling.carbGramsPerHourMax != null && draft.fueling.carbGramsPerHourMax !== draft.fueling.carbGramsPerHourMin ? `–${draft.fueling.carbGramsPerHourMax}` : ''}
+                    {' '}g de glucides/h sur le vélo
+                  </p>
+                  <p className="text-muted-foreground">{draft.fueling.rationale}</p>
+                  {draft.fueling.hydrationNote && <p className="text-muted-foreground">{draft.fueling.hydrationNote}</p>}
+                </div>
               </div>
             )}
 
