@@ -27,7 +27,7 @@ import { useUser, useFirestore } from '@/firebase'
 import { useCrudSubmit } from '@/hooks/use-crud-submit'
 import { cn } from '@/lib/utils'
 import { useStrengthLogs } from './use-strength-logs'
-import { exerciseHistory, formatTimer, summarizeSetsDetail, type LoggedExercise, type LoggedSetDetail, type StrengthSessionLog } from './strength-log-types'
+import { exerciseHistory, formatTimer, isDraftUsable, summarizeSetsDetail, type LoggedExercise, type LoggedSetDetail, type StrengthSessionLog } from './strength-log-types'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 
 /** Repos par défaut si l'exercice n'en porte pas (séance mise en cache avant l'introduction de restSeconds dans le schéma). */
@@ -48,7 +48,48 @@ interface ExerciseProgress {
 interface Props {
   session: PlanWeekSession
   weekNumber: number
+  /** Identifiant stable de cette séance au sein du plan (ex. "3-1" = semaine 3, séance d'index 1) — même convention que sendingSessionKey dans training-plan-tab.tsx. Sert de clé localStorage pour la sauvegarde de secours ci-dessous. */
+  sessionKey: string
   onClose: () => void
+}
+
+/**
+ * Sauvegarde locale automatique — retour utilisateur : "Ajoute une
+ * sauvegarde locale automatique pendant la séance", après une limite
+ * signalée honnêtement (fermer l'onglet en cours de séance perdait la
+ * progression, jamais sauvegardée avant "Terminer la séance"). Un
+ * brouillon par séance (clé localStorage dérivée de sessionKey), écrasé à
+ * chaque changement de progression, effacé uniquement à l'enregistrement
+ * réussi dans Firestore (jamais à une simple fermeture — l'athlète doit
+ * pouvoir reprendre plus tard).
+ */
+interface StrengthSessionDraft {
+  savedAt: number
+  /** Horodatage de départ ORIGINAL de la séance — restauré tel quel pour que le chrono reste exact, jamais remis à "maintenant". */
+  startedAt: number
+  exerciseNames: string[]
+  progress: ExerciseProgress[]
+}
+
+function draftStorageKey(sessionKey: string): string {
+  return `lifecycle:strength-draft:${sessionKey}`
+}
+
+/** Lit et valide le brouillon localStorage pour cette séance — jamais bloquant : toute erreur (parsing, quota, API indisponible) renvoie simplement "pas de brouillon" plutôt que de faire planter la vue. Un brouillon trouvé mais invalide (périmé ou séance regénérée entre-temps) est nettoyé au passage plutôt que laissé à traîner indéfiniment. */
+function readStrengthDraft(sessionKey: string, currentExerciseNames: string[]): StrengthSessionDraft | null {
+  const key = draftStorageKey(sessionKey)
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as StrengthSessionDraft
+    if (isDraftUsable(parsed.savedAt, parsed.exerciseNames, currentExerciseNames, Date.now())) {
+      return parsed
+    }
+    localStorage.removeItem(key)
+    return null
+  } catch {
+    return null
+  }
 }
 
 /** Petit bip généré côté client (Web Audio API) — pas de fichier audio à charger, marche hors ligne. Échoue silencieusement si l'API est indisponible/bloquée (jamais bloquant pour la séance). */
@@ -72,7 +113,7 @@ function playBeep() {
   }
 }
 
-export function LiveStrengthSessionView({ session, weekNumber, onClose }: Props) {
+export function LiveStrengthSessionView({ session, weekNumber, sessionKey, onClose }: Props) {
   const { user } = useUser()
   const db = useFirestore()
   const { toast } = useToast()
@@ -80,9 +121,21 @@ export function LiveStrengthSessionView({ session, weekNumber, onClose }: Props)
   const { logs } = useStrengthLogs()
 
   const exercises = useMemo(() => session.strengthExercises ?? [], [session.strengthExercises])
+  const exerciseNames = useMemo(() => exercises.map((ex) => ex.name), [exercises])
 
-  const [progress, setProgress] = useState<ExerciseProgress[]>(() =>
-    exercises.map((ex) => {
+  // Brouillon localStorage éventuel, chargé une seule fois à l'ouverture —
+  // calculé une fois via ce ref-sentinelle (idiome de "lazy init" partagé
+  // entre plusieurs useState/useRef ci-dessous) plutôt que rechargé à
+  // chaque render.
+  const draftRef = useRef<StrengthSessionDraft | null | undefined>(undefined)
+  if (draftRef.current === undefined) {
+    draftRef.current = readStrengthDraft(sessionKey, exerciseNames)
+  }
+  const draft = draftRef.current
+
+  const [progress, setProgress] = useState<ExerciseProgress[]>(() => {
+    if (draft) return draft.progress
+    return exercises.map((ex) => {
       const lastKnown = exerciseHistory(logs, ex.name).at(-1)
       const fallbackReps = Number(lastKnown?.reps)
       return {
@@ -95,12 +148,37 @@ export function LiveStrengthSessionView({ session, weekNumber, onClose }: Props)
         })),
       }
     })
-  )
+  })
 
-  // Chronomètre de séance — démarre à l'ouverture, tourne en continu. Basé
-  // sur un horodatage de départ plutôt qu'un compteur incrémenté, pour ne
-  // jamais dériver même si des re-renders sont sautés.
-  const startedAtRef = useRef(Date.now())
+  useEffect(() => {
+    if (draft) {
+      toast({ title: 'Séance reprise', description: 'Ta progression précédente a été restaurée automatiquement.' })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Chronomètre de séance — démarre à l'ouverture (ou reprend l'horodatage
+  // de départ ORIGINAL si un brouillon est restauré, pour rester exact),
+  // tourne en continu. Basé sur un horodatage de départ plutôt qu'un
+  // compteur incrémenté, pour ne jamais dériver même si des re-renders
+  // sont sautés.
+  const startedAtRef = useRef(draft?.startedAt ?? Date.now())
+
+  // Sauvegarde locale automatique — écrasée à chaque changement de
+  // progression (y compris une simple modification de reps/charge avant
+  // validation d'une série). Jamais bloquant : une erreur (quota plein,
+  // localStorage indisponible en navigation privée...) est avalée
+  // silencieusement plutôt que de perturber la séance en cours.
+  useEffect(() => {
+    try {
+      const data: StrengthSessionDraft = { savedAt: Date.now(), startedAt: startedAtRef.current, exerciseNames, progress }
+      localStorage.setItem(draftStorageKey(sessionKey), JSON.stringify(data))
+    } catch {
+      // localStorage indisponible/plein — pas bloquant pour la séance.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [progress, sessionKey])
+
   const [, forceTick] = useState(0)
   useEffect(() => {
     const interval = setInterval(() => forceTick((t) => t + 1), 1000)
@@ -171,6 +249,14 @@ export function LiveStrengthSessionView({ session, weekNumber, onClose }: Props)
     } satisfies StrengthSessionLog
     const ok = await submit(() => setDoc(ref, data), { path: ref.path, operation: 'create', requestResourceData: data })
     if (ok) {
+      // Le brouillon n'a plus lieu d'être une fois la séance vraiment
+      // enregistrée — jamais effacé sur une simple fermeture (onClose seul,
+      // sans passer par ici), pour que l'athlète puisse reprendre plus tard.
+      try {
+        localStorage.removeItem(draftStorageKey(sessionKey))
+      } catch {
+        // pas bloquant — au pire un brouillon orphelin, nettoyé à la prochaine lecture (readStrengthDraft).
+      }
       toast({ title: 'Séance terminée', description: `${session.title} — ${formatTimer(elapsedSeconds)}` })
       onClose()
     }

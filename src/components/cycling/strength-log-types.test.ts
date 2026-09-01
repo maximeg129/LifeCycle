@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exerciseHistory, distinctExerciseNames, formatTimer, summarizeSetsDetail, type StrengthSessionLogWithId } from './strength-log-types'
+import { exerciseHistory, distinctExerciseNames, formatTimer, summarizeSetsDetail, isDraftUsable, STRENGTH_DRAFT_MAX_AGE_MS, type StrengthSessionLogWithId } from './strength-log-types'
 
 const logs: StrengthSessionLogWithId[] = [
   {
@@ -120,5 +120,38 @@ describe('summarizeSetsDetail', () => {
 
   it('returns a zeroed summary for an empty list rather than throwing', () => {
     expect(summarizeSetsDetail([])).toEqual({ sets: 0, reps: '0' })
+  })
+})
+
+describe('isDraftUsable', () => {
+  const now = 1_000_000_000_000
+  const names = ['Squat', 'Fentes bulgares']
+
+  it('accepts a fresh draft with the exact same exercise list', () => {
+    expect(isDraftUsable(now - 1000, names, names, now)).toBe(true)
+  })
+
+  it('matches exercise names case/whitespace-insensitively, in order', () => {
+    expect(isDraftUsable(now - 1000, [' squat ', 'FENTES BULGARES'], names, now)).toBe(true)
+  })
+
+  it('rejects a draft older than the max age', () => {
+    expect(isDraftUsable(now - STRENGTH_DRAFT_MAX_AGE_MS - 1, names, names, now)).toBe(false)
+  })
+
+  it('accepts a draft right at the max age boundary', () => {
+    expect(isDraftUsable(now - STRENGTH_DRAFT_MAX_AGE_MS, names, names, now)).toBe(true)
+  })
+
+  it('rejects a draft whose exercise list has a different length (session regenerated)', () => {
+    expect(isDraftUsable(now - 1000, names, ['Squat'], now)).toBe(false)
+  })
+
+  it('rejects a draft whose exercise list differs by name (session regenerated)', () => {
+    expect(isDraftUsable(now - 1000, names, ['Squat', 'Développé couché'], now)).toBe(false)
+  })
+
+  it('rejects a draft whose exercises are in a different order', () => {
+    expect(isDraftUsable(now - 1000, names, ['Fentes bulgares', 'Squat'], now)).toBe(false)
   })
 })

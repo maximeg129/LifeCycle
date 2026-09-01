@@ -536,7 +536,10 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
   // Retour utilisateur : "un système de suivi de la seance a la salle, avec
   // chronometre, temps de repos" — vue plein écran gardée en state local
   // plutôt qu'un Dialog, pour couvrir tout l'écran pendant la séance.
-  const [liveSession, setLiveSession] = useState<PlanWeekSession | null>(null)
+  // L'index est gardé à côté de la séance pour dériver une clé stable
+  // (voir `key` ci-dessous, même convention que sendingSessionKey) —
+  // sert d'identifiant de brouillon localStorage à LiveStrengthSessionView.
+  const [liveSession, setLiveSession] = useState<{ session: PlanWeekSession; index: number } | null>(null)
 
   if (isGenerating) {
     return (
@@ -679,7 +682,7 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
                   Envoyer sur Intervals.icu
                 </Button>
                 {session.sessionKind === 'strength' && session.strengthExercises && session.strengthExercises.length > 0 && (
-                  <Button size="sm" variant="outline" onClick={() => setLiveSession(session)} className="gap-1.5 h-8">
+                  <Button size="sm" variant="outline" onClick={() => setLiveSession({ session, index })} className="gap-1.5 h-8">
                     <PlayCircle className="w-3.5 h-3.5" /> Démarrer la séance
                   </Button>
                 )}
@@ -690,7 +693,12 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
         })}
       </div>
       {liveSession && (
-        <LiveStrengthSessionView session={liveSession} weekNumber={week.weekNumber} onClose={() => setLiveSession(null)} />
+        <LiveStrengthSessionView
+          session={liveSession.session}
+          weekNumber={week.weekNumber}
+          sessionKey={`${week.weekNumber}-${liveSession.index}`}
+          onClose={() => setLiveSession(null)}
+        />
       )}
     </div>
   )

@@ -119,3 +119,30 @@ export function formatTimer(totalSeconds: number): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`
 }
+
+/**
+ * Au-delà de cet âge, un brouillon localStorage n'est plus proposé en
+ * restauration — retour utilisateur : "sauvegarde locale automatique
+ * pendant la séance" (live-strength-session-view.tsx, en cas de fermeture
+ * accidentelle de l'onglet avant "Terminer la séance"). Une séance de muscu
+ * ne dure jamais plus de quelques heures ; passé 12h c'est très probablement
+ * une séance abandonnée d'un jour précédent plutôt qu'une vraie reprise —
+ * la restaurer silencieusement serait plus déroutant qu'utile.
+ */
+export const STRENGTH_DRAFT_MAX_AGE_MS = 12 * 60 * 60 * 1000
+
+/**
+ * Un brouillon n'est réutilisable que s'il est assez récent ET qu'il
+ * correspond bien à la même liste d'exercices que la séance actuellement
+ * ouverte (empreinte par nom, insensible à la casse/aux espaces — même
+ * convention que exerciseHistory ci-dessus). Le deuxième cas couvre une
+ * séance régénérée ("Régénérer" dans le Plan) entre la sauvegarde du
+ * brouillon et la réouverture : restaurer un suivi de séries pour des
+ * exercices qui n'existent plus n'aurait aucun sens.
+ */
+export function isDraftUsable(draftSavedAt: number, draftExerciseNames: string[], currentExerciseNames: string[], nowMs: number): boolean {
+  if (nowMs - draftSavedAt > STRENGTH_DRAFT_MAX_AGE_MS) return false
+  if (draftExerciseNames.length !== currentExerciseNames.length) return false
+  const normalize = (n: string) => n.trim().toLowerCase()
+  return draftExerciseNames.every((name, i) => normalize(name) === normalize(currentExerciseNames[i] ?? ''))
+}
