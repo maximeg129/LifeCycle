@@ -152,6 +152,37 @@ export function formatTimer(totalSeconds: number): string {
 }
 
 /**
+ * Détecte si un exercice est mesuré en temps tenu plutôt qu'en répétitions
+ * — retour utilisateur, capture d'écran d'une planche à l'appui : "on
+ * devrais seulement mettre le temps en minute:seconde". Aucun champ dédié
+ * dans le schéma IA (`reps` reste une chaîne "human-readable" libre, voir
+ * plan-week-sessions-flow.ts) — le suffixe "s" ("30-45s", déjà la
+ * convention utilisée pour un gainage isométrique dans les fixtures de
+ * vérification, voir plan-week-sessions-output.test.ts) est le seul signal
+ * disponible sans changer le schéma IA. Insensible à la casse/aux espaces ;
+ * un exercice classique ("8-10", "5") ne matche jamais.
+ */
+export function isHoldReps(reps: string): boolean {
+  return /\d\s*s\s*$/i.test(reps.trim())
+}
+
+/**
+ * Lit une saisie "m:ss" (ou "h:mm:ss", ou juste des secondes en clair) et
+ * renvoie un total de secondes — l'inverse de formatTimer, pour éditer un
+ * temps tenu (voir isHoldReps) dans live-strength-session-view.tsx. Une
+ * saisie invalide ou vide renvoie 0 plutôt que de planter — l'athlète a pu
+ * juste effacer le champ pour retaper.
+ */
+export function parseDurationInput(text: string): number {
+  const parts = text.trim().split(':').map((p) => Number(p))
+  if (parts.length === 0 || parts.some((p) => !Number.isFinite(p))) return 0
+  const [a = 0, b, c] = parts
+  if (c !== undefined) return Math.max(0, Math.round(a * 3600 + b * 60 + c))
+  if (b !== undefined) return Math.max(0, Math.round(a * 60 + b))
+  return Math.max(0, Math.round(a))
+}
+
+/**
  * Au-delà de cet âge, un brouillon localStorage n'est plus proposé en
  * restauration — retour utilisateur : "sauvegarde locale automatique
  * pendant la séance" (live-strength-session-view.tsx, en cas de fermeture

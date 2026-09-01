@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exerciseHistory, distinctExerciseNames, formatTimer, summarizeSetsDetail, isDraftUsable, STRENGTH_DRAFT_MAX_AGE_MS, formatStrengthLogDescription, type StrengthSessionLogWithId, type LoggedExercise } from './strength-log-types'
+import { exerciseHistory, distinctExerciseNames, formatTimer, summarizeSetsDetail, isDraftUsable, STRENGTH_DRAFT_MAX_AGE_MS, formatStrengthLogDescription, isHoldReps, parseDurationInput, type StrengthSessionLogWithId, type LoggedExercise } from './strength-log-types'
 
 const logs: StrengthSessionLogWithId[] = [
   {
@@ -189,5 +189,57 @@ describe('formatStrengthLogDescription', () => {
 
   it('returns an empty string for no exercises', () => {
     expect(formatStrengthLogDescription([])).toBe('')
+  })
+})
+
+describe('isHoldReps', () => {
+  it('detects a range ending in "s" as a hold (e.g. plank)', () => {
+    expect(isHoldReps('30-45s')).toBe(true)
+  })
+
+  it('detects a single value ending in "s"', () => {
+    expect(isHoldReps('45s')).toBe(true)
+  })
+
+  it('is case-insensitive and tolerates a space before the "s"', () => {
+    expect(isHoldReps('30 S')).toBe(true)
+  })
+
+  it('does not flag a plain rep range', () => {
+    expect(isHoldReps('8-10')).toBe(false)
+  })
+
+  it('does not flag a single rep count', () => {
+    expect(isHoldReps('5')).toBe(false)
+  })
+
+  it('does not false-positive on unrelated text ending in "s"', () => {
+    expect(isHoldReps('5 sets')).toBe(false)
+  })
+})
+
+describe('parseDurationInput', () => {
+  it('parses plain seconds', () => {
+    expect(parseDurationInput('45')).toBe(45)
+  })
+
+  it('parses m:ss', () => {
+    expect(parseDurationInput('1:05')).toBe(65)
+  })
+
+  it('parses h:mm:ss', () => {
+    expect(parseDurationInput('1:01:01')).toBe(3661)
+  })
+
+  it('returns 0 for an empty string rather than throwing', () => {
+    expect(parseDurationInput('')).toBe(0)
+  })
+
+  it('returns 0 for non-numeric input rather than throwing', () => {
+    expect(parseDurationInput('abc')).toBe(0)
+  })
+
+  it('round-trips with formatTimer', () => {
+    expect(parseDurationInput(formatTimer(125))).toBe(125)
   })
 })
