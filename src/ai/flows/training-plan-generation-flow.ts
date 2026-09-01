@@ -18,6 +18,7 @@ import { z } from 'zod';
 import { type FlowResult } from '@/ai/anthropic';
 import { invokeCoachJson } from '@/ai/coach/invokeCoach';
 import { withCoachOutputContract } from '@/ai/coach/outputContract';
+import { STRENGTH_TRAINING_GUIDANCE } from './strength-training-guidance';
 
 const TrainingPlanGenerationInputSchema = z.object({
   today: z.string().describe('yyyy-MM-dd'),
@@ -29,6 +30,8 @@ const TrainingPlanGenerationInputSchema = z.object({
   }),
   weekCount: z.number().describe('Exact number of weeks to plan for — the output MUST contain exactly this many week entries, in order from today to the event.'),
   weeklyAvailableMinutes: z.number().describe('Typical minutes per week the athlete can train, at a normal (non-taper) week.'),
+  includeStrengthTraining: z.boolean().optional().describe("Athlete explicitly requested strength/resistance sessions ('musculation') as a complement to the cycling plan — see STRENGTH_TRAINING_GUIDANCE. When false/absent, never add targetStrengthMinutes to any week."),
+  strengthWeeklyMinutes: z.number().optional().describe('Typical strength-training minutes per week the athlete can dedicate, at a normal (non-taper) week — separate budget from weeklyAvailableMinutes (cycling), never eating into it. Only meaningful when includeStrengthTraining is true.'),
   training: z.object({
     ctl: z.number().optional().describe('Chronic Training Load (fitness)'),
     atl: z.number().optional().describe('Acute Training Load (fatigue)'),
@@ -66,6 +69,7 @@ const TrainingPlanGenerationOutputSchema = withCoachOutputContract({
     focus: z.string().describe('One short sentence: the week\'s training focus.'),
     targetWeeklyMinutes: z.number().describe('Target training minutes for this week — must not exceed weeklyAvailableMinutes except is allowed to be lower (deload/taper weeks).'),
     notes: z.string().optional().describe('Optional short note — only when something specific needs flagging for that week.'),
+    targetStrengthMinutes: z.number().optional().describe('Target strength-training minutes for this week — ONLY when includeStrengthTraining is true (never invent this field otherwise). Should reduce/reach 0 in taper/peak phases close to the event — see STRENGTH_TRAINING_GUIDANCE.'),
   })).describe('Exactly weekCount entries, in order, week 1 first.'),
   warnings: z.array(z.string()).describe('0-3 short things the athlete should know about this plan (e.g. injury-driven adaptation, aggressive timeline). Empty array if nothing stands out.'),
 }).describe('Output of the training plan generation flow.');
@@ -82,6 +86,10 @@ export async function trainingPlanGeneration(input: TrainingPlanGenerationInput)
     `DURÉE DU PLAN : ${parsedInput.weekCount} semaines, du ${parsedInput.today} jusqu'à l'objectif`,
     `VOLUME HEBDOMADAIRE DISPONIBLE (semaine normale) : ${parsedInput.weeklyAvailableMinutes} minutes`,
   ];
+
+  if (parsedInput.includeStrengthTraining) {
+    sections.push(`MUSCULATION DEMANDÉE : INCLURE_MUSCULATION=true — volume hebdo disponible (semaine normale) : ${parsedInput.strengthWeeklyMinutes ?? 'n/a'} minutes, séparé du volume vélo ci-dessus.`);
+  }
 
   if (parsedInput.training) {
     const t = parsedInput.training;
@@ -121,6 +129,7 @@ Principes de périodisation à respecter :
   même hausse hebdomadaire qu'un athlète avec un CTL déjà élevé) — mentionne-le dans warnings si le volume
   demandé (weeklyAvailableMinutes) semble agressif compte tenu du niveau actuel.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
+${parsedInput.includeStrengthTraining ? `- ${STRENGTH_TRAINING_GUIDANCE}` : '- INCLURE_MUSCULATION=false (ou absent) : ne mets JAMAIS de champ targetStrengthMinutes sur aucune semaine.'}
 
 Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme
 (plus les champs de contrat obligatoires décrits plus haut — "summary" résume le plan en une phrase,
@@ -129,7 +138,7 @@ ${parsedInput.weekCount} éléments, dans l'ordre (semaine 1 en premier) :
 {
   "planName": "nom court du plan",
   "weeks": [
-    { "phase": "base|build|peak|taper|recovery", "focus": "une phrase courte", "targetWeeklyMinutes": nombre, "notes": "optionnel" }
+    { "phase": "base|build|peak|taper|recovery", "focus": "une phrase courte", "targetWeeklyMinutes": nombre, "notes": "optionnel"${parsedInput.includeStrengthTraining ? ', "targetStrengthMinutes": nombre' : ''} }
   ],
   "warnings": ["0 à 3 points d'attention courts, tableau vide si rien à signaler"]
 }`;

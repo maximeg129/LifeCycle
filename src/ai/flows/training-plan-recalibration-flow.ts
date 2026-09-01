@@ -38,6 +38,8 @@ const PlanWeekContentSchema = z.object({
   focus: z.string(),
   targetWeeklyMinutes: z.number(),
   notes: z.string().optional(),
+  /** Volume musculation hebdo, si le plan en a un (voir training-plan-types.ts) — absent si la musculation n'a jamais été demandée pour ce plan. */
+  targetStrengthMinutes: z.number().optional(),
 });
 
 const TrainingPlanRecalibrationInputSchema = z.object({
@@ -119,7 +121,7 @@ export async function trainingPlanRecalibration(input: TrainingPlanRecalibration
       `Volume réellement réalisé (Intervals.icu) : ${cw.actualMinutes} minutes${actualPct != null ? ` (${actualPct}% de la cible)` : ''}`,
     ].join('\n'),
     `SEMAINES RESTANTES DU PLAN (les SEULES que tu peux ajuster — jamais la semaine ${parsedInput.throughWeekNumber} ni une semaine antérieure) :\n${parsedInput.remainingWeeks
-      .map((w) => `  - Semaine ${w.weekNumber} (${w.phase}) : "${w.focus}", ${w.targetWeeklyMinutes} min${w.notes ? `, note: ${w.notes}` : ''}`)
+      .map((w) => `  - Semaine ${w.weekNumber} (${w.phase}) : "${w.focus}", ${w.targetWeeklyMinutes} min vélo${w.targetStrengthMinutes != null ? ` + ${w.targetStrengthMinutes} min musculation` : ''}${w.notes ? `, note: ${w.notes}` : ''}`)
       .join('\n')}`,
   ];
 
@@ -163,6 +165,9 @@ Règles impératives :
   "recovery" environ toutes les 3-4 semaines, les 1-2 dernières semaines avant l'objectif restent en "taper"
   avec un volume nettement réduit — ne supprime jamais le taper final même si tu ajustes le reste.
 - Si la FTP/le CTL sont fournis, utilise-les pour juger si un ajustement à la hausse reste réaliste.
+- Si une semaine listée ci-dessus porte un volume musculation, préserve ce champ targetStrengthMinutes (ajusté
+  à la baisse si tu réduis la semaine, jamais ajouté sur une semaine qui n'en avait pas). Si aucune semaine
+  n'en porte, n'en ajoute jamais.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
 
 Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme
@@ -170,7 +175,7 @@ Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, p
 la semaine qui vient) :
 {
   "adjustedWeeks": [
-    { "weekNumber": nombre, "phase": "base|build|peak|taper|recovery", "focus": "une phrase courte", "targetWeeklyMinutes": nombre, "notes": "optionnel" }
+    { "weekNumber": nombre, "phase": "base|build|peak|taper|recovery", "focus": "une phrase courte", "targetWeeklyMinutes": nombre, "notes": "optionnel", "targetStrengthMinutes": "nombre, seulement si la semaine en avait un ci-dessus" }
   ],
   "warnings": ["0 à 3 points d'attention courts, tableau vide si rien à signaler"],
   "strengths": ["1-4 points forts précis et sourcés sur la trajectoire actuelle"],

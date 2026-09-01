@@ -165,7 +165,11 @@ export function useTrainingPlan() {
   const [generatingSessionsForWeek, setGeneratingSessionsForWeek] = useState<number | null>(null)
   const [sendingSessionKey, setSendingSessionKey] = useState<string | null>(null)
 
-  const generate = useCallback(async (goal: CoachGoal & { id: string }, rawWeeklyMinutes: number): Promise<boolean> => {
+  const generate = useCallback(async (
+    goal: CoachGoal & { id: string },
+    rawWeeklyMinutes: number,
+    strength?: { include: boolean; weeklyMinutes?: number }
+  ): Promise<boolean> => {
     if (!user || !db) return false
     const today = format(new Date(), 'yyyy-MM-dd')
     const weeklyAvailableMinutes = clampWeeklyMinutes(rawWeeklyMinutes)
@@ -191,6 +195,8 @@ export function useTrainingPlan() {
         goal: { eventName: goal.eventName, eventDate: goal.eventDate, targetOutcome: goal.targetOutcome, priority: goal.priority },
         weekCount,
         weeklyAvailableMinutes,
+        includeStrengthTraining: strength?.include,
+        strengthWeeklyMinutes: strength?.weeklyMinutes,
         training: athlete.isConfigured && athlete.data ? {
           ctl: athlete.data.ctl,
           atl: athlete.data.atl,
