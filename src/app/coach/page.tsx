@@ -105,6 +105,16 @@ function CoachTabs() {
           cette page (Coach = planifier/faire/relire une sortie). */}
       <TabsContent value="plan" className="space-y-8">
         <DailyWorkoutTab />
+        {/* Retour utilisateur, capture d'écran à l'appui : "c'est pas très
+            user friendly" — la fusion Proposition du jour + Plan (voir
+            plus haut) empilait les deux sans aucune séparation visuelle,
+            illisible sur mobile (un seul long scroll indifférencié). Ce
+            séparateur donne un point de repère net : au-dessus, "aujourd'hui" ;
+            en dessous, le plan périodisé complet. */}
+        <div className="flex items-center gap-3 pt-2">
+          <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider whitespace-nowrap">Plan complet</p>
+          <div className="h-px flex-1 bg-border" />
+        </div>
         <TrainingPlanTab />
       </TabsContent>
       <TabsContent value="stella" className="space-y-8">
