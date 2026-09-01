@@ -149,6 +149,19 @@ describe('checkLoadRepsRestConsistency', () => {
   it('is insufficient_data for an empty exercise list', () => {
     expect(checkLoadRepsRestConsistency('base', []).verdict).toBe('insufficient_data')
   })
+
+  it('exempts an isometric core hold (seconds, not reps) from the matrix rather than flagging it — a plank held 30-45s is not "3-6 reps at 85-92% 1RM"', () => {
+    const plank = ex({ pattern: 'anti-extension', sets: 3, repsMin: 30, repsMax: 45, pct1RMMin: null, pct1RMMax: null, restSeconds: 60 })
+    const result = checkLoadRepsRestConsistency('force-max', [plank])
+    expect(result.verdict).toBe('insufficient_data')
+  })
+
+  it('exempts anti-rotation-lateral and ankle-calf the same way, but still evaluates a co-present primary lift', () => {
+    const pallofPress = ex({ pattern: 'anti-rotation-lateral', repsMin: 30, repsMax: 45 })
+    const squat = ex({ pattern: 'bilateral-heavy', sets: 4, repsMin: 4, repsMax: 6, pct1RMMin: 88, pct1RMMax: 90, restSeconds: 200 })
+    const result = checkLoadRepsRestConsistency('force-max', [pallofPress, squat])
+    expect(result.verdict).toBe('ok')
+  })
 })
 
 describe('checkSessionDuration', () => {
