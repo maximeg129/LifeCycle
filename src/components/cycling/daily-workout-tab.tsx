@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target } from 'lucide-react'
+import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -16,6 +16,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { SourceCitation } from '@/components/coach/source-citation'
 import { LiveStrengthSessionView } from './live-strength-session-view'
 import { LogStrengthSessionDialog } from './log-strength-session-dialog'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_MINUTES = 60
@@ -51,6 +52,14 @@ export function DailyWorkoutTab() {
   const [indoorRequested, setIndoorRequested] = useState(false)
   const [draft, setDraft] = useState<DailyWorkoutRecommendationOutput | null>(null)
   const [wasSent, setWasSent] = useState(false)
+  // Retour utilisateur, capture d'écran à l'appui : "c'est pas très user
+  // friendly" — le script structuré (syntaxe technique) et le détail du
+  // raisonnement (motif/incertitude) gonflaient la carte "Aujourd'hui" bien
+  // au-delà de ce dont l'athlète a besoin d'un coup d'œil (titre/durée/
+  // pourquoi/envoyer). Repliés par défaut, jamais perdus — juste un tap
+  // pour les rouvrir.
+  const [showScript, setShowScript] = useState(false)
+  const [showReasoning, setShowReasoning] = useState(false)
 
   // Prefill from today's already-generated proposal (Firestore singleton),
   // so reopening the tab doesn't lose it or force a regeneration.
@@ -427,37 +436,58 @@ export function DailyWorkoutTab() {
               </div>
             )}
 
-            {(draft.reasons ?? []).length > 0 && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Motif de cette proposition
-                </p>
-                <ul className="space-y-1.5">
-                  {(draft.reasons ?? []).map((r, i) => (
-                    <li key={i} className="flex items-start gap-1.5 text-sm text-muted-foreground">
-                      <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
-                      <span className="flex-1">{r.detail}</span>
-                      <SourceCitation ruleIds={[r.rule]} label="Voir la règle citée" className="shrink-0 mt-0.5" />
-                    </li>
-                  ))}
-                </ul>
-              </div>
+            {/* Retour utilisateur : "c'est pas très user friendly" — motif/
+                incertitude/script repliés par défaut (Collapsible), pour
+                que la carte s'arrête à l'essentiel (titre/durée/pourquoi
+                en une phrase/bouton d'envoi) au premier coup d'œil. Un
+                seul disclosure pour les deux (motif + incertitude) : ce
+                sont la même catégorie d'info ("le détail du raisonnement
+                du coach"), pas la peine de deux toggles séparés. */}
+            {((draft.reasons ?? []).length > 0 || draft.uncertainty) && (
+              <Collapsible open={showReasoning} onOpenChange={setShowReasoning}>
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Motif de cette proposition
+                    <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showReasoning && 'rotate-180')} />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2 space-y-2">
+                  {(draft.reasons ?? []).length > 0 && (
+                    <ul className="space-y-1.5">
+                      {(draft.reasons ?? []).map((r, i) => (
+                        <li key={i} className="flex items-start gap-1.5 text-sm text-muted-foreground">
+                          <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                          <span className="flex-1">{r.detail}</span>
+                          <SourceCitation ruleIds={[r.rule]} label="Voir la règle citée" className="shrink-0 mt-0.5" />
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {draft.uncertainty && (
+                    <p className="text-xs text-muted-foreground italic">Incertitude : {draft.uncertainty}</p>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
             )}
 
-            {draft.uncertainty && (
-              <p className="text-xs text-muted-foreground italic">Incertitude : {draft.uncertainty}</p>
-            )}
-
-            <div className="space-y-2">
-              <Label htmlFor="draft-structured">Script de la séance</Label>
-              <Textarea
-                id="draft-structured"
-                value={draft.structuredWorkout}
-                onChange={(e) => updateDraft({ structuredWorkout: e.target.value })}
-                rows={6}
-                className="font-mono text-xs"
-              />
-            </div>
+            <Collapsible open={showScript} onOpenChange={setShowScript}>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                  <FileText className="w-3.5 h-3.5" /> {showScript ? 'Masquer' : 'Voir/modifier'} le script de la séance
+                  <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showScript && 'rotate-180')} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2 space-y-2">
+                <Label htmlFor="draft-structured" className="sr-only">Script de la séance</Label>
+                <Textarea
+                  id="draft-structured"
+                  value={draft.structuredWorkout}
+                  onChange={(e) => updateDraft({ structuredWorkout: e.target.value })}
+                  rows={6}
+                  className="font-mono text-xs"
+                />
+              </CollapsibleContent>
+            </Collapsible>
 
             <div className="flex items-center justify-between gap-2 pt-2 border-t border-border">
               {wasSent ? (

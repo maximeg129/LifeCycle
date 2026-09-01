@@ -23,6 +23,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 import { checkLoadProgressionWithoutDeload } from '@/domain/cycling/validation/planValidator'
 import { SourceCitation } from '@/components/coach/source-citation'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 
 const DEFAULT_WEEKLY_MINUTES = 360
 
@@ -61,6 +62,7 @@ export function TrainingPlanTab() {
   const [strengthMinutes, setStrengthMinutes] = useState(60)
   const [showNewPlanForm, setShowNewPlanForm] = useState(false)
   const [expandedWeek, setExpandedWeek] = useState<number | null>(null)
+  const [showPlanReasoning, setShowPlanReasoning] = useState(false)
 
   // Préremplit le formulaire depuis la préférence Firestore une fois
   // chargée (jamais si l'athlète a déjà touché le toggle cette session —
@@ -285,26 +287,42 @@ export function TrainingPlanTab() {
               (training-plan-generation-flow.ts) pour être ce paragraphe plutôt
               que l'aperçu générique en une phrase du socle. "reasons" cite les
               règles evidence/rules.ts effectivement appliquées, chacune avec
-              son SourceCitation — absent sur un plan généré avant cet ajout. */}
-          {activePlan.summary && (
-            <p className="text-sm text-muted-foreground leading-relaxed">{activePlan.summary}</p>
-          )}
-
-          {activePlan.reasons && activePlan.reasons.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                Motif de ce plan
-              </p>
-              <ul className="space-y-1.5">
-                {activePlan.reasons.map((r, i) => (
-                  <li key={i} className="flex items-start gap-1.5 text-sm text-muted-foreground">
-                    <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
-                    <span className="flex-1">{r.detail}</span>
-                    <SourceCitation ruleIds={[r.rule]} label="Voir la règle citée" className="shrink-0 mt-0.5" />
-                  </li>
-                ))}
-              </ul>
-            </div>
+              son SourceCitation — absent sur un plan généré avant cet ajout.
+              Replié par défaut (retour utilisateur, capture d'écran à
+              l'appui : "c'est pas très user friendly") — cette carte
+              n'a besoin de s'ouvrir sur le paragraphe complet qu'une fois,
+              pas à chaque visite de l'onglet ; le nom du plan/objectif/
+              tableau des semaines juste en dessous suffit au quotidien. */}
+          {(activePlan.summary || (activePlan.reasons && activePlan.reasons.length > 0)) && (
+            <Collapsible open={showPlanReasoning} onOpenChange={setShowPlanReasoning}>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                  Pourquoi ce plan ?
+                  <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showPlanReasoning && 'rotate-180')} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2 space-y-3">
+                {activePlan.summary && (
+                  <p className="text-sm text-muted-foreground leading-relaxed">{activePlan.summary}</p>
+                )}
+                {activePlan.reasons && activePlan.reasons.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                      Motif de ce plan
+                    </p>
+                    <ul className="space-y-1.5">
+                      {activePlan.reasons.map((r, i) => (
+                        <li key={i} className="flex items-start gap-1.5 text-sm text-muted-foreground">
+                          <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                          <span className="flex-1">{r.detail}</span>
+                          <SourceCitation ruleIds={[r.rule]} label="Voir la règle citée" className="shrink-0 mt-0.5" />
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
           )}
 
           {activePlan.warnings.length > 0 && (
