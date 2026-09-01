@@ -60,6 +60,7 @@ export function DailyWorkoutTab() {
   // pour les rouvrir.
   const [showScript, setShowScript] = useState(false)
   const [showReasoning, setShowReasoning] = useState(false)
+  const [showRationale, setShowRationale] = useState(false)
 
   // Prefill from today's already-generated proposal (Firestore singleton),
   // so reopening the tab doesn't lose it or force a regeneration.
@@ -332,7 +333,24 @@ export function DailyWorkoutTab() {
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
-            <p className="text-sm text-muted-foreground leading-relaxed">{draft.rationale}</p>
+            {/* Retour utilisateur, capture d'écran à l'appui : "ayons un
+                accordéon aussi ici pour l'explication" — rationale (2-4
+                phrases) était le dernier bloc de texte toujours visible en
+                haut de la carte, souvent long (surtout sur une proposition
+                ajustée depuis le plan, qui cite en plus le motif de
+                l'ajustement). Même patron que "Pourquoi ce plan ?" dans
+                training-plan-tab.tsx. */}
+            <Collapsible open={showRationale} onOpenChange={setShowRationale}>
+              <CollapsibleTrigger asChild>
+                <button className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                  Pourquoi cette séance ?
+                  <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showRationale && 'rotate-180')} />
+                </button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="pt-2">
+                <p className="text-sm text-muted-foreground leading-relaxed">{draft.rationale}</p>
+              </CollapsibleContent>
+            </Collapsible>
 
             {/* Bulletin météo réel — même chiffres/même principe (pré-fetch
                 déterministe, jamais inventé) que Météo & Tenue, affichés ici
