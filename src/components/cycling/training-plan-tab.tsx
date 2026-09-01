@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -354,75 +354,75 @@ export function TrainingPlanTab() {
             </div>
           )}
 
-          <div className="overflow-x-auto -mx-2">
-            <table className="w-full text-sm min-w-[560px]">
-              <thead>
-                <tr className="text-left text-xs text-muted-foreground uppercase border-b border-border">
-                  <th className="px-2 py-2 font-medium">Semaine</th>
-                  <th className="px-2 py-2 font-medium">Dates</th>
-                  <th className="px-2 py-2 font-medium">Phase</th>
-                  <th className="px-2 py-2 font-medium">Focus</th>
-                  <th className="px-2 py-2 font-medium text-right">Volume cible</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activePlan.weeks.map((w: PlanWeek) => {
-                  const isCurrent = week?.weekNumber === w.weekNumber
-                  const isExpanded = expandedWeek === w.weekNumber
-                  return (
-                    <React.Fragment key={w.weekNumber}>
-                      <tr
-                        className={cn('border-b border-border/50 cursor-pointer hover:bg-muted/40', isCurrent && 'bg-primary/5', isExpanded && 'bg-muted/40')}
-                        onClick={() => toggleWeek(w)}
-                      >
-                        <td className="px-2 py-2 font-medium">
-                          <span className="inline-flex items-center gap-1">
-                            <ChevronDown className={cn('w-3.5 h-3.5 text-muted-foreground transition-transform', isExpanded && 'rotate-180')} />
-                            S{w.weekNumber}
+          {/* Retour utilisateur, capture d'écran mobile à l'appui :
+              "transforme le tableau des semaines en liste de cartes
+              mobile" — l'ancien <table> (min-w-[560px], scroll horizontal
+              obligatoire dès qu'on sortait d'un desktop large) cachait
+              phase/focus/volume derrière un swipe latéral sur mobile. Une
+              carte empilée par semaine s'adapte à n'importe quelle largeur
+              sans jamais scroller latéralement — même langage visuel que
+              les cartes de séance de WeekSessionsPanel juste en dessous. */}
+          <div className="space-y-2">
+            {activePlan.weeks.map((w: PlanWeek) => {
+              const isCurrent = week?.weekNumber === w.weekNumber
+              const isExpanded = expandedWeek === w.weekNumber
+              return (
+                <div
+                  key={w.weekNumber}
+                  className={cn(
+                    'rounded-xl border transition-colors',
+                    isCurrent ? 'border-primary/30 bg-primary/5' : 'border-border bg-card/40',
+                    isExpanded && 'ring-1 ring-primary/20'
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => toggleWeek(w)}
+                    className="w-full flex items-start justify-between gap-3 p-3 text-left"
+                  >
+                    <div className="flex items-start gap-2 min-w-0">
+                      <ChevronDown className={cn('w-4 h-4 text-muted-foreground shrink-0 mt-0.5 transition-transform', isExpanded && 'rotate-180')} />
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-sm font-medium">S{w.weekNumber}</span>
+                          <span className="text-xs text-muted-foreground whitespace-nowrap">
+                            {format(new Date(`${w.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
                           </span>
-                        </td>
-                        <td className="px-2 py-2 text-muted-foreground whitespace-nowrap">
-                          {format(new Date(`${w.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
-                        </td>
-                        <td className="px-2 py-2">
-                          <span className="inline-flex items-center gap-1">
-                            <Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge>
-                            {adjustedWeekNumbers.has(w.weekNumber) && (
-                              <Badge variant="outline" className="text-[9px] gap-0.5 text-primary border-primary/30" title="Recalibrée depuis le plan d'origine — voir le journal ci-dessous">
-                                <RefreshCw className="w-2.5 h-2.5" /> ajustée
-                              </Badge>
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-2 py-2">{w.focus}{w.notes && <span className="block text-xs text-muted-foreground">{w.notes}</span>}</td>
-                        <td className="px-2 py-2 text-right whitespace-nowrap">
-                          {Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h
-                          {w.targetStrengthMinutes != null && (
-                            <span className="block text-[10px] text-muted-foreground font-normal">+ {Math.round(w.targetStrengthMinutes / 60 * 10) / 10}h muscu</span>
+                          <Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge>
+                          {adjustedWeekNumbers.has(w.weekNumber) && (
+                            <Badge variant="outline" className="text-[9px] gap-0.5 text-primary border-primary/30" title="Recalibrée depuis le plan d'origine — voir le journal ci-dessous">
+                              <RefreshCw className="w-2.5 h-2.5" /> ajustée
+                            </Badge>
                           )}
-                        </td>
-                      </tr>
-                      {isExpanded && (
-                        <tr className="border-b border-border/50 bg-muted/20">
-                          <td colSpan={5} className="px-2 py-3">
-                            <WeekSessionsPanel
-                              week={w}
-                              isGenerating={generatingSessionsForWeek === w.weekNumber}
-                              sendingSessionKey={sendingSessionKey}
-                              canSendToIntervals={canSendToIntervals}
-                              onRegenerate={() => generateWeekSessions(w)}
-                              onSend={(session, index, dateId) => sendSessionToIntervals(session, w.weekNumber, index, dateId)}
-                              onMoveDate={(index, newDate) => moveSessionDate(w.weekNumber, index, newDate)}
-                              getCompletion={(session, index) => getSessionCompletion(w, session, index)}
-                            />
-                          </td>
-                        </tr>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-0.5">{w.focus}</p>
+                        {w.notes && <p className="text-xs text-muted-foreground/80 mt-0.5">{w.notes}</p>}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-medium whitespace-nowrap">{Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h</p>
+                      {w.targetStrengthMinutes != null && (
+                        <p className="text-[10px] text-muted-foreground whitespace-nowrap">+ {Math.round(w.targetStrengthMinutes / 60 * 10) / 10}h muscu</p>
                       )}
-                    </React.Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
+                    </div>
+                  </button>
+                  {isExpanded && (
+                    <div className="px-3 pb-3 border-t border-border/50">
+                      <WeekSessionsPanel
+                        week={w}
+                        isGenerating={generatingSessionsForWeek === w.weekNumber}
+                        sendingSessionKey={sendingSessionKey}
+                        canSendToIntervals={canSendToIntervals}
+                        onRegenerate={() => generateWeekSessions(w)}
+                        onSend={(session, index, dateId) => sendSessionToIntervals(session, w.weekNumber, index, dateId)}
+                        onMoveDate={(index, newDate) => moveSessionDate(w.weekNumber, index, newDate)}
+                        getCompletion={(session, index) => getSessionCompletion(w, session, index)}
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </CardContent>
       </Card>
