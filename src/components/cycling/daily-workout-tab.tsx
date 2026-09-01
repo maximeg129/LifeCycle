@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText } from 'lucide-react'
+import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -17,10 +17,76 @@ import { SourceCitation } from '@/components/coach/source-citation'
 import { LiveStrengthSessionView } from './live-strength-session-view'
 import { LogStrengthSessionDialog } from './log-strength-session-dialog'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { findWeekStrengthSession, type PlanWeekSessionWithValidation } from './training-plan-types'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_MINUTES = 60
 const DEFAULT_RIDE_TIME = '09:00'
+
+/**
+ * Carte séance musculation "à faire aujourd'hui" — extraite pour être
+ * réutilisée par les deux chemins qui peuvent aboutir à une séance muscu
+ * dans "Aujourd'hui" : (1) le plan a déjà daté une séance strength ce
+ * jour-là (court-circuit automatique), (2) l'athlète a basculé le toggle
+ * "Salle" pour remplacer le vélo prévu par la séance muscu de la semaine
+ * (retour utilisateur : "un petit toggle... si l'athlète ne veut pas ou ne
+ * peut pas faire de vélo, mais pour aller à la gym"). Mêmes actions que
+ * l'onglet Plan (suivi en direct / saisie rétroactive) — gère son propre
+ * état d'ouverture du suivi en direct, self-contained.
+ */
+function StrengthSessionCard({ session, weekNumber, sessionIndex, badge, description }: {
+  session: PlanWeekSessionWithValidation
+  weekNumber: number
+  sessionIndex: number
+  badge: React.ReactNode
+  description?: string
+}) {
+  const [liveOpen, setLiveOpen] = useState(false)
+  const exercises = session.strengthExercises ?? []
+  return (
+    <>
+      <Card className="bg-card/60 border-primary/20 border-2">
+        <CardHeader className="space-y-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {badge}
+            <Badge variant="secondary">{session.intensityLabel}</Badge>
+          </div>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <Dumbbell className="w-4 h-4 text-primary" /> {session.title}
+          </CardTitle>
+          <CardDescription>{description ?? session.rationale}</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {exercises.length > 0 && (
+            <ul className="space-y-1.5 text-sm">
+              {exercises.map((ex, i) => (
+                <li key={i} className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20">
+                  <span className="font-medium">{ex.name}</span>
+                  <span className="text-muted-foreground">— {ex.sets}x{ex.reps} — {ex.loadGuidance}{ex.restSeconds ? ` (repos ${ex.restSeconds}s)` : ''}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
+            <Button onClick={() => setLiveOpen(true)} className="gap-2">
+              <PlayCircle className="w-4 h-4" /> Démarrer la séance
+            </Button>
+            <LogStrengthSessionDialog session={session} weekNumber={weekNumber} sessionIndex={sessionIndex} />
+          </div>
+        </CardContent>
+      </Card>
+      {liveOpen && (
+        <LiveStrengthSessionView
+          session={session}
+          weekNumber={weekNumber}
+          sessionIndex={sessionIndex}
+          sessionKey={`${weekNumber}-${sessionIndex}`}
+          onClose={() => setLiveOpen(false)}
+        />
+      )}
+    </>
+  )
+}
 
 export function DailyWorkoutTab() {
   const {
@@ -41,7 +107,6 @@ export function DailyWorkoutTab() {
     todaysPlanSessionIsStrength,
   } = useDailyWorkout()
 
-  const [liveStrengthOpen, setLiveStrengthOpen] = useState(false)
   const [minutes, setMinutes] = useState(DEFAULT_MINUTES)
   const [rideLocation, setRideLocation] = useState('')
   const [rideTime, setRideTime] = useState(DEFAULT_RIDE_TIME)
@@ -61,6 +126,12 @@ export function DailyWorkoutTab() {
   const [showScript, setShowScript] = useState(false)
   const [showReasoning, setShowReasoning] = useState(false)
   const [showRationale, setShowRationale] = useState(false)
+  // Retour utilisateur : "un petit toggle pour faire la proposition du jour
+  // si l'athlète ne veut pas ou ne peut pas faire de vélo, mais pour aller
+  // à la gym" — choix d'affichage local, jamais persisté (contrairement à
+  // indoorRequested) : ce n'est pas un paramètre de génération IA, juste
+  // "qu'est-ce qu'on affiche aujourd'hui", à re-décider à chaque ouverture.
+  const [wantsGym, setWantsGym] = useState(false)
 
   // Prefill from today's already-generated proposal (Firestore singleton),
   // so reopening the tab doesn't lose it or force a regeneration.
@@ -102,6 +173,17 @@ export function DailyWorkoutTab() {
     setWasSent(false)
   }
 
+  // Retour utilisateur : "un petit toggle... si l'athlète ne veut pas ou ne
+  // peut pas faire de vélo, mais pour aller à la gym" — la séance muscu de
+  // la semaine, quel que soit le jour où le plan l'a datée à l'origine
+  // (findWeekStrengthSession, training-plan-types.ts). Jamais une
+  // génération IA à la demande : ce flow reste cycling-only (voir
+  // use-daily-workout.ts) — on réutilise le contenu déjà produit par
+  // planWeekSessions, exactement comme le court-circuit automatique
+  // ci-dessous. Calculé AVANT le early-return qui suit — les Hooks ne
+  // peuvent pas être conditionnels (react-hooks/rules-of-hooks).
+  const weekStrengthSession = useMemo(() => findWeekStrengthSession(planWeek), [planWeek])
+
   // Retour utilisateur : "le plan d'entrainement ne devrais t il pas etre
   // figé avec les seances par jour ?" — quand le plan a déjà daté une
   // séance de MUSCULATION pour aujourd'hui, "Proposition du jour" n'a rien
@@ -111,51 +193,18 @@ export function DailyWorkoutTab() {
   // laisser l'athlète générer une séance vélo qui n'aurait pas de sens ce
   // jour-là.
   if (todaysPlanSessionIsStrength && todaysPlanSession) {
-    const session = todaysPlanSession.session
-    const exercises = session.strengthExercises ?? []
     return (
       <div className="space-y-6">
-        <Card className="bg-card/60 border-primary/20 border-2">
-          <CardHeader className="space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="outline" className="gap-1.5 font-normal text-xs">
-                <Target className="w-3 h-3" /> Semaine {todaysPlanSession.weekNumber} du plan
-              </Badge>
-              <Badge variant="secondary">{session.intensityLabel}</Badge>
-            </div>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Dumbbell className="w-4 h-4 text-primary" /> {session.title}
-            </CardTitle>
-            <CardDescription>{session.rationale}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {exercises.length > 0 && (
-              <ul className="space-y-1.5 text-sm">
-                {exercises.map((ex, i) => (
-                  <li key={i} className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20">
-                    <span className="font-medium">{ex.name}</span>
-                    <span className="text-muted-foreground">— {ex.sets}x{ex.reps} — {ex.loadGuidance}{ex.restSeconds ? ` (repos ${ex.restSeconds}s)` : ''}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
-              <Button onClick={() => setLiveStrengthOpen(true)} className="gap-2">
-                <PlayCircle className="w-4 h-4" /> Démarrer la séance
-              </Button>
-              <LogStrengthSessionDialog session={session} weekNumber={todaysPlanSession.weekNumber} sessionIndex={todaysPlanSession.index} />
-            </div>
-          </CardContent>
-        </Card>
-        {liveStrengthOpen && (
-          <LiveStrengthSessionView
-            session={session}
-            weekNumber={todaysPlanSession.weekNumber}
-            sessionIndex={todaysPlanSession.index}
-            sessionKey={`${todaysPlanSession.weekNumber}-${todaysPlanSession.index}`}
-            onClose={() => setLiveStrengthOpen(false)}
-          />
-        )}
+        <StrengthSessionCard
+          session={todaysPlanSession.session}
+          weekNumber={todaysPlanSession.weekNumber}
+          sessionIndex={todaysPlanSession.index}
+          badge={
+            <Badge variant="outline" className="gap-1.5 font-normal text-xs">
+              <Target className="w-3 h-3" /> Semaine {todaysPlanSession.weekNumber} du plan
+            </Badge>
+          }
+        />
       </div>
     )
   }
@@ -186,7 +235,37 @@ export function DailyWorkoutTab() {
               </Badge>
             )}
           </div>
+          {/* Retour utilisateur : "un petit toggle pour faire la
+              proposition du jour si l'athlète ne veut pas ou ne peut pas
+              faire de vélo, mais pour aller à la gym" — même langage
+              visuel que le toggle Intérieur/Extérieur juste en dessous. */}
+          <div className="space-y-1.5 pt-1">
+            <Label className="text-xs text-muted-foreground">Aujourd&apos;hui</Label>
+            <div className="flex gap-0.5 rounded-full bg-muted p-0.5 w-fit">
+              <button
+                type="button"
+                onClick={() => setWantsGym(false)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
+                  !wantsGym ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Bike className="w-3.5 h-3.5" /> Vélo
+              </button>
+              <button
+                type="button"
+                onClick={() => setWantsGym(true)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
+                  wantsGym ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                <Dumbbell className="w-3.5 h-3.5" /> Salle
+              </button>
+            </div>
+          </div>
         </CardHeader>
+        {!wantsGym && (<>
         <CardContent className="flex flex-wrap items-end gap-4">
           <div className="space-y-2">
             <Label htmlFor="available-minutes">Temps disponible (min)</Label>
@@ -275,9 +354,35 @@ export function DailyWorkoutTab() {
             </p>
           </CardContent>
         )}
+        </>
+        )}
       </Card>
 
-      {isLoadingStored && !draft ? (
+      {wantsGym ? (
+        weekStrengthSession ? (
+          <StrengthSessionCard
+            session={weekStrengthSession.session}
+            weekNumber={weekStrengthSession.weekNumber}
+            sessionIndex={weekStrengthSession.index}
+            badge={
+              <Badge variant="outline" className="gap-1.5 font-normal text-xs">
+                <Target className="w-3 h-3" /> Séance muscu de la semaine {weekStrengthSession.weekNumber}
+              </Badge>
+            }
+            description="Basculée depuis le vélo — la séance muscu déjà prévue cette semaine par le plan, peu importe le jour où elle était datée à l'origine."
+          />
+        ) : (
+          <EmptyState
+            icon={Dumbbell}
+            title="Aucune séance de musculation dans le plan"
+            description={
+              planWeek
+                ? "La musculation n'est pas activée pour cette semaine — active-la dans l'onglet Plan pour que le coach t'en propose une."
+                : "Aucun plan actif — génère un plan avec la musculation activée dans l'onglet Plan pour en profiter ici."
+            }
+          />
+        )
+      ) : isLoadingStored && !draft ? (
         <Skeleton className="h-64 w-full rounded-2xl" />
       ) : !draft ? (
         <EmptyState

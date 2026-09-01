@@ -301,6 +301,22 @@ entièrement la génération IA (n'a pas de sens pour ce flow) et affiche direct
 avec les mêmes actions que l'onglet Plan (suivi en direct `LiveStrengthSessionView` / saisie
 rétroactive `LogStrengthSessionDialog`).
 
+**Toggle "Vélo / Salle"** — retour utilisateur : "un petit toggle pour faire la proposition du jour
+si l'athlète ne veut pas ou ne peut pas faire de vélo, mais pour aller à la gym". Inverse du
+court-circuit ci-dessus : même quand le plan a assigné une séance CYCLING aujourd'hui (ou aucune),
+l'athlète peut basculer manuellement sur "Salle" dans `daily-workout-tab.tsx` pour voir/démarrer la
+séance de musculation de la semaine en cours plutôt que le vélo — `findWeekStrengthSession()`
+(`training-plan-types.ts`, pur/testé) trouve la première séance `sessionKind: "strength"` dans
+`planWeek.sampleSessions`, quel que soit le jour où `assignSessionDates` l'avait initialement datée.
+Jamais une génération IA ad-hoc (ce flow reste cycling-only) — toujours le contenu déjà produit par
+`planWeekSessions`. La faire un jour différent de sa date d'origine reste correctement comptabilisée
+sans rien devoir déplacer : `matchSessionCompletion` rapproche déjà une séance strength par
+`(weekNumber, sessionIndex)`, jamais par date. Choix d'affichage purement local (pas persisté,
+contrairement à `indoorRequested`) — pas un paramètre de génération, juste "qu'est-ce qu'on affiche
+aujourd'hui". Sans séance muscu dans la semaine (musculation non activée pour ce plan, ou aucun plan
+actif), affiche un état honnête plutôt qu'inventer une séance — renvoie vers l'onglet Plan pour
+l'activer.
+
 **Page Coach restructurée : 7 → 6 sous-onglets** — retour utilisateur : "la structure complete de la
 page coach est peut etre compliquée." Une fois la Proposition du jour devenue l'ajustement
 au-jour-le-jour du plan (point 4 ci-dessus), garder "Proposition du jour" et "Plan" comme deux
