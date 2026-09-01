@@ -59,6 +59,7 @@ function describeToolCall(call: CoachChatToolCall): string {
     case 'add_goal': return 'Objectif ajouté'
     case 'add_remembered_fact': return 'Fait ajouté à la mémoire'
     case 'update_injury_status': return 'Statut de blessure mis à jour'
+    case 'set_strength_training_preference': return 'Préférence musculation mise à jour'
     default: return call.name
   }
 }
@@ -96,6 +97,19 @@ async function executeToolCall(db: Firestore, uid: string, call: CoachChatToolCa
         const ref = doc(db, `users/${uid}/coachInjuries/${injuryId}`)
         await updateDoc(ref, { status })
         return { toolUseId: call.id, content: 'Statut de la blessure mis à jour avec succès.' }
+      }
+      case 'set_strength_training_preference': {
+        // Même doc/patron que le toggle manuel de training-plan-tab.tsx
+        // (use-training-preferences.ts) — Stella écrit dans la MÊME
+        // préférence partagée, jamais dans un plan directement (elle ne
+        // génère aucun plan elle-même, voir le prompt système du flow).
+        const { includeStrengthTraining, strengthWeeklyMinutes } = call.input as { includeStrengthTraining?: boolean; strengthWeeklyMinutes?: number }
+        if (includeStrengthTraining == null) throw new Error('includeStrengthTraining manquant')
+        const patch: Record<string, unknown> = { includeStrengthTraining, updatedAt: serverTimestamp() }
+        if (strengthWeeklyMinutes != null) patch.strengthWeeklyMinutes = strengthWeeklyMinutes
+        const ref = doc(db, `users/${uid}/settings/trainingPreferences`)
+        await setDoc(ref, patch, { merge: true })
+        return { toolUseId: call.id, content: 'Préférence musculation mise à jour avec succès — sera appliquée à la prochaine génération de plan.' }
       }
       default:
         return { toolUseId: call.id, content: `Outil inconnu : ${call.name}`, isError: true }

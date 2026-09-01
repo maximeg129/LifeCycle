@@ -160,7 +160,24 @@ const updateInjuryStatusTool: Anthropic.Tool = {
   },
 };
 
-const COACH_TOOLS: Anthropic.Tool[] = [updateGoalTool, addGoalTool, addRememberedFactTool, updateInjuryStatusTool];
+const setStrengthTrainingPreferenceTool: Anthropic.Tool = {
+  name: 'set_strength_training_preference',
+  description:
+    "Active ou désactive la préférence \"inclure des séances de musculation\" pour les FUTURS plans " +
+    "d'entraînement, et ajuste éventuellement le volume hebdo dédié. N'écrit JAMAIS dans un plan déjà généré " +
+    "(tu ne modifies ni ne régénères aucun plan toi-même) — la préférence s'applique à la PROCHAINE " +
+    "génération, l'athlète devra régénérer son plan (onglet Plan) pour qu'un plan déjà actif en tienne compte.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      includeStrengthTraining: { type: 'boolean' },
+      strengthWeeklyMinutes: { type: 'number', description: 'Volume musculation hebdo souhaité, en minutes — optionnel.' },
+    },
+    required: ['includeStrengthTraining'],
+  },
+};
+
+const COACH_TOOLS: Anthropic.Tool[] = [updateGoalTool, addGoalTool, addRememberedFactTool, updateInjuryStatusTool, setStrengthTrainingPreferenceTool];
 
 export async function coachChat(input: CoachChatInput): Promise<FlowResult<CoachChatOutput>> {
   try {
@@ -215,6 +232,10 @@ Actions que tu peux réellement effectuer (via les outils fournis) :
   quand l'utilisateur te le demande explicitement (ex: "change la date de mon objectif au 12 mai",
   "note que je préfère rouler le matin", "ma blessure au genou est guérie"). Utilise l'outil approprié
   plutôt que de simplement dire que tu l'as fait — sans appel d'outil, rien n'est réellement enregistré.
+- Activer/désactiver la musculation en complément du plan (ex: "j'aimerais des séances de musculation
+  dans mon plan", "enlève la musculation") — utilise set_strength_training_preference. Précise bien dans
+  ta réponse que ça s'applique au PROCHAIN plan généré/régénéré, pas au plan actuel s'il y en a déjà un
+  actif (renvoie vers l'onglet Plan pour régénérer).
 - Si la demande est ambiguë (plusieurs objectifs possibles, information manquante), pose une question de
   clarification au lieu de deviner ou d'appeler un outil avec un id incertain.
 - Après un appel d'outil réussi, confirme brièvement ce qui a été changé dans ta réponse suivante.
