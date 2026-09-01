@@ -44,6 +44,8 @@ import type { CoachReason } from '@/ai/coach/outputContract'
 import { trainingPlanRecalibration } from '@/ai/flows/training-plan-recalibration-flow'
 import { useActivities } from '@/hooks/use-intervals'
 import { describeActionDispatchError } from '@/lib/utils'
+import { recentStrengthSessionPatterns } from './strength-session-plan-types'
+import { validateStrengthSession } from '@/domain/cycling/validation/strengthSessionValidator'
 
 interface IntervalsCredentialsDoc {
   intervalsAthleteId?: string
@@ -412,12 +414,18 @@ export function useTrainingPlan() {
         criticalPower: criticalPowerModel ? { cpWatts: criticalPowerModel.cpWatts, wPrimeKJ: criticalPowerModel.wPrimeJoules / 1000 } : null,
       })
 
+      // Historique musculation (S05, règle hip-hinge) — calculé une seule
+      // fois, réutilisé à la fois pour informer le modèle (recentStrengthPatterns)
+      // et pour la validation déterministe post-génération ci-dessous.
+      const previousStrengthPatterns = recentStrengthSessionPatterns(activePlan.weeks, week.weekNumber)
+
       const result = await planWeekSessions({
         weekNumber: week.weekNumber,
         phase: week.phase,
         focus: week.focus,
         targetWeeklyMinutes: week.targetWeeklyMinutes,
         targetStrengthMinutes: week.targetStrengthMinutes,
+        recentStrengthPatterns: previousStrengthPatterns,
         notes: week.notes,
         training: athlete.isConfigured && athlete.data ? {
           ctl: athlete.data.ctl,
@@ -433,8 +441,34 @@ export function useTrainingPlan() {
         return false
       }
 
+      // Retour utilisateur : "une séance qui ne les respecte pas ne doit
+      // jamais être proposée comme séance 'complète'" — vérification
+      // déterministe (S05, strengthSessionValidator.ts) attachée à chaque
+      // séance de musculation générée, jamais une auto-évaluation du
+      // modèle. hoursBeforeNextKeySession reste `null` : aucune date réelle
+      // n'est encore assignée à une séance type (l'athlète en choisit une
+      // au moment d'envoyer sur Intervals.icu) — voir checkTimingBeforeKeySession.
+      const strengthSessionsThisWeek = result.data.sessions.filter((s) => s.sessionKind === 'strength').length
+      const sessionsWithValidation = result.data.sessions.map((session) => {
+        if (session.sessionKind !== 'strength' || !session.strengthPhase) return session
+        const strengthValidation = validateStrengthSession({
+          session: {
+            sessionType: session.sessionType ?? 'principale',
+            strengthPhase: session.strengthPhase,
+            durationMinutes: session.durationMinutes,
+            exercises: session.strengthExercises ?? [],
+          },
+          previousSessionsPatterns: previousStrengthPatterns,
+          weeklyCyclingHours: week.targetWeeklyMinutes / 60,
+          cyclingPhase: week.phase,
+          strengthSessionsThisWeek,
+          hoursBeforeNextKeySession: null,
+        })
+        return { ...session, strengthValidation }
+      })
+
       const weeks = activePlan.weeks.map((w) =>
-        w.weekNumber === week.weekNumber ? { ...w, sampleSessions: result.data.sessions } : w
+        w.weekNumber === week.weekNumber ? { ...w, sampleSessions: sessionsWithValidation } : w
       )
       const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
       try {
