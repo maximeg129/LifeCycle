@@ -8,12 +8,14 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck, Home, TreePine, Apple } from 'lucide-react'
+import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SourceCitation } from '@/components/coach/source-citation'
+import { LiveStrengthSessionView } from './live-strength-session-view'
+import { LogStrengthSessionDialog } from './log-strength-session-dialog'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_MINUTES = 60
@@ -34,8 +36,11 @@ export function DailyWorkoutTab() {
     canSendToIntervals,
     generate,
     sendToIntervals,
+    todaysPlanSession,
+    todaysPlanSessionIsStrength,
   } = useDailyWorkout()
 
+  const [liveStrengthOpen, setLiveStrengthOpen] = useState(false)
   const [minutes, setMinutes] = useState(DEFAULT_MINUTES)
   const [rideLocation, setRideLocation] = useState('')
   const [rideTime, setRideTime] = useState(DEFAULT_RIDE_TIME)
@@ -85,6 +90,64 @@ export function DailyWorkoutTab() {
   const updateDraft = (patch: Partial<DailyWorkoutRecommendationOutput>) => {
     setDraft((d) => (d ? { ...d, ...patch } : d))
     setWasSent(false)
+  }
+
+  // Retour utilisateur : "le plan d'entrainement ne devrais t il pas etre
+  // figé avec les seances par jour ?" — quand le plan a déjà daté une
+  // séance de MUSCULATION pour aujourd'hui, "Proposition du jour" n'a rien
+  // à générer/ajuster (ce flow est cycling-only, voir use-daily-workout.ts) :
+  // on affiche directement la séance prévue avec les mêmes actions que
+  // l'onglet Plan (suivi en direct / saisie rétroactive), plutôt que de
+  // laisser l'athlète générer une séance vélo qui n'aurait pas de sens ce
+  // jour-là.
+  if (todaysPlanSessionIsStrength && todaysPlanSession) {
+    const session = todaysPlanSession.session
+    const exercises = session.strengthExercises ?? []
+    return (
+      <div className="space-y-6">
+        <Card className="bg-card/60 border-primary/20 border-2">
+          <CardHeader className="space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className="gap-1.5 font-normal text-xs">
+                <Target className="w-3 h-3" /> Semaine {todaysPlanSession.weekNumber} du plan
+              </Badge>
+              <Badge variant="secondary">{session.intensityLabel}</Badge>
+            </div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Dumbbell className="w-4 h-4 text-primary" /> {session.title}
+            </CardTitle>
+            <CardDescription>{session.rationale}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {exercises.length > 0 && (
+              <ul className="space-y-1.5 text-sm">
+                {exercises.map((ex, i) => (
+                  <li key={i} className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20">
+                    <span className="font-medium">{ex.name}</span>
+                    <span className="text-muted-foreground">— {ex.sets}x{ex.reps} — {ex.loadGuidance}{ex.restSeconds ? ` (repos ${ex.restSeconds}s)` : ''}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
+              <Button onClick={() => setLiveStrengthOpen(true)} className="gap-2">
+                <PlayCircle className="w-4 h-4" /> Démarrer la séance
+              </Button>
+              <LogStrengthSessionDialog session={session} weekNumber={todaysPlanSession.weekNumber} sessionIndex={todaysPlanSession.index} />
+            </div>
+          </CardContent>
+        </Card>
+        {liveStrengthOpen && (
+          <LiveStrengthSessionView
+            session={session}
+            weekNumber={todaysPlanSession.weekNumber}
+            sessionIndex={todaysPlanSession.index}
+            sessionKey={`${todaysPlanSession.weekNumber}-${todaysPlanSession.index}`}
+            onClose={() => setLiveStrengthOpen(false)}
+          />
+        )}
+      </div>
+    )
   }
 
   return (
@@ -228,6 +291,25 @@ export function DailyWorkoutTab() {
               )}
               <Badge variant="secondary">{draft.intensityLabel}</Badge>
             </div>
+            {/* Retour utilisateur : "le plan d'entrainement ne devrais t
+                il pas etre figé avec les seances par jour ?" — distingue
+                une proposition qui AJUSTE la séance déjà prévue par le
+                plan d'aujourd'hui d'une proposition générée librement (pas
+                de plan actif, ou jour de repos du plan). draft.adjustedFromPlan
+                absent (proposition stockée avant l'introduction de ce
+                champ) traité comme false — même précaution défensive que
+                draft.verdict/reasons plus bas. */}
+            {draft.adjustedFromPlan ? (
+              <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                <Target className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                <span>
+                  Ajustée depuis la séance prévue par le plan{todaysPlanSession ? ` (semaine ${todaysPlanSession.weekNumber})` : ''}.
+                  {draft.planAdjustmentNote ? ` ${draft.planAdjustmentNote}` : ''}
+                </span>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">Générée librement — aucune séance planifiée aujourd&apos;hui.</p>
+            )}
             <div className="flex items-center gap-2">
               <Label htmlFor="draft-duration" className="text-xs text-muted-foreground shrink-0">Durée (min)</Label>
               <Input

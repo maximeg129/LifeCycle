@@ -49,6 +49,12 @@ const DailyWorkoutRecommendationInputSchema = z.object({
     focus: z.string(),
     targetWeeklyMinutes: z.number(),
   }).optional().describe('The current week of the athlete\'s active mid/long-term training plan, if one exists — today\'s session should fit this week\'s phase and focus rather than being generated in a vacuum.'),
+  plannedSession: z.object({
+    title: z.string(),
+    sportType: z.string(),
+    durationMinutes: z.number(),
+    structuredWorkout: z.string(),
+  }).optional().describe('The CONCRETE cycling session the training plan already assigned to this exact date (see assignSessionDates/moveSessionDate, training-plan-types.ts) — present only when the plan has a dated "cycling" session for today. When present, the flow must ADJUST this specific session rather than compose a new one from scratch (see system prompt).'),
   recovery: z.object({
     sleepHours: z.number().optional(),
     sleepQuality: z.number().optional().describe('0-100'),
@@ -75,6 +81,8 @@ const DailyWorkoutRecommendationOutputSchema = withCoachOutputContract({
   rationale: z.string().describe('2-4 sentences in French explaining why this session fits today, grounded in the actual form/context data provided — not generic advice.'),
   structuredWorkout: z.string().describe('Intervals.icu workout-builder text script — section headers (optionally suffixed "Nx" for a repeat) each followed by "- " step lines. See system prompt for the exact syntax.'),
   warnings: z.array(z.string()).describe('0-3 short things the athlete should know before starting (injury caution, heavy week, etc). Empty array if nothing stands out.'),
+  adjustedFromPlan: z.boolean().describe('true when plannedSession was provided and this proposal is an adjustment of it (even if nothing actually changed) — false when generated freely (no active plan, no session dated today, or a rest day).'),
+  planAdjustmentNote: z.string().nullable().describe('ONLY when adjustedFromPlan is true — 1 short French sentence naming what changed from the planned session (e.g. "Durée réduite de 90 à 60min, mauvaise nuit de sommeil") or "Aucun ajustement nécessaire" if the planned session was kept as-is. Null when adjustedFromPlan is false.'),
   windAdvice: z.string().nullable().describe('1-2 French sentences of wind-aware routing advice (which general direction to head out first so the wind ends up at your back on the return leg) — null when no ride location/time was given, the forecast could not be fetched, the wind is too light to matter, or the weather was severe enough to switch the session indoors (no route to advise on).'),
   predictedWeather: z.object({
     temperatureCelsius: z.number().describe('Real temperature from the Open-Meteo forecast.'),
@@ -177,6 +185,23 @@ export async function dailyWorkoutRecommendation(input: DailyWorkoutRecommendati
     ].join('\n'));
   }
 
+  // Retour utilisateur : "le plan d'entrainement ne devrais t il pas etre
+  // figé avec les seances par jour ?" — une fois le plan daté (voir
+  // assignSessionDates, training-plan-types.ts), la Proposition du jour ne
+  // doit plus inventer une séance dans le vide quand une séance CONCRÈTE
+  // est déjà prévue aujourd'hui : elle doit l'ajuster (voir la règle
+  // impérative correspondante dans le system prompt ci-dessous).
+  if (parsedInput.plannedSession) {
+    const p = parsedInput.plannedSession;
+    sections.push([
+      'SÉANCE PRÉVUE AUJOURD\'HUI PAR LE PLAN (à ajuster, pas à ignorer) :',
+      `Titre : ${p.title}`,
+      `Durée prévue : ${p.durationMinutes} minutes`,
+      'Script structuré prévu :',
+      p.structuredWorkout,
+    ].join('\n'));
+  }
+
   if (parsedInput.recovery) {
     const r = parsedInput.recovery;
     const trendLabel = (t: typeof r.hrvTrend) => t === 'favorable' ? 'favorable (7j vs 28j)' : t === 'defavorable' ? 'défavorable (7j vs 28j)' : t === 'stable' ? 'stable (7j vs 28j)' : 'non disponible (historique insuffisant)';
@@ -247,6 +272,16 @@ Règles impératives :
   de la semaine en cours (ex: en phase "base", privilégie l'endurance même si le temps disponible permettrait
   une séance plus intense ; en phase "taper", réduis délibérément l'intensité et le volume). Le plan prime
   sur une proposition générique.
+- IMPÉRATIF si une SÉANCE PRÉVUE AUJOURD'HUI PAR LE PLAN est fournie ci-dessus : NE COMPOSE PAS une séance
+  différente à partir de rien. Pars de CETTE séance précise et ajuste-la seulement si le contexte réel du
+  jour le justifie (temps disponible différent, mauvaise récupération, météo dégradée/home trainer forcé) —
+  raccourcis, réduis l'intensité ou adapte le contenu, mais garde le même titre/type de séance quand c'est
+  raisonnable. Si le contexte ne justifie AUCUN changement, renvoie-la telle quelle (durationMinutes/
+  structuredWorkout identiques). Mets alors adjustedFromPlan à true, et planAdjustmentNote à une phrase
+  courte nommant ce qui a changé (ex: "Durée réduite de 90 à 60min, temps disponible plus court") ou
+  "Aucun ajustement nécessaire" si rien n'a changé. Si AUCUNE séance prévue n'est fournie (jour de repos
+  du plan, ou pas de plan actif), compose librement comme d'habitude et mets adjustedFromPlan à false et
+  planAdjustmentNote à null.
 - Si la récupération de la nuit dernière est mauvaise, RÉDUIS l'intensité prévue même si la charge
   d'entraînement et le plan suggéreraient autre chose, propose éventuellement une alternative (récupération
   active, endurance légère plutôt que seuil/VO2max), et dis-le explicitement dans rationale — la récupération
@@ -277,6 +312,8 @@ séance proposée : <title>") :
   "rationale": "2 à 4 phrases justifiant ce choix à partir du contexte réel fourni",
   "structuredWorkout": "script structuré en sections + étapes, voir le format ci-dessus",
   "warnings": ["0 à 3 points d'attention courts, tableau vide si rien à signaler"],
+  "adjustedFromPlan": ${parsedInput.plannedSession ? 'true' : 'false'},
+  "planAdjustmentNote": "1 phrase courte sur ce qui a changé, ou \\"Aucun ajustement nécessaire\\", ou null si adjustedFromPlan est false",
   "windAdvice": "conseil de direction pour avoir le vent dans le dos au retour, ou null",
   "predictedWeather": ${predictedWeather ? JSON.stringify(predictedWeather) : 'null'},
   "weatherAlert": "1-2 phrases si la météo a forcé un passage en home trainer, sinon null",

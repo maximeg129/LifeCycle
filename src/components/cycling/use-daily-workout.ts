@@ -29,7 +29,7 @@ import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { buildCoachContext } from './coach-context'
 import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload, signalToTrendLabel } from './daily-workout-types'
-import { currentPlanWeek, type PlanWeek } from './training-plan-types'
+import { currentPlanWeek, planSessionExternalId, type PlanWeek } from './training-plan-types'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { describeActionDispatchError } from '@/lib/utils'
 
@@ -43,6 +43,13 @@ export interface StoredRide {
   departureDateTime: string
 }
 
+/** Lien vers la séance du plan dont CETTE proposition est l'ajustement — voir todaysPlanSession ci-dessous. Absent quand la proposition a été générée librement (pas de séance planifiée aujourd'hui). */
+interface PlanSessionRef {
+  planId: string
+  weekNumber: number
+  sessionIndex: number
+}
+
 interface StoredWorkoutProposal {
   userId: string
   availableMinutes: number
@@ -51,6 +58,17 @@ interface StoredWorkoutProposal {
   ride?: StoredRide | null
   /** Choix explicite intérieur/extérieur de l'athlète (retour utilisateur), indépendant de la météo — absent (undefined) sur une proposition générée avant cet ajout, traité comme "extérieur" par défaut. */
   indoorRequested?: boolean
+  /**
+   * Retour utilisateur : "le plan d'entrainement ne devrais t il pas etre
+   * figé avec les seances par jour ?" — capturé au moment de la
+   * génération (pas recalculé à l'envoi) pour que sendToIntervals utilise
+   * le MÊME externalId que la séance du Plan (planSessionExternalId),
+   * plutôt que dailyWorkoutExternalId : envoyer depuis "Aujourd'hui" et
+   * envoyer depuis l'onglet Plan doivent mettre à jour le MÊME événement
+   * calendrier, jamais en créer deux pour la même séance. Absent quand
+   * proposal.adjustedFromPlan est false (génération libre).
+   */
+  planSessionRef?: PlanSessionRef
 }
 
 const SESSIONS_WINDOW_DAYS = 7
@@ -90,10 +108,23 @@ export function useDailyWorkout() {
     return query(collection(db, `users/${user.uid}/trainingPlans`), where('status', '==', 'active'))
   }, [db, user])
   const { data: activePlans } = useCollection<{ weeks: PlanWeek[] }>(activePlanQuery)
+  const activePlan = activePlans?.[0]
   const planWeek = useMemo(() => {
-    const plan = activePlans?.[0]
-    return plan ? currentPlanWeek(plan.weeks, todayId) : null
-  }, [activePlans, todayId])
+    return activePlan ? currentPlanWeek(activePlan.weeks, todayId) : null
+  }, [activePlan, todayId])
+
+  // Retour utilisateur : "le plan d'entrainement ne devrais t il pas etre
+  // figé avec les seances par jour ?" — une fois le plan daté
+  // (assignSessionDates, training-plan-types.ts), la séance CONCRÈTE déjà
+  // prévue aujourd'hui, si elle existe. `sessionKind` absent (semaine mise
+  // en cache avant l'introduction de ce champ) traité comme "cycling" par
+  // défaut, même convention que training-plan-tab.tsx.
+  const todaysPlanSession = useMemo(() => {
+    const index = planWeek?.sampleSessions?.findIndex((s) => s.date === todayId) ?? -1
+    if (!planWeek?.sampleSessions || index < 0) return null
+    return { session: planWeek.sampleSessions[index], index, weekNumber: planWeek.weekNumber, planId: activePlan?.id }
+  }, [planWeek, todayId, activePlan?.id])
+  const todaysPlanSessionIsStrength = todaysPlanSession?.session.sessionKind === 'strength'
 
   // Intervals credentials — read directly rather than through IntervalsProvider,
   // which deliberately doesn't expose the raw athleteId/apiKey past its own
@@ -144,6 +175,21 @@ export function useDailyWorkout() {
           focus: planWeek.focus,
           targetWeeklyMinutes: planWeek.targetWeeklyMinutes,
         } : undefined,
+        // Retour utilisateur : "le plan d'entrainement ne devrais t il pas
+        // etre figé avec les seances par jour ?" — la séance CONCRÈTE déjà
+        // prévue aujourd'hui (voir todaysPlanSession ci-dessus), pour que
+        // le flow l'ajuste plutôt que d'en composer une nouvelle. Une
+        // séance strength (todaysPlanSessionIsStrength) n'a pas de sens
+        // pour ce flow (cycling-only) — court-circuitée côté UI à la
+        // place (daily-workout-tab.tsx), jamais envoyée ici. Un
+        // structuredWorkout manquant (séance mise en cache avant ce champ)
+        // dégrade silencieusement vers la génération libre habituelle.
+        plannedSession: (!todaysPlanSessionIsStrength && todaysPlanSession?.session.structuredWorkout) ? {
+          title: todaysPlanSession.session.title,
+          sportType: todaysPlanSession.session.sportType,
+          durationMinutes: todaysPlanSession.session.durationMinutes,
+          structuredWorkout: todaysPlanSession.session.structuredWorkout,
+        } : undefined,
         recovery: lifestyle.latest ? {
           sleepHours: lifestyle.latest.sleepHours,
           sleepQuality: lifestyle.latest.sleepQuality,
@@ -171,7 +217,7 @@ export function useDailyWorkout() {
       const proposal = result.data
 
       const ref = doc(db, `users/${user.uid}/workoutProposals/${todayId}`)
-      const data = {
+      const data: StoredWorkoutProposal & { createdAt: unknown } = {
         userId: user.uid,
         availableMinutes,
         proposal,
@@ -179,6 +225,10 @@ export function useDailyWorkout() {
         ride: indoorRequested ? null : (ride ?? null),
         indoorRequested: indoorRequested ?? false,
         createdAt: serverTimestamp(),
+      }
+      // Capturé ici (pas recalculé à l'envoi) — voir PlanSessionRef ci-dessus.
+      if (proposal.adjustedFromPlan && todaysPlanSession?.planId) {
+        data.planSessionRef = { planId: todaysPlanSession.planId, weekNumber: todaysPlanSession.weekNumber, sessionIndex: todaysPlanSession.index }
       }
       try {
         await setDoc(ref, data)
@@ -193,7 +243,7 @@ export function useDailyWorkout() {
     } finally {
       setIsGenerating(false)
     }
-  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, governor.signals.hrvTrend, governor.signals.restingHR, enduranceIndex, criticalPowerModel, todayId, athlete.isConfigured, athlete.data, recentActivities.data, planWeek, lifestyle.latest, lifestyle.readiness, toast])
+  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, governor.signals.hrvTrend, governor.signals.restingHR, enduranceIndex, criticalPowerModel, todayId, athlete.isConfigured, athlete.data, recentActivities.data, planWeek, todaysPlanSession, todaysPlanSessionIsStrength, lifestyle.latest, lifestyle.readiness, toast])
 
   const sendToIntervals = useCallback(async (proposal: DailyWorkoutRecommendationOutput): Promise<boolean> => {
     if (!creds?.intervalsAthleteId || !creds?.intervalsApiKey) {
@@ -202,7 +252,17 @@ export function useDailyWorkout() {
     }
     setIsSending(true)
     try {
-      const event = buildWorkoutEventPayload(proposal, todayId)
+      // Retour utilisateur : "lien entre plan et sorties" — quand cette
+      // proposition est un ajustement d'une séance déjà prévue par le
+      // plan (planSessionRef, capturé à la génération), on réutilise le
+      // MÊME externalId que la séance du Plan (planSessionExternalId) —
+      // l'envoi met à jour l'événement calendrier existant plutôt que
+      // d'en créer un deuxième pour la même journée. Sinon, l'externalId
+      // par défaut (dailyWorkoutExternalId, dans buildWorkoutEventPayload).
+      const externalId = stored?.planSessionRef
+        ? planSessionExternalId(stored.planSessionRef.planId, stored.planSessionRef.weekNumber, stored.planSessionRef.sessionIndex)
+        : undefined
+      const event = buildWorkoutEventPayload(proposal, todayId, externalId)
       const res = await fetch('/api/intervals/events', {
         method: 'POST',
         headers: {
@@ -233,7 +293,7 @@ export function useDailyWorkout() {
     } finally {
       setIsSending(false)
     }
-  }, [creds, user, db, todayId, toast])
+  }, [creds, user, db, todayId, stored?.planSessionRef, toast])
 
   return {
     stored: stored?.proposal ?? null,
@@ -242,6 +302,14 @@ export function useDailyWorkout() {
     storedIndoorRequested: stored?.indoorRequested ?? false,
     sentToIntervals: stored?.sentToIntervals ?? false,
     planWeek,
+    // Retour utilisateur : "le plan d'entrainement ne devrais t il pas
+    // etre figé avec les seances par jour ?" — permet à daily-workout-tab.tsx
+    // de court-circuiter la génération IA pour une séance strength (voir
+    // todaysPlanSessionIsStrength ci-dessus) et d'ouvrir directement le
+    // suivi en direct/la saisie rétroactive existants, plutôt que de
+    // forcer cette séance à travers un flow pensé pour le vélo.
+    todaysPlanSession,
+    todaysPlanSessionIsStrength,
     recovery: lifestyle.latest ? { ...lifestyle.latest, readiness: lifestyle.readiness } : null,
     isLoadingStored: loadingStored,
     isGenerating,
