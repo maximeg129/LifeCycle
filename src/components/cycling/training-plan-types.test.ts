@@ -6,6 +6,7 @@ import {
   buildPlanWeekSkeleton,
   mergePlanWeeks,
   currentPlanWeek,
+  findWeekStrengthSession,
   planSessionExternalId,
   weekNeedsRecalibration,
   computeActualWeeklyMinutes,
@@ -476,5 +477,44 @@ describe('matchSessionCompletion', () => {
     const activities = [{ startDate: '2026-09-08', durationMinutes: 60 }]
     const result = matchSessionCompletion({ date: '2026-09-08' }, 1, 0, today, activities, [])
     expect(result.status).toBe('done')
+  })
+})
+
+function minimalStrengthSession(title: string): PlanWeekSessionWithValidation {
+  return {
+    sessionKind: 'strength',
+    title,
+    sportType: 'WeightTraining',
+    durationMinutes: 45,
+    intensityLabel: 'Force',
+    rationale: 'test',
+  }
+}
+
+describe('findWeekStrengthSession', () => {
+  const baseWeek: PlanWeek = { weekNumber: 3, startDate: '2026-09-07', endDate: '2026-09-13', phase: 'build', focus: 'Volume', targetWeeklyMinutes: 360 }
+
+  it('returns null for a null week', () => {
+    expect(findWeekStrengthSession(null)).toBeNull()
+  })
+
+  it('returns null for a week with no sampleSessions yet', () => {
+    expect(findWeekStrengthSession(baseWeek)).toBeNull()
+  })
+
+  it('returns null for a week whose sessions are all cycling', () => {
+    const week = { ...baseWeek, sampleSessions: [minimalSession('Endurance'), minimalSession('Seuil')] }
+    expect(findWeekStrengthSession(week)).toBeNull()
+  })
+
+  it('finds the first strength session among mixed cycling/strength sessions, with its index and weekNumber', () => {
+    const week = { ...baseWeek, sampleSessions: [minimalSession('Endurance'), minimalStrengthSession('Force bas du corps'), minimalSession('Seuil')] }
+    const result = findWeekStrengthSession(week)
+    expect(result).toEqual({ session: week.sampleSessions[1], index: 1, weekNumber: 3 })
+  })
+
+  it('returns the first strength session when several exist', () => {
+    const week = { ...baseWeek, sampleSessions: [minimalStrengthSession('Force A'), minimalStrengthSession('Force B')] }
+    expect(findWeekStrengthSession(week)?.index).toBe(0)
   })
 })

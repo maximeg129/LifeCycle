@@ -150,6 +150,25 @@ export function currentPlanWeek(weeks: PlanWeek[], todayIso: string): PlanWeek |
   return weeks.find((w) => todayIso >= w.startDate && todayIso <= w.endDate) ?? null
 }
 
+/**
+ * Retour utilisateur : "un petit toggle pour faire la proposition du jour
+ * si l'athlète ne veut pas ou ne peut pas faire de vélo, mais pour aller
+ * à la gym" — trouve la première séance "strength" de la semaine du plan
+ * en cours, quel que soit le jour auquel elle est datée (pas forcément
+ * aujourd'hui). Utilisée par daily-workout-tab.tsx quand l'athlète bascule
+ * le toggle "Salle" : jamais une génération IA ad-hoc, toujours le contenu
+ * déjà produit par planWeekSessions — même principe que le reste du "plan
+ * figé par jour". La faire un autre jour que celui initialement assigné
+ * reste correctement comptabilisée : matchSessionCompletion rapproche déjà
+ * une séance strength par (weekNumber, sessionIndex), jamais par date.
+ */
+export function findWeekStrengthSession(week: PlanWeek | null): { session: PlanWeekSessionWithValidation; index: number; weekNumber: number } | null {
+  if (!week?.sampleSessions) return null
+  const index = week.sampleSessions.findIndex((s) => s.sessionKind === 'strength')
+  if (index < 0) return null
+  return { session: week.sampleSessions[index], index, weekNumber: week.weekNumber }
+}
+
 // ── Séances figées par jour — retour utilisateur ────────────────────────
 //
 // "le plan d'entrainement ne devrais t il pas etre figé avec les seances
