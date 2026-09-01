@@ -48,6 +48,8 @@ interface ExerciseProgress {
 interface Props {
   session: PlanWeekSession
   weekNumber: number
+  /** Index de la séance au sein de la semaine — voir strength-log-types.ts (planSessionIndex), pour rapprocher précisément le log de la séance type prévue (retour utilisateur : "comment lier les seances realisees aux seance prevues"). */
+  sessionIndex: number
   /** Identifiant stable de cette séance au sein du plan (ex. "3-1" = semaine 3, séance d'index 1) — même convention que sendingSessionKey dans training-plan-tab.tsx. Sert de clé localStorage pour la sauvegarde de secours ci-dessous. */
   sessionKey: string
   onClose: () => void
@@ -113,7 +115,7 @@ function playBeep() {
   }
 }
 
-export function LiveStrengthSessionView({ session, weekNumber, sessionKey, onClose }: Props) {
+export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, sessionKey, onClose }: Props) {
   const { user } = useUser()
   const db = useFirestore()
   const { toast } = useToast()
@@ -245,6 +247,7 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionKey, onClo
       title: session.title,
       exercises: loggedExercises,
       planWeekNumber: weekNumber,
+      planSessionIndex: sessionIndex,
       createdAt: serverTimestamp(),
     } satisfies StrengthSessionLog
     const ok = await submit(() => setDoc(ref, data), { path: ref.path, operation: 'create', requestResourceData: data })

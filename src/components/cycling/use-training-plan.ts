@@ -35,8 +35,13 @@ import {
   computeActualWeeklyMinutes,
   diffPlanWeeks,
   applyRecalibration,
+  assignSessionDates,
+  clampDateToWeek,
+  matchSessionCompletion,
   type PlanWeek,
   type PlanWeekChange,
+  type PlanWeekSessionWithValidation,
+  type SessionCompletion,
 } from './training-plan-types'
 import { buildWorkoutEventPayload } from './daily-workout-types'
 import type { CoachGoal } from './coach-memory-types'
@@ -46,6 +51,7 @@ import { useActivities } from '@/hooks/use-intervals'
 import { describeActionDispatchError } from '@/lib/utils'
 import { recentStrengthSessionPatterns } from './strength-session-plan-types'
 import { validateStrengthSession } from '@/domain/cycling/validation/strengthSessionValidator'
+import { useStrengthLogs } from './use-strength-logs'
 
 interface IntervalsCredentialsDoc {
   intervalsAthleteId?: string
@@ -153,6 +159,10 @@ export function useTrainingPlan() {
   // dégradées sur todayId si aucun plan actif (la query ne sert alors à
   // rien, mais useActivities exige des bornes non-optionnelles).
   const planActivities = useActivities(activePlan?.startDate ?? todayId, todayId)
+  // Retour utilisateur : "comment lier les seances realisees aux seance
+  // prevues" — même source que le journal muscu (Sorties/Journal), pas une
+  // deuxième lecture de la collection.
+  const strengthLogs = useStrengthLogs()
 
   // Intervals credentials — same direct-read pattern as use-daily-workout.ts
   // (IntervalsProvider deliberately doesn't expose the raw athleteId/apiKey).
@@ -467,8 +477,15 @@ export function useTrainingPlan() {
         return { ...session, strengthValidation }
       })
 
+      // Retour utilisateur : "le plan d'entrainement ne devrais t il pas
+      // etre figé avec les seances par jour ?" — chaque séance type obtient
+      // une date déterministe (jamais confiée à l'IA, voir
+      // distributeWeekdayOffsets) dès sa génération, plutôt qu'un
+      // sélecteur de date libre non persisté au moment de l'envoi.
+      const datedSessions = assignSessionDates(week, sessionsWithValidation)
+
       const weeks = activePlan.weeks.map((w) =>
-        w.weekNumber === week.weekNumber ? { ...w, sampleSessions: sessionsWithValidation } : w
+        w.weekNumber === week.weekNumber ? { ...w, sampleSessions: datedSessions } : w
       )
       const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
       try {
@@ -485,6 +502,48 @@ export function useTrainingPlan() {
       setGeneratingSessionsForWeek(null)
     }
   }, [user, db, activePlan, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, athlete.isConfigured, athlete.data, toast])
+
+  /**
+   * Déplace une séance type vers un autre jour de SA semaine — retour
+   * utilisateur : le plan est "figé" par jour (date assignée à la
+   * génération, voir generateWeekSessions ci-dessus) mais reste modifiable,
+   * l'athlète connaît sa vie mieux que la répartition mécanique par défaut.
+   * clampDateToWeek empêche de faire glisser une séance dans une autre
+   * semaine du plan (une semaine a ses propres bornes de dates).
+   */
+  const moveSessionDate = useCallback(async (weekNumber: number, sessionIndex: number, newDate: string): Promise<boolean> => {
+    if (!user || !db || !activePlan) return false
+    const week = activePlan.weeks.find((w) => w.weekNumber === weekNumber)
+    if (!week || !week.sampleSessions) return false
+    const clamped = clampDateToWeek(newDate, week)
+
+    const weeks = activePlan.weeks.map((w) => {
+      if (w.weekNumber !== weekNumber || !w.sampleSessions) return w
+      return { ...w, sampleSessions: w.sampleSessions.map((s, i) => (i === sessionIndex ? { ...s, date: clamped } : s)) }
+    })
+    const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
+    try {
+      await updateDoc(ref, { weeks })
+      return true
+    } catch {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+      return false
+    }
+  }, [user, db, activePlan])
+
+  /**
+   * Réalisé vs prévu — retour utilisateur : "comment lier les seances
+   * realisees aux seance prevues". Réutilise planActivities (déjà fetché
+   * pour la recalibration, fenêtre startDate..aujourd'hui) et strengthLogs
+   * ci-dessus plutôt qu'une nouvelle lecture — voir matchSessionCompletion
+   * (training-plan-types.ts) pour la logique de rapprochement elle-même.
+   */
+  const getSessionCompletion = useCallback((week: PlanWeek, session: PlanWeekSessionWithValidation, sessionIndex: number): SessionCompletion => {
+    const cyclingActivities = planActivities.data
+      .filter((a) => a.start_date_local)
+      .map((a) => ({ startDate: (a.start_date_local as string).slice(0, 10), durationMinutes: (a.moving_time ?? 0) / 60 }))
+    return matchSessionCompletion(session, week.weekNumber, sessionIndex, todayId, cyclingActivities, strengthLogs.logs)
+  }, [planActivities.data, strengthLogs.logs, todayId])
 
   /** Pushes one plan-week sample session to Intervals.icu on a chosen date — same event path as "Proposition du jour", with a date-independent externalId so re-picking the date moves rather than duplicates the entry. */
   const sendSessionToIntervals = useCallback(async (
@@ -537,6 +596,8 @@ export function useTrainingPlan() {
     archivePlan,
     generateWeekSessions,
     generatingSessionsForWeek,
+    moveSessionDate,
+    getSessionCompletion,
     sendSessionToIntervals,
     sendingSessionKey,
     canSendToIntervals,

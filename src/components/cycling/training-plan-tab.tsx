@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion, Apple, Dumbbell, PlayCircle } from 'lucide-react'
+import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion, Apple, Dumbbell, PlayCircle, CheckCircle2, XCircle } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -17,7 +17,7 @@ import { useTrainingPlan } from './use-training-plan'
 import { useTrainingPreferences } from './use-training-preferences'
 import { LogStrengthSessionDialog } from './log-strength-session-dialog'
 import { LiveStrengthSessionView } from './live-strength-session-view'
-import { currentPlanWeek, type PlanPhase, type PlanWeek } from './training-plan-types'
+import { currentPlanWeek, type PlanPhase, type PlanWeek, type SessionCompletion } from './training-plan-types'
 import { upcomingGoals } from './coach-memory-types'
 import { EmptyState } from '@/components/ui/empty-state'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
@@ -45,7 +45,7 @@ const PHASE_BADGE_CLASS: Record<PlanPhase, string> = {
 export function TrainingPlanTab() {
   const {
     activePlan, isLoadingPlan, isGenerating, goals, isLoadingGoals, generate, archivePlan,
-    generateWeekSessions, generatingSessionsForWeek, sendSessionToIntervals, sendingSessionKey, canSendToIntervals,
+    generateWeekSessions, generatingSessionsForWeek, moveSessionDate, getSessionCompletion, sendSessionToIntervals, sendingSessionKey, canSendToIntervals,
   } = useTrainingPlan()
   const today = format(new Date(), 'yyyy-MM-dd')
   const upcoming = upcomingGoals(goals, today)
@@ -394,6 +394,8 @@ export function TrainingPlanTab() {
                               canSendToIntervals={canSendToIntervals}
                               onRegenerate={() => generateWeekSessions(w)}
                               onSend={(session, index, dateId) => sendSessionToIntervals(session, w.weekNumber, index, dateId)}
+                              onMoveDate={(index, newDate) => moveSessionDate(w.weekNumber, index, newDate)}
+                              getCompletion={(session, index) => getSessionCompletion(w, session, index)}
                             />
                           </td>
                         </tr>
@@ -520,6 +522,10 @@ interface WeekSessionsPanelProps {
   canSendToIntervals: boolean
   onRegenerate: () => void
   onSend: (session: PlanWeekSession, index: number, dateId: string) => void
+  /** Retour utilisateur : "le plan d'entrainement... figé avec les seances par jour" — chaque séance a désormais une date persistée (assignSessionDates), modifiable ici plutôt qu'un sélecteur libre non sauvegardé. */
+  onMoveDate: (index: number, newDate: string) => void
+  /** Retour utilisateur : "comment lier les seances realisees aux seance prevues" — rapprochement réalisé/prévu (matchSessionCompletion), calculé dans useTrainingPlan (getSessionCompletion). */
+  getCompletion: (session: PlanWeekSession, index: number) => SessionCompletion
 }
 
 /**
@@ -530,9 +536,7 @@ interface WeekSessionsPanelProps {
  * from "Proposition du jour" (which adapts to a specific day's real
  * conditions) — these are the phase-appropriate ideal sessions instead.
  */
-function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToIntervals, onRegenerate, onSend }: WeekSessionsPanelProps) {
-  const [dates, setDates] = useState<Record<number, string>>({})
-  const getDate = (index: number) => dates[index] ?? week.startDate
+function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToIntervals, onRegenerate, onSend, onMoveDate, getCompletion }: WeekSessionsPanelProps) {
   // Retour utilisateur : "un système de suivi de la seance a la salle, avec
   // chronometre, temps de repos" — vue plein écran gardée en state local
   // plutôt qu'un Dialog, pour couvrir tout l'écran pendant la séance.
@@ -578,11 +582,37 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
         {week.sampleSessions.map((session, index) => {
           const key = `${week.weekNumber}-${index}`
           const isSending = sendingSessionKey === key
+          // Retour utilisateur : "comment lier les seances realisees aux
+          // seance prevues" — 'upcoming'/'unscheduled' ne sont pas affichés
+          // (bruit inutile, c'est l'état par défaut d'une séance à venir),
+          // seuls 'done'/'missed' apportent une vraie information.
+          const completion = getCompletion(session, index)
           return (
             <div key={index} className="rounded-xl border border-border bg-card/60 p-3 space-y-2">
               <div className="flex items-start justify-between gap-2 flex-wrap">
                 <div>
-                  <p className="text-sm font-medium">{session.title}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Jour assigné (assignSessionDates) — absent sur une
+                        semaine mise en cache avant l'introduction du plan
+                        figé par jour, auquel cas seul le sélecteur de date
+                        libre plus bas reste disponible. */}
+                    {session.date && (
+                      <Badge variant="secondary" className="text-[10px] capitalize">
+                        {format(new Date(`${session.date}T00:00:00`), 'EEEE d MMM', { locale: fr })}
+                      </Badge>
+                    )}
+                    <p className="text-sm font-medium">{session.title}</p>
+                    {completion.status === 'done' && (
+                      <Badge className="text-[10px] gap-1 bg-primary/15 text-primary border-primary/30 hover:bg-primary/15">
+                        <CheckCircle2 className="w-3 h-3" /> Réalisée{completion.actualDurationMinutes != null ? ` · ${Math.round(completion.actualDurationMinutes)}min` : ''}
+                      </Badge>
+                    )}
+                    {completion.status === 'missed' && (
+                      <Badge variant="outline" className="text-[10px] gap-1 border-destructive/40 text-destructive bg-destructive/5">
+                        <XCircle className="w-3 h-3" /> Manquée
+                      </Badge>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{session.rationale}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -665,15 +695,16 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
               <div className="flex items-center gap-2 flex-wrap">
                 <Input
                   type="date"
-                  value={getDate(index)}
+                  value={session.date ?? week.startDate}
                   min={week.startDate}
                   max={week.endDate}
-                  onChange={(e) => setDates((d) => ({ ...d, [index]: e.target.value }))}
+                  onChange={(e) => onMoveDate(index, e.target.value)}
                   className="h-8 w-auto text-xs"
+                  aria-label={`Jour de la séance "${session.title}"`}
                 />
                 <Button
                   size="sm"
-                  onClick={() => onSend(session, index, getDate(index))}
+                  onClick={() => onSend(session, index, session.date ?? week.startDate)}
                   disabled={isSending || !canSendToIntervals}
                   className="gap-1.5 h-8"
                   title={canSendToIntervals ? undefined : 'Renseignez vos identifiants Intervals.icu dans Réglages'}
@@ -686,7 +717,7 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
                     <PlayCircle className="w-3.5 h-3.5" /> Démarrer la séance
                   </Button>
                 )}
-                {session.sessionKind === 'strength' && <LogStrengthSessionDialog session={session} weekNumber={week.weekNumber} />}
+                {session.sessionKind === 'strength' && <LogStrengthSessionDialog session={session} weekNumber={week.weekNumber} sessionIndex={index} />}
               </div>
             </div>
           )
@@ -696,6 +727,7 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
         <LiveStrengthSessionView
           session={liveSession.session}
           weekNumber={week.weekNumber}
+          sessionIndex={liveSession.index}
           sessionKey={`${week.weekNumber}-${liveSession.index}`}
           onClose={() => setLiveSession(null)}
         />
