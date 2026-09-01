@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exerciseHistory, distinctExerciseNames, formatTimer, summarizeSetsDetail, isDraftUsable, STRENGTH_DRAFT_MAX_AGE_MS, type StrengthSessionLogWithId } from './strength-log-types'
+import { exerciseHistory, distinctExerciseNames, formatTimer, summarizeSetsDetail, isDraftUsable, STRENGTH_DRAFT_MAX_AGE_MS, formatStrengthLogDescription, type StrengthSessionLogWithId, type LoggedExercise } from './strength-log-types'
 
 const logs: StrengthSessionLogWithId[] = [
   {
@@ -153,5 +153,41 @@ describe('isDraftUsable', () => {
 
   it('rejects a draft whose exercises are in a different order', () => {
     expect(isDraftUsable(now - 1000, names, ['Fentes bulgares', 'Squat'], now)).toBe(false)
+  })
+})
+
+describe('formatStrengthLogDescription', () => {
+  it('formats one line per exercise from setsDetail when present', () => {
+    const exercises: LoggedExercise[] = [
+      { name: 'Squat', sets: 3, reps: '5', loadKg: 85, setsDetail: [{ reps: 5, loadKg: 80 }, { reps: 5, loadKg: 82.5 }, { reps: 5, loadKg: 85 }] },
+    ]
+    expect(formatStrengthLogDescription(exercises)).toBe('Squat: 5 reps @ 80kg, 5 reps @ 82.5kg, 5 reps @ 85kg')
+  })
+
+  it('falls back to the sets/reps/loadKg summary when setsDetail is absent (retroactive logging)', () => {
+    const exercises: LoggedExercise[] = [{ name: 'Développé couché', sets: 4, reps: '8-10', loadKg: 60 }]
+    expect(formatStrengthLogDescription(exercises)).toBe('Développé couché: 4x8-10 @ 60kg')
+  })
+
+  it('omits the load for a bodyweight exercise', () => {
+    const exercises: LoggedExercise[] = [{ name: 'Pompes', sets: 3, reps: '15' }]
+    expect(formatStrengthLogDescription(exercises)).toBe('Pompes: 3x15')
+  })
+
+  it('appends notes in parentheses when present', () => {
+    const exercises: LoggedExercise[] = [{ name: 'Squat', sets: 3, reps: '5', loadKg: 80, notes: 'Genou droit surveillé' }]
+    expect(formatStrengthLogDescription(exercises)).toBe('Squat: 3x5 @ 80kg (Genou droit surveillé)')
+  })
+
+  it('joins multiple exercises with newlines, one per line', () => {
+    const exercises: LoggedExercise[] = [
+      { name: 'Squat', sets: 3, reps: '5', loadKg: 80 },
+      { name: 'Fentes bulgares', sets: 3, reps: '8', loadKg: 20 },
+    ]
+    expect(formatStrengthLogDescription(exercises)).toBe('Squat: 3x5 @ 80kg\nFentes bulgares: 3x8 @ 20kg')
+  })
+
+  it('returns an empty string for no exercises', () => {
+    expect(formatStrengthLogDescription([])).toBe('')
   })
 })

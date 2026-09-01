@@ -457,6 +457,44 @@ Pour ajouter un module à la nav principale : ajouter une entrée à `navItems` 
 `src/app/<route>/page.tsx`. Un module qui ne justifie pas une place dans la nav principale peut
 rester accessible via la carte "Autres modules" de Réglages à la place.
 
+## Export d'une séance muscu vers Intervals.icu (Strava en attente)
+
+Retour utilisateur : "seras t il possible d'exporter la séance de muscu vers Strava et/ou dans
+intervals". Les deux services demandaient une décision : Intervals.icu réutilise l'authentification
+déjà en place dans l'app (clé API, `settings/intervals`) — construit tout de suite. Strava
+demanderait une intégration OAuth complète depuis zéro (aucune app Strava enregistrée, aucun jeton
+nulle part dans cette app aujourd'hui — le seul "Strava" existant est un badge d'affichage en
+lecture seule sur les activités déjà synchronisées *via* Intervals.icu, voir `rides-journal-tab.tsx`)
+— différé, l'athlète doit d'abord créer une application API sur son propre compte Strava (developers
+.strava.com → "My API Application" — nom, catégorie, "Authorization Callback Domain" pointant vers le
+domaine de l'app) avant qu'une intégration OAuth ait un `client_id`/`client_secret` à utiliser.
+
+**`IntervalsService.createManualActivity()`** (`intervals-api.ts`) — crée une activité RÉALISÉE (pas
+planifiée, voir `createPlannedWorkout` plus bas) via `POST /activities/manual`, sans upload de
+fichier FIT/GPX. **⚠️ Endpoint corroboré via la documentation communautaire (forum Intervals.icu +
+une spec OpenAPI tierce), jamais vérifié contre un vrai compte** — la doc officielle
+(`intervals.icu/api-docs.html`) et le forum eux-mêmes sont inaccessibles depuis ce sandbox (proxy
+réseau bloque `intervals.icu`), donc à confirmer au premier envoi réel ; l'erreur de l'API remonte
+telle quelle côté athlète (même chemin `postIntervals`/toast que le reste de l'intégration
+Intervals.icu) si le endpoint ou le schéma s'avère légèrement différent — pas un échec silencieux.
+**Intervals.icu n'a pas de modèle structuré séries/répétitions pour une activité créée via l'API**
+(confirmé par les retours de la communauté) — `formatStrengthLogDescription()`
+(`strength-log-types.ts`, pur/testé) met donc le détail série par série en texte libre dans
+`description`, une ligne par exercice. **Pas d'upsert par id externe** (contrairement à `/events`) :
+renvoyer la même séance créerait un doublon plutôt qu'une mise à jour — `intervalsActivityId`
+(nouveau champ sur `StrengthSessionLog`, posé au premier envoi réussi) sert de garde côté UI
+(`use-strength-log-export.ts` désactive le bouton une fois présent).
+
+**`durationSeconds`** (nouveau champ sur `StrengthSessionLog`) — le chrono de
+`LiveStrengthSessionView` existait déjà mais n'était jusqu'ici jamais persisté ; nécessaire pour
+renseigner `moving_time` à l'export. Absent pour une séance loguée via le formulaire rétroactif
+(`log-strength-session-dialog.tsx`, qui ne suit pas le temps).
+
+**Bouton d'export** sur chaque entrée muscu du Journal (`rides-journal-tab.tsx`) — pas sur les
+sorties vélo juste à côté, qui viennent déjà d'Intervals.icu (sync entrant) : une séance muscu n'a
+aucun capteur/montre qui la synchronise automatiquement, d'où ce geste manuel. Remplacé par une coche
+une fois exportée.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

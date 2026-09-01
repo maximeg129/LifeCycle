@@ -24,12 +24,14 @@ import { fr } from 'date-fns/locale'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Bike, ChevronRight, Timer, Flame, Dumbbell } from 'lucide-react'
+import { Bike, ChevronRight, Timer, Flame, Dumbbell, Send, Loader2, CheckCircle2 } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { useActivities, useFitnessChart } from '@/hooks/use-intervals'
 import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
 import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
 import { RideAnalysisDialog, RideAnalysisTrigger } from './ride-analysis-dialog'
 import { useStrengthLogs } from '@/components/cycling/use-strength-logs'
+import { useStrengthLogExport } from '@/components/cycling/use-strength-log-export'
 import type { StrengthSessionLogWithId } from '@/components/cycling/strength-log-types'
 
 type RideActivity = ReturnType<typeof useActivities>['data'][number]
@@ -61,6 +63,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
   const activities = useActivities(activitiesOldest, newest)
   const fitness = useFitnessChart(fitnessOldest, newest)
   const strengthLogs = useStrengthLogs()
+  const { exportLog, sendingLogId, canExport } = useStrengthLogExport()
   const [analyzingRide, setAnalyzingRide] = useState<{ id: string; label: string } | null>(null)
 
   // Map date → charge d'entraînement du jour, pour les activités qui
@@ -148,6 +151,31 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                       {entry.log.exercises.reduce((sum, e) => sum + e.sets, 0)} série{entry.log.exercises.reduce((sum, e) => sum + e.sets, 0) > 1 ? 's' : ''}
                     </span>
                   </div>
+                  {/* Retour utilisateur : "seras t il possible d'exporter la
+                      séance de muscu vers... intervals" — pas de bouton pour
+                      les sorties vélo ci-dessous, elles viennent déjà
+                      d'Intervals.icu (sync entrant) ; une séance muscu n'a
+                      aucun capteur/montre qui la synchronise automatiquement,
+                      d'où ce bouton d'export manuel. Désactivé une fois
+                      envoyée (intervalsActivityId posé) — pas d'upsert côté
+                      Intervals.icu pour une activité manuelle, renvoyer
+                      créerait un doublon. */}
+                  {entry.log.intervalsActivityId ? (
+                    <span className="hidden sm:flex items-center gap-1 text-[11px] text-primary shrink-0" title="Déjà exportée sur Intervals.icu">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                    </span>
+                  ) : (
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8 shrink-0"
+                      disabled={!canExport || sendingLogId === entry.log.id}
+                      onClick={() => exportLog(entry.log)}
+                      title="Envoyer sur Intervals.icu"
+                    >
+                      {sendingLogId === entry.log.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    </Button>
+                  )}
                 </div>
               ) : (() => {
               const ride = entry.ride
