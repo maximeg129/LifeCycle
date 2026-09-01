@@ -15,6 +15,7 @@
 import { z } from 'zod';
 import { type FlowResult } from '@/ai/anthropic';
 import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
+import { ON_BIKE_FUELING_GUIDANCE } from './on-bike-fueling-guidance';
 import { invokeCoachJson } from '@/ai/coach/invokeCoach';
 import { withCoachOutputContract } from '@/ai/coach/outputContract';
 
@@ -44,6 +45,13 @@ const PlanWeekSessionSchema = z.object({
   intensityLabel: z.string().describe('One or two words, e.g. "Endurance", "Seuil", "Récupération active".'),
   rationale: z.string().describe('1-2 sentences in French: why this session fits the week\'s phase/focus.'),
   structuredWorkout: z.string().describe('Intervals.icu workout-builder text script — see system prompt for the exact syntax.'),
+  fueling: z.object({
+    neededOnBike: z.boolean().describe("false quand la durée/intensité de CETTE séance ne justifie pas un apport glucidique pendant l'effort (repères S03/S04 : sous ~60-75min à intensité modérée, bénéfice non démontré) — jamais un apport inventé pour une séance courte."),
+    carbGramsPerHourMin: z.number().nullable().describe('Borne basse de la fourchette de glucides recommandée (g/h) pour CETTE séance. Null si neededOnBike est false.'),
+    carbGramsPerHourMax: z.number().nullable().describe('Borne haute — ne doit JAMAIS dépasser 120 (plafond sourcé R34). Null si neededOnBike est false.'),
+    hydrationNote: z.string().nullable().describe("1 phrase de rappel hydratation/électrolytes si la durée le justifie (>60-70min), sinon null."),
+    rationale: z.string().describe("1-2 phrases expliquant la fourchette choisie à partir de la durée/intensité RÉELLES de cette séance — jamais un chiffre générique."),
+  }).describe("Alimentation à avoir sur le vélo pendant la séance — ancrée dans la recherche fournie (voir guidage ci-dessous et S03/S04, la règle nutrition-carb-intake-guidance/R34), jamais un chiffre au hasard."),
 });
 
 const PlanWeekSessionsOutputSchema = withCoachOutputContract({
@@ -108,6 +116,7 @@ Règles impératives :
   (ex: "seuil à 95% FTP, environ 260W" plutôt que "seuil" tout court) — le script structuré reste en % de
   FTP. Si la FTP n'est pas fournie (n/a ci-dessus), reste en %/ressenti, ne l'invente jamais.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
+- ${ON_BIKE_FUELING_GUIDANCE}
 
 ${STRUCTURED_WORKOUT_SYNTAX}
 
@@ -122,7 +131,14 @@ en une phrase, "recommendation" indique quelle séance prioriser si le temps man
       "durationMinutes": nombre,
       "intensityLabel": "un ou deux mots",
       "rationale": "1 à 2 phrases expliquant pourquoi cette séance colle à la phase/au focus de la semaine",
-      "structuredWorkout": "script structuré en sections + étapes, voir le format ci-dessus"
+      "structuredWorkout": "script structuré en sections + étapes, voir le format ci-dessus",
+      "fueling": {
+        "neededOnBike": booléen,
+        "carbGramsPerHourMin": nombre ou null,
+        "carbGramsPerHourMax": nombre ou null,
+        "hydrationNote": "rappel court ou null",
+        "rationale": "1-2 phrases ancrées dans la durée/intensité réelles de cette séance"
+      }
     }
   ]
 }`;
