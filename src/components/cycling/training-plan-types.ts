@@ -11,8 +11,20 @@
 import { addDays, format } from 'date-fns'
 import { mondayOf } from './load-types'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
+import type { StrengthSessionValidationSummary } from '@/domain/cycling/validation/strengthSessionValidator'
 
 export type PlanPhase = 'base' | 'build' | 'peak' | 'taper' | 'recovery'
+
+/**
+ * Une séance type, avec son verdict de validation musculation (S05) attaché
+ * — calculé côté client après réception de la réponse du flow (voir
+ * strength-session-plan-types.ts), jamais par le modèle lui-même. Absent
+ * pour une séance "cycling", ou une séance mise en cache avant
+ * l'introduction de ce champ (retour utilisateur : grille de validation
+ * musculation, "une séance qui ne les respecte pas ne doit jamais être
+ * proposée comme séance complète").
+ */
+export type PlanWeekSessionWithValidation = PlanWeekSession & { strengthValidation?: StrengthSessionValidationSummary }
 
 const MIN_WEEKLY_MINUTES = 60
 const MAX_WEEKLY_MINUTES = 1500 // 25h/week
@@ -85,7 +97,7 @@ export interface PlanWeekContent {
    * here so re-opening the week doesn't re-call the AI. Absent until
    * generated; never regenerated automatically once present.
    */
-  sampleSessions?: PlanWeekSession[]
+  sampleSessions?: PlanWeekSessionWithValidation[]
 }
 
 export interface PlanWeek extends PlanWeekSkeleton, PlanWeekContent {}

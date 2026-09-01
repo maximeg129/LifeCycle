@@ -619,6 +619,41 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
                   </ul>
                 </div>
               )}
+              {/* S05 §4, dernière case de la checklist : "si is_maintenance_only:
+                  true, l'interface doit l'afficher clairement comme telle,
+                  pas comme séance de force par défaut" — badge distinct
+                  plutôt qu'une simple mention dans le texte. */}
+              {session.sessionKind === 'strength' && session.strengthValidation?.isMaintenanceOnly && (
+                <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 bg-amber-500/5 w-fit">
+                  {session.sessionType === 'entretien' ? 'Entretien' : 'Top-up'} — pas la séance principale de la semaine
+                </Badge>
+              )}
+              {/* Retour utilisateur : "une séance qui ne les respecte pas
+                  ne doit jamais être proposée comme séance 'complète'" —
+                  résultat de validateStrengthSession (S05), calculé côté
+                  client dans use-training-plan.ts. Absent (donc jamais
+                  affiché) sur une séance mise en cache avant l'introduction
+                  de ce champ, ou une séance cycling. */}
+              {session.strengthValidation && session.strengthValidation.overallVerdict !== 'ok' && (
+                <div
+                  className={cn(
+                    'flex items-start gap-2 p-2 rounded-lg border text-xs',
+                    session.strengthValidation.overallVerdict === 'blocked' ? 'bg-destructive/5 border-destructive/20' : 'bg-yellow-500/5 border-yellow-500/20'
+                  )}
+                >
+                  <ShieldAlert className={cn('w-3.5 h-3.5 shrink-0 mt-0.5', session.strengthValidation.overallVerdict === 'blocked' ? 'text-destructive' : 'text-yellow-500')} />
+                  <div className="space-y-0.5">
+                    <p className="font-medium">
+                      {session.strengthValidation.overallVerdict === 'blocked' ? 'Séance incomplète — ne respecte pas la grille S05' : 'À vérifier (grille S05)'}
+                    </p>
+                    <ul className="space-y-0.5 text-muted-foreground list-disc pl-4">
+                      {session.strengthValidation.results
+                        .filter((r) => r.verdict === 'block' || r.verdict === 'warn')
+                        .map((r, i) => <li key={i}>{r.detail}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-2 flex-wrap">
                 <Input
                   type="date"

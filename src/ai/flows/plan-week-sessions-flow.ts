@@ -17,8 +17,11 @@ import { type FlowResult } from '@/ai/anthropic';
 import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
 import { ON_BIKE_FUELING_GUIDANCE } from './on-bike-fueling-guidance';
 import { STRENGTH_TRAINING_GUIDANCE } from './strength-training-guidance';
+import { STRENGTH_SESSION_VALIDATION_GUIDANCE } from './strength-session-validation-guidance';
 import { invokeCoachJson } from '@/ai/coach/invokeCoach';
 import { withCoachOutputContract } from '@/ai/coach/outputContract';
+
+const MovementPatternEnum = z.enum(['bilateral-heavy', 'hip-hinge', 'unilateral', 'anti-extension', 'anti-rotation-lateral', 'ankle-calf']);
 
 const PlanWeekSessionsInputSchema = z.object({
   weekNumber: z.number(),
@@ -28,6 +31,7 @@ const PlanWeekSessionsInputSchema = z.object({
   notes: z.string().optional().describe('Any plan note specific to this week.'),
   sportType: z.string().optional().describe('Preferred Intervals.icu sport type (e.g. "Ride"). Defaults to "Ride".'),
   targetStrengthMinutes: z.number().optional().describe('This week\'s target strength-training volume, from the plan (PlanWeek.targetStrengthMinutes) — present ONLY when the athlete requested musculation for this plan. When present, ALSO generate 1-3 strength sessions (sessionKind "strength") summing close to this, in ADDITION to the cycling sessions (never counted toward targetWeeklyMinutes). When absent, NEVER produce a strength session.'),
+  recentStrengthPatterns: z.array(z.array(MovementPatternEnum)).optional().describe('Movement patterns of the ~2 most recently logged strength sessions, oldest first — for the S05 hip-hinge recency rule (see STRENGTH_SESSION_VALIDATION_GUIDANCE). Empty/absent if no history.'),
   training: z.object({
     ctl: z.number().optional(),
     atl: z.number().optional(),
@@ -42,10 +46,15 @@ export type PlanWeekSessionsInput = z.infer<typeof PlanWeekSessionsInputSchema>;
 
 const StrengthExerciseSchema = z.object({
   name: z.string().describe('e.g. "Squat", "Presse à cuisses", "Fentes bulgares".'),
+  pattern: MovementPatternEnum.describe('The ONE movement pattern this exercise primarily trains — see STRENGTH_SESSION_VALIDATION_GUIDANCE (S05) for the 6 patterns and which is mandatory.'),
   sets: z.number(),
-  reps: z.string().describe('e.g. "5" or "8-10" — a count or range, never a specific kg load.'),
-  loadGuidance: z.string().describe('QUALITATIVE load guidance only, e.g. "charge lourde (RPE 8-9)" — NEVER a specific kg/%1RM number, the research provided does not give one for an individual athlete.'),
-  restSeconds: z.number().optional(),
+  reps: z.string().describe('Human-readable display, e.g. "5" or "8-10" — MUST match repsMin/repsMax below exactly (e.g. "3-6" for repsMin=3/repsMax=6, or "5" if repsMin=repsMax=5).'),
+  repsMin: z.number().describe('Lower bound of the rep count (equal to repsMax for a fixed number) — used for mechanical validation against the S05 phase matrix.'),
+  repsMax: z.number().describe('Upper bound of the rep count.'),
+  pct1RMMin: z.number().nullable().describe('Lower bound of estimated %1RM for THIS exercise, per the S05 matrix for the session\'s strengthPhase — null when not applicable (bodyweight/core work).'),
+  pct1RMMax: z.number().nullable().describe('Upper bound of estimated %1RM — null when not applicable.'),
+  loadGuidance: z.string().describe('Short qualitative complement, e.g. "charge lourde (RPE 8-9)" — alongside the numeric pct1RM range above, not a replacement for it.'),
+  restSeconds: z.number().describe('Rest between sets, in seconds — per the S05 phase matrix (STRENGTH_SESSION_VALIDATION_GUIDANCE).'),
 });
 
 const PlanWeekSessionSchema = z.object({
@@ -56,6 +65,8 @@ const PlanWeekSessionSchema = z.object({
   intensityLabel: z.string().describe('One or two words, e.g. "Endurance", "Seuil", "Récupération active", "Force".'),
   rationale: z.string().describe('1-2 sentences in French: why this session fits the week\'s phase/focus.'),
   structuredWorkout: z.string().optional().describe('CYCLING ONLY (sessionKind "cycling") — Intervals.icu workout-builder text script, see system prompt for the exact syntax. Absent for a strength session.'),
+  sessionType: z.enum(['principale', 'entretien', 'top-up']).optional().describe('STRENGTH ONLY — "principale" must satisfy the S05 pattern-coverage minimum (≥4/6 patterns incl. bilateral-heavy) ; "entretien"/"top-up" are exempt (1-2 exercises allowed) but must NEVER silently replace the week\'s real principal strength session — say so explicitly in warnings if that\'s the case.'),
+  strengthPhase: z.enum(['base', 'force-max', 'transfert-puissance', 'entretien']).optional().describe('STRENGTH ONLY — determines the S05 charge/reps/repos matrix each exercise\'s sets/repsMin/repsMax/pct1RM/restSeconds must be consistent with.'),
   strengthExercises: z.array(StrengthExerciseSchema).optional().describe('STRENGTH ONLY (sessionKind "strength") — 3-6 exercises. Absent for a cycling session.'),
   fueling: z.object({
     neededOnBike: z.boolean().describe("false quand la durée/intensité de CETTE séance ne justifie pas un apport glucidique pendant l'effort (repères S03/S04 : sous ~60-75min à intensité modérée, bénéfice non démontré) — jamais un apport inventé pour une séance courte."),
@@ -95,6 +106,12 @@ export async function planWeekSessions(input: PlanWeekSessionsInput): Promise<Fl
   if (parsedInput.notes) sections.push(`NOTE SPÉCIFIQUE À CETTE SEMAINE : ${parsedInput.notes}`);
   if (parsedInput.targetStrengthMinutes != null) {
     sections.push(`MUSCULATION DEMANDÉE POUR CE PLAN : INCLURE_MUSCULATION=true — volume cible cette semaine : ${parsedInput.targetStrengthMinutes} minutes, séparé du volume vélo ci-dessus.`);
+    const recentPatterns = parsedInput.recentStrengthPatterns ?? [];
+    sections.push(
+      recentPatterns.length > 0
+        ? `PATTERNS DES DERNIÈRES SÉANCES DE MUSCULATION (de la plus ancienne à la plus récente, pour la règle hip-hinge S05) :\n${recentPatterns.map((p, i) => `  - Séance -${recentPatterns.length - i} : ${p.join(', ') || 'aucun pattern enregistré'}`).join('\n')}`
+        : 'PATTERNS DES DERNIÈRES SÉANCES DE MUSCULATION : aucun historique disponible.'
+    );
   }
 
   if (parsedInput.training) {
@@ -136,7 +153,7 @@ Règles impératives :
   fueling (jamais strengthExercises) ; une séance "strength" porte strengthExercises (jamais structuredWorkout
   ni fueling — l'alimentation à l'effort ne s'applique pas à une séance de musculation).
 - ${ON_BIKE_FUELING_GUIDANCE}
-${parsedInput.targetStrengthMinutes != null ? `- ${STRENGTH_TRAINING_GUIDANCE}` : "- Musculation non demandée pour ce plan : ne produis JAMAIS de séance sessionKind=\"strength\"."}
+${parsedInput.targetStrengthMinutes != null ? `- ${STRENGTH_TRAINING_GUIDANCE}\n- ${STRENGTH_SESSION_VALIDATION_GUIDANCE}` : "- Musculation non demandée pour ce plan : ne produis JAMAIS de séance sessionKind=\"strength\"."}
 
 ${STRUCTURED_WORKOUT_SYNTAX}
 
@@ -168,8 +185,10 @@ en une phrase, "recommendation" indique quelle séance prioriser si le temps man
       "durationMinutes": nombre,
       "intensityLabel": "ex. Force",
       "rationale": "1 à 2 phrases",
+      "sessionType": "principale|entretien|top-up",
+      "strengthPhase": "base|force-max|transfert-puissance|entretien",
       "strengthExercises": [
-        { "name": "ex. Squat", "sets": nombre, "reps": "ex. 5 ou 8-10", "loadGuidance": "qualitatif seulement, ex. charge lourde (RPE 8-9)", "restSeconds": "optionnel" }
+        { "name": "ex. Squat", "pattern": "bilateral-heavy|hip-hinge|unilateral|anti-extension|anti-rotation-lateral|ankle-calf", "sets": nombre, "reps": "ex. 5 ou 8-10 — DOIT correspondre à repsMin/repsMax", "repsMin": nombre, "repsMax": nombre, "pct1RMMin": nombre ou null, "pct1RMMax": nombre ou null, "loadGuidance": "ex. charge lourde (RPE 8-9)", "restSeconds": nombre }
       ]
     }` : ''}
   ]
