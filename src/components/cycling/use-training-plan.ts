@@ -455,9 +455,11 @@ export function useTrainingPlan() {
       // jamais être proposée comme séance 'complète'" — vérification
       // déterministe (S05, strengthSessionValidator.ts) attachée à chaque
       // séance de musculation générée, jamais une auto-évaluation du
-      // modèle. hoursBeforeNextKeySession reste `null` : aucune date réelle
-      // n'est encore assignée à une séance type (l'athlète en choisit une
-      // au moment d'envoyer sur Intervals.icu) — voir checkTimingBeforeKeySession.
+      // modèle. hoursBeforeNextKeySession reste `null` : les séances de
+      // CETTE semaine n'ont pas encore de date à ce stade (assignSessionDates
+      // tourne juste après, voir plus bas) et croiser le timing avec une
+      // séance clé d'une AUTRE semaine du plan n'est pas câblé — voir
+      // checkTimingBeforeKeySession.
       const strengthSessionsThisWeek = result.data.sessions.filter((s) => s.sessionKind === 'strength').length
       const sessionsWithValidation = result.data.sessions.map((session) => {
         if (session.sessionKind !== 'strength' || !session.strengthPhase) return session
