@@ -253,6 +253,27 @@ export interface ManualActivityInput {
    */
   description: string;
   durationSeconds?: number;
+  /**
+   * Poids total soulevé (kg) — retour utilisateur : "on a la charge...
+   * pourquoi ça ne le remonte pas". `kg_lifted` confirmé comme vrai champ de
+   * l'Activity Intervals.icu via son schéma OpenAPI public (le seul dont
+   * l'app dispose déjà les données sans rien demander de plus à
+   * l'athlète — voir totalWeightLiftedKg, strength-log-types.ts). Absent
+   * (jamais 0 envoyé) pour une séance purement au poids du corps — "?"
+   * reste honnête plutôt qu'un zéro qui laisserait croire à une charge
+   * réellement nulle.
+   */
+  weightLiftedKg?: number;
+  /**
+   * RPE de séance (1-10) — seul signal qu'Intervals.icu peut utiliser pour
+   * calculer son "Load" sur une activité manuelle sans FC/puissance (`Load`
+   * dépend normalement de la FC pendant l'effort, absente ici ; à défaut
+   * `session_rpe` est le champ que la communauté confirme utiliser pour une
+   * séance muscu). Jamais envoyé si l'athlète n'a pas réellement saisi de
+   * RPE (voir StrengthSessionLog.sessionRpe) — Load reste "?" sur
+   * Intervals.icu plutôt qu'un chiffre inventé côté app.
+   */
+  sessionRpe?: number;
 }
 
 export interface ManualActivityResult {
@@ -573,6 +594,12 @@ export class IntervalsService {
       description: activity.description,
       manual: true,
       ...(activity.durationSeconds != null ? { moving_time: activity.durationSeconds } : {}),
+      // kg_lifted/session_rpe : noms de champ confirmés via le schéma
+      // OpenAPI public d'Intervals.icu (Activity) — voir ManualActivityInput
+      // pour le détail de pourquoi chacun n'est envoyé que s'il porte une
+      // vraie valeur.
+      ...(activity.weightLiftedKg != null && activity.weightLiftedKg > 0 ? { kg_lifted: activity.weightLiftedKg } : {}),
+      ...(activity.sessionRpe != null ? { session_rpe: activity.sessionRpe } : {}),
     };
     return this.postIntervals<ManualActivityResult>('/activities/manual', body);
   }

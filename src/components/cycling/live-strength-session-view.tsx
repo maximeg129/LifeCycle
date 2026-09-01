@@ -209,6 +209,16 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
   const totalSets = progress.reduce((sum, ex) => sum + ex.sets.length, 0)
   const doneSets = progress.reduce((sum, ex) => sum + ex.sets.filter((s) => s.done).length, 0)
 
+  // RPE de séance — retour utilisateur : "je ne sais pas si c'est possible
+  // le [Load]" sur l'export Intervals.icu. Load y dépend normalement de la
+  // FC (absente pour une séance muscu dans cette app) ; à défaut,
+  // session_rpe est le seul signal qu'Intervals.icu peut utiliser — jamais
+  // envoyé sans une vraie saisie de l'athlète (voir sessionRpe,
+  // strength-log-types.ts). Optionnel : "Terminer la séance" reste
+  // possible sans le renseigner, Load reste alors honnêtement "?" côté
+  // Intervals.icu plutôt qu'un chiffre inventé.
+  const [rpe, setRpe] = useState<number | null>(null)
+
   const updateSet = (exIndex: number, setIndex: number, patch: Partial<SetProgress>) => {
     setProgress((prev) => prev.map((ex, i) => (i !== exIndex ? ex : { ...ex, sets: ex.sets.map((s, j) => (j !== setIndex ? s : { ...s, ...patch })) })))
   }
@@ -253,6 +263,7 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
       // mais n'était jusqu'ici jamais persisté ; nécessaire pour renseigner
       // moving_time à l'export (voir use-strength-log-export.ts).
       durationSeconds: elapsedSeconds,
+      ...(rpe != null ? { sessionRpe: rpe } : {}),
       createdAt: serverTimestamp(),
     } satisfies StrengthSessionLog
     const ok = await submit(() => setDoc(ref, data), { path: ref.path, operation: 'create', requestResourceData: data })
@@ -368,6 +379,25 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
           </div>
           )
         })}
+
+        <div className="lc-card p-4 space-y-2">
+          <p className="text-sm font-medium">RPE de séance (optionnel)</p>
+          <p className="text-xs text-muted-foreground">1 = facile, 10 = proche de l&apos;échec — alimente le calcul du Load une fois exportée vers Intervals.icu.</p>
+          <div className="grid grid-cols-5 gap-1.5">
+            {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+              <Button
+                key={n}
+                type="button"
+                size="sm"
+                variant={rpe === n ? 'default' : 'outline'}
+                className="h-8 px-0 text-xs"
+                onClick={() => setRpe(rpe === n ? null : n)}
+              >
+                {n}
+              </Button>
+            ))}
+          </div>
+        </div>
 
         <Button onClick={handleFinish} disabled={isSaving} size="lg" className="w-full gap-2">
           <Flag className="w-4 h-4" /> Terminer la séance

@@ -20,7 +20,7 @@ import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
 import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
-import { formatStrengthLogDescription, type StrengthSessionLogWithId } from './strength-log-types'
+import { formatStrengthLogDescription, totalWeightLiftedKg, type StrengthSessionLogWithId } from './strength-log-types'
 
 interface IntervalsCredentialsDoc {
   intervalsAthleteId?: string
@@ -61,6 +61,13 @@ export function useStrengthLogExport() {
         startDateLocal: log.date,
         description: formatStrengthLogDescription(log.exercises),
         durationSeconds: log.durationSeconds,
+        // Retour utilisateur : "on a la charge, le temps... ça ne les
+        // inclut pas" — kg_lifted est calculable sans rien demander de plus
+        // (voir totalWeightLiftedKg) ; session_rpe n'est envoyé que si
+        // l'athlète l'a réellement saisi (jamais un chiffre inventé pour
+        // faire apparaître un "Load" sur Intervals.icu).
+        weightLiftedKg: totalWeightLiftedKg(log.exercises),
+        sessionRpe: log.sessionRpe,
       }
       const res = await fetch('/api/intervals/activities', {
         method: 'POST',

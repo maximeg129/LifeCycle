@@ -60,6 +60,9 @@ export function LogStrengthSessionDialog({ session, weekNumber, sessionIndex }: 
       return entry
     })
 
+    const rpeRaw = fd.get('rpe')
+    const rpe = rpeRaw != null && String(rpeRaw).trim() !== '' ? Number(rpeRaw) : undefined
+
     const ref = doc(collection(db, `users/${user.uid}/strengthSessionLogs`))
     const data = {
       userId: user.uid,
@@ -68,6 +71,7 @@ export function LogStrengthSessionDialog({ session, weekNumber, sessionIndex }: 
       exercises: loggedExercises,
       planWeekNumber: weekNumber,
       planSessionIndex: sessionIndex,
+      ...(rpe != null && Number.isFinite(rpe) ? { sessionRpe: rpe } : {}),
       createdAt: serverTimestamp(),
     } satisfies StrengthSessionLog
     const ok = await submit(() => setDoc(ref, data), { path: ref.path, operation: 'create', requestResourceData: data })
@@ -100,6 +104,11 @@ export function LogStrengthSessionDialog({ session, weekNumber, sessionIndex }: 
           <Label htmlFor="log-title">Titre</Label>
           <Input id="log-title" name="title" defaultValue={session.title} required />
         </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="log-rpe">RPE de séance (1-10, optionnel)</Label>
+        <Input id="log-rpe" name="rpe" type="number" min={1} max={10} placeholder="ex. 7" />
+        <p className="text-xs text-muted-foreground">Alimente le calcul du Load une fois exportée vers Intervals.icu.</p>
       </div>
       <div className="space-y-3 max-h-[50vh] overflow-y-auto pr-1">
         {exercises.map((ex, i) => {

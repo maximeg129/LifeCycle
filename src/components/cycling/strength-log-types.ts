@@ -89,6 +89,19 @@ export interface StrengthSessionLog {
    * fois.
    */
   intervalsActivityId?: string
+  /**
+   * RPE de séance (1-10, "distance par rapport au TTE") — retour
+   * utilisateur : "je ne sais pas si c'est possible le [Load]". Load sur
+   * Intervals.icu est calculé PAR EUX à partir de la FC (aucune FC captée
+   * pour une séance muscu dans cette app) ou, à défaut, du couple RPE ×
+   * durée (session_rpe, voir exportStrengthLogToIntervals) — jamais un
+   * chiffre inventé côté app : ce champ n'existe que si l'athlète l'a
+   * réellement saisi (LiveStrengthSessionView en fin de séance,
+   * LogStrengthSessionDialog en saisie rétroactive), et reste absent
+   * sinon — Load affiche alors honnêtement "?" sur Intervals.icu plutôt
+   * qu'un chiffre halluciné.
+   */
+  sessionRpe?: number
   createdAt?: unknown
 }
 
@@ -236,4 +249,45 @@ export function formatStrengthLogDescription(exercises: LoggedExercise[]): strin
       return `${ex.name}: ${detail}${notes}`
     })
     .join('\n')
+}
+
+/**
+ * Nombre de répétitions représentatif à partir d'une chaîne "reps" libre
+ * ("5", "8-10") — moyenne des nombres trouvés dans la chaîne (une plage
+ * "8-10" devient 9). Jamais un chiffre halluciné : c'est la seule lecture
+ * cohérente d'une plage prescrite quand aucun détail série par série n'est
+ * disponible (voir totalWeightLiftedKg ci-dessous). Renvoie 0 pour une
+ * chaîne sans aucun nombre plutôt que de planter.
+ */
+function averageRepsCount(reps: string): number {
+  const numbers = reps.match(/\d+(\.\d+)?/g)?.map(Number) ?? []
+  if (numbers.length === 0) return 0
+  return numbers.reduce((a, b) => a + b, 0) / numbers.length
+}
+
+/**
+ * Poids total soulevé (kg) — retour utilisateur : "ça ne revoit pas
+ * beaucoup d'informations... alors qu'on a la charge". C'est le "Weight
+ * Lifted" affiché par Intervals.icu une fois l'activité exportée (champ
+ * `kg_lifted`, confirmé via le schéma OpenAPI public d'Intervals.icu — voir
+ * ManualActivityInput, intervals-api.ts). Somme reps × charge sur chaque
+ * série qui porte une charge ; une série au poids du corps (loadKg absent)
+ * est ignorée plutôt que de lui attribuer un poids corporel estimé —
+ * jamais un chiffre inventé, uniquement les charges réellement saisies.
+ * Utilise setsDetail (suivi en direct) quand disponible pour un total
+ * exact série par série ; dégrade sur sets × loadKg × répétitions moyennes
+ * de la chaîne reps sinon (saisie rétroactive, voir averageRepsCount) —
+ * moins précis mais c'est la seule donnée disponible dans ce cas.
+ */
+export function totalWeightLiftedKg(exercises: LoggedExercise[]): number {
+  const total = exercises.reduce((sum, ex) => {
+    if (ex.setsDetail && ex.setsDetail.length > 0) {
+      return sum + ex.setsDetail.reduce((s, d) => s + (d.loadKg != null ? d.reps * d.loadKg : 0), 0)
+    }
+    if (ex.loadKg != null) {
+      return sum + ex.sets * averageRepsCount(ex.reps) * ex.loadKg
+    }
+    return sum
+  }, 0)
+  return Math.round(total * 10) / 10
 }

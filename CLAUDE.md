@@ -471,19 +471,17 @@ domaine de l'app) avant qu'une intégration OAuth ait un `client_id`/`client_sec
 
 **`IntervalsService.createManualActivity()`** (`intervals-api.ts`) — crée une activité RÉALISÉE (pas
 planifiée, voir `createPlannedWorkout` plus bas) via `POST /activities/manual`, sans upload de
-fichier FIT/GPX. **⚠️ Endpoint corroboré via la documentation communautaire (forum Intervals.icu +
-une spec OpenAPI tierce), jamais vérifié contre un vrai compte** — la doc officielle
-(`intervals.icu/api-docs.html`) et le forum eux-mêmes sont inaccessibles depuis ce sandbox (proxy
-réseau bloque `intervals.icu`), donc à confirmer au premier envoi réel ; l'erreur de l'API remonte
-telle quelle côté athlète (même chemin `postIntervals`/toast que le reste de l'intégration
-Intervals.icu) si le endpoint ou le schéma s'avère légèrement différent — pas un échec silencieux.
-**Intervals.icu n'a pas de modèle structuré séries/répétitions pour une activité créée via l'API**
-(confirmé par les retours de la communauté) — `formatStrengthLogDescription()`
-(`strength-log-types.ts`, pur/testé) met donc le détail série par série en texte libre dans
-`description`, une ligne par exercice. **Pas d'upsert par id externe** (contrairement à `/events`) :
-renvoyer la même séance créerait un doublon plutôt qu'une mise à jour — `intervalsActivityId`
-(nouveau champ sur `StrengthSessionLog`, posé au premier envoi réussi) sert de garde côté UI
-(`use-strength-log-export.ts` désactive le bouton une fois présent).
+fichier FIT/GPX. **Endpoint corroboré via la documentation communautaire (forum Intervals.icu + une
+spec OpenAPI tierce) — confirmé fonctionnel en prod** (badge "~ Manual Entry" visible côté athlète
+au premier envoi réel) ; l'erreur de l'API remonte telle quelle côté athlète (même chemin
+`postIntervals`/toast que le reste de l'intégration Intervals.icu) si jamais un champ s'avérait
+incorrect — pas un échec silencieux. **Intervals.icu n'a pas de modèle structuré séries/répétitions
+pour une activité créée via l'API** (confirmé par les retours de la communauté) —
+`formatStrengthLogDescription()` (`strength-log-types.ts`, pur/testé) met donc le détail série par
+série en texte libre dans `description`, une ligne par exercice. **Pas d'upsert par id externe**
+(contrairement à `/events`) : renvoyer la même séance créerait un doublon plutôt qu'une mise à jour
+— `intervalsActivityId` (nouveau champ sur `StrengthSessionLog`, posé au premier envoi réussi) sert
+de garde côté UI (`use-strength-log-export.ts` désactive le bouton une fois présent).
 
 **`durationSeconds`** (nouveau champ sur `StrengthSessionLog`) — le chrono de
 `LiveStrengthSessionView` existait déjà mais n'était jusqu'ici jamais persisté ; nécessaire pour
@@ -494,6 +492,34 @@ renseigner `moving_time` à l'export. Absent pour une séance loguée via le for
 sorties vélo juste à côté, qui viennent déjà d'Intervals.icu (sync entrant) : une séance muscu n'a
 aucun capteur/montre qui la synchronise automatiquement, d'où ce geste manuel. Remplacé par une coche
 une fois exportée.
+
+**"Weight Lifted" (kg_lifted) + Load (session_rpe)** — retour utilisateur après un premier envoi
+réel, capture d'écran de l'activité créée sur Intervals.icu à l'appui : "ça ne revoit pas beaucoup
+d'informations... alors qu'on a la charge, le temps... Je ne sais pas si c'est possible le load."
+Le premier export ne remplissait que `name`/`description`/`moving_time` — deux champs réels
+d'Intervals.icu restaient donc à "?" sur l'activité (Weight Lifted, Load) alors que l'app a déjà (ou
+pourrait avoir) de quoi les renseigner honnêtement. Les deux noms de champ exacts ont été confirmés
+via le schéma OpenAPI public d'Intervals.icu (`kg_lifted`, `session_rpe` sur `Activity`) plutôt que
+devinés — même sandbox network-blocked que documenté plus haut, contourné cette fois en téléchargeant
+le spec JSON tiers directement (`raw.githubusercontent.com`, non bloqué) et en l'inspectant en local
+plutôt qu'en résumé tronqué.
+- **`totalWeightLiftedKg()`** (`strength-log-types.ts`, pur/testé) — somme reps × charge sur chaque
+  série qui porte une charge, exact via `setsDetail` (suivi en direct) ou dégradé sur
+  `sets × loadKg × répétitions moyennes de la chaîne "reps"` sinon (saisie rétroactive, voir
+  `averageRepsCount`). Une série au poids du corps (sans charge) est ignorée plutôt que de lui
+  attribuer un poids corporel estimé. Calculable à 100% depuis les données déjà loguées — aucune
+  nouvelle saisie demandée à l'athlète, envoyé systématiquement (sauf séance purement poids du corps,
+  où `weightLiftedKg` reste 0 et n'est alors pas envoyé — "?" reste honnête plutôt qu'un zéro trompeur).
+- **Load — décision consciente de ne PAS l'inventer.** Le Load d'Intervals.icu dépend normalement de
+  la FC pendant l'effort (absente : aucune séance muscu de cette app ne capte de FC) ; à défaut, le
+  seul signal qu'Intervals.icu peut exploiter pour une activité manuelle est `session_rpe` (1-10) —
+  jamais calculé côté app (pas de formule sRPE maison, cohérent avec la discipline "jamais un chiffre
+  inventé" documentée partout ailleurs dans ce fichier). `StrengthSessionLog.sessionRpe` est donc une
+  nouvelle saisie OPTIONNELLE et réelle de l'athlète : un petit sélecteur 1-10 en bas de
+  `LiveStrengthSessionView` (juste avant "Terminer la séance", RPE non renseigné = séance quand même
+  loguable) et un champ numérique optionnel dans `LogStrengthSessionDialog` (saisie rétroactive). Si
+  absent, `session_rpe` n'est simplement pas envoyé — Load reste "?" côté Intervals.icu plutôt qu'un
+  nombre halluciné.
 
 ## Modèle de Données Firestore
 
