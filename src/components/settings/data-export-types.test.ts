@@ -48,7 +48,7 @@ describe('TOP_LEVEL_COLLECTIONS', () => {
   it('covers every top-level collection defined in firestore.rules', () => {
     const expected = [
       'settings', 'coachMemory', 'activities', 'trainingPlans', 'bikes', 'components',
-      'chains', 'coachInjuries', 'coachGoals', 'coachLibrary', 'sessionFeedback', 'workoutProposals',
+      'chains', 'coachInjuries', 'coachGoals', 'coachLibrary', 'sessionFeedback', 'strengthSessionLogs', 'workoutProposals',
       'rideAnalyses', 'coachChatMessages', 'maintenanceRecords', 'recipes', 'tags',
       'ingredients', 'cyclingClothingItems', 'plants', 'pantryItems', 'shoppingListItems',
       'mealPlans', 'mealLogs', 'hydrationLogs', 'expenseCategories', 'monthlyBudgets',

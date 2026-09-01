@@ -20,7 +20,7 @@ import { collection, getDocs, deleteDoc, type Firestore } from 'firebase/firesto
 // façon dont ce déséquilibre a pu passer inaperçu la première fois.
 export const TOP_LEVEL_COLLECTIONS = [
   'settings', 'coachMemory', 'activities', 'trainingPlans', 'bikes', 'components',
-  'chains', 'coachInjuries', 'coachGoals', 'coachLibrary', 'sessionFeedback', 'workoutProposals',
+  'chains', 'coachInjuries', 'coachGoals', 'coachLibrary', 'sessionFeedback', 'strengthSessionLogs', 'workoutProposals',
   'rideAnalyses', 'coachChatMessages', 'maintenanceRecords', 'recipes', 'tags',
   'ingredients', 'cyclingClothingItems', 'plants', 'pantryItems', 'shoppingListItems',
   'mealPlans', 'mealLogs', 'hydrationLogs', 'expenseCategories', 'monthlyBudgets',
