@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exerciseHistory, distinctExerciseNames, type StrengthSessionLogWithId } from './strength-log-types'
+import { exerciseHistory, distinctExerciseNames, formatTimer, summarizeSetsDetail, type StrengthSessionLogWithId } from './strength-log-types'
 
 const logs: StrengthSessionLogWithId[] = [
   {
@@ -72,5 +72,53 @@ describe('distinctExerciseNames', () => {
 
   it('returns an empty array for no logs', () => {
     expect(distinctExerciseNames([])).toEqual([])
+  })
+})
+
+describe('formatTimer', () => {
+  it('formats under a minute as "0:ss"', () => {
+    expect(formatTimer(45)).toBe('0:45')
+  })
+
+  it('formats minutes and seconds as "m:ss", zero-padded', () => {
+    expect(formatTimer(125)).toBe('2:05')
+  })
+
+  it('switches to "h:mm:ss" past an hour', () => {
+    expect(formatTimer(3661)).toBe('1:01:01')
+  })
+
+  it('rounds to the nearest second', () => {
+    expect(formatTimer(59.6)).toBe('1:00')
+  })
+
+  it('never goes negative — clamps to 0 rather than showing a minus sign', () => {
+    expect(formatTimer(-5)).toBe('0:00')
+  })
+
+  it('formats exactly 0 as "0:00"', () => {
+    expect(formatTimer(0)).toBe('0:00')
+  })
+})
+
+describe('summarizeSetsDetail', () => {
+  it('picks the heaviest set as the representative reps/loadKg', () => {
+    const summary = summarizeSetsDetail([{ reps: 6, loadKg: 80 }, { reps: 4, loadKg: 90 }, { reps: 5, loadKg: 85 }])
+    expect(summary).toEqual({ sets: 3, reps: '4', loadKg: 90 })
+  })
+
+  it('falls back to the last set when no load was recorded (bodyweight exercise)', () => {
+    const summary = summarizeSetsDetail([{ reps: 12 }, { reps: 10 }, { reps: 8 }])
+    expect(summary).toEqual({ sets: 3, reps: '8' })
+  })
+
+  it('counts every set even if only some carry a load', () => {
+    const summary = summarizeSetsDetail([{ reps: 10 }, { reps: 8, loadKg: 20 }])
+    expect(summary.sets).toBe(2)
+    expect(summary.loadKg).toBe(20)
+  })
+
+  it('returns a zeroed summary for an empty list rather than throwing', () => {
+    expect(summarizeSetsDetail([])).toEqual({ sets: 0, reps: '0' })
   })
 })
