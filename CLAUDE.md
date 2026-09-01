@@ -227,16 +227,90 @@ que dans Garage (à côté du reste du matériel) ; les données (`cyclingClothi
 l'UI a changé de page.
 
 **Coach** (`src/app/coach/page.tsx`) regroupe tout ce qui concerne planifier/faire/relire une
-sortie et la relation coach : Proposition du jour (onglet par défaut), Sorties (le journal
-d'activités, déplacé depuis Cyclisme > Vue d'ensemble), Météo & Tenue (l'ex-page `/weather`, qui
-redirige maintenant ici — `next.config.ts` — et qui renvoie vers Garage > Garde-robe plutôt que
-d'embarquer son propre CRUD vêtements), Plan, Stella, Mémoire coach — remplace l'ancien onglet
-"Coaching" de Cyclisme. Planifier une sortie avec la bonne intensité et planifier une sortie avec
-la bonne tenue sont le même geste ; les séparer en deux destinations de nav n'avait pas de sens.
-Cyclisme redevient purement la page données (Vue d'ensemble + PMC, sans onglets — voir plus bas).
-Proposition du jour peut aussi recevoir un lieu/heure de départ optionnels : le flow
-`dailyWorkoutRecommendation` récupère alors la météo réelle (vent inclus) et ajoute un conseil de
-direction pour l'avoir dans le dos au retour — voir la section flows IA plus bas.
+sortie et la relation coach : **Plan** (onglet par défaut — voir "Plan figé par jour" ci-dessous,
+Proposition du jour y a fusionné), Journal (ex-"Sorties", le journal d'activités, déplacé depuis
+Cyclisme > Vue d'ensemble), Météo & Tenue (l'ex-page `/weather`, qui redirige maintenant ici —
+`next.config.ts` — et qui renvoie vers Garage > Garde-robe plutôt que d'embarquer son propre CRUD
+vêtements), Stella, Mémoire coach — remplace l'ancien onglet "Coaching" de Cyclisme. Planifier une
+sortie avec la bonne intensité et planifier une sortie avec la bonne tenue sont le même geste ; les
+séparer en deux destinations de nav n'avait pas de sens. Cyclisme redevient purement la page
+données (Vue d'ensemble + PMC, sans onglets — voir plus bas). La séance du jour peut recevoir un
+lieu/heure de départ optionnels : le flow `dailyWorkoutRecommendation` récupère alors la météo
+réelle (vent inclus) et ajoute un conseil de direction pour l'avoir dans le dos au retour — voir la
+section flows IA plus bas.
+
+## Plan d'entraînement — figé par jour, lien réalisé/prévu, page Coach restructurée
+
+Retour utilisateur, en un seul message qui a motivé tout ce chantier (une chaîne de 3 PRs) : "le
+plan d'entrainement ne devrais t il pas etre figé avec les seances par jour? on garde l'ajustement
+automatique par semaine, comment lier les seances realisees aux seance prevues, lien entre plan et
+sorties (d'ailleurs peut etre pas le bon nom), la structure complete de la page coach est peut etre
+compliquée." Quatre pièces, dans l'ordre où elles ont été construites (chacune dépend de la
+précédente) :
+
+**1. Séances figées par jour** (`training-plan-types.ts`) — avant ce chantier, une semaine type
+n'avait que son volume hebdomadaire ; chaque séance type n'obtenait une date qu'au moment de
+l'envoi vers Intervals.icu (sélecteur libre, jamais persisté, remis à zéro à chaque ouverture de
+l'onglet). `distributeWeekdayOffsets()`/`assignSessionDates()` assignent maintenant une date
+(yyyy-MM-dd) à chaque séance dès sa génération (`generateWeekSessions` dans `use-training-plan.ts`)
+— étalée aussi régulièrement que possible sur les 7 jours de la semaine, JAMAIS confiée à l'IA (même
+raisonnement que `buildPlanWeekSkeleton` pour les dates de semaine : de l'arithmétique de dates
+déterministe, pas un jugement à faire). L'athlète peut ensuite déplacer une séance vers un autre
+jour (`moveSessionDate`, persisté ; `clampDateToWeek` empêche de la faire glisser dans une autre
+semaine du plan). L'ajustement automatique hebdomadaire déjà en place (recalibration —
+`weekNeedsRecalibration`/`applyRecalibration`, voir plus haut dans ce fichier) n'a pas changé : le
+plan reste "figé par jour" à l'intérieur d'une semaine dont le contenu (phase/focus/volume) peut
+toujours être recalibré automatiquement à la fin de chaque semaine.
+
+**2. Lien réalisé/prévu** (`matchSessionCompletion`, `training-plan-types.ts`) — une séance
+"cycling" datée est rapprochée d'une vraie activité Intervals.icu du même jour (heuristique par
+date : cette app n'a pas accès au "pairing" interne d'Intervals.icu entre événement planifié et
+activité réelle, juste ce que l'API renvoie). Une séance "strength" est rapprochée d'un
+`strengthSessionLogs` via `planWeekNumber`+`planSessionIndex` (nouveau champ sur
+`StrengthSessionLog`, threadé depuis les deux chemins d'écriture existants —
+`LiveStrengthSessionView` et `LogStrengthSessionDialog`) — plus fiable qu'une date, qui peut avoir
+changé après coup via `moveSessionDate`. Badge Réalisée/Manquée affiché sur chaque séance de
+l'onglet Plan (`getSessionCompletion` dans `use-training-plan.ts`, réutilise `planActivities` déjà
+fetché pour la recalibration — pas une deuxième lecture).
+
+**3. Journal unifié** (`rides-journal-tab.tsx`, ex-"Sorties") — "Sorties" ne couvrait que les
+activités Intervals.icu, donc uniquement le vélo ; retour utilisateur : "lien entre plan et sorties
+(d'ailleurs peut etre pas le bon nom)". Fusionné avec les séances muscu loguées
+(`strengthSessionLogs`) en un seul flux chronologique (`journalEntries`, trié ensemble — pas deux
+listes séparées), chaque entrée muscu affichant directement son lien vers le plan ("Plan S{n}",
+depuis `planWeekNumber` déjà porté par le log). Onglet Coach renommé "Sorties" → "Journal" en
+conséquence. Le rapprochement réalisé/prévu du vélo (badge Réalisée/Manquée) reste affiché sur
+l'onglet Plan uniquement — pas dupliqué ici.
+
+**4. Proposition du jour ajuste le plan au lieu de générer dans le vide** — avant ce chantier, le
+flow `dailyWorkoutRecommendation` recevait `planWeek` (phase/focus/volume, un CONTEXTE) mais
+composait toujours une séance à partir de rien, même quand le plan avait déjà daté une séance
+CONCRÈTE pour aujourd'hui. Nouvel input optionnel `plannedSession` (title/sportType/durationMinutes/
+structuredWorkout) — la séance exacte assignée à aujourd'hui (`todaysPlanSession` dans
+`use-daily-workout.ts`) — avec une règle impérative dans le prompt : partir de CETTE séance et
+l'ajuster (durée, intensité, home trainer si météo dégradée) plutôt que d'en inventer une nouvelle,
+et la renvoyer telle quelle si rien ne justifie un changement. Nouveaux champs de sortie
+`adjustedFromPlan`/`planAdjustmentNote`, affichés en badge dans `daily-workout-tab.tsx` ("Ajustée
+depuis le plan" vs "Générée librement"). Un `planSessionRef` (planId/weekNumber/sessionIndex) est
+capturé à la génération et stocké dans `workoutProposals/{date}`, pour que `sendToIntervals`
+réutilise le MÊME externalId que la séance du Plan (`planSessionExternalId`) plutôt que
+`dailyWorkoutExternalId` — envoyer depuis "Aujourd'hui" et depuis l'onglet Plan mettent désormais à
+jour LE MÊME événement calendrier, jamais deux pour la même journée. **Ce flow reste cycling-only** :
+quand la séance planifiée du jour est de la musculation, `daily-workout-tab.tsx` court-circuite
+entièrement la génération IA (n'a pas de sens pour ce flow) et affiche directement la séance prévue
+avec les mêmes actions que l'onglet Plan (suivi en direct `LiveStrengthSessionView` / saisie
+rétroactive `LogStrengthSessionDialog`).
+
+**Page Coach restructurée : 7 → 6 sous-onglets** — retour utilisateur : "la structure complete de la
+page coach est peut etre compliquée." Une fois la Proposition du jour devenue l'ajustement
+au-jour-le-jour du plan (point 4 ci-dessus), garder "Proposition du jour" et "Plan" comme deux
+onglets séparés pour la même notion de "mon plan" n'avait plus de sens. Fusionnés dans
+`coach/page.tsx` : l'onglet "Plan" (devenu l'onglet par défaut) affiche `DailyWorkoutTab`
+("Aujourd'hui") au-dessus de `TrainingPlanTab` (le plan périodisé complet), plutôt que deux
+`TabsContent` distincts. Vérification hors ligne de ce chantier (pas de ANTHROPIC_API_KEY dans ce
+sandbox, voir plus bas la technique de vérification via fixtures) :
+`daily-workout-recommendation-output.test.ts` (même patron `satisfies`-le-vrai-schéma que
+`plan-week-sessions-output.test.ts`).
 
 **Chaque tuile de Vue d'ensemble renvoie vers `/cycling/metric/<id>`** (`cycling/metric/[id]/page.tsx`)
 — une page détail avec la courbe des ~180 derniers jours et une explication du principe de
@@ -701,16 +775,20 @@ inventés) et choisir la tenue.
 - Usage : `src/app/lifestyle/page.tsx` (bouton "Analyser" dans l'onglet Récupération)
 
 ### Flow existant : `dailyWorkoutRecommendation`
-- Input : `{ date, availableMinutes, sportType?, training?, recentSessions[], planWeek?, recovery?, coachContext?, ride? }`
+- Input : `{ date, availableMinutes, sportType?, training?, recentSessions[], planWeek?, plannedSession?, recovery?, coachContext?, ride? }`
   — `recovery` (sleepHours/sleepQuality/hrv/readiness) vient de la même série fusionnée auto-sync Intervals.icu +
   saisie manuelle que Vie & Santé (`useLifestyleData`) : une mauvaise nuit doit réduire l'intensité proposée
   même si la charge d'entraînement suggérerait autre chose — la récupération prime en cas de tension.
   `ride` (`{location, departureDateTime}`, optionnel, saisi dans l'onglet) déclenche un fetch météo réel
   (`fetchWeatherForecast` dans `src/ai/weather.ts`, partagé avec `cyclingOutfitRecommendation`) — échoue en
   silence (pas de section météo dans le prompt) plutôt que de casser toute la génération si le lieu n'est pas
-  géocodable.
+  géocodable. `plannedSession` (`{title, sportType, durationMinutes, structuredWorkout}`, optionnel — voir
+  "Plan d'entraînement — figé par jour" plus haut) : la séance CONCRÈTE que le plan a déjà datée pour
+  aujourd'hui, quand une existe — le flow doit alors l'ajuster plutôt que d'en composer une nouvelle.
 - Output : `{ title, sportType, durationMinutes, intensityLabel, rationale, structuredWorkout, warnings[],
-  windAdvice, predictedWeather, weatherAlert }` — `structuredWorkout` est le script texte du "workout builder"
+  adjustedFromPlan, planAdjustmentNote, windAdvice, predictedWeather, weatherAlert }` — `adjustedFromPlan`
+  (bool) et `planAdjustmentNote` (string ou null, "Aucun ajustement nécessaire" si la séance planifiée a été
+  gardée telle quelle) reflètent si `plannedSession` était fourni ; `structuredWorkout` est le script texte du "workout builder"
   Intervals.icu que le site parse lui-même : en-têtes de section (optionnellement suffixés `Nx` pour une
   répétition) suivis de lignes `- <durée> <cible%>`. Le format inline `Nx (étape / étape)` n'est PAS reconnu
   par le parseur — voir le prompt du flow. `windAdvice` (string ou null) : conseil de direction générale au
@@ -737,18 +815,22 @@ inventés) et choisir la tenue.
   indoor). `weatherAlert` s'affiche dans un bandeau distinct (couleur destructive) des warnings jaunes
   génériques, pour rester visible comme le changement structurel qu'il est plutôt qu'un simple point
   d'attention.
-- Usage : `src/components/cycling/daily-workout-tab.tsx` (sous-onglet "Proposition du jour" de Coach — onglet par défaut)
+- Usage : `src/components/cycling/daily-workout-tab.tsx` (haut du sous-onglet "Plan" de Coach — onglet par
+  défaut ; Proposition du jour y a fusionné, voir "Page Coach restructurée" plus haut)
 - Réutilise `buildCoachContext` (blessures/objectifs/style de vie/faits retenus/gouverneur/budget kJ) comme
   `recoveryInsight`, plus le CTL/ATL/TSB courant et les séances des 7 derniers jours (`summarizeRecentSessions`
   dans `daily-workout-types.ts`). L'utilisateur peut éditer le titre/durée/script avant envoi. Poussée sur le
   calendrier Intervals.icu via `IntervalsService.createPlannedWorkout()` → `POST /api/intervals/events`
-  (`upsertOnUid=true` : ré-envoyer la même journée met à jour l'événement au lieu de le dupliquer, voir
-  `dailyWorkoutExternalId`). Stocké dans `users/{uid}/workoutProposals/{yyyy-MM-dd}` (y compris `ride`, pour
-  préremplir le lieu/heure à la réouverture de l'onglet).
+  (`upsertOnUid=true` : ré-envoyer la même journée met à jour l'événement au lieu de le dupliquer) — avec
+  `dailyWorkoutExternalId` par défaut, ou `planSessionExternalId` (le MÊME externalId que la séance du Plan)
+  quand `adjustedFromPlan` est vrai, voir "Plan d'entraînement — figé par jour" plus haut. Stocké dans
+  `users/{uid}/workoutProposals/{yyyy-MM-dd}` (y compris `ride`/`planSessionRef`, pour préremplir la
+  réouverture de l'onglet et pour que l'envoi réutilise le bon externalId).
 - Si un plan d'entraînement actif existe (voir `trainingPlanGeneration` ci-dessous), reçoit en plus
   `planWeek` (phase/focus/volume cible de la semaine en cours, via `currentPlanWeek` dans
-  `training-plan-types.ts`) — la séance du jour doit alors coller à la phase du plan plutôt qu'être
-  générée dans le vide.
+  `training-plan-types.ts`) et, si le plan a daté une séance CYCLING précise pour aujourd'hui,
+  `plannedSession` (voir ci-dessus) — une séance MUSCULATION planifiée aujourd'hui court-circuite
+  entièrement ce flow côté UI plutôt que de lui être transmise (cycling-only, voir plus haut).
 
 ### Flow existant : `trainingPlanGeneration`
 - Input : `{ today, goal, weekCount, weeklyAvailableMinutes, training?, coachContext? }`
