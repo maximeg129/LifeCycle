@@ -26,9 +26,11 @@ import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 interface Props {
   session: PlanWeekSession
   weekNumber: number
+  /** Index de la séance au sein de la semaine — voir strength-log-types.ts (planSessionIndex), pour rapprocher précisément le log de la séance type prévue. */
+  sessionIndex: number
 }
 
-export function LogStrengthSessionDialog({ session, weekNumber }: Props) {
+export function LogStrengthSessionDialog({ session, weekNumber, sessionIndex }: Props) {
   const { user } = useUser()
   const db = useFirestore()
   const { toast } = useToast()
@@ -65,6 +67,7 @@ export function LogStrengthSessionDialog({ session, weekNumber }: Props) {
       title,
       exercises: loggedExercises,
       planWeekNumber: weekNumber,
+      planSessionIndex: sessionIndex,
       createdAt: serverTimestamp(),
     } satisfies StrengthSessionLog
     const ok = await submit(() => setDoc(ref, data), { path: ref.path, operation: 'create', requestResourceData: data })

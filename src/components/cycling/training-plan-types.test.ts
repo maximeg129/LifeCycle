@@ -11,9 +11,15 @@ import {
   computeActualWeeklyMinutes,
   diffPlanWeeks,
   applyRecalibration,
+  distributeWeekdayOffsets,
+  assignSessionDates,
+  clampDateToWeek,
+  matchSessionCompletion,
   type PlanWeekContent,
   type PlanWeek,
   type PlanWeekAdjustment,
+  type PlanWeekSessionWithValidation,
+  type PlanWeekSkeleton,
 } from './training-plan-types'
 
 describe('clampWeeklyMinutes', () => {
@@ -328,5 +334,147 @@ describe('applyRecalibration', () => {
     const adjustmentsNoStrength: PlanWeekAdjustment[] = [{ weekNumber: 3, phase: 'build', focus: 'S3 sans muscu', targetWeeklyMinutes: 360 }]
     const result2 = applyRecalibration(withStrength, adjustmentsNoStrength)
     expect(result2[2].targetStrengthMinutes).toBeUndefined()
+  })
+})
+
+/** Séance minimale suffisante pour ces tests — seul le titre sert à distinguer les séances entre elles, les autres champs requis par le schéma AI sont juste renseignés pour satisfaire le type. */
+function minimalSession(title: string): PlanWeekSessionWithValidation {
+  return {
+    sessionKind: 'cycling',
+    title,
+    sportType: 'Ride',
+    durationMinutes: 60,
+    intensityLabel: 'Endurance',
+    rationale: 'test',
+  }
+}
+
+describe('distributeWeekdayOffsets', () => {
+  it('returns an empty array for zero sessions', () => {
+    expect(distributeWeekdayOffsets(0)).toEqual([])
+  })
+
+  it('places a single session mid-week', () => {
+    expect(distributeWeekdayOffsets(1)).toEqual([3])
+  })
+
+  it('spreads two sessions with rest days on both sides and in between', () => {
+    expect(distributeWeekdayOffsets(2)).toEqual([1, 5])
+  })
+
+  it('spreads three sessions across the week, never on consecutive days', () => {
+    const offsets = distributeWeekdayOffsets(3)
+    expect(offsets).toEqual([1, 3, 5])
+  })
+
+  it('never returns an offset past Sunday (6), however many sessions are given', () => {
+    const offsets = distributeWeekdayOffsets(8)
+    expect(offsets.every((o) => o >= 0 && o <= 6)).toBe(true)
+    expect(offsets).toHaveLength(8)
+  })
+
+  it('returns offsets in non-decreasing order (chronological within the week)', () => {
+    const offsets = distributeWeekdayOffsets(5)
+    for (let i = 1; i < offsets.length; i++) expect(offsets[i]).toBeGreaterThanOrEqual(offsets[i - 1])
+  })
+})
+
+describe('assignSessionDates', () => {
+  const week: PlanWeekSkeleton = { weekNumber: 1, startDate: '2026-09-07', endDate: '2026-09-13' } // a real Monday
+
+  it('assigns a date within the week to each session', () => {
+    const sessions = [minimalSession('A'), minimalSession('B'), minimalSession('C')]
+    const dated = assignSessionDates(week, sessions)
+    expect(dated.map((s) => s.date)).toEqual(['2026-09-08', '2026-09-10', '2026-09-12']) // Tue/Thu/Sat
+  })
+
+  it('preserves every other field of the session untouched', () => {
+    const dated = assignSessionDates(week, [minimalSession('Séance seuil')])
+    expect(dated[0].title).toBe('Séance seuil')
+    expect(dated[0].sportType).toBe('Ride')
+  })
+
+  it('returns an empty array for an empty session list', () => {
+    expect(assignSessionDates(week, [])).toEqual([])
+  })
+})
+
+describe('clampDateToWeek', () => {
+  const week: PlanWeekSkeleton = { weekNumber: 2, startDate: '2026-09-14', endDate: '2026-09-20' }
+
+  it('passes through a date already inside the week', () => {
+    expect(clampDateToWeek('2026-09-17', week)).toBe('2026-09-17')
+  })
+
+  it('clamps a date before the week to the week start', () => {
+    expect(clampDateToWeek('2026-09-01', week)).toBe('2026-09-14')
+  })
+
+  it('clamps a date after the week to the week end', () => {
+    expect(clampDateToWeek('2026-10-01', week)).toBe('2026-09-20')
+  })
+
+  it('accepts the exact boundary dates unchanged', () => {
+    expect(clampDateToWeek(week.startDate, week)).toBe(week.startDate)
+    expect(clampDateToWeek(week.endDate, week)).toBe(week.endDate)
+  })
+})
+
+describe('matchSessionCompletion', () => {
+  const today = '2026-09-10'
+
+  it('returns unscheduled for a session with no assigned date (pre-dated-plan cache)', () => {
+    expect(matchSessionCompletion({ sessionKind: 'cycling' }, 1, 0, today, [], [])).toEqual({ status: 'unscheduled' })
+  })
+
+  it('matches a cycling session to a real activity on the same date', () => {
+    const activities = [{ startDate: '2026-09-08', durationMinutes: 95 }]
+    const result = matchSessionCompletion({ sessionKind: 'cycling', date: '2026-09-08' }, 1, 0, today, activities, [])
+    expect(result).toEqual({ status: 'done', actualDate: '2026-09-08', actualDurationMinutes: 95 })
+  })
+
+  it('marks a past cycling session with no matching activity as missed', () => {
+    const result = matchSessionCompletion({ sessionKind: 'cycling', date: '2026-09-08' }, 1, 0, today, [], [])
+    expect(result).toEqual({ status: 'missed' })
+  })
+
+  it('marks a future cycling session as upcoming, never missed', () => {
+    const result = matchSessionCompletion({ sessionKind: 'cycling', date: '2026-09-12' }, 1, 0, today, [], [])
+    expect(result).toEqual({ status: 'upcoming' })
+  })
+
+  it('treats a session dated today with no match yet as upcoming, not missed', () => {
+    const result = matchSessionCompletion({ sessionKind: 'cycling', date: today }, 1, 0, today, [], [])
+    expect(result.status).toBe('upcoming')
+  })
+
+  it('matches a strength session to its log via planWeekNumber+planSessionIndex, not date', () => {
+    const logs = [{ date: '2026-09-09', planWeekNumber: 1, planSessionIndex: 2 }] // logged a day late — date alone would miss it
+    const result = matchSessionCompletion({ sessionKind: 'strength', date: '2026-09-08' }, 1, 2, today, [], logs)
+    expect(result).toEqual({ status: 'done', actualDate: '2026-09-09' })
+  })
+
+  it('does not cross-match a strength log from a different session index in the same week', () => {
+    const logs = [{ date: '2026-09-08', planWeekNumber: 1, planSessionIndex: 0 }]
+    const result = matchSessionCompletion({ sessionKind: 'strength', date: '2026-09-08' }, 1, 2, today, [], logs)
+    expect(result.status).toBe('missed')
+  })
+
+  it('does not cross-match a strength log from the same session index in a different week', () => {
+    const logs = [{ date: '2026-09-08', planWeekNumber: 2, planSessionIndex: 0 }]
+    const result = matchSessionCompletion({ sessionKind: 'strength', date: '2026-09-08' }, 1, 0, today, [], logs)
+    expect(result.status).toBe('missed')
+  })
+
+  it('never matches a cycling session against strength logs or vice versa', () => {
+    const activities = [{ startDate: '2026-09-08', durationMinutes: 60 }]
+    const result = matchSessionCompletion({ sessionKind: 'strength', date: '2026-09-08' }, 1, 0, today, activities, [])
+    expect(result.status).toBe('missed')
+  })
+
+  it('defaults to cycling matching when sessionKind is absent (legacy cached session)', () => {
+    const activities = [{ startDate: '2026-09-08', durationMinutes: 60 }]
+    const result = matchSessionCompletion({ date: '2026-09-08' }, 1, 0, today, activities, [])
+    expect(result.status).toBe('done')
   })
 })

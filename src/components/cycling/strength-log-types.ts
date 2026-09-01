@@ -58,6 +58,17 @@ export interface StrengthSessionLog {
   exercises: LoggedExercise[]
   /** Lien optionnel vers la semaine du plan dont cette séance est issue — absent pour une séance loguée librement, sans passer par une séance type du plan. */
   planWeekNumber?: number
+  /**
+   * Index de la séance type au sein de cette semaine (week.sampleSessions)
+   * — retour utilisateur : "comment lier les seances realisees aux seance
+   * prevues". Avec planWeekNumber, identifie précisément QUELLE séance type
+   * a été réalisée (une semaine peut avoir plusieurs séances muscu) — plus
+   * fiable qu'un simple rapprochement par date, qui casse si l'athlète
+   * déplace la date prévue après avoir déjà logué (voir moveSessionDate).
+   * Absent pour une séance loguée avant l'introduction de ce champ, ou
+   * loguée librement sans passer par une séance type du plan.
+   */
+  planSessionIndex?: number
   createdAt?: unknown
 }
 

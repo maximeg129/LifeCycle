@@ -24,7 +24,20 @@ export type PlanPhase = 'base' | 'build' | 'peak' | 'taper' | 'recovery'
  * musculation, "une séance qui ne les respecte pas ne doit jamais être
  * proposée comme séance complète").
  */
-export type PlanWeekSessionWithValidation = PlanWeekSession & { strengthValidation?: StrengthSessionValidationSummary }
+export type PlanWeekSessionWithValidation = PlanWeekSession & {
+  strengthValidation?: StrengthSessionValidationSummary
+  /**
+   * yyyy-MM-dd — retour utilisateur : "le plan d'entrainement ne devrais t
+   * il pas etre figé avec les seances par jour ?". Assigné une seule fois à
+   * la génération (assignSessionDates ci-dessous, JAMAIS par l'IA — même
+   * principe que buildPlanWeekSkeleton pour les semaines : l'arithmétique de
+   * dates est déterministe côté client), puis modifiable par l'athlète
+   * (moveSessionDate dans use-training-plan.ts). Absent sur une semaine mise
+   * en cache avant l'introduction de ce champ — le Plan retombe alors sur
+   * l'ancien sélecteur de date libre par séance.
+   */
+  date?: string
+}
 
 const MIN_WEEKLY_MINUTES = 60
 const MAX_WEEKLY_MINUTES = 1500 // 25h/week
@@ -135,6 +148,103 @@ export function mergePlanWeeks(skeleton: PlanWeekSkeleton[], content: PlanWeekCo
 /** The week containing todayIso, or null if today falls before the plan starts or after it ends. */
 export function currentPlanWeek(weeks: PlanWeek[], todayIso: string): PlanWeek | null {
   return weeks.find((w) => todayIso >= w.startDate && todayIso <= w.endDate) ?? null
+}
+
+// ── Séances figées par jour — retour utilisateur ────────────────────────
+//
+// "le plan d'entrainement ne devrais t il pas etre figé avec les seances
+// par jour?" Avant ce chantier, une semaine type n'avait que son volume
+// hebdomadaire — chaque séance n'obtenait une date qu'au moment de l'envoi
+// vers Intervals.icu (sélecteur libre, jamais persisté). Distribution
+// purement mécanique — jamais confiée à l'IA (même raisonnement que
+// buildPlanWeekSkeleton pour les dates de semaine : de l'arithmétique de
+// dates déterministe, pas un jugement à faire) — étalée sur les 7 jours de
+// la semaine ; l'athlète peut ensuite déplacer n'importe quelle séance vers
+// un autre jour (moveSessionDate).
+
+/** Un décalage (0=lundi..6=dimanche) par séance, réparti aussi régulièrement que possible sur la semaine — ex. 3 séances → mardi/jeudi/samedi, jamais deux jours d'affilée quand le compte le permet. */
+export function distributeWeekdayOffsets(sessionCount: number): number[] {
+  const offsets: number[] = []
+  for (let i = 0; i < sessionCount; i++) {
+    const raw = ((i + 0.5) * 7) / sessionCount
+    offsets.push(Math.min(6, Math.floor(raw)))
+  }
+  return offsets
+}
+
+/** Attache une date (yyyy-MM-dd) à chaque séance type d'une semaine, via distributeWeekdayOffsets — appelé une seule fois à la génération (use-training-plan.ts, generateWeekSessions), jamais retouché automatiquement ensuite. */
+export function assignSessionDates(week: PlanWeekSkeleton, sessions: PlanWeekSessionWithValidation[]): PlanWeekSessionWithValidation[] {
+  const offsets = distributeWeekdayOffsets(sessions.length)
+  const weekStart = new Date(`${week.startDate}T00:00:00`)
+  return sessions.map((s, i) => ({ ...s, date: format(addDays(weekStart, offsets[i]), 'yyyy-MM-dd') }))
+}
+
+/** Garde une date choisie par l'athlète (moveSessionDate) à l'intérieur des bornes de la semaine — une séance de la semaine 3 ne doit jamais glisser dans la semaine 2 ou 4. */
+export function clampDateToWeek(dateIso: string, week: PlanWeekSkeleton): string {
+  if (dateIso < week.startDate) return week.startDate
+  if (dateIso > week.endDate) return week.endDate
+  return dateIso
+}
+
+// ── Réalisé vs prévu — retour utilisateur ────────────────────────────────
+//
+// "comment lier les seances realisees aux seance prevues, lien entre plan
+// et sorties". Une séance type "cycling" prévue à une date est rapprochée
+// d'une VRAIE activité Intervals.icu synchronisée ce jour-là (heuristique
+// par date — cette app n'a pas accès au "pairing" interne d'Intervals.icu
+// entre événement planifié et activité réelle, juste ce que l'API renvoie).
+// Une séance "strength" est rapprochée d'un strengthSessionLogs précis via
+// planWeekNumber+planSessionIndex (voir strength-log-types.ts) — plus fiable
+// qu'une date, qui peut avoir changé après coup (moveSessionDate).
+
+export type SessionCompletionStatus = 'done' | 'missed' | 'upcoming' | 'unscheduled'
+
+export interface SessionCompletion {
+  status: SessionCompletionStatus
+  /** yyyy-MM-dd de l'activité/log réellement rapproché — présent seulement quand status est 'done'. */
+  actualDate?: string
+  /** Durée réelle (minutes) — cycling uniquement (une activité Intervals.icu porte une durée ; un log muscu n'en porte pas de comparable). */
+  actualDurationMinutes?: number
+}
+
+export interface CyclingActivityLike {
+  /** yyyy-MM-dd */
+  startDate: string
+  durationMinutes: number
+}
+
+export interface StrengthLogLike {
+  date: string
+  planWeekNumber?: number
+  planSessionIndex?: number
+}
+
+/**
+ * Détermine si une séance type prévue (datée, voir assignSessionDates) a
+ * réellement été faite. `session.date` absent (semaine mise en cache avant
+ * le plan figé par jour) → 'unscheduled', rien à rapprocher. Sinon : une
+ * séance déjà réalisée → 'done' ; une date déjà passée sans correspondance
+ * → 'missed' ; une date future → 'upcoming'.
+ */
+export function matchSessionCompletion(
+  session: { sessionKind?: 'cycling' | 'strength'; date?: string },
+  weekNumber: number,
+  sessionIndex: number,
+  todayIso: string,
+  cyclingActivities: CyclingActivityLike[],
+  strengthLogs: StrengthLogLike[]
+): SessionCompletion {
+  if (!session.date) return { status: 'unscheduled' }
+
+  if (session.sessionKind === 'strength') {
+    const match = strengthLogs.find((l) => l.planWeekNumber === weekNumber && l.planSessionIndex === sessionIndex)
+    if (match) return { status: 'done', actualDate: match.date }
+  } else {
+    const match = cyclingActivities.find((a) => a.startDate === session.date)
+    if (match) return { status: 'done', actualDate: match.startDate, actualDurationMinutes: match.durationMinutes }
+  }
+
+  return { status: session.date < todayIso ? 'missed' : 'upcoming' }
 }
 
 /**

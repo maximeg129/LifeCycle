@@ -61,7 +61,7 @@ function CoachTabs() {
           <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Proposition du jour
         </TabsTrigger>
         <TabsTrigger value="rides" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-          <Activity className="w-3.5 h-3.5 mr-1.5" /> Sorties
+          <Activity className="w-3.5 h-3.5 mr-1.5" /> Journal
         </TabsTrigger>
         <TabsTrigger value="weather" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
           <CloudSun className="w-3.5 h-3.5 mr-1.5" /> Météo &amp; Tenue
