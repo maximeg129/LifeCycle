@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion } from 'lucide-react'
+import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion, Apple } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -517,6 +517,25 @@ function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToInt
                   <span className="text-xs text-muted-foreground whitespace-nowrap">{session.durationMinutes} min</span>
                 </div>
               </div>
+              {/* Alimentation sur le vélo — même traitement que la
+                  Proposition du jour (daily-workout-tab.tsx) : fourchette
+                  sourcée (S03/S04), jamais un chiffre unique. session.fueling
+                  gardé optionnel : une semaine générée avant l'introduction
+                  de ce champ (week.sampleSessions déjà en cache Firestore)
+                  n'en a pas. */}
+              {session.fueling && session.fueling.neededOnBike && (
+                <div className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20 text-xs">
+                  <Apple className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <p className="font-medium">
+                      {session.fueling.carbGramsPerHourMin}
+                      {session.fueling.carbGramsPerHourMax != null && session.fueling.carbGramsPerHourMax !== session.fueling.carbGramsPerHourMin ? `–${session.fueling.carbGramsPerHourMax}` : ''}
+                      {' '}g de glucides/h
+                    </p>
+                    {session.fueling.hydrationNote && <p className="text-muted-foreground">{session.fueling.hydrationNote}</p>}
+                  </div>
+                </div>
+              )}
               <div className="flex items-center gap-2 flex-wrap">
                 <Input
                   type="date"
