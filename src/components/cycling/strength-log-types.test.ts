@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { exerciseHistory, distinctExerciseNames, formatTimer, summarizeSetsDetail, isDraftUsable, STRENGTH_DRAFT_MAX_AGE_MS, formatStrengthLogDescription, isHoldReps, parseDurationInput, type StrengthSessionLogWithId, type LoggedExercise } from './strength-log-types'
+import { exerciseHistory, distinctExerciseNames, formatTimer, summarizeSetsDetail, isDraftUsable, STRENGTH_DRAFT_MAX_AGE_MS, formatStrengthLogDescription, isHoldReps, parseDurationInput, totalWeightLiftedKg, type StrengthSessionLogWithId, type LoggedExercise } from './strength-log-types'
 
 const logs: StrengthSessionLogWithId[] = [
   {
@@ -241,5 +241,46 @@ describe('parseDurationInput', () => {
 
   it('round-trips with formatTimer', () => {
     expect(parseDurationInput(formatTimer(125))).toBe(125)
+  })
+})
+
+describe('totalWeightLiftedKg', () => {
+  it('sums reps × loadKg across setsDetail for an exact total', () => {
+    const exercises: LoggedExercise[] = [
+      { name: 'Squat', sets: 3, reps: '5', loadKg: 85, setsDetail: [{ reps: 5, loadKg: 80 }, { reps: 5, loadKg: 82.5 }, { reps: 5, loadKg: 85 }] },
+    ]
+    // 5*80 + 5*82.5 + 5*85 = 400 + 412.5 + 425 = 1237.5
+    expect(totalWeightLiftedKg(exercises)).toBe(1237.5)
+  })
+
+  it('ignores setsDetail entries with no load (bodyweight sets)', () => {
+    const exercises: LoggedExercise[] = [
+      { name: 'Pompes', sets: 2, reps: '15', setsDetail: [{ reps: 15 }, { reps: 12, loadKg: 10 }] },
+    ]
+    expect(totalWeightLiftedKg(exercises)).toBe(120)
+  })
+
+  it('falls back to sets × loadKg × average reps when setsDetail is absent', () => {
+    const exercises: LoggedExercise[] = [{ name: 'Développé couché', sets: 4, reps: '8-10', loadKg: 60 }]
+    // 4 sets * avg(8,10)=9 reps * 60kg = 2160
+    expect(totalWeightLiftedKg(exercises)).toBe(2160)
+  })
+
+  it('returns 0 for a purely bodyweight session (no load anywhere)', () => {
+    const exercises: LoggedExercise[] = [{ name: 'Pompes', sets: 3, reps: '15' }]
+    expect(totalWeightLiftedKg(exercises)).toBe(0)
+  })
+
+  it('sums across multiple exercises', () => {
+    const exercises: LoggedExercise[] = [
+      { name: 'Squat', sets: 3, reps: '5', loadKg: 80 },
+      { name: 'Fentes bulgares', sets: 3, reps: '8', loadKg: 20 },
+    ]
+    // (3*5*80) + (3*8*20) = 1200 + 480 = 1680
+    expect(totalWeightLiftedKg(exercises)).toBe(1680)
+  })
+
+  it('returns 0 for no exercises', () => {
+    expect(totalWeightLiftedKg([])).toBe(0)
   })
 })
