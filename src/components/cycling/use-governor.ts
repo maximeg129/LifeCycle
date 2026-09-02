@@ -19,7 +19,7 @@ import { feelingScore } from './session-feedback-types'
 import {
   getLastDayIds,
   buildMergedDailySeries,
-  resolveReadiness,
+  computeReadiness,
   type HealthMetric,
   type WellnessLike,
 } from '@/components/lifestyle/lifestyle-types'
@@ -138,7 +138,7 @@ export function useGovernor(): GovernorResult {
     const mergedDaily = buildMergedDailySeries(healthMetrics || [], wellnessByDay, sleepDayIds)
     const sleepSeries: DatedValue[] = mergedDaily
       .map((day) => {
-        const readiness = resolveReadiness(day, wellnessByDay.get(day.dayId)?.readiness)
+        const readiness = computeReadiness(day)
         if (readiness == null) return null
         return { date: day.dayId, value: readiness }
       })

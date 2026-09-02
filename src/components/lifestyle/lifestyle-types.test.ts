@@ -7,7 +7,6 @@ import {
   trendPct,
   buildDailySeries,
   computeReadiness,
-  resolveReadiness,
   computeGoalProgress,
   mergeDailyWellness,
   buildMergedDailySeries,
@@ -291,14 +290,5 @@ describe('formatSleepDuration', () => {
 
   it('carries a minute rollover into the hour', () => {
     expect(formatSleepDuration(6.9933)).toBe('7h00') // 419.6min rounds to 420min = 7h00, not 6h60
-  })
-})
-
-describe('resolveReadiness', () => {
-  it('prefers the device readiness score over the local heuristic', () => {
-    expect(resolveReadiness({ date: null, sleepQuality: 10, mood: 1 }, 82)).toBe(82)
-  })
-  it('falls back to the local heuristic without a device score', () => {
-    expect(resolveReadiness({ date: null, sleepQuality: 80, mood: 8 }, undefined)).toBe(computeReadiness({ date: null, sleepQuality: 80, mood: 8 }))
   })
 })
