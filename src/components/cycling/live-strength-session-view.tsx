@@ -18,7 +18,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { doc, collection, setDoc, serverTimestamp } from 'firebase/firestore'
 import { format } from 'date-fns'
-import { X, Check, SkipForward, Dumbbell, Flag, Pause, Play, RotateCcw, Undo2 } from 'lucide-react'
+import { X, Check, SkipForward, Dumbbell, Flag, Pause, Play, RotateCcw, Undo2, Trophy, Minus, Plus, ChevronsRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
@@ -27,8 +27,10 @@ import { useUser, useFirestore } from '@/firebase'
 import { useCrudSubmit } from '@/hooks/use-crud-submit'
 import { cn } from '@/lib/utils'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
 import { useStrengthLogs } from './use-strength-logs'
 import { exerciseHistory, formatTimer, isDraftUsable, isHoldReps, parseDurationInput, summarizeSetsDetail, type LoggedExercise, type LoggedSetDetail, type StrengthSessionLog } from './strength-log-types'
+import { EXERCISE_TECHNIQUE } from './exercise-technique'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 
 /** Repos par défaut si l'exercice n'en porte pas (séance mise en cache avant l'introduction de restSeconds dans le schéma). */
@@ -231,6 +233,38 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, isPaused, sessionKey])
 
+  // Écran toujours allumé pendant le suivi — retour utilisateur : "l'écran
+  // de l'iPhone ne s'éteint pas parce que c'est vraiment pénible de faire
+  // le suivi". Screen Wake Lock API, supportée sur Safari iOS depuis 16.4 —
+  // contrairement au Bluetooth (voir la discussion capteur HR plus tôt),
+  // ce n'est PAS bloqué par WebKit. Redemandé à la reprise de visibilité
+  // (l'OS relâche automatiquement le verrou quand l'onglet passe en
+  // arrière-plan — reverrouiller silencieusement au retour). Feature-detect
+  // + échec avalé silencieusement (permission refusée, batterie faible,
+  // navigateur trop ancien) — jamais bloquant pour la séance elle-même.
+  useEffect(() => {
+    if (typeof navigator === 'undefined' || !('wakeLock' in navigator)) return
+    let sentinel: WakeLockSentinel | null = null
+    let cancelled = false
+    const acquire = async () => {
+      try {
+        sentinel = await navigator.wakeLock.request('screen')
+      } catch {
+        // Refusé/indisponible — silencieux, pas bloquant pour la séance.
+      }
+    }
+    acquire()
+    const handleVisibility = () => {
+      if (!cancelled && document.visibilityState === 'visible') acquire()
+    }
+    document.addEventListener('visibilitychange', handleVisibility)
+    return () => {
+      cancelled = true
+      document.removeEventListener('visibilitychange', handleVisibility)
+      sentinel?.release().catch(() => {})
+    }
+  }, [])
+
   const [, forceTick] = useState(0)
   useEffect(() => {
     const interval = setInterval(() => forceTick((t) => t + 1), 1000)
@@ -281,15 +315,51 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
   // Intervals.icu plutôt qu'un chiffre inventé.
   const [rpe, setRpe] = useState<number | null>(null)
 
+  // Record personnel — retour utilisateur, en validant la proposition
+  // "badge record personnel" : "Oui, pourquoi pas ? Si c'est bien
+  // implémenté". Charge historique max par exercice (séances déjà loguées
+  // dans Firestore, jamais la séance en cours) — recalculée une seule fois
+  // par ouverture, pas à chaque set. Jamais un score inventé (pas de 1RM
+  // estimé) : juste "cette charge dépasse-t-elle la meilleure connue ?".
+  const exercisePRMap = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const ex of exercises) {
+      const key = ex.name.trim().toLowerCase()
+      if (map.has(key)) continue
+      const max = exerciseHistory(logs, ex.name).reduce((m, p) => (p.loadKg != null && p.loadKg > m ? p.loadKg : m), 0)
+      map.set(key, max)
+    }
+    return map
+  }, [exercises, logs])
+
+  /** Un set donné bat-il le record connu — historique OU déjà fait plus tôt dans CETTE séance ? */
+  const isNewPersonalRecord = (exIndex: number, setIndex: number): boolean => {
+    const ex = progress[exIndex]
+    const set = ex.sets[setIndex]
+    if (set.loadKg == null) return false
+    const historicalMax = exercisePRMap.get(ex.name.trim().toLowerCase()) ?? 0
+    const bestSoFarThisSession = ex.sets.reduce((m, s, i) => (i !== setIndex && s.done && s.loadKg != null && s.loadKg > m ? s.loadKg : m), historicalMax)
+    return set.loadKg > bestSoFarThisSession
+  }
+
+  const [prSetKeys, setPrSetKeys] = useState<Set<string>>(new Set())
+
   const updateSet = (exIndex: number, setIndex: number, patch: Partial<SetProgress>) => {
     setProgress((prev) => prev.map((ex, i) => (i !== exIndex ? ex : { ...ex, sets: ex.sets.map((s, j) => (j !== setIndex ? s : { ...s, ...patch })) })))
   }
 
   const markSetDone = (exIndex: number, setIndex: number) => {
+    const ex = progress[exIndex]
+    const set = ex.sets[setIndex]
+    const key = `${exIndex}-${setIndex}`
+    if (isNewPersonalRecord(exIndex, setIndex)) {
+      setPrSetKeys((prev) => new Set(prev).add(key))
+      toast({ title: '🏆 Nouveau record personnel !', description: `${ex.name} — ${set.loadKg}kg` })
+    }
     updateSet(exIndex, setIndex, { done: true })
     const isVeryLastSet = exIndex === progress.length - 1 && setIndex === progress[exIndex].sets.length - 1
     if (!isVeryLastSet) {
-      restKeyRef.current = `${exIndex}-${setIndex}`
+      restKeyRef.current = key
       setRestEndAt(Date.now() + progress[exIndex].restSeconds * 1000)
     }
   }
@@ -312,9 +382,49 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
         restKeyRef.current = null
         setRestEndAt(null)
       }
+      setPrSetKeys((prev) => {
+        if (!prev.has(key)) return prev
+        const next = new Set(prev)
+        next.delete(key)
+        return next
+      })
     } else {
       markSetDone(exIndex, setIndex)
     }
+  }
+
+  // Sauter un exercice — retour utilisateur : "sauter un exercice
+  // explicitement, oui". Un exercice déjà "skippable" en pratique (ne
+  // rien valider et terminer la séance suffit, voir handleFinish qui
+  // filtre les exercices à 0 série faite) — ce bouton rend juste ce choix
+  // explicite et visible plutôt qu'une case vide ambiguë ("pas encore
+  // fait" vs "volontairement sauté"). Uniquement disponible tant qu'aucune
+  // série n'est validée — sauter un exercice déjà entamé n'aurait pas de
+  // sens, "Recommencer" (l'exercice entier redevient vierge) est le geste
+  // pour ça.
+  const [skippedExercises, setSkippedExercises] = useState<Set<number>>(new Set())
+  const toggleSkipExercise = (exIndex: number) => {
+    setSkippedExercises((prev) => {
+      const next = new Set(prev)
+      if (next.has(exIndex)) next.delete(exIndex)
+      else next.add(exIndex)
+      return next
+    })
+  }
+
+  /**
+   * Ajuste le repos en cours de +/-15s — retour utilisateur : "ajuster le
+   * repos en direct, oui". Clampé à 0 minimum (jamais négatif) ; ne
+   * s'applique qu'au décompte actif, la durée par défaut de la prochaine
+   * série reste celle décidée par l'IA (ex.restSeconds), pas modifiée en
+   * cascade.
+   */
+  const adjustRest = (deltaSeconds: number) => {
+    setRestEndAt((prev) => {
+      if (prev == null) return prev
+      const next = prev + deltaSeconds * 1000
+      return Math.max(Date.now(), next)
+    })
   }
 
   const [restartConfirmOpen, setRestartConfirmOpen] = useState(false)
@@ -335,6 +445,8 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
     restKeyRef.current = null
     setRestEndAt(null)
     setRpe(null)
+    setPrSetKeys(new Set())
+    setSkippedExercises(new Set())
     setRestartConfirmOpen(false)
     toast({ title: 'Séance réinitialisée', description: 'La progression et le chrono sont repartis de zéro.' })
   }
@@ -433,14 +545,23 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
       <Progress value={totalSets > 0 ? (doneSets / totalSets) * 100 : 0} className="rounded-none h-1" />
 
       {restRemainingSeconds != null && (
-        <div className="sticky top-[65px] z-10 bg-primary text-primary-foreground p-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Repos</span>
+        <div className="sticky top-[65px] z-10 bg-primary text-primary-foreground p-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm font-medium shrink-0">Repos</span>
             <span className="lc-data text-2xl font-bold tabular-nums">{formatTimer(restRemainingSeconds)}</span>
           </div>
-          <Button variant="secondary" size="sm" onClick={() => setRestEndAt(null)} className="gap-1.5">
-            <SkipForward className="w-3.5 h-3.5" /> Passer
-          </Button>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {/* Retour utilisateur : "ajuster le repos en direct, oui" — +/-15s sur le décompte en cours, sans toucher au repos par défaut des prochaines séries. */}
+            <Button variant="secondary" size="icon" className="h-8 w-8" onClick={() => adjustRest(-15)} aria-label="Réduire le repos de 15 secondes" title="-15s">
+              <Minus className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="secondary" size="icon" className="h-8 w-8" onClick={() => adjustRest(15)} aria-label="Ajouter 15 secondes de repos" title="+15s">
+              <Plus className="w-3.5 h-3.5" />
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setRestEndAt(null)} className="gap-1.5">
+              <SkipForward className="w-3.5 h-3.5" /> Passer
+            </Button>
+          </div>
         </div>
       )}
 
@@ -453,58 +574,120 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
           // par défaut était trompeur. isHoldReps() détecte le suffixe "s"
           // déjà utilisé par convention pour ces exercices ("30-45s") — pas
           // de champ dédié dans le schéma IA, voir isHoldReps.
-          const isHold = isHoldReps(exercises[exIndex]?.reps ?? '')
+          const planned = exercises[exIndex]
+          const isHold = isHoldReps(planned?.reps ?? '')
+          const isSkipped = skippedExercises.has(exIndex)
+          const doneCount = ex.sets.filter((s) => s.done).length
+          // "Exercice en cours" — retour utilisateur : look-and-feel façon
+          // Hevy, qui met en évidence l'exercice courant plutôt qu'une liste
+          // plate. Le premier exercice non sauté avec au moins une série pas
+          // encore faite ; jamais recalculé au-delà (pas besoin d'un état
+          // dédié, dérivé de progress/skippedExercises à chaque render).
+          const isActive = !isSkipped && doneCount < ex.sets.length &&
+            progress.slice(0, exIndex).every((prior, i) => skippedExercises.has(i) || prior.sets.every((s) => s.done))
+          // "Dernière fois" — retour utilisateur : "context dernière fois
+          // visible pendant la séance, oui". La donnée sert déjà à
+          // préremplir les champs (buildFreshProgress) ; elle n'était
+          // jusqu'ici jamais réaffichée en clair pendant la séance,
+          // contrairement à LogStrengthSessionDialog (saisie rétroactive).
+          const lastKnown = exerciseHistory(logs, ex.name).at(-1)
+          const technique = planned ? EXERCISE_TECHNIQUE[planned.pattern] : undefined
           return (
-          <div key={exIndex} className="lc-card p-4 space-y-3">
+          <div key={exIndex} className={cn('lc-card p-4 space-y-3 transition-colors', isActive && 'ring-2 ring-primary/50', isSkipped && 'opacity-60')}>
             <div className="flex items-center gap-2">
               <Dumbbell className="w-4 h-4 text-primary shrink-0" />
-              <p className="font-medium">{ex.name}</p>
+              <p className="font-medium flex-1 min-w-0 truncate">{ex.name}</p>
+              <span className="text-xs text-muted-foreground shrink-0 lc-data">{doneCount}/{ex.sets.length}</span>
+              {/* Retour utilisateur : "sauter un exercice explicitement, oui" — seulement tant qu'aucune série n'est validée (sauter un exercice déjà entamé n'a pas de sens, voir Recommencer pour repartir de zéro). */}
+              {doneCount === 0 && (
+                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs gap-1 shrink-0" onClick={() => toggleSkipExercise(exIndex)}>
+                  {isSkipped ? <><Undo2 className="w-3 h-3" /> Reprendre</> : <><ChevronsRight className="w-3 h-3" /> Passer</>}
+                </Button>
+              )}
             </div>
-            <div className="space-y-2">
-              {ex.sets.map((set, setIndex) => (
-                <div key={setIndex} className={cn('flex items-center gap-2 p-2 rounded-lg border', set.done ? 'bg-primary/5 border-primary/20' : 'border-border')}>
-                  <span className="text-xs text-muted-foreground w-14 shrink-0">Série {setIndex + 1}</span>
-                  {isHold ? (
-                    <Input
-                      type="text"
-                      inputMode="numeric"
-                      value={formatTimer(set.reps)}
-                      onChange={(e) => updateSet(exIndex, setIndex, { reps: parseDurationInput(e.target.value) })}
-                      className="h-9 w-20 text-center"
-                      aria-label={`Temps tenu, série ${setIndex + 1}`}
-                    />
-                  ) : (
-                    <Input
-                      type="number"
-                      value={set.reps}
-                      onChange={(e) => updateSet(exIndex, setIndex, { reps: Number(e.target.value) })}
-                      className="h-9 w-16 text-center"
-                      aria-label={`Répétitions, série ${setIndex + 1}`}
-                    />
-                  )}
-                  <span className="text-xs text-muted-foreground shrink-0">{isHold ? 'tenu ×' : 'reps ×'}</span>
-                  <Input
-                    type="number"
-                    step="0.5"
-                    value={set.loadKg ?? ''}
-                    onChange={(e) => updateSet(exIndex, setIndex, { loadKg: e.target.value === '' ? null : Number(e.target.value) })}
-                    placeholder="kg"
-                    className="h-9 w-20 text-center"
-                    aria-label={`Charge, série ${setIndex + 1}`}
-                  />
-                  <Button
-                    size="sm"
-                    variant={set.done ? 'secondary' : 'default'}
-                    onClick={() => toggleSetDone(exIndex, setIndex)}
-                    className="ml-auto gap-1.5 h-9 shrink-0"
-                    aria-label={set.done ? `Annuler la validation, série ${setIndex + 1}` : `Valider la série ${setIndex + 1}`}
-                    title={set.done ? 'Modifier — retire la validation' : 'Valider'}
-                  >
-                    {set.done ? <Undo2 className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />} {set.done ? 'Fait' : 'Valider'}
-                  </Button>
+            {lastKnown && !isSkipped && (
+              <p className="text-xs text-muted-foreground -mt-2">
+                Dernière fois ({lastKnown.date}) : {lastKnown.sets}×{lastKnown.reps}{lastKnown.loadKg != null ? ` @ ${lastKnown.loadKg}kg` : ''}
+              </p>
+            )}
+            {isSkipped ? (
+              <p className="text-sm text-muted-foreground italic">Exercice sauté pour cette séance.</p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  {ex.sets.map((set, setIndex) => {
+                    const key = `${exIndex}-${setIndex}`
+                    const isPR = prSetKeys.has(key)
+                    return (
+                    <div key={setIndex} className={cn('flex items-center gap-2 p-2 rounded-lg border', isPR ? 'bg-amber-500/10 border-amber-500/40' : set.done ? 'bg-primary/5 border-primary/20' : 'border-border')}>
+                      <span className="text-xs text-muted-foreground w-14 shrink-0">Série {setIndex + 1}</span>
+                      {isHold ? (
+                        <Input
+                          type="text"
+                          inputMode="numeric"
+                          value={formatTimer(set.reps)}
+                          onChange={(e) => updateSet(exIndex, setIndex, { reps: parseDurationInput(e.target.value) })}
+                          className="h-9 w-20 text-center"
+                          aria-label={`Temps tenu, série ${setIndex + 1}`}
+                        />
+                      ) : (
+                        <Input
+                          type="number"
+                          value={set.reps}
+                          onChange={(e) => updateSet(exIndex, setIndex, { reps: Number(e.target.value) })}
+                          className="h-9 w-16 text-center"
+                          aria-label={`Répétitions, série ${setIndex + 1}`}
+                        />
+                      )}
+                      <span className="text-xs text-muted-foreground shrink-0">{isHold ? 'tenu ×' : 'reps ×'}</span>
+                      <Input
+                        type="number"
+                        step="0.5"
+                        value={set.loadKg ?? ''}
+                        onChange={(e) => updateSet(exIndex, setIndex, { loadKg: e.target.value === '' ? null : Number(e.target.value) })}
+                        placeholder="kg"
+                        className="h-9 w-20 text-center"
+                        aria-label={`Charge, série ${setIndex + 1}`}
+                      />
+                      {isPR && <Trophy className="w-4 h-4 text-amber-500 shrink-0" aria-label="Nouveau record personnel" />}
+                      <Button
+                        size="sm"
+                        variant={set.done ? 'secondary' : 'default'}
+                        onClick={() => toggleSetDone(exIndex, setIndex)}
+                        className="ml-auto gap-1.5 h-9 shrink-0"
+                        aria-label={set.done ? `Annuler la validation, série ${setIndex + 1}` : `Valider la série ${setIndex + 1}`}
+                        title={set.done ? 'Modifier — retire la validation' : 'Valider'}
+                      >
+                        {set.done ? <Undo2 className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />} {set.done ? 'Fait' : 'Valider'}
+                      </Button>
+                    </div>
+                    )
+                  })}
                 </div>
-              ))}
-            </div>
+                {/* Retour utilisateur : "un lien aussi descriptif, condensé en
+                    accordéon... la bonne technique à avoir" — contenu
+                    statique par pattern de mouvement, voir exercise-technique.ts. */}
+                {technique && (
+                  <Accordion type="single" collapsible className="border-t border-border -mx-4 px-4 -mb-1">
+                    <AccordionItem value="technique" className="border-b-0">
+                      <AccordionTrigger className="py-2 text-xs text-muted-foreground hover:no-underline">
+                        Bonne technique — {technique.title}
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-2">
+                        <ul className="space-y-1.5 text-sm">
+                          {technique.cues.map((cue, i) => (
+                            <li key={i} className="flex gap-2">
+                              <span className="text-primary shrink-0">•</span>
+                              <span>{cue}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </AccordionContent>
+                    </AccordionItem>
+                  </Accordion>
+                )}
+              </>
+            )}
           </div>
           )
         })}

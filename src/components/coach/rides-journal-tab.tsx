@@ -24,14 +24,14 @@ import { fr } from 'date-fns/locale'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Bike, ChevronRight, Timer, Flame, Dumbbell, Send, Loader2, CheckCircle2 } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Bike, ChevronRight, Timer, Flame, Dumbbell, CheckCircle2 } from 'lucide-react'
 import { useActivities, useFitnessChart } from '@/hooks/use-intervals'
 import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
 import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
 import { RideAnalysisDialog, RideAnalysisTrigger } from './ride-analysis-dialog'
 import { useStrengthLogs } from '@/components/cycling/use-strength-logs'
 import { useStrengthLogExport } from '@/components/cycling/use-strength-log-export'
+import { StrengthLogExportButton } from '@/components/cycling/strength-log-export-button'
 import type { StrengthSessionLogWithId } from '@/components/cycling/strength-log-types'
 
 type RideActivity = ReturnType<typeof useActivities>['data'][number]
@@ -165,16 +165,12 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                       <CheckCircle2 className="w-3.5 h-3.5" />
                     </span>
                   ) : (
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-8 w-8 shrink-0"
-                      disabled={!canExport || sendingLogId === entry.log.id}
-                      onClick={() => exportLog(entry.log)}
-                      title="Envoyer sur Intervals.icu"
-                    >
-                      {sendingLogId === entry.log.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    </Button>
+                    <StrengthLogExportButton
+                      log={entry.log}
+                      canExport={canExport}
+                      sending={sendingLogId === entry.log.id}
+                      onExport={exportLog}
+                    />
                   )}
                 </div>
               ) : (() => {

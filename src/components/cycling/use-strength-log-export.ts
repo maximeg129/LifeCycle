@@ -40,7 +40,7 @@ export function useStrengthLogExport() {
   const { data: creds } = useDoc<IntervalsCredentialsDoc>(credsRef)
   const canExport = !!creds?.intervalsAthleteId && !!creds?.intervalsApiKey
 
-  const exportLog = useCallback(async (log: StrengthSessionLogWithId): Promise<boolean> => {
+  const exportLog = useCallback(async (log: StrengthSessionLogWithId, note?: string): Promise<boolean> => {
     if (!creds?.intervalsAthleteId || !creds?.intervalsApiKey) {
       toast({ variant: 'destructive', title: 'Intervals.icu non connecté', description: 'Renseignez vos identifiants dans Réglages.' })
       return false
@@ -55,11 +55,20 @@ export function useStrengthLogExport() {
     }
     setSendingLogId(log.id)
     try {
+      // Note de séance — retour utilisateur : "nous pouvons faire une note
+      // après la séance avant d'envoyer sur intervalles" (voir
+      // StrengthLogExportButton, qui la capture juste avant cet appel).
+      // Ajoutée à la description plutôt qu'un champ séparé : Intervals.icu
+      // n'a pas de champ "notes" dédié sur une activité manuelle.
+      const trimmedNote = note?.trim()
+      const description = trimmedNote
+        ? `${formatStrengthLogDescription(log.exercises)}\n\nNotes : ${trimmedNote}`
+        : formatStrengthLogDescription(log.exercises)
       const activity = {
         name: log.title,
         type: 'WeightTraining',
         startDateLocal: log.date,
-        description: formatStrengthLogDescription(log.exercises),
+        description,
         durationSeconds: log.durationSeconds,
         // Retour utilisateur : "on a la charge, le temps... ça ne les
         // inclut pas" — kg_lifted est calculable sans rien demander de plus
@@ -86,7 +95,7 @@ export function useStrengthLogExport() {
 
       if (user && db) {
         const ref = doc(db, `users/${user.uid}/strengthSessionLogs/${log.id}`)
-        const patch = { intervalsActivityId: String(result.id) }
+        const patch = { intervalsActivityId: String(result.id), ...(trimmedNote ? { sessionNotes: trimmedNote } : {}) }
         await updateDoc(ref, patch).catch(() => {
           errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: patch }))
         })
