@@ -30,6 +30,7 @@ import { buildCoachContext } from './coach-context'
 import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload, signalToTrendLabel } from './daily-workout-types'
 import { currentPlanWeek, planSessionExternalId, type PlanWeek } from './training-plan-types'
+import { useGenerateWeekSessions } from './use-generate-week-sessions'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { describeActionDispatchError } from '@/lib/utils'
 
@@ -125,6 +126,20 @@ export function useDailyWorkout() {
     return { session: planWeek.sampleSessions[index], index, weekNumber: planWeek.weekNumber, planId: activePlan?.id }
   }, [planWeek, todayId, activePlan?.id])
   const todaysPlanSessionIsStrength = todaysPlanSession?.session.sessionKind === 'strength'
+
+  // Retour utilisateur, indirect : découvert en construisant l'aperçu de
+  // séance prévue de la page Cyclisme (performance-bento.tsx) — depuis la
+  // séparation Aujourd'hui/Plan en deux onglets, la génération auto de la
+  // semaine courante (voir CLAUDE.md "Génération automatique de la semaine
+  // courante") ne se déclenchait plus que depuis l'onglet Plan, jamais
+  // depuis "Aujourd'hui" (le nouvel onglet par défaut). generateWeekSessions
+  // partagé avec use-training-plan.ts (voir use-generate-week-sessions.ts)
+  // — aucune lecture supplémentaire, toutes les dépendances (mémoire,
+  // budget, gouverneur, indices de puissance, athlète) sont déjà chargées
+  // ci-dessus pour l'appel dailyWorkoutRecommendation de ce hook.
+  const { generateWeekSessions, generatingSessionsForWeek } = useGenerateWeekSessions({
+    user, db, activePlan, memory, budget, governor, enduranceIndex, criticalPowerModel, athlete,
+  })
 
   // Intervals credentials — read directly rather than through IntervalsProvider,
   // which deliberately doesn't expose the raw athleteId/apiKey past its own
@@ -317,5 +332,7 @@ export function useDailyWorkout() {
     canSendToIntervals,
     generate,
     sendToIntervals,
+    generateWeekSessions,
+    generatingSessionsForWeek,
   }
 }
