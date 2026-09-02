@@ -282,6 +282,12 @@ export function useTrainingPlan() {
   // confirmation, mais le résultat est documenté (recalibrations[]) pour
   // que l'athlète comprenne après coup pourquoi le plan a changé.
   const recalibratingRef = useRef(false)
+  // Reflète recalibratingRef pour l'UI (le ref seul ne déclenche pas de
+  // re-render) — retour utilisateur : "en gardant l'option peut-être via un
+  // bouton, de réajuster le plan" ; voir recalibrateNow plus bas, le seul
+  // appelant qui a besoin d'un retour visuel (l'automatique reste
+  // silencieux).
+  const [isRecalibrating, setIsRecalibrating] = useState(false)
 
   const runRecalibration = useCallback(async (plan: StoredPlan, throughWeekNumber: number) => {
     if (!user || !db || recalibratingRef.current) return
@@ -290,6 +296,7 @@ export function useTrainingPlan() {
     if (!completedWeek || remainingWeeks.length === 0) return
 
     recalibratingRef.current = true
+    setIsRecalibrating(true)
     try {
       const actualMinutes = computeActualWeeklyMinutes(
         planActivities.data
@@ -375,6 +382,7 @@ export function useTrainingPlan() {
       }
     } finally {
       recalibratingRef.current = false
+      setIsRecalibrating(false)
     }
   }, [user, db, planActivities.data, todayId, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, athlete.isConfigured, athlete.data])
 
@@ -390,6 +398,28 @@ export function useTrainingPlan() {
     // duplicate/repeated runs, not this dependency array.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePlan?.id, activePlan?.weeks.length, todayId, isLoadingPlan, planActivities.isLoading])
+
+  /**
+   * Déclenche immédiatement la vérification de recalibration plutôt que
+   * d'attendre la prochaine ouverture de l'onglet (le déclenchement
+   * automatique ci-dessus ne tourne qu'au chargement) — retour utilisateur :
+   * "en gardant l'option peut-être via un bouton, de réajuster le plan basé
+   * sur ce qui a été réalistiquement fait". Même chemin que le
+   * déclenchement automatique (weekNeedsRecalibration + runRecalibration),
+   * donc les mêmes garde-fous : si rien n'est dû (aucune semaine terminée
+   * pas encore prise en compte), ne force RIEN et le dit honnêtement plutôt
+   * que de re-recalibrer une semaine déjà traitée.
+   */
+  const recalibrateNow = useCallback(async () => {
+    if (!activePlan) return
+    const dueThroughWeek = weekNeedsRecalibration(activePlan.weeks, activePlan.recalibrations?.at(-1)?.throughWeekNumber, todayId)
+    if (dueThroughWeek == null) {
+      toast({ title: 'Rien à recalibrer', description: 'Le plan est déjà à jour par rapport aux semaines terminées.' })
+      return
+    }
+    await runRecalibration(activePlan, dueThroughWeek)
+    toast({ title: 'Plan recalibré', description: `Semaines ajustées suite au bilan de la semaine ${dueThroughWeek}.` })
+  }, [activePlan, todayId, runRecalibration, toast])
 
   const archivePlan = useCallback(async (planId: string) => {
     if (!user || !db) return
@@ -603,5 +633,16 @@ export function useTrainingPlan() {
     sendSessionToIntervals,
     sendingSessionKey,
     canSendToIntervals,
+    recalibrateNow,
+    isRecalibrating,
+    // Retour utilisateur : "un visual de l'activité (avec zone de
+    // puissance/couleurs)" — vue calendrier (plan-week-calendar.tsx).
+    // Réexpose les activités déjà chargées pour la recalibration
+    // (planActivities) plutôt que de les re-fetcher : IntervalsProvider
+    // déduplique déjà l'appel réseau sous-jacent (voir CLAUDE.md), donc un
+    // deuxième useActivities() sur la même fenêtre ne coûterait rien de
+    // plus — mais autant réutiliser ce que ce hook a déjà en main.
+    activities: planActivities.data,
+    athleteFtp: athlete.data?.ftp,
   }
 }

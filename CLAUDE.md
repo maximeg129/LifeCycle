@@ -726,6 +726,80 @@ avec le fix ci-dessus : `lastKnown.reps` (une chaîne "30", venant de `ExerciseH
 maintenant par `formatTimer(Number(...))` quand `isHold`, pour afficher "0:30" plutôt que l'entier nu
 "30" qui laissait croire à des répétitions.
 
+## Plan d'entraînement — vue calendrier (remplace le long scroll)
+
+Retour utilisateur, capture d'écran (export PDF de l'app) à l'appui : "c'est pas idéal encore des
+long scroll beaucoup d'info et on peut se perdre, et si on faisait une calendar view? un peu à
+l'exemple de intervals, et peut-être en donnant un visual de l'activité (avec zone de puissance/
+couleurs) etc pour que l'athlète sache ce qu'il a à faire. De plus ça permettrait en drag and drop ou
+en ajustant la date de modifier le plan (tout en gardant l'option peut-être via un bouton) de
+réajuster le plan basé sur ce qui a été réalistiquement fait." Décisions prises avant de coder
+(`AskUserQuestion`) : tout le chantier en une fois (pas de phasage), et un sélecteur de date
+tap-friendly plutôt qu'un vrai glisser-déposer tactile (plus fiable sur mobile, aucune nouvelle
+dépendance comme `@dnd-kit`).
+
+**Remplace l'ancien accordéon** (`TrainingPlanTab` : 12 cartes-semaine empilées, chacune développable
+en cliquant, contenant elle-même la liste de ses séances) par deux nouvelles vues qui coexistent :
+- **`PlanOverviewGrid`** — une ligne compacte par semaine (phase, focus, volume, 7 pastilles de
+  couleur) pour l'orientation dans le plan entier, à l'exemple du calendrier Intervals.icu. Taper une
+  semaine la sélectionne.
+- **`PlanWeekCalendar`** — la semaine sélectionnée en détail : une bande de 7 jours en défilement
+  horizontal (pas une grille 7 colonnes rigide, illisible sous ~400px de large), chaque jour coloré
+  selon l'intensité de sa séance. Taper un jour avec une séance ouvre une feuille (`Sheet`, bas
+  d'écran) avec le détail complet — c'est ce détail qui remplace le long scroll : plus besoin de
+  dérouler 12 semaines pour lire une seule séance.
+- **`PlanSessionDetail`** — le contenu détaillé d'UNE séance (badges de statut, alimentation,
+  exercices muscu, validation S05, sélecteur de date, boutons d'action), extrait tel quel de
+  l'ancien `WeekSessionsPanel` sans changement de comportement — seul son contexte d'affichage change
+  (une feuille de détail par jour tapé, plus un accordéon de liste).
+
+**Couleur d'intensité par jour — décision consciente sur la source des données**
+(`plan-calendar-types.ts`, pur/testé) : les vraies zones de puissance seconde-par-seconde
+(`computePowerZoneDistribution`, `ride-analysis-types.ts`) exigent le flux détaillé d'UNE activité —
+un fetch réseau à part entière, bien trop coûteux à répéter pour chaque jour d'un calendrier de
+plusieurs semaines. Deux sources différentes selon l'état de la séance, toutes deux déjà chargées en
+masse, jamais un flux re-téléchargé pour l'occasion :
+- **Séance déjà FAITE** — `completedRideZone()` préfère `icu_intensity` (Intensity Factor déjà
+  calculé par Intervals.icu = NP/FTP, présent dans la liste d'activités déjà fetchée) ; à défaut,
+  `bestAverageWatts()/ftp` (même helper que le reste de l'app). Null si ni l'un ni l'autre n'est
+  calculable — le jour affiche alors une marque "faite" neutre plutôt qu'une couleur devinée.
+- **Séance PLANIFIÉE** — `parseStructuredWorkoutProfile()` parse le script "workout builder" déjà
+  généré par l'IA (voir `STRUCTURED_WORKOUT_SYNTAX`, jamais interprété côté client avant ce
+  chantier) en une liste d'étapes avec leur cible %FTP, expansées selon le suffixe "Nx" de répétition
+  de section. `averageIntensityPct()` en tire une moyenne pondérée par la durée, classée dans
+  l'échelle Coggan 7 zones (`POWER_ZONES`, désormais exportée depuis `ride-analysis-types.ts` — même
+  référentiel que l'analyse de sortie, pas une deuxième table). Ne lève jamais d'exception : une
+  ligne illisible (ex. une cible en watts absolus plutôt qu'en %, cas rare) est simplement ignorée.
+- La musculation n'a pas de %FTP — traitée à part visuellement (icône haltère, teinte primaire),
+  jamais forcée dans l'échelle de couleur des zones.
+- Sept couleurs réelles (jamais une classe Tailwind — même piège documenté pour `tsb-zones.ts`/
+  `ring-metrics.ts`, une couleur posée en `style` inline plutôt qu'une classe `bg-*`), dégradé
+  bleu→vert→jaune→orange→rouge→violet du plus facile au plus dur.
+
+**Déplacer une séance** — inchangé dans sa mécanique (`moveSessionDate`, déjà en place depuis "Plan
+figé par jour" : un simple `<Input type="date">`, borné à la semaine via `clampDateToWeek`) ; ce qui
+change est son emplacement, maintenant dans `PlanSessionDetail` au sein de la feuille de détail
+plutôt que dans l'ancien accordéon. Retour utilisateur explicitement tranché avant de coder : tap +
+sélecteur de date plutôt qu'un vrai glisser-déposer tactile.
+
+**"Recalibrer maintenant"** — la recalibration automatique existait déjà (voir plus bas, section
+"Plan d'entraînement — figé par jour") mais tournait silencieusement, seulement à l'ouverture de
+l'onglet, sans bouton. `recalibrateNow()` (`use-training-plan.ts`) expose le MÊME chemin
+(`weekNeedsRecalibration` + `runRecalibration`) sur demande explicite, avec un retour visible (toast)
+que l'automatique n'a jamais eu — si rien n'est dû (aucune semaine terminée pas encore prise en
+compte), le dit honnêtement ("Rien à recalibrer") plutôt que de forcer une deuxième recalibration
+d'une semaine déjà traitée. `isRecalibrating` (nouveau state, reflète `recalibratingRef` pour l'UI —
+le ref seul ne déclenche pas de re-render) anime le bouton pendant l'appel IA.
+
+**Génération automatique de la semaine courante** — l'ancien accordéon ne générait les séances type
+d'une semaine qu'au premier clic pour la déplier (`toggleWeek`). La vue calendrier n'a plus ce geste
+d'expansion : la semaine courante est désormais générée automatiquement à l'arrivée sur l'onglet si
+elle ne l'est pas déjà (`autoGeneratedRef` dans `TrainingPlanTab`, garde contre les doubles appels),
+pour que l'athlète voie sa semaine déjà composée sans action — exactement "que l'athlète sache ce
+qu'il a à faire". Les autres semaines restent lazy (bouton "Proposer les séances" dans
+`PlanWeekCalendar`/`PlanOverviewGrid`), pour ne jamais déclencher tous les appels IA du plan d'un
+coup à l'ouverture.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
