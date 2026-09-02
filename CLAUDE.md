@@ -31,7 +31,7 @@ src/
 │   ├── cycling/metric/[id]/page.tsx  # Page détail d'une tuile Vue d'ensemble : courbe ~180j + explication (metric-info.ts) — une seule route dynamique pour les 8 métriques ; pour `riegel`, affiche `PowerCurveCard` (saisie des records + calculateur TTE) à la place du graphique, qui n'existe pas pour cette métrique
 │   ├── cycling/budget/page.tsx   # Page détail du widget "Budget de la semaine" : `KJBudgetWidget` + méthode de calcul (load-types.ts)
 │   ├── cycling/governor/page.tsx # Page détail du "Gouverneur de charge interne" : `GovernorWidget` + méthode de calcul des 6 signaux (governor-types.ts/use-governor.ts)
-│   ├── coach/page.tsx            # Hub coaching IA — 7 sous-onglets : Proposition du jour (défaut), Sorties (journal d'activités), Météo & Tenue (ex-/weather), Plan, Stella, Mémoire coach, Bibliothèque
+│   ├── coach/page.tsx            # Hub coaching IA — 6 sous-onglets, dont 4 visibles dans la TabsList (Plan [défaut, fusionne Aujourd'hui + plan périodisé], Journal, Météo & Tenue, Stella) + 2 démotés dans un menu "Plus" (Mémoire coach, Bibliothèque — voir COACH_UX_AUDIT.md)
 │   ├── garage/page.tsx           # Matériel + Chaînes + Garde-robe (Firestore) — sorti de Cyclisme, sa propre destination de nav
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
 │   ├── nutrition/fueling/page.tsx # Page détail du widget "Fueling vs Workload" : brûlé/mangé/écart + méthode de calcul (fueling-types.ts)
@@ -327,6 +327,43 @@ onglets séparés pour la même notion de "mon plan" n'avait plus de sens. Fusio
 sandbox, voir plus bas la technique de vérification via fixtures) :
 `daily-workout-recommendation-output.test.ts` (même patron `satisfies`-le-vrai-schéma que
 `plan-week-sessions-output.test.ts`).
+
+**Audit UX Coach vs concurrents (Join/Frive/TrainerRoad) → bandeau "à traiter" + démotion 6→4
+onglets** — retour utilisateur : "je suis toujours pas convaincue de la présentation et de
+l'organisation du coach... nous devrions peut-être effectuer un audit ainsi qu'une review des best
+practices ainsi que des applications compétitrices (genre Join ou Frive)." Diagnostic complet dans
+`COACH_UX_AUDIT.md` (racine du repo, distinct de `AUDIT.md`/`PLAN.md` qui datent d'une phase
+antérieure du projet) — recherche web sur Join/Frive/TrainerRoad (accès direct aux sites bloqué par
+le proxy réseau du sandbox, comme pour `intervals.icu` ; basé sur des extraits indexés). Constat
+principal : les 3 concurrents traitent readiness + séance du jour comme un seul écran d'accueil,
+LifeCycle les sépare entre Cyclisme et Coach — tension identifiée mais volontairement PAS tranchée
+dans ce chantier (défait plusieurs décisions déjà prises et documentées dans ce fichier). Deux
+recommandations retenues et construites immédiatement (les deux autres — fusion "Aujourd'hui" et
+vue prévu/réalisé compacte — restent en attente d'arbitrage) :
+- **Bandeau "à traiter"** (`pending-feedback-banner.tsx`, inspiré de la "Pending Feedback card" de
+  Join) — sorties Intervals.icu des 7 derniers jours sans RPE (ni sur Intervals.icu lui-même via
+  `bestRpe()`, ni en local via `sessionFeedback`), affichées en haut de l'onglet Plan avec action
+  inline (réutilise `QuickFeedbackButton` tel quel). Scope volontairement limité au vélo — une
+  séance muscu capture déjà son RPE au moment de la logger (voir `sessionRpe`,
+  `strength-log-types.ts`), il n'existe pas de geste rétroactif côté muscu aujourd'hui pour la
+  corriger après coup, donc l'inclure ici pointerait vers une action qui n'existe pas.
+- **Démotion Mémoire coach/Bibliothèque** — aucun des 3 concurrents examinés ne place un écran de
+  configuration (mémoire/bibliothèque de sources) au même niveau de nav qu'un écran d'usage
+  quotidien. `TabsList` passe de 6 à 4 déclencheurs visibles (Plan/Journal/Météo & Tenue/Stella) ;
+  Mémoire coach et Bibliothèque restent de VRAIS onglets (même valeur, même `TabsContent`, deep-link
+  `?tab=memory`/`?tab=library` inchangé) mais leur déclencheur passe dans un menu "Plus"
+  (`DropdownMenu`) plutôt que la `TabsList`. `Tabs` devient contrôlé (`value`/`onValueChange`,
+  jusqu'ici `defaultValue` non contrôlé) pour que ce menu puisse changer l'onglet actif sans être
+  lui-même un `TabsTrigger` Radix ; le bouton "Plus" reprend le style `data-[state=active]` quand
+  Mémoire coach ou Bibliothèque est ouvert, pour ne pas perdre le repère "où suis-je".
+
+Un complément UI/visuel (pas seulement structurel) est aussi documenté dans `COACH_UX_AUDIT.md`
+§5 : `daily-workout-tab.tsx`/`training-plan-tab.tsx` n'utilisent quasiment jamais `.lc-card` (la
+carte canonique du design system), au profit de combinaisons ad hoc (`bg-card/60 border-primary/20
+border-2` répété sur 3+ cartes différentes) qui font perdre toute hiérarchie visuelle entre "voici
+la chose à faire maintenant" et "voici un résumé pour information" — même symptôme que celui déjà
+documenté dans `AUDIT.md` pour d'autres modules, non corrigé dans ce chantier (recommandation
+seulement, migration non construite).
 
 **Chaque tuile de Vue d'ensemble renvoie vers `/cycling/metric/<id>`** (`cycling/metric/[id]/page.tsx`)
 — une page détail avec la courbe des ~180 derniers jours et une explication du principe de

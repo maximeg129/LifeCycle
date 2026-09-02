@@ -149,12 +149,76 @@ plutôt que deux onglets de poids égal à Plan/Journal. Réduit 6 onglets à 4,
 
 ---
 
-## 5. Ce que cet audit ne tranche pas
+## 5. Complément UI/visuel — retour utilisateur : "là tu me parles de structure mais le côté UI est à revoir également"
 
-Je n'ai pas de préférence à imposer entre A, B, C, D — ce sont des choix de produit, pas des
-défauts techniques à corriger automatiquement. B et D sont des changements contenus (un seul
-sprint, faible risque de régression) ; A est structurel et mérite d'être décidé consciemment avant
-d'y toucher, vu le nombre de décisions déjà prises dans l'autre sens et documentées dans CLAUDE.md.
-Je n'ai pas non plus pu inspecter les apps concurrentes écran par écran (accès direct bloqué) — la
-comparaison ci-dessus est fiable sur la structure et les motifs, pas sur des détails de mise en page
-au pixel près.
+Les sections précédentes portaient sur l'architecture de l'information (quels écrans, quels onglets).
+Celle-ci porte sur le rendu visuel lui-même — inspection du code des deux composants les plus
+consultés de Coach (`daily-workout-tab.tsx`, `training-plan-tab.tsx`), pas une capture d'écran réelle
+(voir la limite déjà documentée : le serveur de dev de ce sandbox échoue sur toute page à cause d'un
+bug de décodage `favicon.ico` préexistant, sans rapport avec ce diagnostic).
+
+**Constat principal : Coach n'utilise quasiment jamais `.lc-card`, la carte canonique du design
+system "Performance Lab".** `globals.css` définit `.lc-card` comme `rounded-[18px] border
+border-border/60`, une ombre douce à deux niveaux, et un lift au survol (`hover:-translate-y-[1px]`)
+— c'est ce que les tuiles Vue d'ensemble, les widgets Budget/Gouverneur et toutes les pages détail
+construites cette session utilisent. `daily-workout-tab.tsx`/`training-plan-tab.tsx` utilisent à la
+place, de façon répétée, deux combinaisons ad hoc :
+- `bg-card/60 border-primary/20 border-2` — le `Card` shadcn par défaut (`rounded-lg`, `shadow-sm`,
+  aucun lift) avec une bordure épaisse teintée primaire par-dessus. Utilisé au moins 3 fois dans le
+  parcours "Plan" : la carte séance muscu (`StrengthSessionCard`, ligne 48), la carte proposition IA
+  générée (`daily-workout-tab.tsx:394`), et la carte résumé du plan actif (`training-plan-tab.tsx:247`).
+- `bg-card/40 border-border` — le formulaire de disponibilité (`daily-workout-tab.tsx:214`), le
+  Journal (`rides-journal-tab.tsx:97`).
+
+Résultat concret : en scrollant l'onglet Plan, l'athlète croise 3-4 cartes à bordure épaisse teintée
+primaire d'affilée (séance muscu OU proposition IA, puis plus bas le résumé du plan actif) — **la
+même intensité visuelle appliquée à plusieurs blocs différents ne hiérarchise plus rien**. Rien ne
+distingue visuellement "voici ce qu'il faut faire maintenant" de "voici un résumé pour information".
+C'est exactement le même symptôme que `AUDIT.md` avait déjà documenté ailleurs dans l'app il y a
+plusieurs mois ("trois langages de carte différents pour le même concept") — Coach a été construit
+après ce constat, avec son propre système ad hoc, sans jamais adopter `.lc-card`.
+
+**Autres observations, plus mineures :**
+- Trois `Collapsible` imbriqués dans la carte de proposition IA (rationale / raisonnement / script
+  structuré) — cohérent avec "donner accès au détail sans l'imposer", mais ajoute de la profondeur
+  d'interaction à un écran dont le rôle principal (façon Join) est justement le coup d'œil rapide.
+- Aucune des deux pages n'utilise le halo `ring-2 ring-primary/50` maintenant établi ailleurs pour
+  signaler "l'élément actif/à traiter en ce moment" (utilisé ce mois-ci dans le suivi en direct
+  muscu pour l'exercice courant) — un vocabulaire déjà inventé dans l'app, pas repris ici alors que
+  "quelle est LA chose à faire maintenant" est exactement la question que cet écran doit répondre en
+  un coup d'œil.
+
+**Recommandation, non construite** : migrer `StrengthSessionCard`, la carte de proposition IA
+générée, et la carte résumé du plan actif vers `.lc-card`, et réserver la bordure primaire épaisse à
+UN SEUL élément par écran — la séance concrète du jour, la seule chose qui justifie vraiment
+l'emphase visuelle maximale sur cet onglet. Le formulaire de disponibilité et le résumé du plan actif
+redeviennent des `.lc-card` neutres, hiérarchiquement secondaires. Ampleur : moyenne — pas une
+réécriture, un remplacement de classes sur ~4-5 blocs, mais qui mérite d'être fait en une fois plutôt
+que fragmenté (risque de rendre les deux fichiers encore plus incohérents entre eux si fait à moitié).
+
+## 6. Ce qui a été construit suite à cet audit
+
+- **§4.B — Bandeau "à traiter"** (`pending-feedback-banner.tsx`) : sorties Intervals.icu des 7
+  derniers jours sans RPE (ni sur Intervals.icu lui-même, ni en local), affichées en haut de l'onglet
+  Plan avec action inline (réutilise `QuickFeedbackButton`, aucune nouvelle saisie créée). Scope
+  volontairement limité au vélo — une séance muscu capture déjà son RPE au moment de la logger, il
+  n'existe pas de geste rétroactif pour la muscu aujourd'hui, l'inclure aurait pointé vers une action
+  qui n'existe pas.
+- **§4.D — Démotion Mémoire coach/Bibliothèque** : sorties de la `TabsList` principale (passée de 6 à
+  4 déclencheurs visibles), regroupées dans un menu "Plus" (`DropdownMenu`). Les deux restent de
+  vrais onglets (même valeur, même `TabsContent`, deep-link `?tab=memory`/`?tab=library` inchangé) —
+  seul leur déclencheur change de forme. Le bouton "Plus" s'illumine (même traitement `data-[state=
+  active]` que les onglets) quand l'un des deux est actif, pour ne pas perdre le repère "où suis-je".
+
+Non construit : §4.A (fusion "Aujourd'hui") et §4.C (vue prévu/réalisé) restent en attente
+d'arbitrage — voir section 4 ci-dessus.
+
+## 7. Ce que cet audit ne tranche pas
+
+B et D sont construits (section 6). A reste structurel et mérite d'être décidé consciemment avant
+d'y toucher, vu le nombre de décisions déjà prises dans l'autre sens et documentées dans CLAUDE.md ;
+C reste une amélioration d'ampleur moyenne, non urgente. Le remplacement de cartes recommandé en
+section 5 (`.lc-card` sur les 4-5 blocs identifiés) n'est pas construit non plus — même statut que C,
+en attente de ton feu vert. Je n'ai pas non plus pu inspecter les apps concurrentes écran par écran
+(accès direct bloqué) — la comparaison ci-dessus est fiable sur la structure et les motifs, pas sur
+des détails de mise en page au pixel près.

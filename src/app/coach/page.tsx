@@ -16,7 +16,7 @@
 // réduits à 6, "Plan" ouvre désormais sur "Aujourd'hui" avant le plan
 // périodisé complet.
 
-import { Suspense } from 'react'
+import { Suspense, useState } from 'react'
 import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { AppNavigation } from '@/components/layout/sidebar'
@@ -24,10 +24,14 @@ import { AuthGuard } from '@/components/layout/auth-guard'
 import { PageHeader } from '@/components/ui/page-header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Activity, CloudSun, Target, MessageCircle, BrainCircuit, Library } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { cn } from '@/lib/utils'
+import { Activity, CloudSun, Target, MessageCircle, BrainCircuit, Library, MoreHorizontal } from 'lucide-react'
 import { useAthlete } from '@/hooks/use-intervals'
 import { useGovernor } from '@/components/cycling/use-governor'
 import { DailyWorkoutTab } from '@/components/cycling/daily-workout-tab'
+import { PendingFeedbackBanner } from '@/components/coach/pending-feedback-banner'
 
 // Code-split: seule DailyWorkoutTab (le contenu du haut de l'onglet "Plan",
 // désormais l'onglet par défaut — le geste le plus fréquent) ship dans le
@@ -55,38 +59,71 @@ const CoachLibraryTab = dynamic(() => import('@/components/cycling/coach-library
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 
-// Lit ?tab=stella (bouton flottant Stella de la nav mobile — sidebar.tsx)
-// pour ouvrir directement le sous-onglet Stella. useSearchParams() exige
-// sa propre limite Suspense pour ne pas faire basculer toute la page en
-// rendu client pur.
+const VALID_TABS = ['plan', 'rides', 'weather', 'stella', 'memory', 'library'] as const
+type CoachTab = (typeof VALID_TABS)[number]
+
+// Lit ?tab=... (bouton flottant Stella de la nav mobile — sidebar.tsx —
+// utilise ?tab=stella, mais n'importe quel onglet valide peut être
+// deep-lié de la même façon) pour ouvrir directement un sous-onglet.
+// useSearchParams() exige sa propre limite Suspense pour ne pas faire
+// basculer toute la page en rendu client pur.
 function CoachTabs() {
   const athlete = useAthlete()
   const governor = useGovernor()
   const searchParams = useSearchParams()
-  const initialTab = searchParams.get('tab') === 'stella' ? 'stella' : 'plan'
+  const paramTab = searchParams.get('tab')
+  const initialTab: CoachTab = (VALID_TABS as readonly string[]).includes(paramTab ?? '') ? (paramTab as CoachTab) : 'plan'
+  const [tab, setTab] = useState<CoachTab>(initialTab)
+
+  // Retour utilisateur : "nous devrions peut être effectuer un audit...
+  // des applications compétitrices" (COACH_UX_AUDIT.md §4.D) — aucun des 3
+  // concurrents examinés (Join, Frive, TrainerRoad) ne met un écran de
+  // configuration (mémoire/bibliothèque de sources) au même niveau de nav
+  // qu'un écran d'usage quotidien (Plan/Journal). Mémoire coach et
+  // Bibliothèque restent de vrais onglets (même valeur, même TabsContent —
+  // rien ne change côté deep-link ?tab=memory/library) mais leur déclencheur
+  // sort de la TabsList pour un menu "Plus", démoté visuellement. Tabs
+  // devient contrôlé (value/onValueChange) pour que ce menu puisse changer
+  // l'onglet actif sans être lui-même un TabsTrigger Radix.
+  const isSecondaryTab = tab === 'memory' || tab === 'library'
 
   return (
-    <Tabs defaultValue={initialTab} className="space-y-6">
-      <TabsList className="bg-card/50 border border-border p-1 h-auto flex flex-wrap gap-1">
-        <TabsTrigger value="plan" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-          <Target className="w-3.5 h-3.5 mr-1.5" /> Plan
-        </TabsTrigger>
-        <TabsTrigger value="rides" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-          <Activity className="w-3.5 h-3.5 mr-1.5" /> Journal
-        </TabsTrigger>
-        <TabsTrigger value="weather" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-          <CloudSun className="w-3.5 h-3.5 mr-1.5" /> Météo &amp; Tenue
-        </TabsTrigger>
-        <TabsTrigger value="stella" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-          <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> Stella
-        </TabsTrigger>
-        <TabsTrigger value="memory" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-          <BrainCircuit className="w-3.5 h-3.5 mr-1.5" /> Mémoire coach
-        </TabsTrigger>
-        <TabsTrigger value="library" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-          <Library className="w-3.5 h-3.5 mr-1.5" /> Bibliothèque
-        </TabsTrigger>
-      </TabsList>
+    <Tabs value={tab} onValueChange={(v) => setTab(v as CoachTab)} className="space-y-6">
+      <div className="flex items-center gap-1 flex-wrap">
+        <TabsList className="bg-card/50 border border-border p-1 h-auto flex flex-wrap gap-1">
+          <TabsTrigger value="plan" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
+            <Target className="w-3.5 h-3.5 mr-1.5" /> Plan
+          </TabsTrigger>
+          <TabsTrigger value="rides" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
+            <Activity className="w-3.5 h-3.5 mr-1.5" /> Journal
+          </TabsTrigger>
+          <TabsTrigger value="weather" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
+            <CloudSun className="w-3.5 h-3.5 mr-1.5" /> Météo &amp; Tenue
+          </TabsTrigger>
+          <TabsTrigger value="stella" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
+            <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> Stella
+          </TabsTrigger>
+        </TabsList>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              className={cn('gap-1.5 text-sm px-3 py-1.5 h-auto', isSecondaryTab && 'bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground')}
+            >
+              <MoreHorizontal className="w-3.5 h-3.5" /> Plus
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onClick={() => setTab('memory')} className="gap-2">
+              <BrainCircuit className="w-4 h-4" /> Mémoire coach
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setTab('library')} className="gap-2">
+              <Library className="w-4 h-4" /> Bibliothèque
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
       <TabsContent value="rides" className="space-y-8">
         <RidesJournalTab isConfigured={athlete.isConfigured} athleteLoading={athlete.isLoading} />
@@ -104,6 +141,11 @@ function CoachTabs() {
           complet (TrainingPlanTab), même geste mental que le reste de
           cette page (Coach = planifier/faire/relire une sortie). */}
       <TabsContent value="plan" className="space-y-8">
+        {/* Retour utilisateur, en validant COACH_UX_AUDIT.md §4.B (inspiré
+            de Join, "Pending Feedback" card) : les sorties récentes sans
+            RPE sont désormais surfacées ici plutôt que de compter sur
+            l'athlète pour remarquer une icône non remplie dans le Journal. */}
+        <PendingFeedbackBanner />
         <DailyWorkoutTab />
         {/* Retour utilisateur, capture d'écran à l'appui : "c'est pas très
             user friendly" — la fusion Proposition du jour + Plan (voir
