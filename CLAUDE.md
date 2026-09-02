@@ -937,7 +937,31 @@ tailles : compact (12px de haut) dans chaque tuile de la bande de jours, détail
 pas de %FTP, garde son traitement icône haltère existant ; `[]` (composant qui ne rend rien) pour une
 séance sans script structuré exploitable, jamais un graphique vide ou inventé.
 
-## Modèle de Données Firestore
+## Plan : voir l'activité liée à une séance réalisée
+
+Retour utilisateur : "est-il possible de voir l'activité qui est liée à l'activité planifiée ?" —
+une séance du plan marquée "Réalisée" (`matchSessionCompletion`, voir "Lien réalisé/prévu" plus haut)
+savait déjà QU'elle avait été faite, mais ne gardait jamais l'id de l'activité Intervals.icu
+réellement rapprochée : impossible d'ouvrir cette activité depuis le plan, il fallait la retrouver à
+la main dans le Journal.
+
+**`SessionCompletion.activityId`** (`training-plan-types.ts`) — nouveau champ optionnel, présent
+uniquement pour une séance cycling `'done'`. `CyclingActivityLike` porte désormais un `id` (en plus
+de `startDate`/`durationMinutes`), et `matchSessionCompletion()` le recopie dans `activityId` au
+moment du rapprochement. `getSessionCompletion()` (`use-training-plan.ts`) thread `a.id` (l'id
+Intervals.icu réel, déjà présent sur `IntervalsActivity` mais jusqu'ici jeté au moment de construire
+la liste `cyclingActivities` allégée) — aucun nouveau fetch, la donnée était déjà chargée. Absent
+côté musculation (`SessionCompletion` reste rapproché via `strengthSessionLogs`, pas une activité
+Intervals.icu — pas d'équivalent "voir l'activité" pour ce cas aujourd'hui, une séance muscu n'a pas
+de fiche Intervals.icu à visiter).
+
+**`PlanSessionDetail`** — deux nouveaux boutons apparaissent à côté du badge "Réalisée" quand
+`activityId` est présent, réutilisant tels quels les mêmes mécanismes que le Journal
+(`rides-journal-tab.tsx`) plutôt que d'en dupliquer la logique : un lien "Voir sur Intervals.icu"
+(`https://intervals.icu/activities/{id}`, nouvel onglet — même URL que le lien de ligne du Journal)
+et un bouton "Analyser" qui ouvre `RideAnalysisDialog` (`ride-analysis-dialog.tsx`, déjà existant —
+analyse IA de sortie, stockée dans `rideAnalyses/{activityId}`, régénérable) directement depuis la
+séance du plan.
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
 

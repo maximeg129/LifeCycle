@@ -573,7 +573,7 @@ export function useTrainingPlan() {
   const getSessionCompletion = useCallback((week: PlanWeek, session: PlanWeekSessionWithValidation, sessionIndex: number): SessionCompletion => {
     const cyclingActivities = planActivities.data
       .filter((a) => a.start_date_local)
-      .map((a) => ({ startDate: (a.start_date_local as string).slice(0, 10), durationMinutes: (a.moving_time ?? 0) / 60 }))
+      .map((a) => ({ id: a.id, startDate: (a.start_date_local as string).slice(0, 10), durationMinutes: (a.moving_time ?? 0) / 60 }))
     return matchSessionCompletion(session, week.weekNumber, sessionIndex, todayId, cyclingActivities, strengthLogs.logs)
   }, [planActivities.data, strengthLogs.logs, todayId])
 

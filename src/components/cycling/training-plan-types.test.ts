@@ -473,9 +473,9 @@ describe('matchSessionCompletion', () => {
   })
 
   it('matches a cycling session to a real activity on the same date', () => {
-    const activities = [{ startDate: '2026-09-08', durationMinutes: 95 }]
+    const activities = [{ id: 'act-1', startDate: '2026-09-08', durationMinutes: 95 }]
     const result = matchSessionCompletion({ sessionKind: 'cycling', date: '2026-09-08' }, 1, 0, today, activities, [])
-    expect(result).toEqual({ status: 'done', actualDate: '2026-09-08', actualDurationMinutes: 95 })
+    expect(result).toEqual({ status: 'done', actualDate: '2026-09-08', actualDurationMinutes: 95, activityId: 'act-1' })
   })
 
   it('marks a past cycling session with no matching activity as missed', () => {
@@ -512,15 +512,27 @@ describe('matchSessionCompletion', () => {
   })
 
   it('never matches a cycling session against strength logs or vice versa', () => {
-    const activities = [{ startDate: '2026-09-08', durationMinutes: 60 }]
+    const activities = [{ id: 'act-1', startDate: '2026-09-08', durationMinutes: 60 }]
     const result = matchSessionCompletion({ sessionKind: 'strength', date: '2026-09-08' }, 1, 0, today, activities, [])
     expect(result.status).toBe('missed')
   })
 
   it('defaults to cycling matching when sessionKind is absent (legacy cached session)', () => {
-    const activities = [{ startDate: '2026-09-08', durationMinutes: 60 }]
+    const activities = [{ id: 'act-1', startDate: '2026-09-08', durationMinutes: 60 }]
     const result = matchSessionCompletion({ date: '2026-09-08' }, 1, 0, today, activities, [])
     expect(result.status).toBe('done')
+  })
+
+  it('carries the matched activity id for a done cycling session', () => {
+    const activities = [{ id: 'act-42', startDate: '2026-09-08', durationMinutes: 60 }]
+    const result = matchSessionCompletion({ sessionKind: 'cycling', date: '2026-09-08' }, 1, 0, today, activities, [])
+    expect(result.activityId).toBe('act-42')
+  })
+
+  it('never sets an activityId for a done strength session', () => {
+    const logs = [{ date: '2026-09-08', planWeekNumber: 1, planSessionIndex: 0 }]
+    const result = matchSessionCompletion({ sessionKind: 'strength', date: '2026-09-08' }, 1, 0, today, [], logs)
+    expect(result.activityId).toBeUndefined()
   })
 })
 

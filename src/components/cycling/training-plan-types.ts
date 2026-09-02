@@ -284,9 +284,22 @@ export interface SessionCompletion {
   actualDate?: string
   /** Durée réelle (minutes) — cycling uniquement (une activité Intervals.icu porte une durée ; un log muscu n'en porte pas de comparable). */
   actualDurationMinutes?: number
+  /**
+   * Id Intervals.icu de l'activité réellement rapprochée — cycling
+   * uniquement (retour utilisateur : "est-il possible de voir l'activité
+   * qui est liée à l'activité planifiée ?"). Permet à l'UI d'ouvrir la
+   * même analyse IA / le même lien externe que le Journal
+   * (RideAnalysisDialog, rides-journal-tab.tsx) directement depuis la
+   * séance du plan, sans dupliquer cette logique. Absent pour une séance
+   * "strength" (rapprochée d'un strengthSessionLogs, pas d'une activité
+   * Intervals.icu) ou tant qu'aucune activité n'est rapprochée.
+   */
+  activityId?: string
 }
 
 export interface CyclingActivityLike {
+  /** Id Intervals.icu de l'activité — voir SessionCompletion.activityId. */
+  id: string
   /** yyyy-MM-dd */
   startDate: string
   durationMinutes: number
@@ -320,7 +333,7 @@ export function matchSessionCompletion(
     if (match) return { status: 'done', actualDate: match.date }
   } else {
     const match = cyclingActivities.find((a) => a.startDate === session.date)
-    if (match) return { status: 'done', actualDate: match.startDate, actualDurationMinutes: match.durationMinutes }
+    if (match) return { status: 'done', actualDate: match.startDate, actualDurationMinutes: match.durationMinutes, activityId: match.id }
   }
 
   return { status: session.date < todayIso ? 'missed' : 'upcoming' }
