@@ -31,6 +31,7 @@ import { useAthlete, useFitnessChart } from '@/hooks/use-intervals'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { usePowerCurve } from '@/components/cycling/use-power-curve'
 import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/endurance'
+import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { PowerCurveCard } from '@/components/cycling/power-curve-card'
 import { METRIC_INFO, type MetricId } from '@/components/cycling/metric-info'
 import { tsbZone, TSB_ZONES_ORDERED } from '@/components/cycling/tsb-zones'
@@ -47,6 +48,8 @@ const SOURCE_RULE_IDS: Partial<Record<MetricId, string[]>> = {
   atl: ['fitness-fatigue-show-trajectory-not-absolute'],
   tsb: ['forbidden-tsb-universal-optimal'],
   hrv: ['principle-3-hrv-sign-ambiguous', 'forbidden-hrv-sign-fatigue-freshness'],
+  criticalPower: ['riegel-prefer-critical-power-side-cycling'],
+  readiness: ['readiness-composition-explicit-weighting'],
 }
 
 const TREND_DAYS = 180 // ~6 mois
@@ -97,9 +100,9 @@ export default function MetricDetailPage() {
   const lifestyle = useLifestyleData(TREND_DAYS)
   const powerCurve = usePowerCurve()
 
-  const enduranceIndex = fitEnduranceCurve(
-    [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
-  )?.enduranceIndex ?? null
+  const powerRecords = [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
+  const enduranceIndex = fitEnduranceCurve(powerRecords)?.enduranceIndex ?? null
+  const criticalPowerModel = fitCriticalPower(powerRecords)
 
   // ── Par métrique : série de tendance (null = pas d'historique suivi) + valeur actuelle + unité affichée ──
   const { series, currentValue, isLoading } = useMemo((): { series: TrendPoint[] | null; currentValue: string; isLoading: boolean } => {
@@ -156,10 +159,12 @@ export default function MetricDetailPage() {
         return { series: null, currentValue: athlete.data?.ftp != null ? String(athlete.data.ftp) : '—', isLoading: athlete.isLoading }
       case 'riegel':
         return { series: null, currentValue: enduranceIndex != null ? enduranceIndex.toFixed(2) : '—', isLoading: powerCurve.isLoading }
+      case 'criticalPower':
+        return { series: null, currentValue: criticalPowerModel != null ? String(Math.round(criticalPowerModel.cpWatts)) : '—', isLoading: powerCurve.isLoading }
       default:
         return { series: null, currentValue: '—', isLoading: false }
     }
-  }, [id, fitness.data, fitness.isLoading, athlete.data, athlete.isLoading, lifestyle.dailySeries, lifestyle.latest, lifestyle.readiness, lifestyle.readinessSeries, lifestyle.isLoading, enduranceIndex, powerCurve.isLoading])
+  }, [id, fitness.data, fitness.isLoading, athlete.data, athlete.isLoading, lifestyle.dailySeries, lifestyle.latest, lifestyle.readiness, lifestyle.readinessSeries, lifestyle.isLoading, enduranceIndex, criticalPowerModel, powerCurve.isLoading])
 
   const [range, setRange] = useState<RangeOption>('all')
   const visibleSeries = useMemo(() => {
@@ -245,16 +250,24 @@ export default function MetricDetailPage() {
               <p className="text-xs text-muted-foreground">{currentZone.description}</p>
             </CardContent>
           )}
+          {id === 'criticalPower' && criticalPowerModel && (
+            <CardContent className="px-6 pt-0 pb-5 -mt-2">
+              <p className="text-xs text-muted-foreground">
+                W′ {(criticalPowerModel.wPrimeJoules / 1000).toFixed(1)} kJ — la réserve de travail mobilisable au-dessus de la CP avant épuisement.
+              </p>
+            </CardContent>
+          )}
         </Card>
 
-        {/* Riegel n'a pas de courbe d'historique (recalculé à la volée, jamais
-            stocké jour par jour) — cette page devient plutôt sa destination
-            "détail" pour la saisie des records de puissance et le calculateur
-            de TTE, déplacés ici depuis la page Cyclisme principale (retour
-            utilisateur : ce module n'avait pas sa place noyé dans PMC — voir
-            CLAUDE.md). Le composant gère lui-même son propre état "pas assez
-            de données". */}
-        {id === 'riegel' ? (
+        {/* Riegel/Puissance critique n'ont pas de courbe d'historique
+            (recalculés à la volée depuis les mêmes 3 records personnels,
+            jamais stockés jour par jour) — cette page devient plutôt leur
+            destination "détail" pour la saisie des records de puissance et
+            le calculateur de TTE, déplacés ici depuis la page Cyclisme
+            principale (retour utilisateur : ce module n'avait pas sa place
+            noyé dans PMC — voir CLAUDE.md). Le composant gère lui-même son
+            propre état "pas assez de données". */}
+        {id === 'riegel' || id === 'criticalPower' ? (
           <PowerCurveCard />
         ) : (
         <Card className="lc-card">
