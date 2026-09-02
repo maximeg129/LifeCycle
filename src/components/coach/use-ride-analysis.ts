@@ -28,9 +28,9 @@ import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { buildCoachContext } from '@/components/cycling/coach-context'
 import { rideAnalysis, type RideAnalysisOutput } from '@/ai/flows/ride-analysis-flow'
 import { bestAverageWatts, bestRpe, feelToScore, type IntervalsActivity, type IntervalsActivityStream } from '@/lib/intervals-api'
-import { computeNormalizedPower, computePowerZoneDistribution, computeHrZoneDistribution, computeSplitAnalysis, average, type PowerZoneBucket, type HrZoneBucket } from './ride-analysis-types'
+import { computeNormalizedPower, computePowerZoneDistribution, computeHrZoneDistribution, computeSplitAnalysis, average, type PowerZoneBucket, type HrZoneBucket, type DurabilityRideEntry } from './ride-analysis-types'
 import { computeDurabilityProfile } from '@/domain/cycling/metrics/durability'
-import { computeDecoupling } from '@/domain/cycling/metrics/decoupling'
+import { computeDecoupling, type DecouplingResult } from '@/domain/cycling/metrics/decoupling'
 import { computePowerZoneDistribution3, type ThreeZoneBucket } from '@/domain/cycling/metrics/zones'
 import { describeActionDispatchError } from '@/lib/utils'
 
@@ -42,6 +42,16 @@ interface IntervalsCredentialsDoc {
 interface StoredRideAnalysis {
   userId: string
   analysis: RideAnalysisOutput
+  // Retour utilisateur, audit des indicateurs Cyclisme : encarts chiffrés
+  // "durabilité"/"découplage" dans RideAnalysisDialog, en plus du texte IA.
+  // Déjà calculés ci-dessous pour le prompt de rideAnalysis — persistés ici
+  // (plutôt que recalculés à chaque ouverture, ce qui exigerait de
+  // refetcher les streams) pour que le dialogue les affiche sans re-générer.
+  // `null` (jamais `undefined`, que Firestore refuse) si non calculables
+  // sur cette sortie (pas de flux watts/FC, ou poids athlète inconnu pour
+  // la durabilité).
+  durability: DurabilityRideEntry[] | null
+  decoupling: DecouplingResult | null
 }
 
 function toZoneInput(zones: (PowerZoneBucket | HrZoneBucket)[] | null, totalSeconds: number) {
@@ -235,7 +245,13 @@ export function useRideAnalysis(activityId: string | null) {
       }
 
       const ref = doc(db, `users/${user.uid}/rideAnalyses/${activityId}`)
-      const data = { userId: user.uid, analysis: result.data, createdAt: serverTimestamp() }
+      const data = {
+        userId: user.uid,
+        analysis: result.data,
+        durability: durability ?? null,
+        decoupling: decoupling ?? null,
+        createdAt: serverTimestamp(),
+      }
       try {
         await setDoc(ref, data)
       } catch {
@@ -253,6 +269,8 @@ export function useRideAnalysis(activityId: string | null) {
 
   return {
     analysis: stored?.analysis ?? null,
+    durability: stored?.durability ?? null,
+    decoupling: stored?.decoupling ?? null,
     isLoadingStored,
     isGenerating,
     canAnalyze: !!creds?.intervalsAthleteId && !!creds?.intervalsApiKey,

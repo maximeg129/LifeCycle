@@ -129,3 +129,59 @@ export function computeSplitAnalysis(watts: number[] | undefined): SplitAnalysis
     fadePct: Math.round(fadePct * 10) / 10,
   }
 }
+
+// ── Encart Durabilité (RideAnalysisDialog) ──────────────────────────────
+//
+// computeDurabilityProfile() (domain/cycling/metrics/durability.ts) sort un
+// profil complet — 5 paliers de travail accumulé × 6 durées de MMP testées.
+// Bien trop dense pour un encart de dialogue. summarizeDurabilityForDisplay
+// le réduit à une seule durée repère (5 min, au milieu de la fenêtre 10s-
+// 40min testée) : le % de MMP conservé à chaque palier de fatigue franchi,
+// par rapport au palier "à froid" (0 kJ/kg) DE LA MÊME SORTIE. Ce n'est PAS
+// la comparaison à l'historique de compareDurabilityToHistory() (qui exige
+// de refetcher plusieurs sorties passées comparables) — juste la
+// dégradation intra-sortie, déjà entièrement disponible depuis les données
+// déjà chargées pour l'analyse IA.
+
+/** Le format déjà construit par use-ride-analysis.ts à partir de DurabilityTierProfile — un plain object directement stockable en Firestore (jamais de valeur `undefined`). */
+export interface DurabilityRideEntry {
+  tierKJPerKg: number
+  reached: boolean
+  mmp: { durationSeconds: number; watts: number }[]
+}
+
+export interface DurabilitySummaryRow {
+  tierKJPerKg: number
+  watts: number
+  /** % vs le palier "à froid" (0 kJ/kg) à la même durée — positif = mieux que le début de la sortie. */
+  deltaPctVsFresh: number
+}
+
+const DURABILITY_SUMMARY_DURATION_SECONDS = 300 // 5 min
+
+/**
+ * Réduit le profil de durabilité complet à une ligne par palier de fatigue
+ * franchi (hors le palier "à froid" lui-même, qui sert de référence), à la
+ * durée repère de 5 minutes. `null` si le palier "à froid" n'a pas de MMP à
+ * cette durée (sortie trop courte pour même 5 min pleines) ou si aucun
+ * palier de fatigue n'a été franchi — rien à comparer.
+ */
+export function summarizeDurabilityForDisplay(durability: DurabilityRideEntry[] | null): DurabilitySummaryRow[] | null {
+  if (!durability) return null
+  const fresh = durability.find((t) => t.tierKJPerKg === 0)
+  const freshWatts = fresh?.mmp.find((m) => m.durationSeconds === DURABILITY_SUMMARY_DURATION_SECONDS)?.watts ?? null
+  if (freshWatts == null || freshWatts <= 0) return null
+
+  const rows: DurabilitySummaryRow[] = []
+  for (const tier of durability) {
+    if (tier.tierKJPerKg === 0 || !tier.reached) continue
+    const watts = tier.mmp.find((m) => m.durationSeconds === DURABILITY_SUMMARY_DURATION_SECONDS)?.watts ?? null
+    if (watts == null) continue
+    rows.push({
+      tierKJPerKg: tier.tierKJPerKg,
+      watts: Math.round(watts),
+      deltaPctVsFresh: Math.round(((watts - freshWatts) / freshWatts) * 1000) / 10,
+    })
+  }
+  return rows.length > 0 ? rows : null
+}
