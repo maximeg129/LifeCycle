@@ -16,6 +16,32 @@ import type { StrengthSessionValidationSummary } from '@/domain/cycling/validati
 export type PlanPhase = 'base' | 'build' | 'peak' | 'taper' | 'recovery'
 
 /**
+ * Libellé/couleur par phase — extraits de training-plan-tab.tsx (chantier
+ * "vue calendrier v2", retour utilisateur : les semaines pas encore
+ * générées par l'IA (sampleSessions lazy, voir plus bas) doivent quand même
+ * afficher quelque chose de significatif dans la grille du plan entier
+ * (plan-overview-grid.tsx), "comme c'était précédemment" avant la vue
+ * calendrier — d'où le besoin de partager ces deux tables entre le badge de
+ * repli de la grille et les usages déjà en place dans l'onglet Plan
+ * (badge de la semaine sélectionnée, journal des recalibrations).
+ */
+export const PHASE_LABELS: Record<PlanPhase, string> = {
+  base: 'Base',
+  build: 'Développement',
+  peak: 'Pic',
+  taper: 'Affûtage',
+  recovery: 'Récupération',
+}
+
+export const PHASE_BADGE_CLASS: Record<PlanPhase, string> = {
+  base: 'bg-blue-500/10 text-blue-500',
+  build: 'bg-orange-500/10 text-orange-500',
+  peak: 'bg-red-500/10 text-red-500',
+  taper: 'bg-purple-500/10 text-purple-500',
+  recovery: 'bg-green-500/10 text-green-500',
+}
+
+/**
  * Une séance type, avec son verdict de validation musculation (S05) attaché
  * — calculé côté client après réception de la réponse du flow (voir
  * strength-session-plan-types.ts), jamais par le modèle lui-même. Absent
