@@ -9,21 +9,20 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, Send, Wand2, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion, Apple, Dumbbell, PlayCircle, CheckCircle2, XCircle } from 'lucide-react'
+import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { useTrainingPlan } from './use-training-plan'
 import { useTrainingPreferences } from './use-training-preferences'
-import { LogStrengthSessionDialog } from './log-strength-session-dialog'
-import { LiveStrengthSessionView } from './live-strength-session-view'
-import { currentPlanWeek, type PlanPhase, type PlanWeek, type SessionCompletion } from './training-plan-types'
+import { currentPlanWeek, type PlanPhase } from './training-plan-types'
 import { upcomingGoals } from './coach-memory-types'
 import { EmptyState } from '@/components/ui/empty-state'
-import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 import { checkLoadProgressionWithoutDeload } from '@/domain/cycling/validation/planValidator'
 import { SourceCitation } from '@/components/coach/source-citation'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { PlanOverviewGrid } from './plan-overview-grid'
+import { PlanWeekCalendar } from './plan-week-calendar'
 
 const DEFAULT_WEEKLY_MINUTES = 360
 
@@ -47,6 +46,7 @@ export function TrainingPlanTab() {
   const {
     activePlan, isLoadingPlan, isGenerating, goals, isLoadingGoals, generate, archivePlan,
     generateWeekSessions, generatingSessionsForWeek, moveSessionDate, getSessionCompletion, sendSessionToIntervals, sendingSessionKey, canSendToIntervals,
+    recalibrateNow, isRecalibrating, activities, athleteFtp,
   } = useTrainingPlan()
   const today = format(new Date(), 'yyyy-MM-dd')
   const upcoming = upcomingGoals(goals, today)
@@ -61,8 +61,13 @@ export function TrainingPlanTab() {
   const [includeStrength, setIncludeStrength] = useState(false)
   const [strengthMinutes, setStrengthMinutes] = useState(60)
   const [showNewPlanForm, setShowNewPlanForm] = useState(false)
-  const [expandedWeek, setExpandedWeek] = useState<number | null>(null)
   const [showPlanReasoning, setShowPlanReasoning] = useState(false)
+  // Retour utilisateur : "et si on faisait une calendar view?" — la semaine
+  // sélectionnée dans la grille du plan entier (PlanOverviewGrid) pilote la
+  // vue détaillée (PlanWeekCalendar) juste en dessous. Initialisée à la
+  // semaine courante une fois le plan chargé (voir l'effect plus bas), pas
+  // au rendu initial — activePlan n'existe pas encore à ce moment.
+  const [selectedWeekNumber, setSelectedWeekNumber] = useState<number | null>(null)
 
   // Préremplit le formulaire depuis la préférence Firestore une fois
   // chargée (jamais si l'athlète a déjà touché le toggle cette session —
@@ -74,12 +79,6 @@ export function TrainingPlanTab() {
     if (trainingPrefs.data.includeStrengthTraining) setIncludeStrength(true)
     if (trainingPrefs.data.strengthWeeklyMinutes) setStrengthMinutes(trainingPrefs.data.strengthWeeklyMinutes)
   }, [trainingPrefs.data])
-
-  const toggleWeek = (w: PlanWeek) => {
-    const opening = expandedWeek !== w.weekNumber
-    setExpandedWeek(opening ? w.weekNumber : null)
-    if (opening && !w.sampleSessions) generateWeekSessions(w)
-  }
 
   const handleGenerate = async () => {
     const goal = upcoming.find((g) => g.id === selectedGoalId)
@@ -101,6 +100,33 @@ export function TrainingPlanTab() {
   }
 
   const week = activePlan ? currentPlanWeek(activePlan.weeks, today) : null
+
+  // Retour utilisateur : "pour que l'athlète sache ce qu'il a à faire" —
+  // sélectionne la semaine courante dès qu'elle est connue, sans geste
+  // manuel. Bascule sur la première semaine du plan si aujourd'hui tombe
+  // hors de sa plage (plan pas encore démarré ou déjà terminé) plutôt que
+  // de ne rien sélectionner.
+  useEffect(() => {
+    if (selectedWeekNumber != null || !activePlan) return
+    setSelectedWeekNumber(week?.weekNumber ?? activePlan.weeks[0]?.weekNumber ?? null)
+  }, [activePlan, week, selectedWeekNumber])
+
+  // Génère automatiquement les séances de la semaine COURANTE dès l'arrivée
+  // sur l'onglet — avant ce chantier, la première génération demandait un
+  // clic explicite (déplier la semaine dans l'ancien accordéon) ; la vue
+  // calendrier n'a plus ce geste d'expansion, l'athlète doit voir sa
+  // semaine déjà composée sans action. Les autres semaines restent lazy
+  // (bouton "Proposer les séances" dans PlanWeekCalendar/PlanOverviewGrid),
+  // pour ne jamais déclencher tous les appels IA du plan d'un coup.
+  const autoGeneratedRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (!week || week.sampleSessions || generatingSessionsForWeek != null) return
+    if (autoGeneratedRef.current === week.weekNumber) return
+    autoGeneratedRef.current = week.weekNumber
+    generateWeekSessions(week)
+  }, [week, generatingSessionsForWeek, generateWeekSessions])
+
+  const selectedWeek = activePlan?.weeks.find((w) => w.weekNumber === selectedWeekNumber) ?? week ?? null
 
   // plan-check-8 (R23, planValidator.ts) — le seul des 9 contrôles de plan
   // directement calculable ici sans donnée qui n'existe pas encore dans
@@ -254,6 +280,19 @@ export function TrainingPlanTab() {
             </CardDescription>
           </div>
           <div className="flex gap-2">
+            {/* Retour utilisateur : "en gardant l'option peut-être via un
+                bouton, de réajuster le plan basé sur ce qui a été
+                réalistiquement fait" — la recalibration tourne déjà
+                automatiquement à l'ouverture de l'onglet quand une semaine
+                vient de se terminer (voir le Journal du plan plus bas) ;
+                ce bouton la déclenche sur demande plutôt que d'attendre.
+                Ne force rien si rien n'est dû (recalibrateNow le dit via
+                toast) — jamais une deuxième recalibration de la même
+                semaine déjà traitée. */}
+            <Button variant="outline" size="sm" onClick={recalibrateNow} disabled={isRecalibrating} className="gap-2">
+              {isRecalibrating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+              Recalibrer maintenant
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setShowNewPlanForm(true)} className="gap-2">
               <Sparkles className="w-4 h-4" /> Nouveau plan
             </Button>
@@ -344,86 +383,68 @@ export function TrainingPlanTab() {
             </div>
           )}
 
-          {week && (
-            <div className="p-4 rounded-xl bg-primary/5 border border-primary/20 flex items-center justify-between flex-wrap gap-2">
-              <div>
-                <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Semaine actuelle</p>
-                <p className="text-sm font-medium mt-1">{week.focus || PHASE_LABELS[week.phase]}</p>
-              </div>
-              <Badge className={cn('font-bold', PHASE_BADGE_CLASS[week.phase])}>{PHASE_LABELS[week.phase]}</Badge>
-            </div>
-          )}
+          {/* Retour utilisateur, capture d'écran (export PDF de l'app) à
+              l'appui : "c'est pas idéal encore des long scroll beaucoup
+              d'info et on peut se perdre, et si on faisait une calendar
+              view? un peu à l'exemple de intervals". Remplace la liste de
+              12 cartes-semaine empilées (chacune développable) par une
+              grille compacte du plan entier — pour l'orientation, taper
+              une semaine la sélectionne — au-dessus d'une vue semaine
+              détaillée qui colore chaque jour selon l'intensité de sa
+              séance (réelle une fois faite, cible sinon — voir
+              plan-calendar-types.ts). */}
+          <PlanOverviewGrid
+            weeks={activePlan.weeks}
+            selectedWeekNumber={selectedWeekNumber}
+            onSelectWeek={setSelectedWeekNumber}
+            getCompletion={(w, session, index) => getSessionCompletion(w, session, index)}
+            activities={activities}
+            athleteFtp={athleteFtp}
+          />
 
-          {/* Retour utilisateur, capture d'écran mobile à l'appui :
-              "transforme le tableau des semaines en liste de cartes
-              mobile" — l'ancien <table> (min-w-[560px], scroll horizontal
-              obligatoire dès qu'on sortait d'un desktop large) cachait
-              phase/focus/volume derrière un swipe latéral sur mobile. Une
-              carte empilée par semaine s'adapte à n'importe quelle largeur
-              sans jamais scroller latéralement — même langage visuel que
-              les cartes de séance de WeekSessionsPanel juste en dessous. */}
-          <div className="space-y-2">
-            {activePlan.weeks.map((w: PlanWeek) => {
-              const isCurrent = week?.weekNumber === w.weekNumber
-              const isExpanded = expandedWeek === w.weekNumber
-              return (
-                <div
-                  key={w.weekNumber}
-                  className={cn(
-                    'rounded-xl border transition-colors',
-                    isCurrent ? 'border-primary/30 bg-primary/5' : 'border-border bg-card/40',
-                    isExpanded && 'ring-1 ring-primary/20'
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => toggleWeek(w)}
-                    className="w-full flex items-start justify-between gap-3 p-3 text-left"
-                  >
-                    <div className="flex items-start gap-2 min-w-0">
-                      <ChevronDown className={cn('w-4 h-4 text-muted-foreground shrink-0 mt-0.5 transition-transform', isExpanded && 'rotate-180')} />
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="text-sm font-medium">S{w.weekNumber}</span>
-                          <span className="text-xs text-muted-foreground whitespace-nowrap">
-                            {format(new Date(`${w.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
-                          </span>
-                          <Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge>
-                          {adjustedWeekNumbers.has(w.weekNumber) && (
-                            <Badge variant="outline" className="text-[9px] gap-0.5 text-primary border-primary/30" title="Recalibrée depuis le plan d'origine — voir le journal ci-dessous">
-                              <RefreshCw className="w-2.5 h-2.5" /> ajustée
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-muted-foreground mt-0.5">{w.focus}</p>
-                        {w.notes && <p className="text-xs text-muted-foreground/80 mt-0.5">{w.notes}</p>}
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-medium whitespace-nowrap">{Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h</p>
-                      {w.targetStrengthMinutes != null && (
-                        <p className="text-[10px] text-muted-foreground whitespace-nowrap">+ {Math.round(w.targetStrengthMinutes / 60 * 10) / 10}h muscu</p>
-                      )}
-                    </div>
-                  </button>
-                  {isExpanded && (
-                    <div className="px-3 pb-3 border-t border-border/50">
-                      <WeekSessionsPanel
-                        week={w}
-                        isGenerating={generatingSessionsForWeek === w.weekNumber}
-                        sendingSessionKey={sendingSessionKey}
-                        canSendToIntervals={canSendToIntervals}
-                        onRegenerate={() => generateWeekSessions(w)}
-                        onSend={(session, index, dateId) => sendSessionToIntervals(session, w.weekNumber, index, dateId)}
-                        onMoveDate={(index, newDate) => moveSessionDate(w.weekNumber, index, newDate)}
-                        getCompletion={(session, index) => getSessionCompletion(w, session, index)}
-                      />
-                    </div>
+          {selectedWeek && (
+            <div className="rounded-xl border border-border bg-card/40 p-3 space-y-3">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-sm font-medium">S{selectedWeek.weekNumber}</span>
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {format(new Date(`${selectedWeek.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
+                    </span>
+                    <Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[selectedWeek.phase])}>{PHASE_LABELS[selectedWeek.phase]}</Badge>
+                    {week?.weekNumber === selectedWeek.weekNumber && (
+                      <Badge variant="secondary" className="text-[10px]">Semaine actuelle</Badge>
+                    )}
+                    {adjustedWeekNumbers.has(selectedWeek.weekNumber) && (
+                      <Badge variant="outline" className="text-[9px] gap-0.5 text-primary border-primary/30" title="Recalibrée depuis le plan d'origine — voir le journal ci-dessous">
+                        <RefreshCw className="w-2.5 h-2.5" /> ajustée
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-sm text-muted-foreground mt-0.5">{selectedWeek.focus}</p>
+                  {selectedWeek.notes && <p className="text-xs text-muted-foreground/80 mt-0.5">{selectedWeek.notes}</p>}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-medium whitespace-nowrap">{Math.round(selectedWeek.targetWeeklyMinutes / 60 * 10) / 10}h</p>
+                  {selectedWeek.targetStrengthMinutes != null && (
+                    <p className="text-[10px] text-muted-foreground whitespace-nowrap">+ {Math.round(selectedWeek.targetStrengthMinutes / 60 * 10) / 10}h muscu</p>
                   )}
                 </div>
-              )
-            })}
-          </div>
+              </div>
+              <PlanWeekCalendar
+                week={selectedWeek}
+                isGenerating={generatingSessionsForWeek === selectedWeek.weekNumber}
+                sendingSessionKey={sendingSessionKey}
+                canSendToIntervals={canSendToIntervals}
+                onRegenerate={() => generateWeekSessions(selectedWeek)}
+                onSend={(session, index, dateId) => sendSessionToIntervals(session, selectedWeek.weekNumber, index, dateId)}
+                onMoveDate={(index, newDate) => moveSessionDate(selectedWeek.weekNumber, index, newDate)}
+                getCompletion={(session, index) => getSessionCompletion(selectedWeek, session, index)}
+                activities={activities}
+                athleteFtp={athleteFtp}
+              />
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -528,227 +549,6 @@ export function TrainingPlanTab() {
             ))}
           </CardContent>
         </Card>
-      )}
-    </div>
-  )
-}
-
-interface WeekSessionsPanelProps {
-  week: PlanWeek
-  isGenerating: boolean
-  sendingSessionKey: string | null
-  canSendToIntervals: boolean
-  onRegenerate: () => void
-  onSend: (session: PlanWeekSession, index: number, dateId: string) => void
-  /** Retour utilisateur : "le plan d'entrainement... figé avec les seances par jour" — chaque séance a désormais une date persistée (assignSessionDates), modifiable ici plutôt qu'un sélecteur libre non sauvegardé. */
-  onMoveDate: (index: number, newDate: string) => void
-  /** Retour utilisateur : "comment lier les seances realisees aux seance prevues" — rapprochement réalisé/prévu (matchSessionCompletion), calculé dans useTrainingPlan (getSessionCompletion). */
-  getCompletion: (session: PlanWeekSession, index: number) => SessionCompletion
-}
-
-/**
- * The coach's example sessions for one plan week — lazily generated on
- * first expand (see toggleWeek in TrainingPlanTab), cached in
- * week.sampleSessions once generated. Each session can be pushed to
- * Intervals.icu for any date within the week's own range, independently
- * from "Proposition du jour" (which adapts to a specific day's real
- * conditions) — these are the phase-appropriate ideal sessions instead.
- */
-function WeekSessionsPanel({ week, isGenerating, sendingSessionKey, canSendToIntervals, onRegenerate, onSend, onMoveDate, getCompletion }: WeekSessionsPanelProps) {
-  // Retour utilisateur : "un système de suivi de la seance a la salle, avec
-  // chronometre, temps de repos" — vue plein écran gardée en state local
-  // plutôt qu'un Dialog, pour couvrir tout l'écran pendant la séance.
-  // L'index est gardé à côté de la séance pour dériver une clé stable
-  // (voir `key` ci-dessous, même convention que sendingSessionKey) —
-  // sert d'identifiant de brouillon localStorage à LiveStrengthSessionView.
-  const [liveSession, setLiveSession] = useState<{ session: PlanWeekSession; index: number } | null>(null)
-
-  if (isGenerating) {
-    return (
-      <div className="space-y-2 py-2">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="w-4 h-4 animate-spin" /> Le coach compose les séances type de la semaine...
-        </div>
-        <Skeleton className="h-16 w-full rounded-xl" />
-        <Skeleton className="h-16 w-full rounded-xl" />
-      </div>
-    )
-  }
-
-  if (!week.sampleSessions || week.sampleSessions.length === 0) {
-    return (
-      <div className="flex items-center justify-between gap-2 py-2">
-        <p className="text-sm text-muted-foreground">Aucune séance type pour cette semaine pour le moment.</p>
-        <Button size="sm" variant="outline" onClick={onRegenerate} className="gap-2 shrink-0">
-          <Wand2 className="w-3.5 h-3.5" /> Proposer les séances
-        </Button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="space-y-3 py-1">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
-          Séances type recommandées — S{week.weekNumber}
-        </p>
-        <Button size="sm" variant="ghost" onClick={onRegenerate} className="gap-1.5 text-xs text-muted-foreground h-7">
-          <Wand2 className="w-3 h-3" /> Régénérer
-        </Button>
-      </div>
-      <div className="grid gap-2">
-        {week.sampleSessions.map((session, index) => {
-          const key = `${week.weekNumber}-${index}`
-          const isSending = sendingSessionKey === key
-          // Retour utilisateur : "comment lier les seances realisees aux
-          // seance prevues" — 'upcoming'/'unscheduled' ne sont pas affichés
-          // (bruit inutile, c'est l'état par défaut d'une séance à venir),
-          // seuls 'done'/'missed' apportent une vraie information.
-          const completion = getCompletion(session, index)
-          return (
-            <div key={index} className="rounded-xl border border-border bg-card/60 p-3 space-y-2">
-              <div className="flex items-start justify-between gap-2 flex-wrap">
-                <div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {/* Jour assigné (assignSessionDates) — absent sur une
-                        semaine mise en cache avant l'introduction du plan
-                        figé par jour, auquel cas seul le sélecteur de date
-                        libre plus bas reste disponible. */}
-                    {session.date && (
-                      <Badge variant="secondary" className="text-[10px] capitalize">
-                        {format(new Date(`${session.date}T00:00:00`), 'EEEE d MMM', { locale: fr })}
-                      </Badge>
-                    )}
-                    <p className="text-sm font-medium">{session.title}</p>
-                    {completion.status === 'done' && (
-                      <Badge className="text-[10px] gap-1 bg-primary/15 text-primary border-primary/30 hover:bg-primary/15">
-                        <CheckCircle2 className="w-3 h-3" /> Réalisée{completion.actualDurationMinutes != null ? ` · ${Math.round(completion.actualDurationMinutes)}min` : ''}
-                      </Badge>
-                    )}
-                    {completion.status === 'missed' && (
-                      <Badge variant="outline" className="text-[10px] gap-1 border-destructive/40 text-destructive bg-destructive/5">
-                        <XCircle className="w-3 h-3" /> Manquée
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{session.rationale}</p>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Badge variant="outline" className="text-[10px]">{session.intensityLabel}</Badge>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">{session.durationMinutes} min</span>
-                </div>
-              </div>
-              {/* Alimentation sur le vélo — même traitement que la
-                  Proposition du jour (daily-workout-tab.tsx) : fourchette
-                  sourcée (S03/S04), jamais un chiffre unique. N'a de sens
-                  que pour une séance vélo — session.sessionKind absent
-                  (semaine mise en cache avant l'introduction de ce champ)
-                  traité comme "cycling" par défaut pour rester compatible. */}
-              {session.fueling && session.fueling.neededOnBike && (!session.sessionKind || session.sessionKind === 'cycling') && (
-                <div className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20 text-xs">
-                  <Apple className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-                  <div className="space-y-0.5">
-                    <p className="font-medium">
-                      {session.fueling.carbGramsPerHourMin}
-                      {session.fueling.carbGramsPerHourMax != null && session.fueling.carbGramsPerHourMax !== session.fueling.carbGramsPerHourMin ? `–${session.fueling.carbGramsPerHourMax}` : ''}
-                      {' '}g de glucides/h
-                    </p>
-                    {session.fueling.hydrationNote && <p className="text-muted-foreground">{session.fueling.hydrationNote}</p>}
-                  </div>
-                </div>
-              )}
-              {/* Séance de musculation — retour utilisateur : "des seance
-                  de musculation dans le plan d'entrainement", mêlées aux
-                  séances vélo dans la même liste (décision de clarification
-                  utilisateur). Exercices affichés en liste plutôt qu'un
-                  script %FTP, qui n'a pas de sens ici. */}
-              {session.sessionKind === 'strength' && session.strengthExercises && session.strengthExercises.length > 0 && (
-                <div className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20 text-xs">
-                  <Dumbbell className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-                  <ul className="space-y-0.5">
-                    {session.strengthExercises.map((ex, exIndex) => (
-                      <li key={exIndex}>
-                        <span className="font-medium">{ex.name}</span> : {ex.sets}x{ex.reps} — {ex.loadGuidance}
-                        {ex.restSeconds ? ` (repos ${ex.restSeconds}s)` : ''}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {/* S05 §4, dernière case de la checklist : "si is_maintenance_only:
-                  true, l'interface doit l'afficher clairement comme telle,
-                  pas comme séance de force par défaut" — badge distinct
-                  plutôt qu'une simple mention dans le texte. */}
-              {session.sessionKind === 'strength' && session.strengthValidation?.isMaintenanceOnly && (
-                <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 bg-amber-500/5 w-fit">
-                  {session.sessionType === 'entretien' ? 'Entretien' : 'Top-up'} — pas la séance principale de la semaine
-                </Badge>
-              )}
-              {/* Retour utilisateur : "une séance qui ne les respecte pas
-                  ne doit jamais être proposée comme séance 'complète'" —
-                  résultat de validateStrengthSession (S05), calculé côté
-                  client dans use-training-plan.ts. Absent (donc jamais
-                  affiché) sur une séance mise en cache avant l'introduction
-                  de ce champ, ou une séance cycling. */}
-              {session.strengthValidation && session.strengthValidation.overallVerdict !== 'ok' && (
-                <div
-                  className={cn(
-                    'flex items-start gap-2 p-2 rounded-lg border text-xs',
-                    session.strengthValidation.overallVerdict === 'blocked' ? 'bg-destructive/5 border-destructive/20' : 'bg-yellow-500/5 border-yellow-500/20'
-                  )}
-                >
-                  <ShieldAlert className={cn('w-3.5 h-3.5 shrink-0 mt-0.5', session.strengthValidation.overallVerdict === 'blocked' ? 'text-destructive' : 'text-yellow-500')} />
-                  <div className="space-y-0.5">
-                    <p className="font-medium">
-                      {session.strengthValidation.overallVerdict === 'blocked' ? 'Séance incomplète — ne respecte pas la grille S05' : 'À vérifier (grille S05)'}
-                    </p>
-                    <ul className="space-y-0.5 text-muted-foreground list-disc pl-4">
-                      {session.strengthValidation.results
-                        .filter((r) => r.verdict === 'block' || r.verdict === 'warn')
-                        .map((r, i) => <li key={i}>{r.detail}</li>)}
-                    </ul>
-                  </div>
-                </div>
-              )}
-              <div className="flex items-center gap-2 flex-wrap">
-                <Input
-                  type="date"
-                  value={session.date ?? week.startDate}
-                  min={week.startDate}
-                  max={week.endDate}
-                  onChange={(e) => onMoveDate(index, e.target.value)}
-                  className="h-8 w-auto text-xs"
-                  aria-label={`Jour de la séance "${session.title}"`}
-                />
-                <Button
-                  size="sm"
-                  onClick={() => onSend(session, index, session.date ?? week.startDate)}
-                  disabled={isSending || !canSendToIntervals}
-                  className="gap-1.5 h-8"
-                  title={canSendToIntervals ? undefined : 'Renseignez vos identifiants Intervals.icu dans Réglages'}
-                >
-                  {isSending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                  Envoyer sur Intervals.icu
-                </Button>
-                {session.sessionKind === 'strength' && session.strengthExercises && session.strengthExercises.length > 0 && (
-                  <Button size="sm" variant="outline" onClick={() => setLiveSession({ session, index })} className="gap-1.5 h-8">
-                    <PlayCircle className="w-3.5 h-3.5" /> Démarrer la séance
-                  </Button>
-                )}
-                {session.sessionKind === 'strength' && <LogStrengthSessionDialog session={session} weekNumber={week.weekNumber} sessionIndex={index} />}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-      {liveSession && (
-        <LiveStrengthSessionView
-          session={liveSession.session}
-          weekNumber={week.weekNumber}
-          sessionIndex={liveSession.index}
-          sessionKey={`${week.weekNumber}-${liveSession.index}`}
-          onClose={() => setLiveSession(null)}
-        />
       )}
     </div>
   )

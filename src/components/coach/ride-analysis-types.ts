@@ -34,7 +34,11 @@ export interface SplitAnalysis {
   fadePct: number
 }
 
-const POWER_ZONES = [
+// Exportée (plutôt que privée à ce fichier) pour que plan-calendar-types.ts
+// puisse classer une intensité (%FTP réel ou cible) dans la même échelle de
+// zones sans dupliquer les bornes — un seul référentiel Coggan pour toute
+// l'app plutôt que deux tables qui pourraient diverger.
+export const POWER_ZONES = [
   { zone: 1, label: 'Récupération', minPct: 0, maxPct: 55 },
   { zone: 2, label: 'Endurance', minPct: 55, maxPct: 75 },
   { zone: 3, label: 'Tempo', minPct: 75, maxPct: 90 },
