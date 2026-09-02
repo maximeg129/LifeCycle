@@ -9,13 +9,32 @@
 // une ligne compacte par semaine avec 7 petites pastilles de couleur, pour
 // naviguer directement à la semaine voulue sans dérouler 12 cartes à la
 // suite. Une semaine pas encore générée (sampleSessions lazy, voir
-// training-plan-types.ts) affiche des pastilles neutres plutôt que
-// d'inventer un contenu — honnête sur ce qui a réellement été composé.
+// training-plan-types.ts) affiche le badge de sa phase plutôt que 7
+// pastilles vides — voir ⚠️ ci-dessous.
+//
+// ⚠️ Retour utilisateur après premier usage réel : "étant donné que l'IA
+// génère seulement une semaine de plan d'entraînement, les petites
+// pastilles pour le reste du plan d'entraînement sont vides... il y a très
+// peu d'intérêt." Décision consciente de NE PAS générer tout le plan
+// d'avance (ça irait à l'encontre du principe "jamais tous les appels IA
+// du plan d'un coup", voir training-plan-tab.tsx) — l'utilisateur préfère
+// lui-même garder la génération paresseuse et se rabattre sur "une couleur
+// particulière pour le thème un petit peu comme [avant la vue calendrier]"
+// pour toute semaine pas encore composée : WeekRow affiche alors le badge
+// de phase (PHASE_LABELS/PHASE_BADGE_CLASS, training-plan-types.ts — mêmes
+// tables que l'ancien accordéon) à la place des 7 pastilles.
+//
+// La semaine sélectionnée s'ouvre maintenant directement sous sa propre
+// ligne (renderExpanded) plutôt que dans un bloc séparé sous toute la
+// grille — retour utilisateur : "j'irai mettre chaque séance
+// d'entraînement de la semaine en cours directement sous la semaine en
+// cours."
 
-import { useMemo } from 'react'
+import { useMemo, type ReactNode } from 'react'
 import { addDays, format } from 'date-fns'
 import { cn } from '@/lib/utils'
 import { sessionZone } from './plan-calendar-types'
+import { PHASE_LABELS, PHASE_BADGE_CLASS } from './training-plan-types'
 import type { PlanPhase, PlanWeek, PlanWeekSessionWithValidation, SessionCompletion } from './training-plan-types'
 import type { IntervalsActivity } from '@/lib/intervals-api'
 
@@ -34,22 +53,29 @@ interface Props {
   getCompletion: (week: PlanWeek, session: PlanWeekSessionWithValidation, index: number) => SessionCompletion
   activities: IntervalsActivity[]
   athleteFtp: number | null | undefined
+  /** Contenu affiché directement sous la ligne de la semaine sélectionnée — voir ⚠️ ci-dessus. */
+  renderExpanded: (week: PlanWeek) => ReactNode
 }
 
-export function PlanOverviewGrid({ weeks, selectedWeekNumber, onSelectWeek, getCompletion, activities, athleteFtp }: Props) {
+export function PlanOverviewGrid({ weeks, selectedWeekNumber, onSelectWeek, getCompletion, activities, athleteFtp, renderExpanded }: Props) {
   return (
     <div className="space-y-1">
-      {weeks.map((week) => (
-        <WeekRow
-          key={week.weekNumber}
-          week={week}
-          isSelected={week.weekNumber === selectedWeekNumber}
-          onSelect={() => onSelectWeek(week.weekNumber)}
-          getCompletion={getCompletion}
-          activities={activities}
-          athleteFtp={athleteFtp}
-        />
-      ))}
+      {weeks.map((week) => {
+        const isSelected = week.weekNumber === selectedWeekNumber
+        return (
+          <div key={week.weekNumber}>
+            <WeekRow
+              week={week}
+              isSelected={isSelected}
+              onSelect={() => onSelectWeek(week.weekNumber)}
+              getCompletion={getCompletion}
+              activities={activities}
+              athleteFtp={athleteFtp}
+            />
+            {isSelected && <div className="pt-2 pb-1">{renderExpanded(week)}</div>}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -97,18 +123,26 @@ function WeekRow({ week, isSelected, onSelect, getCompletion, activities, athlet
         <span className={cn('w-1.5 h-1.5 rounded-full', PHASE_DOT_CLASS[week.phase])} />
         <span className="text-xs font-medium">S{week.weekNumber}</span>
       </div>
-      <div className="flex gap-1 shrink-0">
-        {days.map((day) => {
-          const color = colorByDay.get(day)
-          return (
-            <span
-              key={day}
-              className={cn('w-2.5 h-2.5 rounded-[3px]', color == null && 'bg-muted')}
-              style={color && color !== 'strength' ? { backgroundColor: color } : color === 'strength' ? { backgroundColor: 'hsl(var(--primary))' } : undefined}
-            />
-          )
-        })}
-      </div>
+      {week.sampleSessions ? (
+        <div className="flex gap-1 shrink-0">
+          {days.map((day) => {
+            const color = colorByDay.get(day)
+            return (
+              <span
+                key={day}
+                className={cn('w-2.5 h-2.5 rounded-[3px]', color == null && 'bg-muted')}
+                style={color && color !== 'strength' ? { backgroundColor: color } : color === 'strength' ? { backgroundColor: 'hsl(var(--primary))' } : undefined}
+              />
+            )
+          })}
+        </div>
+      ) : (
+        // Semaine pas encore générée (sampleSessions lazy) — badge de phase
+        // plutôt que 7 pastilles vides, voir ⚠️ en tête de fichier.
+        <span className={cn('shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-md', PHASE_BADGE_CLASS[week.phase])}>
+          {PHASE_LABELS[week.phase]}
+        </span>
+      )}
       <p className="text-xs text-muted-foreground truncate flex-1 min-w-0">{week.focus}</p>
       <p className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">{Math.round(week.targetWeeklyMinutes / 60 * 10) / 10}h</p>
     </button>

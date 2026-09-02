@@ -9,13 +9,13 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, AlertTriangle, Target, Archive, ChevronDown, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion } from 'lucide-react'
+import { Sparkles, Loader2, Target, Archive, ChevronDown, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { useTrainingPlan } from './use-training-plan'
 import { useTrainingPreferences } from './use-training-preferences'
-import { currentPlanWeek, type PlanPhase } from './training-plan-types'
+import { currentPlanWeek, PHASE_LABELS, PHASE_BADGE_CLASS } from './training-plan-types'
 import { upcomingGoals } from './coach-memory-types'
 import { EmptyState } from '@/components/ui/empty-state'
 import { checkLoadProgressionWithoutDeload } from '@/domain/cycling/validation/planValidator'
@@ -23,24 +23,10 @@ import { SourceCitation } from '@/components/coach/source-citation'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { PlanOverviewGrid } from './plan-overview-grid'
 import { PlanWeekCalendar } from './plan-week-calendar'
+import { buildPlanAttentionItems } from './plan-attention-types'
+import { PlanAttentionBadge } from './plan-attention-badge'
 
 const DEFAULT_WEEKLY_MINUTES = 360
-
-const PHASE_LABELS: Record<PlanPhase, string> = {
-  base: 'Base',
-  build: 'Développement',
-  peak: 'Pic',
-  taper: 'Affûtage',
-  recovery: 'Récupération',
-}
-
-const PHASE_BADGE_CLASS: Record<PlanPhase, string> = {
-  base: 'bg-blue-500/10 text-blue-500',
-  build: 'bg-orange-500/10 text-orange-500',
-  peak: 'bg-red-500/10 text-red-500',
-  taper: 'bg-purple-500/10 text-purple-500',
-  recovery: 'bg-green-500/10 text-green-500',
-}
 
 export function TrainingPlanTab() {
   const {
@@ -126,8 +112,6 @@ export function TrainingPlanTab() {
     generateWeekSessions(week)
   }, [week, generatingSessionsForWeek, generateWeekSessions])
 
-  const selectedWeek = activePlan?.weeks.find((w) => w.weekNumber === selectedWeekNumber) ?? week ?? null
-
   // plan-check-8 (R23, planValidator.ts) — le seul des 9 contrôles de plan
   // directement calculable ici sans donnée qui n'existe pas encore dans
   // l'app (les 7 autres ont chacun besoin d'une donnée absente à ce stade —
@@ -165,6 +149,25 @@ export function TrainingPlanTab() {
   // coach mais n'était jusqu'ici jamais affiché dans cet onglet (vrai
   // oubli, corrigé ici) — contrairement à la Proposition du jour.
   const currentVerdict = activePlan?.recalibrations?.at(-1)?.verdict ?? activePlan?.verdict
+
+  // Retour utilisateur : "ça prend quand même pas mal de place sur la page
+  // et ça rallonge... plus user friendly [d']avoir des pastilles... et
+  // qu'après l'utilisateur clique sur ce warning pour le voir." Consolide
+  // les trois sources de vigilance (verdict, warnings de génération,
+  // contrôle de progression de charge) en une seule liste — voir
+  // plan-attention-types.ts — affichée par un unique badge compact
+  // (PlanAttentionBadge) plutôt que trois blocs toujours dépliés.
+  const attentionItems = useMemo(
+    () => buildPlanAttentionItems(
+      {
+        verdict: currentVerdict,
+        recommendation: activePlan?.recalibrations?.at(-1)?.recommendation ?? activePlan?.recommendation,
+        warnings: activePlan?.warnings ?? [],
+      },
+      loadProgressionCheck
+    ),
+    [currentVerdict, activePlan, loadProgressionCheck]
+  )
 
   const NewPlanForm = (
     <Card className="bg-card/40 border-border">
@@ -302,24 +305,6 @@ export function TrainingPlanTab() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* verdict — calculé par le contrat de sortie coach depuis la
-              génération, jamais affiché jusqu'ici dans cet onglet. Reflète
-              la dernière recalibration si elle existe (currentVerdict),
-              sinon celui de la génération initiale. Rien n'est affiché
-              quand tout va bien (ok) — même langage visuel que la
-              Proposition du jour. */}
-          {currentVerdict && currentVerdict !== 'ok' && (
-            <div
-              className={cn(
-                'flex items-start gap-2 p-3 rounded-xl border text-sm',
-                currentVerdict === 'block' ? 'bg-destructive/5 border-destructive/20' : 'bg-yellow-500/5 border-yellow-500/20'
-              )}
-            >
-              <ShieldAlert className={cn('w-4 h-4 shrink-0 mt-0.5', currentVerdict === 'block' ? 'text-destructive' : 'text-yellow-500')} />
-              <span>{activePlan.recalibrations?.at(-1)?.recommendation ?? activePlan.recommendation}</span>
-            </div>
-          )}
-
           {/* Retour utilisateur : "un paragraphe qui explique les raisons...
               quelle base il prend pour proposer ce plan... et quelles sont les
               attentes physiologiques". "summary" est redéfini pour ce flow
@@ -332,56 +317,44 @@ export function TrainingPlanTab() {
               n'a besoin de s'ouvrir sur le paragraphe complet qu'une fois,
               pas à chaque visite de l'onglet ; le nom du plan/objectif/
               tableau des semaines juste en dessous suffit au quotidien. */}
-          {(activePlan.summary || (activePlan.reasons && activePlan.reasons.length > 0)) && (
-            <Collapsible open={showPlanReasoning} onOpenChange={setShowPlanReasoning}>
-              <CollapsibleTrigger asChild>
-                <button className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  Pourquoi ce plan ?
-                  <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showPlanReasoning && 'rotate-180')} />
-                </button>
-              </CollapsibleTrigger>
-              <CollapsibleContent className="pt-2 space-y-3">
-                {activePlan.summary && (
-                  <p className="text-sm text-muted-foreground leading-relaxed">{activePlan.summary}</p>
-                )}
-                {activePlan.reasons && activePlan.reasons.length > 0 && (
-                  <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
-                      Motif de ce plan
-                    </p>
-                    <ul className="space-y-1.5">
-                      {activePlan.reasons.map((r, i) => (
-                        <li key={i} className="flex items-start gap-1.5 text-sm text-muted-foreground">
-                          <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
-                          <span className="flex-1">{r.detail}</span>
-                          <SourceCitation ruleIds={[r.rule]} label="Voir la règle citée" className="shrink-0 mt-0.5" />
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-
-          {activePlan.warnings.length > 0 && (
-            <div className="space-y-2">
-              {activePlan.warnings.map((w, i) => (
-                <div key={i} className="flex items-start gap-2 p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20 text-sm">
-                  <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
-                  <span>{w}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {loadProgressionCheck && loadProgressionCheck.verdict === 'warn' && (
-            <div className="flex items-start gap-2 p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20 text-sm">
-              <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
-              <span className="flex-1">{loadProgressionCheck.detail}</span>
-              <SourceCitation ruleIds={['plan-check-8-load-progression']} label="Source du contrôle de charge" className="shrink-0" />
-            </div>
-          )}
+          {/* "Pourquoi ce plan ?" et le badge de vigilance sont regroupés sur
+              une même ligne — les deux sont le même geste "taper pour en
+              savoir plus", voir PlanAttentionBadge pour le détail du retour
+              utilisateur qui a motivé sa consolidation. */}
+          <div className="flex items-start gap-3 flex-wrap">
+            {(activePlan.summary || (activePlan.reasons && activePlan.reasons.length > 0)) && (
+              <Collapsible open={showPlanReasoning} onOpenChange={setShowPlanReasoning} className="flex-1 min-w-[160px]">
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                    Pourquoi ce plan ?
+                    <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showPlanReasoning && 'rotate-180')} />
+                  </button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2 space-y-3">
+                  {activePlan.summary && (
+                    <p className="text-sm text-muted-foreground leading-relaxed">{activePlan.summary}</p>
+                  )}
+                  {activePlan.reasons && activePlan.reasons.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+                        Motif de ce plan
+                      </p>
+                      <ul className="space-y-1.5">
+                        {activePlan.reasons.map((r, i) => (
+                          <li key={i} className="flex items-start gap-1.5 text-sm text-muted-foreground">
+                            <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                            <span className="flex-1">{r.detail}</span>
+                            <SourceCitation ruleIds={[r.rule]} label="Voir la règle citée" className="shrink-0 mt-0.5" />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+            <PlanAttentionBadge items={attentionItems} />
+          </div>
 
           {/* Retour utilisateur, capture d'écran (export PDF de l'app) à
               l'appui : "c'est pas idéal encore des long scroll beaucoup
@@ -389,10 +362,14 @@ export function TrainingPlanTab() {
               view? un peu à l'exemple de intervals". Remplace la liste de
               12 cartes-semaine empilées (chacune développable) par une
               grille compacte du plan entier — pour l'orientation, taper
-              une semaine la sélectionne — au-dessus d'une vue semaine
-              détaillée qui colore chaque jour selon l'intensité de sa
-              séance (réelle une fois faite, cible sinon — voir
-              plan-calendar-types.ts). */}
+              une semaine la sélectionne, qui déplie sa vue détaillée
+              directement sous sa propre ligne (renderExpanded) — retour
+              utilisateur après premier usage réel : "j'irai mettre chaque
+              séance d'entraînement de la semaine en cours directement sous
+              la semaine en cours" plutôt que dans un bloc séparé sous
+              toute la grille. Chaque jour de la vue détaillée est coloré
+              selon l'intensité de sa séance (réelle une fois faite, cible
+              sinon — voir plan-calendar-types.ts). */}
           <PlanOverviewGrid
             weeks={activePlan.weeks}
             selectedWeekNumber={selectedWeekNumber}
@@ -400,51 +377,50 @@ export function TrainingPlanTab() {
             getCompletion={(w, session, index) => getSessionCompletion(w, session, index)}
             activities={activities}
             athleteFtp={athleteFtp}
-          />
-
-          {selectedWeek && (
-            <div className="rounded-xl border border-border bg-card/40 p-3 space-y-3">
-              <div className="flex items-start justify-between gap-3 flex-wrap">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="text-sm font-medium">S{selectedWeek.weekNumber}</span>
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">
-                      {format(new Date(`${selectedWeek.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
-                    </span>
-                    <Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[selectedWeek.phase])}>{PHASE_LABELS[selectedWeek.phase]}</Badge>
-                    {week?.weekNumber === selectedWeek.weekNumber && (
-                      <Badge variant="secondary" className="text-[10px]">Semaine actuelle</Badge>
-                    )}
-                    {adjustedWeekNumbers.has(selectedWeek.weekNumber) && (
-                      <Badge variant="outline" className="text-[9px] gap-0.5 text-primary border-primary/30" title="Recalibrée depuis le plan d'origine — voir le journal ci-dessous">
-                        <RefreshCw className="w-2.5 h-2.5" /> ajustée
-                      </Badge>
+            renderExpanded={(w) => (
+              <div className="rounded-xl border border-border bg-card/40 p-3 space-y-3">
+                <div className="flex items-start justify-between gap-3 flex-wrap">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-medium">S{w.weekNumber}</span>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {format(new Date(`${w.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
+                      </span>
+                      <Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge>
+                      {week?.weekNumber === w.weekNumber && (
+                        <Badge variant="secondary" className="text-[10px]">Semaine actuelle</Badge>
+                      )}
+                      {adjustedWeekNumbers.has(w.weekNumber) && (
+                        <Badge variant="outline" className="text-[9px] gap-0.5 text-primary border-primary/30" title="Recalibrée depuis le plan d'origine — voir le journal ci-dessous">
+                          <RefreshCw className="w-2.5 h-2.5" /> ajustée
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground mt-0.5">{w.focus}</p>
+                    {w.notes && <p className="text-xs text-muted-foreground/80 mt-0.5">{w.notes}</p>}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-sm font-medium whitespace-nowrap">{Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h</p>
+                    {w.targetStrengthMinutes != null && (
+                      <p className="text-[10px] text-muted-foreground whitespace-nowrap">+ {Math.round(w.targetStrengthMinutes / 60 * 10) / 10}h muscu</p>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground mt-0.5">{selectedWeek.focus}</p>
-                  {selectedWeek.notes && <p className="text-xs text-muted-foreground/80 mt-0.5">{selectedWeek.notes}</p>}
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-medium whitespace-nowrap">{Math.round(selectedWeek.targetWeeklyMinutes / 60 * 10) / 10}h</p>
-                  {selectedWeek.targetStrengthMinutes != null && (
-                    <p className="text-[10px] text-muted-foreground whitespace-nowrap">+ {Math.round(selectedWeek.targetStrengthMinutes / 60 * 10) / 10}h muscu</p>
-                  )}
-                </div>
+                <PlanWeekCalendar
+                  week={w}
+                  isGenerating={generatingSessionsForWeek === w.weekNumber}
+                  sendingSessionKey={sendingSessionKey}
+                  canSendToIntervals={canSendToIntervals}
+                  onRegenerate={() => generateWeekSessions(w)}
+                  onSend={(session, index, dateId) => sendSessionToIntervals(session, w.weekNumber, index, dateId)}
+                  onMoveDate={(index, newDate) => moveSessionDate(w.weekNumber, index, newDate)}
+                  getCompletion={(session, index) => getSessionCompletion(w, session, index)}
+                  activities={activities}
+                  athleteFtp={athleteFtp}
+                />
               </div>
-              <PlanWeekCalendar
-                week={selectedWeek}
-                isGenerating={generatingSessionsForWeek === selectedWeek.weekNumber}
-                sendingSessionKey={sendingSessionKey}
-                canSendToIntervals={canSendToIntervals}
-                onRegenerate={() => generateWeekSessions(selectedWeek)}
-                onSend={(session, index, dateId) => sendSessionToIntervals(session, selectedWeek.weekNumber, index, dateId)}
-                onMoveDate={(index, newDate) => moveSessionDate(selectedWeek.weekNumber, index, newDate)}
-                getCompletion={(session, index) => getSessionCompletion(selectedWeek, session, index)}
-                activities={activities}
-                athleteFtp={athleteFtp}
-              />
-            </div>
-          )}
+            )}
+          />
         </CardContent>
       </Card>
 
