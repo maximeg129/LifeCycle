@@ -1074,6 +1074,34 @@ verdict citant la règle qui motive la tuile. L'entrée `readiness` de `metric-i
 corrigée au passage : son texte référençait encore l'ancien comportement de préférence au capteur,
 périmé depuis le correctif ci-dessus.
 
+**Analyse de sortie : encarts Durabilité + Découplage cardiaque** — deuxième pièce du même audit
+(`AskUserQuestion` : "Durabilité + Découplage dans l'analyse d'une sortie"). `durability.ts`
+(dégradation de puissance sur effort long) et `decoupling.ts` (découplage cardiaque Pw:HR,
+Maunder et al. 2021, R06) étaient déjà calculés dans `use-ride-analysis.ts` pour nourrir le prompt
+IA de `rideAnalysis`, mais le résultat n'était jamais persisté ni affiché comme chiffre autonome —
+seul le texte généré par l'IA était visible dans `RideAnalysisDialog`. Deux encarts chiffrés
+ajoutés, en complément du texte IA (pas un remplacement) :
+- **Durabilité** — `computeDurabilityProfile()` sort un profil complet (5 paliers de travail
+  accumulé × 6 durées de MMP testées), bien trop dense pour un encart de dialogue.
+  `summarizeDurabilityForDisplay()` (`ride-analysis-types.ts`, pur/testé) le réduit à une seule
+  durée repère (5 min) : le % de MMP conservé à chaque palier de fatigue franchi PENDANT la sortie,
+  comparé au palier "à froid" (0 kJ/kg) de la MÊME sortie — jamais une comparaison à l'historique de
+  l'athlète (`compareDurabilityToHistory()`, qui exigerait de refetcher plusieurs sorties passées
+  comparables, hors scope ici) ni à un autre athlète ou un seuil labo, conformément à la règle
+  `ride-analysis-2-power-profile-by-accumulated-tier`. `null` (encart masqué) si le palier "à froid"
+  n'a pas de MMP à 5 min (sortie trop courte) ou si aucun palier de fatigue n'a été franchi.
+- **Découplage cardiaque (Pw:HR)** — `computeDecoupling()` (déjà existant/testé), affiché tel quel :
+  l'efficience puissance/FC de chaque moitié de la sortie (W/bpm) et le % de dérive entre les deux,
+  coloré (rouge si dérive positive = FC monte plus que la puissance, vert sinon) — jamais interprété
+  au-delà de ce que dit le module lui-même (le module calcule le nombre, ne l'interprète pas — voir
+  son commentaire de fichier).
+- **Persistance** — `StoredRideAnalysis` (`users/{uid}/rideAnalyses/{activityId}`) porte désormais
+  `durability`/`decoupling` (`null`, jamais `undefined`, que Firestore refuse) à côté de `analysis` :
+  recalculer ces deux chiffres à chaque ouverture du dialogue exigerait de refetcher les streams
+  seconde par seconde (coûteux, voir la note existante sur `getActivityStreams()` plus haut) — ils
+  sont donc écrits une fois à la génération et relus depuis Firestore comme `analysis`, écrasés au
+  même moment (`setDoc`) qu'un "Régénérer".
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

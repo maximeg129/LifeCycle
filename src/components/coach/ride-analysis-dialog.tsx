@@ -8,8 +8,10 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Sparkles, Loader2, TrendingUp, Zap, Target } from 'lucide-react'
+import { Sparkles, Loader2, TrendingUp, Zap, Target, BatteryMedium, HeartPulse } from 'lucide-react'
 import { useRideAnalysis } from './use-ride-analysis'
+import { summarizeDurabilityForDisplay } from './ride-analysis-types'
+import { cn } from '@/lib/utils'
 
 interface Props {
   activityId: string
@@ -19,7 +21,8 @@ interface Props {
 }
 
 export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange }: Props) {
-  const { analysis, isLoadingStored, isGenerating, canAnalyze, generate } = useRideAnalysis(open ? activityId : null)
+  const { analysis, durability, decoupling, isLoadingStored, isGenerating, canAnalyze, generate } = useRideAnalysis(open ? activityId : null)
+  const durabilitySummary = summarizeDurabilityForDisplay(durability)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -56,6 +59,54 @@ export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange }
               <Target className="w-4 h-4 text-primary shrink-0 mt-0.5" />
               <p className="text-sm">{analysis.effortContext}</p>
             </div>
+
+            {/* Retour utilisateur, audit des indicateurs Cyclisme : "mettre
+                tous les indicateurs que nous avons définis" — durability.ts
+                et decoupling.ts étaient déjà calculés pour le prompt IA
+                ci-dessus (voir use-ride-analysis.ts) mais jamais affichés
+                comme chiffre autonome. Deux encarts chiffrés, en plus du
+                texte IA déjà généré — pas de remplacement, un complément. */}
+            {durabilitySummary && (
+              <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
+                <h5 className="font-bold text-xs flex items-center gap-1.5">
+                  <BatteryMedium className="w-3.5 h-3.5 text-primary" /> Durabilité (5 min)
+                </h5>
+                <p className="text-xs text-muted-foreground">
+                  Puissance max sur 5 min après avoir accumulé du travail dans la sortie, comparée au début (à froid) — jamais à un autre athlète ou à un seuil labo.
+                </p>
+                <div className="space-y-1">
+                  {durabilitySummary.map((row) => (
+                    <div key={row.tierKJPerKg} className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">Après {row.tierKJPerKg} kJ/kg</span>
+                      <span className="font-data">
+                        {row.watts} W
+                        <span className={cn('ml-1.5 text-xs', row.deltaPctVsFresh < 0 ? 'text-destructive' : 'text-green-600')}>
+                          {row.deltaPctVsFresh > 0 ? '+' : ''}{row.deltaPctVsFresh}%
+                        </span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {decoupling && (
+              <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-1.5">
+                <h5 className="font-bold text-xs flex items-center gap-1.5">
+                  <HeartPulse className="w-3.5 h-3.5 text-primary" /> Découplage cardiaque (Pw:HR)
+                </h5>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">1ère moitié → 2ème moitié</span>
+                  <span className="font-data">
+                    {decoupling.efficiencyFirstHalf.toFixed(2)} → {decoupling.efficiencySecondHalf.toFixed(2)} W/bpm
+                  </span>
+                </div>
+                <p className={cn('text-xs', decoupling.decouplingPct > 0 ? 'text-destructive' : 'text-green-600')}>
+                  {decoupling.decouplingPct > 0 ? '+' : ''}{decoupling.decouplingPct.toFixed(1)}%
+                  {decoupling.decouplingPct > 0 ? ' — dérive cardiaque (FC monte plus que la puissance)' : ' — pas de dérive notable'}
+                </p>
+              </div>
+            )}
 
             {analysis.strengths.length > 0 && (
               <div className="space-y-1.5">

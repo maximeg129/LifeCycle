@@ -5,6 +5,8 @@ import {
   computePowerZoneDistribution,
   computeHrZoneDistribution,
   computeSplitAnalysis,
+  summarizeDurabilityForDisplay,
+  type DurabilityRideEntry,
 } from './ride-analysis-types'
 
 describe('average', () => {
@@ -104,5 +106,48 @@ describe('computeSplitAnalysis', () => {
   it('calls a small (<5%) difference even pacing', () => {
     const watts = [...Array(60).fill(200), ...Array(60).fill(195)]
     expect(computeSplitAnalysis(watts)!.fade).toBe('even')
+  })
+})
+
+describe('summarizeDurabilityForDisplay', () => {
+  it('returns null without a durability profile', () => {
+    expect(summarizeDurabilityForDisplay(null)).toBeNull()
+  })
+
+  it('returns null when the fresh (0 kJ/kg) tier has no 5min MMP', () => {
+    const durability: DurabilityRideEntry[] = [
+      { tierKJPerKg: 0, reached: true, mmp: [{ durationSeconds: 60, watts: 250 }] },
+      { tierKJPerKg: 20, reached: true, mmp: [{ durationSeconds: 300, watts: 220 }] },
+    ]
+    expect(summarizeDurabilityForDisplay(durability)).toBeNull()
+  })
+
+  it('returns null when no fatigue tier was reached', () => {
+    const durability: DurabilityRideEntry[] = [
+      { tierKJPerKg: 0, reached: true, mmp: [{ durationSeconds: 300, watts: 250 }] },
+      { tierKJPerKg: 20, reached: false, mmp: [] },
+    ]
+    expect(summarizeDurabilityForDisplay(durability)).toBeNull()
+  })
+
+  it('computes % degradation vs the fresh tier at 5min for each reached fatigue tier', () => {
+    const durability: DurabilityRideEntry[] = [
+      { tierKJPerKg: 0, reached: true, mmp: [{ durationSeconds: 300, watts: 250 }] },
+      { tierKJPerKg: 10, reached: true, mmp: [{ durationSeconds: 300, watts: 237.5 }] }, // -5%
+      { tierKJPerKg: 20, reached: true, mmp: [{ durationSeconds: 300, watts: 225 }] }, // -10%
+      { tierKJPerKg: 30, reached: false, mmp: [] }, // never reached — excluded
+    ]
+    const rows = summarizeDurabilityForDisplay(durability)!
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toEqual({ tierKJPerKg: 10, watts: 238, deltaPctVsFresh: -5 })
+    expect(rows[1]).toEqual({ tierKJPerKg: 20, watts: 225, deltaPctVsFresh: -10 })
+  })
+
+  it('skips a reached tier that has no 5min MMP (segment too short after that point)', () => {
+    const durability: DurabilityRideEntry[] = [
+      { tierKJPerKg: 0, reached: true, mmp: [{ durationSeconds: 300, watts: 250 }] },
+      { tierKJPerKg: 40, reached: true, mmp: [{ durationSeconds: 60, watts: 200 }] }, // no 300s entry
+    ]
+    expect(summarizeDurabilityForDisplay(durability)).toBeNull()
   })
 })
