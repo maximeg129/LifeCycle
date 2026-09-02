@@ -170,24 +170,70 @@ export const KJ_TARGET_NUDGE: ConventionConstant<KjTargetNudge> = {
     "traceable-constants.",
 }
 
-// ── Constantes PENDING — à extraire des sources primaires avant codage ────
-// Annexe B de docs/01_Base_Scientifique_Cyclisme.md. Trois constantes,
-// obligatoires au démarrage de la Phase 2 (endurance.ts / criticalPower.ts /
-// metabolism.ts en dépendent directement — chacune lèvera via
-// requireConstant() tant que la valeur réelle n'est pas fournie ici).
+// ── Métabolisme de base — coefficients Ten-Haaf (R33) ──────────────────────
+// Retour utilisateur, audit des indicateurs Cyclisme : "Sourcer les
+// coefficients Ten-Haaf (BMR)" — un des trois chantiers explicitement
+// choisis (AskUserQuestion) après l'audit "métriques jamais affichées".
+
+export interface TenHaafBodyMassCoefficients {
+  /** kJ/jour par kg de poids corporel. */
+  weightKJPerKg: number
+  /** kJ/jour par mètre de taille. */
+  heightKJPerM: number
+  /** kJ/jour par année d'âge (soustrait). */
+  ageKJPerYear: number
+  /** kJ/jour ajoutés si sexe masculin (0 pour féminin). */
+  maleKJ: number
+  constantKJ: number
+}
+
+export interface TenHaafFatFreeMassCoefficients {
+  /** kJ/jour par kg de masse maigre. */
+  fatFreeMassKJPerKg: number
+  constantKJ: number
+}
+
+export interface TenHaafCoefficientsValue {
+  bodyMass: TenHaafBodyMassCoefficients
+  fatFreeMass: TenHaafFatFreeMassCoefficients
+}
 
 /**
  * Coefficients de l'équation Ten-Haaf (métabolisme de base), versions masse
- * corporelle ET masse maigre. R33 : "Les coefficients exacts... doivent être
- * repris dans le tableau du papier avant codage — ne pas les reconstituer
- * de mémoire."
+ * corporelle ET masse maigre — R33.
+ *
+ * ⚠️ Exception documentée à la règle normale de ce fichier ("jamais
+ * reconstitué de mémoire, toujours extrait du tableau du papier avant
+ * codage") : l'accès direct au papier primaire (PLoS ONE, PMC, ResearchGate,
+ * Frontiers, medicalalgorithms.com — même Wikipedia) est bloqué par le proxy
+ * réseau de ce sandbox, comme documenté ailleurs dans CLAUDE.md pour
+ * intervals.icu/Join/Frive/TrainerRoad. Valeurs triangulées via 3 recherches
+ * web indépendantes reproduisant exactement les mêmes chiffres, avec une
+ * conversion kJ→kcal interne cohérente sur les 5 coefficients de la variante
+ * masse corporelle (49,940/4,184≈11,936 ; 2459,053/4,184≈587,728 ;
+ * 34,014/4,184≈8,129 ; 799,257/4,184≈191,027 ; 122,502/4,184≈29,279 — signe
+ * fort de fiabilité, pas une coïncidence sur 5 coefficients indépendants).
+ * Override explicite demandé et approuvé par l'utilisateur (AskUserQuestion)
+ * pour ce cas précis — à re-confirmer contre le tableau original du papier
+ * si l'accès réseau direct devient possible un jour.
  */
-export const TEN_HAAF_COEFFICIENTS: PendingConstant = {
-  status: 'pending',
-  sourceToConsult:
-    'R33 — ten Haaf T, Weijs PJM (2014), "Resting energy expenditure prediction in recreational athletes of 18–35 years", ' +
-    'PLoS ONE 9(10):e108460 — tableau des coefficients, version masse corporelle ET version masse maigre.',
+export const TEN_HAAF_COEFFICIENTS: SourcedConstant<TenHaafCoefficientsValue> = {
+  status: 'sourced',
+  refs: ['R33'],
+  value: {
+    bodyMass: { weightKJPerKg: 49.94, heightKJPerM: 2459.053, ageKJPerYear: 34.014, maleKJ: 799.257, constantKJ: 122.502 },
+    fatFreeMass: { fatFreeMassKJPerKg: 95.272, constantKJ: 2026.161 },
+  },
+  note:
+    'Sourcing par triangulation web (accès primaire bloqué par le sandbox), pas une extraction directe du tableau — voir le ' +
+    'commentaire ci-dessus pour le détail de la vérification et son approbation explicite.',
 }
+
+// ── Constantes PENDING — à extraire des sources primaires avant codage ────
+// Annexe B de docs/01_Base_Scientifique_Cyclisme.md. Deux constantes
+// restantes, obligatoires au démarrage de la Phase 2 (criticalPower.ts en
+// dépend directement — lèvera via requireConstant() tant que la valeur
+// réelle n'est pas fournie ici).
 
 /**
  * Constante de temps de reconstitution du W′ au-dessus de la puissance

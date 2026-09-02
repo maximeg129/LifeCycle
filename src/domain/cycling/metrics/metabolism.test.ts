@@ -2,20 +2,31 @@ import { describe, it, expect } from 'vitest'
 import { computeRestingMetabolicRate } from './metabolism'
 
 describe('computeRestingMetabolicRate', () => {
-  // Le garde-fou demandé explicitement : jamais de calcul (ni Ten-Haaf
-  // approximé, ni un repli sur une équation non sourcée comme Mifflin-St
-  // Jeor) tant que TEN_HAAF_COEFFICIENTS (R33) n'a pas été extraite du
-  // papier source.
-  it('always throws today — TEN_HAAF_COEFFICIENTS is still pending', () => {
-    expect(() => computeRestingMetabolicRate({ weightKg: 70 })).toThrowError(/R33/)
+  it('computes the body-mass variant (weight/height/age/sex) for a man', () => {
+    const result = computeRestingMetabolicRate({ weightKg: 70, heightCm: 175, age: 30, sex: 'male' })
+    expect(result).toEqual({ kcalPerDay: 1840, method: 'ten-haaf-body-mass' })
   })
 
-  it('throws the same way whether or not fat-free mass is supplied', () => {
-    expect(() => computeRestingMetabolicRate({ weightKg: 70, fatFreeMassKg: 58 })).toThrowError(/R33/)
-    expect(() => computeRestingMetabolicRate({ weightKg: 70, fatFreeMassKg: null })).toThrowError(/R33/)
+  it('computes the body-mass variant for a woman (no male term added)', () => {
+    const result = computeRestingMetabolicRate({ weightKg: 60, heightCm: 165, age: 25, sex: 'female' })
+    expect(result).toEqual({ kcalPerDay: 1512, method: 'ten-haaf-body-mass' })
   })
 
-  it('names the constant in the error, per the requireConstant contract', () => {
-    expect(() => computeRestingMetabolicRate({ weightKg: 70 })).toThrowError(/TEN_HAAF_COEFFICIENTS/)
+  it('prefers the fat-free-mass variant when fatFreeMassKg is provided', () => {
+    // Same weight/height/age/sex as the first case, but with a known FFM —
+    // the dedicated FFM equation (more precise per R33) takes over, ignoring
+    // the body-mass inputs entirely.
+    const result = computeRestingMetabolicRate({ weightKg: 70, heightCm: 175, age: 30, sex: 'male', fatFreeMassKg: 58 })
+    expect(result).toEqual({ kcalPerDay: 1805, method: 'ten-haaf-fat-free-mass' })
+  })
+
+  it('falls back to the body-mass variant when fatFreeMassKg is null', () => {
+    const result = computeRestingMetabolicRate({ weightKg: 70, heightCm: 175, age: 30, sex: 'male', fatFreeMassKg: null })
+    expect(result.method).toBe('ten-haaf-body-mass')
+  })
+
+  it('falls back to the body-mass variant when fatFreeMassKg is not positive', () => {
+    const result = computeRestingMetabolicRate({ weightKg: 70, heightCm: 175, age: 30, sex: 'male', fatFreeMassKg: 0 })
+    expect(result.method).toBe('ten-haaf-body-mass')
   })
 })

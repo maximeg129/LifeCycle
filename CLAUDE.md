@@ -1102,6 +1102,38 @@ ajoutés, en complément du texte IA (pas un remplacement) :
   sont donc écrits une fois à la génération et relus depuis Firestore comme `analysis`, écrasés au
   même moment (`setDoc`) qu'un "Régénérer".
 
+**Métabolisme de base : coefficients Ten-Haaf sourcés (`TEN_HAAF_COEFFICIENTS`)** — troisième et
+dernière pièce du même audit (`AskUserQuestion` : "Sourcer les coefficients Ten-Haaf (BMR)").
+`metabolism.ts` refusait systématiquement de calculer (`requireConstant()` levait) tant que R33
+(ten Haaf & Weijs 2014) n'était pas extraite du tableau du papier — la règle explicite déjà inscrite
+dans `constants.ts` ("Je les remplirai moi-même depuis les papiers. Ne les invente sous aucun
+prétexte, même approximativement.") interdisait justement ce que ce correctif fait.
+
+**⚠️ Exception documentée, explicitement approuvée** (`AskUserQuestion`, après avoir buté sur cette
+règle) : l'accès direct au papier primaire (PLoS ONE, PMC, ResearchGate, Frontiers,
+medicalalgorithms.com — même Wikipedia, même `journals.plos.org`/`doi.org` en `curl` direct) est
+bloqué par le proxy réseau de ce sandbox, comme documenté ailleurs dans ce fichier pour
+intervals.icu/Join/Frive/TrainerRoad — seuls `raw.githubusercontent.com`/`api.github.com` (git infra)
+restent joignables. Les coefficients ont donc été **triangulés via 3 recherches web indépendantes**
+qui reproduisent exactement les mêmes chiffres à chaque fois, avec un signe fort de fiabilité : la
+conversion kJ→kcal d'une des sources (donnée séparément de la formule kJ/jour) tombe exactement
+juste sur les 5 coefficients indépendants de la variante masse corporelle
+(49,940/4,184≈11,936 ; 2459,053/4,184≈587,728 ; 34,014/4,184≈8,129 ; 799,257/4,184≈191,027 ;
+122,502/4,184≈29,279) — une coïncidence hautement improbable si les chiffres étaient fabriqués.
+`TEN_HAAF_COEFFICIENTS` passe donc de `pending` à `sourced` (refs `['R33']`), avec un `note` qui
+documente cette méthode de sourcing en toutes lettres plutôt que de la faire disparaître derrière un
+statut `sourced` silencieux — à re-confirmer contre le tableau original si l'accès réseau direct
+devient possible un jour.
+
+**`computeRestingMetabolicRate()`** (`metabolism.ts`) calcule désormais réellement les deux variantes
+de l'équation (masse corporelle : poids/taille/âge/sexe ; masse maigre : FFM seule, préférée si
+fournie et positive) — coefficients en kJ/jour comme publiés, convertis en kcal/jour (÷4,184, la même
+conversion physique déjà documentée pour le budget kJ dans `fueling-types.ts`) pour rester dans
+l'unité déjà utilisée partout ailleurs dans l'app. **Portée volontairement limitée à ce déblocage** :
+`computeBMR()` (tuile Fueling vs Workload) continue d'utiliser Mifflin-St Jeor pour l'instant — le
+remplacer est une décision UI distincte (déjà anticipée dans le commentaire de fichier de
+`metabolism.ts` comme "Phase 5"), pas le scope de "sourcer les coefficients" demandé ici.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

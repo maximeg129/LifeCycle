@@ -12,29 +12,33 @@
 // (src/components/nutrition/fueling-types.ts, tuile Fueling vs Workload)
 // utilise aujourd'hui Mifflin-St Jeor — une équation que R32 ne teste même
 // pas (les 5 équations comparées n'incluent pas Mifflin-St Jeor) et qui
-// n'a donc aucune source dans les 35 références de ce projet. Ce n'est pas
-// corrigé dans cette PR (voir plus bas — module domaine pur, pas encore
-// branché, même posture que kj.ts/durability.ts/endurance.ts), mais c'est
-// documenté ici pour la Phase 5 (UI) : le vrai remplacement ne pourra se
-// faire qu'une fois TEN_HAAF_COEFFICIENTS rempli.
+// n'a donc aucune source dans les 35+ références de ce projet. TEN_HAAF_
+// COEFFICIENTS (evidence/constants.ts) est désormais rempli (voir son
+// commentaire pour le détail du sourcing par triangulation, network sandbox
+// oblige) — ce module calcule donc réellement Ten-Haaf maintenant — mais le
+// remplacement de `computeBMR()`/la tuile Fueling vs Workload par cette
+// fonction reste une décision UI distincte, pas encore prise (scope de ce
+// chantier : "sourcer les coefficients", pas "remplacer Mifflin-St Jeor
+// partout").
 //
-// R33 (ten Haaf & Weijs 2014, source primaire) prévient explicitement que
-// les coefficients exacts (deux variantes : masse corporelle ET masse
-// maigre) doivent être repris tels quels dans le tableau du papier, jamais
-// reconstitués de mémoire — TEN_HAAF_COEFFICIENTS (evidence/constants.ts)
-// reste `pending` pour cette raison précise. **Ce module entier dépend de
-// cette seule constante** : contrairement à endurance.ts/criticalPower.ts
-// (PR 6), qui avaient chacun un chemin principal indépendant des
-// constantes pending, il n'existe aucune formule de métabolisme de base
-// dans les 35 références qui soit à la fois sourcée ET déjà chiffrée dans
-// ce projet — utiliser autre chose ici (Mifflin-St Jeor, Harris-Benedict)
-// serait inventer une source hors du canon. computeRestingMetabolicRate()
-// lève donc systématiquement aujourd'hui, en citant R33.
+// R33 (ten Haaf & Weijs 2014, source primaire) donne deux variantes de
+// l'équation — masse corporelle (poids/taille/âge/sexe) et masse maigre
+// (FFM seule, plus précise quand connue) — voir TEN_HAAF_COEFFICIENTS pour
+// les coefficients exacts et leur sourcing.
 
 import { TEN_HAAF_COEFFICIENTS, requireConstant } from '../evidence/constants'
 
+/** 4,184 kJ = 1 kcal — conversion physique standard, pas une constante scientifique sourcée (voir la même note dans fueling-types.ts pour le budget kJ). */
+const KJ_PER_KCAL = 4.184
+
 export interface TenHaafInput {
   weightKg: number
+  /** Taille (cm) — nécessaire pour la variante masse corporelle, ignorée si `fatFreeMassKg` est fourni. */
+  heightCm: number
+  /** Âge (années) — nécessaire pour la variante masse corporelle, ignorée si `fatFreeMassKg` est fourni. */
+  age: number
+  /** Sexe — nécessaire pour la variante masse corporelle, ignoré si `fatFreeMassKg` est fourni. */
+  sex: 'male' | 'female'
   /** Masse maigre (kg), si connue — R33 fournit une variante dédiée, plus précise que la version masse corporelle seule quand disponible. */
   fatFreeMassKg?: number | null
 }
@@ -49,16 +53,29 @@ export interface RestingMetabolicRateEstimate {
 /**
  * Estimation du métabolisme de base via l'équation Ten-Haaf (R32/R33),
  * équation par défaut de ce projet (nutrition-bmr-ten-haaf-default) —
- * utilise la variante masse maigre si `fatFreeMassKg` est fournie, sinon
- * la variante masse corporelle. Lève systématiquement aujourd'hui :
- * TEN_HAAF_COEFFICIENTS est toujours `pending` — jamais un calcul avec des
- * coefficients approximés ou une équation de repli non sourcée (Mifflin-
- * St Jeor, Harris-Benedict) à la place.
+ * utilise la variante masse maigre si `fatFreeMassKg` est fournie (et > 0),
+ * sinon la variante masse corporelle (poids/taille/âge/sexe). Les
+ * coefficients du papier sont en kJ/jour — convertis en kcal/jour ici
+ * (division par 4,184) pour rester dans l'unité déjà utilisée partout
+ * ailleurs dans l'app (voir computeBMR()/sessionEnergyBurnedKcal() dans
+ * fueling-types.ts).
  */
-export function computeRestingMetabolicRate(_input: TenHaafInput): RestingMetabolicRateEstimate {
-  // requireConstant<...>() lève avant d'atteindre quoi que ce soit
-  // d'autre — pas de formule à écrire tant que R33 n'a pas été extraite du
-  // papier source. Conservé typé (plutôt que `never`) pour documenter la
-  // forme de sortie attendue une fois la constante remplie.
-  return requireConstant<RestingMetabolicRateEstimate>(TEN_HAAF_COEFFICIENTS, 'TEN_HAAF_COEFFICIENTS')
+export function computeRestingMetabolicRate(input: TenHaafInput): RestingMetabolicRateEstimate {
+  const coefficients = requireConstant(TEN_HAAF_COEFFICIENTS, 'TEN_HAAF_COEFFICIENTS')
+
+  if (input.fatFreeMassKg != null && input.fatFreeMassKg > 0) {
+    const { fatFreeMassKJPerKg, constantKJ } = coefficients.fatFreeMass
+    const kJPerDay = fatFreeMassKJPerKg * input.fatFreeMassKg + constantKJ
+    return { kcalPerDay: Math.round(kJPerDay / KJ_PER_KCAL), method: 'ten-haaf-fat-free-mass' }
+  }
+
+  const { weightKJPerKg, heightKJPerM, ageKJPerYear, maleKJ, constantKJ } = coefficients.bodyMass
+  const heightM = input.heightCm / 100
+  const kJPerDay =
+    weightKJPerKg * input.weightKg +
+    heightKJPerM * heightM -
+    ageKJPerYear * input.age +
+    (input.sex === 'male' ? maleKJ : 0) +
+    constantKJ
+  return { kcalPerDay: Math.round(kJPerDay / KJ_PER_KCAL), method: 'ten-haaf-body-mass' }
 }
