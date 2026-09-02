@@ -11,7 +11,7 @@ import {
   getLastDayIds,
   buildMergedDailySeries,
   pickLatestWithData,
-  resolveReadiness,
+  computeReadiness,
 } from './lifestyle-types'
 
 const HISTORY_DAYS = 7
@@ -60,13 +60,12 @@ export function useLifestyleData(days: number = HISTORY_DAYS) {
     const wellnessByDay = new Map<string, WellnessLike>(wellness.data.map((w) => [w.id, w]))
     const dailySeries = buildMergedDailySeries(list, wellnessByDay, dayIds)
     const latest = pickLatestWithData(dailySeries)
-    const latestWellness = latest ? wellnessByDay.get(latest.dayId) : undefined
-    const readiness = resolveReadiness(latest, latestWellness?.readiness)
+    const readiness = computeReadiness(latest)
     // Per-day readiness for the whole window (not just the latest day) —
     // only the metric detail pages need this trend; every other call site
     // just ignores it.
     const readinessSeries = dailySeries
-      .map((d) => ({ dayId: d.dayId, value: resolveReadiness(d, wellnessByDay.get(d.dayId)?.readiness) }))
+      .map((d) => ({ dayId: d.dayId, value: computeReadiness(d) }))
       .filter((d): d is { dayId: string; value: number } => d.value != null)
     return { dailySeries, latest, readiness, readinessSeries }
   }, [metrics, dayIds, wellness.data])

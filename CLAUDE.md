@@ -1008,6 +1008,55 @@ unique). Cyclisme, lui, reste strictement en lecture : s'il est visité avant to
 `TodaysSessionCard` dégrade gracieusement sur phase/focus plutôt que de déclencher un appel IA
 depuis la page données.
 
+## Indicateurs Cyclisme — audit "propriétaire" et anneau Récupération
+
+Retour utilisateur : "si on revient sur la page cyclisme je pense qui serait utile de mettre tous
+les indicateurs que nous avons défini et d'éviter tous indicateurs qui reste propriétaire (hors
+TSS)." Plutôt que de deviner ce qui est "propriétaire", audit direct du système de règles sourcées
+déjà en place (`src/domain/cycling/evidence/`) — ce projet a en réalité déjà une position écrite sur
+le sujet, pas encore totalement respectée partout.
+
+**Ce qui est déjà correct** : la règle `power-np-if-tss-label-proprietary` (`evidence/rules.ts`)
+classe NP/IF/**TSS** comme "métriques propriétaires non validées par les pairs" — exactement le
+"hors TSS" de la demande, déjà codifié avant même cette conversation. NP/IF ne sont d'ailleurs
+jamais affichés comme un chiffre brut nulle part dans l'app (seulement utilisés en interne pour le
+Variability Index et la classification de zones) — rien à corriger de ce côté. Le modèle 5-7 zones
+Coggan (`POWER_ZONES`, `zoneForPct` — utilisé par `sessionZone`/`WorkoutProfileChart` sur le
+calendrier du plan, et par l'analyse de sortie) reste lui aussi une convention issue du même
+algorithme, jamais présentée comme validée indépendamment (`power-zones-5-7-zone-prescription-
+convention`) — accepté tel quel, c'est le langage visuel standard du secteur pour prescrire une
+séance, pas un chiffre affiché en soi.
+
+**⚠️ Écart trouvé et corrigé** : l'anneau "Récupération" (`readinessRingColor`, `ring-metrics.ts`)
+préférait jusqu'ici le score de récupération propriétaire d'un capteur connecté (WHOOP, relayé par
+Intervals.icu, champ `wellness.readiness`) à la formule locale sleep/stress/mood de l'app —
+`resolveReadiness()` (`lifestyle-types.ts`) retournait ce score de capteur dès qu'il était présent.
+Ça contredisait directement une règle déjà écrite dans ce même projet, `readiness-composition-
+explicit-weighting` (`evidence/rules.ts`) : la composition du score readiness doit avoir "une
+pondération explicite et visible/modifiable par l'utilisateur" — ce qu'un score de capteur en boîte
+noire ne peut par nature pas offrir. Décision utilisateur (`AskUserQuestion`, deux options : toujours
+la formule transparente vs. garder la priorité au capteur) : **toujours la formule transparente**.
+`resolveReadiness()` supprimé — `computeReadiness()` (formule locale, déjà existante, inchangée) est
+désormais la seule source, dans les 3 endroits qui lisaient un score readiness (`use-lifestyle-
+data.ts` pour le ring Cyclisme et les pages détail, `use-governor.ts` pour le signal readiness du
+gouverneur de charge interne — les deux consommaient déjà `resolveReadiness`, donc les deux
+héritent du même correctif sans changement de comportement l'un par rapport à l'autre). Compromis
+assumé, documenté dans le code : moins précis qu'un capteur haut de gamme quand un est connecté,
+mais jamais une boîte noire.
+
+**Métriques définies mais jamais affichées, identifiées pour discussion future** (pas construites
+dans ce chantier — l'utilisateur a demandé un plan avant d'aller plus loin) : `durability.ts`
+(dégradation de puissance sur effort long — documentée dans son propre code comme "le cœur
+différenciant du produit... aucun équivalent n'existe") et `decoupling.ts` (découplage cardiaque
+Pw:HR) sont déjà calculées pour l'analyse IA d'une sortie (`use-ride-analysis.ts`) mais jamais
+montrées comme un chiffre autonome ; `criticalPower.ts` (modèle CP/W′) pareil, déjà utilisé en
+interne (contexte coach) sans jamais être sa propre tuile ; `impulseResponse.ts` (modèle Banister
+fitness-fatigue, alternative de simulation au CTL/ATL directement lus depuis Intervals.icu) et
+`metabolism.ts` (équation Ten-Haaf, plus fiable que Mifflin-St Jeor selon R32 mais bloquée tant que
+`TEN_HAAF_COEFFICIENTS`, evidence/constants.ts, reste `pending`) ne sont carrément pas branchés à
+l'UI. Chacun a son propre commentaire de fichier documentant précisément pourquoi/dans quel contexte
+l'utiliser — point de départ pour une future proposition détaillée plutôt qu'une redécouverte.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

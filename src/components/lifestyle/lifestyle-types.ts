@@ -258,7 +258,21 @@ export function formatSleepDuration(hours: number): string {
   return `${h}h${String(m).padStart(2, '0')}`
 }
 
-/** Lightweight 0-100 readiness heuristic from the most recent entry — not a medical score. */
+/**
+ * Lightweight 0-100 readiness heuristic from the most recent entry — not a
+ * medical score. Always used, never a connected device's own proprietary
+ * recovery/readiness score (WHOOP via Intervals.icu) — retour utilisateur,
+ * suite à l'audit des indicateurs de Cyclisme : "éviter tous indicateurs
+ * qui restent propriétaires". Cette fonction remplace resolveReadiness()
+ * (qui préférait le score du capteur quand présent) pour honorer la règle
+ * déjà écrite dans ce projet, jusqu'ici pas totalement respectée par ce
+ * ring précis — voir readiness-composition-explicit-weighting,
+ * evidence/rules.ts : la composition du score readiness doit avoir "une
+ * pondération explicite et visible/modifiable par l'utilisateur", ce
+ * qu'un score de capteur en boîte noire ne peut pas offrir. Compromis
+ * assumé : moins précis qu'un capteur haut de gamme quand un est connecté,
+ * mais jamais une boîte noire.
+ */
 export function computeReadiness(latest: HealthMetricLike | undefined): number | null {
   if (!latest) return null
   const parts: number[] = []
@@ -267,12 +281,6 @@ export function computeReadiness(latest: HealthMetricLike | undefined): number |
   if (latest.mood !== undefined) parts.push(latest.mood * 10)
   if (parts.length === 0) return null
   return Math.round(average(parts))
-}
-
-/** Prefers the device's own 0-100 recovery/readiness score (WHOOP via Intervals.icu) over the local sleep/stress/mood heuristic — it's a more authoritative measurement when available. */
-export function resolveReadiness(latest: HealthMetricLike | undefined, deviceReadiness: number | undefined): number | null {
-  if (deviceReadiness != null) return Math.round(deviceReadiness)
-  return computeReadiness(latest)
 }
 
 export interface GoalProgress {
