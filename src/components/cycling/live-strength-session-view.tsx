@@ -364,6 +364,40 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
     }
   }
 
+  // Chrono grand écran pour un exercice tenu — retour utilisateur : "quand
+  // on est en position planche, ce qu'on veut c'est pouvoir regarder le
+  // temps facilement... dès qu'on a fini on appuie sur le chronomètre, ça
+  // arrête le temps de l'exercice, ça le met dans l'application et ça
+  // lance le temps de pause". Un overlay plein écran plutôt qu'un simple
+  // agrandissement de l'input — lisible à distance, position plank oblige.
+  // Complète la saisie manuelle du temps tenu (toujours possible), ne la
+  // remplace pas — utile si le téléphone n'est pas en position lisible.
+  const [holdTimer, setHoldTimer] = useState<{ exIndex: number; setIndex: number; startedAt: number } | null>(null)
+
+  /** Même effet que markSetDone (badge PR, décompte de repos), en posant reps ET done en un seul updateSet — évite toute question d'ordre entre deux appels setProgress successifs. */
+  const finishHoldSet = (exIndex: number, setIndex: number, elapsedSeconds: number) => {
+    const ex = progress[exIndex]
+    const set = ex.sets[setIndex]
+    const key = `${exIndex}-${setIndex}`
+    if (isNewPersonalRecord(exIndex, setIndex)) {
+      setPrSetKeys((prev) => new Set(prev).add(key))
+      toast({ title: '🏆 Nouveau record personnel !', description: `${ex.name} — ${set.loadKg}kg` })
+    }
+    updateSet(exIndex, setIndex, { reps: elapsedSeconds, done: true })
+    const isVeryLastSet = exIndex === progress.length - 1 && setIndex === progress[exIndex].sets.length - 1
+    if (!isVeryLastSet) {
+      restKeyRef.current = key
+      setRestEndAt(Date.now() + ex.restSeconds * 1000)
+    }
+  }
+
+  const stopHoldTimer = () => {
+    if (!holdTimer) return
+    const elapsed = Math.max(1, Math.round((Date.now() - holdTimer.startedAt) / 1000))
+    finishHoldSet(holdTimer.exIndex, holdTimer.setIndex, elapsed)
+    setHoldTimer(null)
+  }
+
   /**
    * Bascule l'état "faite" d'une série — retour utilisateur : "pouvoir
    * modifier lorsqu'un exercice a été validé". Les champs reps/charge
@@ -505,6 +539,22 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
 
   return (
     <div className="fixed inset-0 z-50 bg-background overflow-y-auto">
+      {/* Chrono grand écran d'un exercice tenu — voir startHoldTimer/stopHoldTimer plus haut. z-[60], au-dessus du reste de la vue (z-50). */}
+      {holdTimer && (
+        <div
+          className="fixed inset-0 z-[60] bg-primary text-primary-foreground flex flex-col items-center justify-center gap-6 p-6 cursor-pointer select-none"
+          onClick={stopHoldTimer}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') stopHoldTimer() }}
+          aria-label="Arrêter le chrono et valider la série"
+        >
+          <p className="text-sm uppercase tracking-wider font-bold opacity-80 text-center">{progress[holdTimer.exIndex]?.name}</p>
+          <p className="lc-data font-bold tabular-nums text-8xl">{formatTimer(Math.floor((Date.now() - holdTimer.startedAt) / 1000))}</p>
+          <p className="text-sm opacity-80">Touchez l&apos;écran pour arrêter</p>
+        </div>
+      )}
+
       <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border p-4 flex items-center justify-between">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Séance en cours</p>
@@ -572,10 +622,17 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
           // exercice de gainage isométrique (planche, Pallof press tenu...)
           // se mesure en secondes tenues, pas en répétitions ; le "reps ×"
           // par défaut était trompeur. isHoldReps() détecte le suffixe "s"
-          // déjà utilisé par convention pour ces exercices ("30-45s") — pas
-          // de champ dédié dans le schéma IA, voir isHoldReps.
+          // déjà utilisé par convention pour ces exercices ("30-45s"), mais
+          // reste un signal fragile (texte libre généré par l'IA — retour
+          // utilisateur, capture à l'appui : "Planche latérale" affichée en
+          // reps au lieu de secondes, le "s" manquait sur cette génération).
+          // Les patterns anti-extension/anti-rotation-lateral (gainage) sont
+          // TOUJOURS tenus dans cette app (voir S05/CORE_PATTERNS,
+          // strengthSessionValidator.ts) — un signal structuré bien plus
+          // fiable que la convention textuelle, utilisé en repli.
           const planned = exercises[exIndex]
-          const isHold = isHoldReps(planned?.reps ?? '')
+          const isCorePattern = planned?.pattern === 'anti-extension' || planned?.pattern === 'anti-rotation-lateral'
+          const isHold = isHoldReps(planned?.reps ?? '') || isCorePattern
           const isSkipped = skippedExercises.has(exIndex)
           const doneCount = ex.sets.filter((s) => s.done).length
           // "Exercice en cours" — retour utilisateur : look-and-feel façon
@@ -607,7 +664,7 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
             </div>
             {lastKnown && !isSkipped && (
               <p className="text-xs text-muted-foreground -mt-2">
-                Dernière fois ({lastKnown.date}) : {lastKnown.sets}×{lastKnown.reps}{lastKnown.loadKg != null ? ` @ ${lastKnown.loadKg}kg` : ''}
+                Dernière fois ({lastKnown.date}) : {lastKnown.sets}×{isHold ? formatTimer(Number(lastKnown.reps)) : lastKnown.reps}{lastKnown.loadKg != null ? ` @ ${lastKnown.loadKg}kg` : ''}
               </p>
             )}
             {isSkipped ? (
@@ -615,19 +672,31 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
             ) : (
               <>
                 <div className="space-y-2">
+                  {/* En-tête de colonnes — retour utilisateur, look-and-feel
+                      façon Hevy : plutôt qu'un libellé "reps ×"/"tenu ×"
+                      répété sur chaque ligne (une des causes du débordement
+                      hors cadre signalé), une seule ligne d'en-tête au-dessus
+                      de la liste, alignée sur les mêmes largeurs de colonne. */}
+                  <div className="flex items-center gap-1.5 px-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                    <span className="w-5 shrink-0 text-center">#</span>
+                    <span className="w-16 shrink-0 text-center">{isHold ? 'Temps' : 'Reps'}</span>
+                    {isHold && <span className="w-9 shrink-0" />}
+                    {!isCorePattern && <span className="w-16 shrink-0 text-center">Charge</span>}
+                    <span className="ml-auto w-9 shrink-0" />
+                  </div>
                   {ex.sets.map((set, setIndex) => {
                     const key = `${exIndex}-${setIndex}`
                     const isPR = prSetKeys.has(key)
                     return (
-                    <div key={setIndex} className={cn('flex items-center gap-2 p-2 rounded-lg border', isPR ? 'bg-amber-500/10 border-amber-500/40' : set.done ? 'bg-primary/5 border-primary/20' : 'border-border')}>
-                      <span className="text-xs text-muted-foreground w-14 shrink-0">Série {setIndex + 1}</span>
+                    <div key={setIndex} className={cn('flex items-center gap-1.5 p-2 rounded-lg border', isPR ? 'bg-amber-500/10 border-amber-500/40' : set.done ? 'bg-primary/5 border-primary/20' : 'border-border')}>
+                      <span className="text-xs text-muted-foreground w-5 shrink-0 text-center font-medium">{setIndex + 1}</span>
                       {isHold ? (
                         <Input
                           type="text"
                           inputMode="numeric"
                           value={formatTimer(set.reps)}
                           onChange={(e) => updateSet(exIndex, setIndex, { reps: parseDurationInput(e.target.value) })}
-                          className="h-9 w-20 text-center"
+                          className="h-9 w-16 text-center shrink-0 px-1"
                           aria-label={`Temps tenu, série ${setIndex + 1}`}
                         />
                       ) : (
@@ -635,30 +704,64 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
                           type="number"
                           value={set.reps}
                           onChange={(e) => updateSet(exIndex, setIndex, { reps: Number(e.target.value) })}
-                          className="h-9 w-16 text-center"
+                          className="h-9 w-16 text-center shrink-0 px-1"
                           aria-label={`Répétitions, série ${setIndex + 1}`}
                         />
                       )}
-                      <span className="text-xs text-muted-foreground shrink-0">{isHold ? 'tenu ×' : 'reps ×'}</span>
-                      <Input
-                        type="number"
-                        step="0.5"
-                        value={set.loadKg ?? ''}
-                        onChange={(e) => updateSet(exIndex, setIndex, { loadKg: e.target.value === '' ? null : Number(e.target.value) })}
-                        placeholder="kg"
-                        className="h-9 w-20 text-center"
-                        aria-label={`Charge, série ${setIndex + 1}`}
-                      />
+                      {/* Retour utilisateur : "un autre timer... en grand
+                          écran... quand on est en position planche, ce
+                          qu'on veut c'est pouvoir regarder le temps
+                          facilement" — chrono plein écran (voir holdTimer
+                          plus haut), en plus de la saisie manuelle
+                          ci-dessus (utile si le téléphone n'est pas en
+                          position lisible pendant l'exercice). */}
+                      {isHold && (set.done ? (
+                        <span className="w-9 shrink-0" />
+                      ) : (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-9 w-9 shrink-0"
+                          onClick={() => setHoldTimer({ exIndex, setIndex, startedAt: Date.now() })}
+                          aria-label={`Chrono grand écran, série ${setIndex + 1}`}
+                          title="Chrono grand écran"
+                        >
+                          <Play className="w-4 h-4" />
+                        </Button>
+                      ))}
+                      {/* Retour utilisateur : "je ne sais pas pourquoi tu
+                          rajoutes le poids... pour ce type d'exercice" —
+                          pas de champ charge pour le gainage
+                          (anti-extension/anti-rotation-lateral), toujours
+                          au poids du corps dans cette app (loadGuidance
+                          "Poids du corps" côté génération IA, voir S05). */}
+                      {!isCorePattern && (
+                        <Input
+                          type="number"
+                          step="0.5"
+                          value={set.loadKg ?? ''}
+                          onChange={(e) => updateSet(exIndex, setIndex, { loadKg: e.target.value === '' ? null : Number(e.target.value) })}
+                          placeholder="kg"
+                          className="h-9 w-16 text-center shrink-0 px-1"
+                          aria-label={`Charge, série ${setIndex + 1}`}
+                        />
+                      )}
                       {isPR && <Trophy className="w-4 h-4 text-amber-500 shrink-0" aria-label="Nouveau record personnel" />}
+                      {/* Retour utilisateur, capture d'écran à l'appui : les
+                          boutons "Fait"/"Valider" débordaient du cadre sur
+                          mobile — icône seule (voir aria-label/title pour le
+                          texte) plutôt qu'icône + libellé, la ligne entière
+                          ne tenait pas sur un iPhone. */}
                       <Button
-                        size="sm"
+                        size="icon"
                         variant={set.done ? 'secondary' : 'default'}
                         onClick={() => toggleSetDone(exIndex, setIndex)}
-                        className="ml-auto gap-1.5 h-9 shrink-0"
+                        className="ml-auto h-9 w-9 shrink-0"
                         aria-label={set.done ? `Annuler la validation, série ${setIndex + 1}` : `Valider la série ${setIndex + 1}`}
                         title={set.done ? 'Modifier — retire la validation' : 'Valider'}
                       >
-                        {set.done ? <Undo2 className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />} {set.done ? 'Fait' : 'Valider'}
+                        {set.done ? <Undo2 className="w-4 h-4" /> : <Check className="w-4 h-4" />}
                       </Button>
                     </div>
                     )
