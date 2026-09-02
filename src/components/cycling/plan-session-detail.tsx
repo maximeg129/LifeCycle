@@ -15,13 +15,14 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Loader2, Send, Apple, Dumbbell, PlayCircle, CheckCircle2, XCircle, ShieldAlert, CalendarClock } from 'lucide-react'
+import { Loader2, Send, Apple, Dumbbell, PlayCircle, CheckCircle2, XCircle, ShieldAlert, CalendarClock, ExternalLink, Sparkles } from 'lucide-react'
 import { addDays, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { LogStrengthSessionDialog } from './log-strength-session-dialog'
 import { LiveStrengthSessionView } from './live-strength-session-view'
 import { WorkoutProfileChart } from './workout-profile-chart'
+import { RideAnalysisDialog } from '@/components/coach/ride-analysis-dialog'
 import { nextAvailableWeekDate, type PlanWeek, type PlanWeekSessionWithValidation, type SessionCompletion } from './training-plan-types'
 
 interface Props {
@@ -45,6 +46,12 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
   // visible à la fois (la feuille de détail du jour tapé), donc plus besoin
   // de partager cet état entre plusieurs cartes d'une même liste.
   const [liveOpen, setLiveOpen] = useState(false)
+  // Retour utilisateur : "est-il possible de voir l'activité qui est liée à
+  // l'activité planifiée ?" — même mécanisme que le Journal
+  // (rides-journal-tab.tsx) pour l'activité réellement rapprochée
+  // (completion.activityId, cycling uniquement — voir SessionCompletion,
+  // training-plan-types.ts), pas une nouvelle logique dupliquée.
+  const [analysisOpen, setAnalysisOpen] = useState(false)
 
   // Retour utilisateur : "il faudrait sûrement pouvoir donner la
   // possibilité de, si une séance est loupée, [la] remettre quelque part
@@ -71,9 +78,32 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
             )}
             <p className="text-sm font-medium">{session.title}</p>
             {completion.status === 'done' && (
-              <Badge className="text-[10px] gap-1 bg-primary/15 text-primary border-primary/30 hover:bg-primary/15">
-                <CheckCircle2 className="w-3 h-3" /> Réalisée{completion.actualDurationMinutes != null ? ` · ${Math.round(completion.actualDurationMinutes)}min` : ''}
-              </Badge>
+              <>
+                <Badge className="text-[10px] gap-1 bg-primary/15 text-primary border-primary/30 hover:bg-primary/15">
+                  <CheckCircle2 className="w-3 h-3" /> Réalisée{completion.actualDurationMinutes != null ? ` · ${Math.round(completion.actualDurationMinutes)}min` : ''}
+                </Badge>
+                {completion.activityId && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setAnalysisOpen(true)}
+                      className="h-6 px-2 text-[10px] gap-1"
+                      title="Analyse IA de l'activité liée"
+                    >
+                      <Sparkles className="w-3 h-3" /> Analyser
+                    </Button>
+                    <a
+                      href={`https://intervals.icu/activities/${completion.activityId}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-border text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                    >
+                      <ExternalLink className="w-3 h-3" /> Voir sur Intervals.icu
+                    </a>
+                  </>
+                )}
+              </>
             )}
             {completion.status === 'missed' && (
               <>
@@ -192,6 +222,14 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
           sessionIndex={index}
           sessionKey={`${week.weekNumber}-${index}`}
           onClose={() => setLiveOpen(false)}
+        />
+      )}
+      {completion.activityId && (
+        <RideAnalysisDialog
+          activityId={completion.activityId}
+          rideLabel={session.title}
+          open={analysisOpen}
+          onOpenChange={setAnalysisOpen}
         />
       )}
     </div>
