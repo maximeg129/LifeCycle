@@ -38,15 +38,10 @@ describe('requireConstant — garde-fou principal', () => {
   })
 })
 
-describe('the three constants required at launch (Annexe B) are still pending', () => {
+describe('the two constants still required at launch (Annexe B) remain pending', () => {
   // Regression guard, pas une interdiction — le jour où l'utilisateur les
   // remplit depuis les papiers sources, ce test doit être mis à jour en
   // même temps (status passera à 'sourced'), pas silencieusement contourné.
-  it('Ten-Haaf coefficients', () => {
-    expect(TEN_HAAF_COEFFICIENTS.status).toBe('pending')
-    expect(() => requireConstant(TEN_HAAF_COEFFICIENTS, 'Ten-Haaf')).toThrowError(/R33/)
-  })
-
   it("W′ reconstitution constant", () => {
     expect(W_PRIME_RECONSTITUTION_CONSTANT.status).toBe('pending')
     expect(() => requireConstant(W_PRIME_RECONSTITUTION_CONSTANT, "W′")).toThrowError(/R15/)
@@ -55,6 +50,28 @@ describe('the three constants required at launch (Annexe B) are still pending', 
   it('Riegel cycling fatigue exponent', () => {
     expect(RIEGEL_CYCLING_FATIGUE_EXPONENT.status).toBe('pending')
     expect(() => requireConstant(RIEGEL_CYCLING_FATIGUE_EXPONENT, 'Riegel cyclisme')).toThrowError(/R12/)
+  })
+})
+
+describe('TEN_HAAF_COEFFICIENTS', () => {
+  it('is sourced from R33', () => {
+    expect(TEN_HAAF_COEFFICIENTS.status).toBe('sourced')
+    expect(TEN_HAAF_COEFFICIENTS.refs).toEqual(['R33'])
+  })
+
+  it('matches the published body-mass variant (kJ/day)', () => {
+    const v = TEN_HAAF_COEFFICIENTS.value.bodyMass
+    expect(v.weightKJPerKg).toBe(49.94)
+    expect(v.heightKJPerM).toBe(2459.053)
+    expect(v.ageKJPerYear).toBe(34.014)
+    expect(v.maleKJ).toBe(799.257)
+    expect(v.constantKJ).toBe(122.502)
+  })
+
+  it('matches the published fat-free-mass variant (kJ/day)', () => {
+    const v = TEN_HAAF_COEFFICIENTS.value.fatFreeMass
+    expect(v.fatFreeMassKJPerKg).toBe(95.272)
+    expect(v.constantKJ).toBe(2026.161)
   })
 })
 
