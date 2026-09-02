@@ -18,7 +18,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { doc, collection, setDoc, serverTimestamp } from 'firebase/firestore'
 import { format } from 'date-fns'
-import { X, Check, SkipForward, Dumbbell, Flag } from 'lucide-react'
+import { X, Check, SkipForward, Dumbbell, Flag, Pause, Play, RotateCcw, Undo2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Progress } from '@/components/ui/progress'
@@ -26,6 +26,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useUser, useFirestore } from '@/firebase'
 import { useCrudSubmit } from '@/hooks/use-crud-submit'
 import { cn } from '@/lib/utils'
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
 import { useStrengthLogs } from './use-strength-logs'
 import { exerciseHistory, formatTimer, isDraftUsable, isHoldReps, parseDurationInput, summarizeSetsDetail, type LoggedExercise, type LoggedSetDetail, type StrengthSessionLog } from './strength-log-types'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
@@ -69,6 +70,19 @@ interface StrengthSessionDraft {
   savedAt: number
   /** Horodatage de départ ORIGINAL de la séance — restauré tel quel pour que le chrono reste exact, jamais remis à "maintenant". */
   startedAt: number
+  /**
+   * État pause/reprise — retour utilisateur : "mettre pause". Le chrono
+   * n'est jamais remis à zéro en pause, juste figé : elapsedSeconds
+   * soustrait totalPausedMs (temps cumulé passé en pause) de l'écart
+   * startedAt→maintenant. pausedAt (l'instant où la pause a commencé) n'a
+   * de sens que si isPaused est vrai — restauré tel quel pour qu'une pause
+   * en cours au moment de la fermeture accidentelle de l'onglet reste
+   * exacte à la réouverture plutôt que de compter silencieusement le temps
+   * de pause écoulé hors-app comme du temps actif.
+   */
+  isPaused: boolean
+  pausedAt: number | null
+  totalPausedMs: number
   exerciseNames: string[]
   progress: ExerciseProgress[]
 }
@@ -135,22 +149,27 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
   }
   const draft = draftRef.current
 
-  const [progress, setProgress] = useState<ExerciseProgress[]>(() => {
-    if (draft) return draft.progress
-    return exercises.map((ex) => {
-      const lastKnown = exerciseHistory(logs, ex.name).at(-1)
-      const fallbackReps = Number(lastKnown?.reps)
-      return {
-        name: ex.name,
-        restSeconds: ex.restSeconds ?? DEFAULT_REST_SECONDS,
-        sets: Array.from({ length: ex.sets }, () => ({
-          reps: Number.isFinite(fallbackReps) ? fallbackReps : ex.repsMin,
-          loadKg: lastKnown?.loadKg ?? null,
-          done: false,
-        })),
-      }
-    })
+  /**
+   * Progression vierge — extrait en fonction réutilisable pour servir à la
+   * fois d'état initial (première ouverture, pas de brouillon) et à
+   * "Recommencer" (retour utilisateur : "recommencer le training") plutôt
+   * que de dupliquer cette logique de préremplissage à deux endroits.
+   */
+  const buildFreshProgress = (): ExerciseProgress[] => exercises.map((ex) => {
+    const lastKnown = exerciseHistory(logs, ex.name).at(-1)
+    const fallbackReps = Number(lastKnown?.reps)
+    return {
+      name: ex.name,
+      restSeconds: ex.restSeconds ?? DEFAULT_REST_SECONDS,
+      sets: Array.from({ length: ex.sets }, () => ({
+        reps: Number.isFinite(fallbackReps) ? fallbackReps : ex.repsMin,
+        loadKg: lastKnown?.loadKg ?? null,
+        done: false,
+      })),
+    }
   })
+
+  const [progress, setProgress] = useState<ExerciseProgress[]>(() => (draft ? draft.progress : buildFreshProgress()))
 
   useEffect(() => {
     if (draft) {
@@ -166,32 +185,75 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
   // sont sautés.
   const startedAtRef = useRef(draft?.startedAt ?? Date.now())
 
+  // Pause/reprise — retour utilisateur : "mettre pause et/ou recommencer le
+  // training". isPaused est un state (le bouton Pause/Lecture doit
+  // re-render) ; pausedAtRef/totalPausedMsRef sont des refs (leur
+  // changement seul n'a pas besoin de re-render, le tick à la seconde
+  // ci-dessous s'en charge déjà pendant que le chrono tourne).
+  const [isPaused, setIsPaused] = useState(draft?.isPaused ?? false)
+  const pausedAtRef = useRef<number | null>(draft?.pausedAt ?? null)
+  const totalPausedMsRef = useRef(draft?.totalPausedMs ?? 0)
+
+  const togglePause = () => {
+    if (isPaused) {
+      if (pausedAtRef.current != null) {
+        totalPausedMsRef.current += Date.now() - pausedAtRef.current
+        pausedAtRef.current = null
+      }
+      setIsPaused(false)
+    } else {
+      pausedAtRef.current = Date.now()
+      setIsPaused(true)
+    }
+  }
+
   // Sauvegarde locale automatique — écrasée à chaque changement de
   // progression (y compris une simple modification de reps/charge avant
-  // validation d'une série). Jamais bloquant : une erreur (quota plein,
-  // localStorage indisponible en navigation privée...) est avalée
-  // silencieusement plutôt que de perturber la séance en cours.
+  // validation d'une série) ou de l'état pause/reprise. Jamais bloquant :
+  // une erreur (quota plein, localStorage indisponible en navigation
+  // privée...) est avalée silencieusement plutôt que de perturber la
+  // séance en cours.
   useEffect(() => {
     try {
-      const data: StrengthSessionDraft = { savedAt: Date.now(), startedAt: startedAtRef.current, exerciseNames, progress }
+      const data: StrengthSessionDraft = {
+        savedAt: Date.now(),
+        startedAt: startedAtRef.current,
+        isPaused,
+        pausedAt: pausedAtRef.current,
+        totalPausedMs: totalPausedMsRef.current,
+        exerciseNames,
+        progress,
+      }
       localStorage.setItem(draftStorageKey(sessionKey), JSON.stringify(data))
     } catch {
       // localStorage indisponible/plein — pas bloquant pour la séance.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress, sessionKey])
+  }, [progress, isPaused, sessionKey])
 
   const [, forceTick] = useState(0)
   useEffect(() => {
     const interval = setInterval(() => forceTick((t) => t + 1), 1000)
     return () => clearInterval(interval)
   }, [])
-  const elapsedSeconds = Math.floor((Date.now() - startedAtRef.current) / 1000)
+  // En pause, le chrono reste figé à l'instant où la pause a commencé
+  // plutôt que de continuer à avancer — sinon "Terminer la séance" enverrait
+  // un moving_time qui compte le temps de pause comme actif (voir
+  // durationSeconds à l'export Intervals.icu).
+  const elapsedSeconds = isPaused && pausedAtRef.current != null
+    ? Math.floor((pausedAtRef.current - startedAtRef.current - totalPausedMsRef.current) / 1000)
+    : Math.floor((Date.now() - startedAtRef.current - totalPausedMsRef.current) / 1000)
 
   // Minuteur de repos — démarre quand une série est marquée faite. Même
   // principe d'horodatage absolu que le chrono ci-dessus (un setInterval
   // seul dérive si l'onglet passe en arrière-plan).
   const [restEndAt, setRestEndAt] = useState<number | null>(null)
+  // Quelle série a déclenché le décompte de repos actuel ("exIndex-setIndex")
+  // — retour utilisateur : "modifier lorsqu'un exercice a été validé".
+  // Dé-valider CETTE série précise annule son décompte ; dé-valider une
+  // AUTRE série (plus ancienne, pendant qu'un repos plus récent tourne)
+  // laisse le décompte en cours tranquille.
+  const restKeyRef = useRef<string | null>(null)
   useEffect(() => {
     if (restEndAt == null) return
     const interval = setInterval(() => forceTick((t) => t + 1), 250)
@@ -226,7 +288,55 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
   const markSetDone = (exIndex: number, setIndex: number) => {
     updateSet(exIndex, setIndex, { done: true })
     const isVeryLastSet = exIndex === progress.length - 1 && setIndex === progress[exIndex].sets.length - 1
-    if (!isVeryLastSet) setRestEndAt(Date.now() + progress[exIndex].restSeconds * 1000)
+    if (!isVeryLastSet) {
+      restKeyRef.current = `${exIndex}-${setIndex}`
+      setRestEndAt(Date.now() + progress[exIndex].restSeconds * 1000)
+    }
+  }
+
+  /**
+   * Bascule l'état "faite" d'une série — retour utilisateur : "pouvoir
+   * modifier lorsqu'un exercice a été validé". Les champs reps/charge
+   * restent de toute façon éditables même une fois "faite" (voir le JSX
+   * ci-dessous, plus de `disabled={set.done}`) ; ce bouton sert surtout à
+   * annuler une validation faite par erreur (mauvais exercice, mauvaise
+   * série) plutôt qu'à corriger un chiffre.
+   */
+  const toggleSetDone = (exIndex: number, setIndex: number) => {
+    const set = progress[exIndex]?.sets[setIndex]
+    if (!set) return
+    if (set.done) {
+      updateSet(exIndex, setIndex, { done: false })
+      const key = `${exIndex}-${setIndex}`
+      if (restKeyRef.current === key) {
+        restKeyRef.current = null
+        setRestEndAt(null)
+      }
+    } else {
+      markSetDone(exIndex, setIndex)
+    }
+  }
+
+  const [restartConfirmOpen, setRestartConfirmOpen] = useState(false)
+
+  /**
+   * "Recommencer" — retour utilisateur : "recommencer le training". Remet
+   * TOUT à zéro (progression, chrono, pause, repos, RPE) comme une nouvelle
+   * ouverture de la même séance ; confirmé via AlertDialog car destructif
+   * (la progression en cours est perdue, contrairement à un simple
+   * dé-cochage de série).
+   */
+  const handleRestart = () => {
+    setProgress(buildFreshProgress())
+    startedAtRef.current = Date.now()
+    totalPausedMsRef.current = 0
+    pausedAtRef.current = null
+    setIsPaused(false)
+    restKeyRef.current = null
+    setRestEndAt(null)
+    setRpe(null)
+    setRestartConfirmOpen(false)
+    toast({ title: 'Séance réinitialisée', description: 'La progression et le chrono sont repartis de zéro.' })
   }
 
   const handleFinish = async () => {
@@ -288,16 +398,37 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
           <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Séance en cours</p>
           <p className="font-medium truncate">{session.title}</p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
-          <div className="text-right">
-            <p className="lc-data text-lg font-bold tabular-nums">{formatTimer(elapsedSeconds)}</p>
-            <p className="text-[10px] text-muted-foreground">{doneSets}/{totalSets} séries</p>
+        <div className="flex items-center gap-1 shrink-0">
+          <Button variant="ghost" size="icon" onClick={togglePause} aria-label={isPaused ? 'Reprendre le chrono' : 'Mettre en pause'} title={isPaused ? 'Reprendre' : 'Pause'}>
+            {isPaused ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+          </Button>
+          <div className="text-right px-1">
+            <p className={cn('lc-data text-lg font-bold tabular-nums', isPaused && 'text-muted-foreground')}>{formatTimer(elapsedSeconds)}</p>
+            <p className="text-[10px] text-muted-foreground">{isPaused ? 'En pause' : `${doneSets}/${totalSets} séries`}</p>
           </div>
+          <Button variant="ghost" size="icon" onClick={() => setRestartConfirmOpen(true)} aria-label="Recommencer la séance" title="Recommencer">
+            <RotateCcw className="w-4 h-4" />
+          </Button>
           <Button variant="ghost" size="icon" onClick={onClose} aria-label="Fermer sans terminer">
             <X className="w-5 h-5" />
           </Button>
         </div>
       </div>
+
+      <AlertDialog open={restartConfirmOpen} onOpenChange={setRestartConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Recommencer la séance ?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Toutes les séries déjà validées et le chrono actuel ({formatTimer(elapsedSeconds)}) seront remis à zéro. Cette action est irréversible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annuler</AlertDialogCancel>
+            <AlertDialogAction onClick={handleRestart}>Recommencer</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Progress value={totalSets > 0 ? (doneSets / totalSets) * 100 : 0} className="rounded-none h-1" />
 
@@ -340,7 +471,6 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
                       value={formatTimer(set.reps)}
                       onChange={(e) => updateSet(exIndex, setIndex, { reps: parseDurationInput(e.target.value) })}
                       className="h-9 w-20 text-center"
-                      disabled={set.done}
                       aria-label={`Temps tenu, série ${setIndex + 1}`}
                     />
                   ) : (
@@ -349,7 +479,6 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
                       value={set.reps}
                       onChange={(e) => updateSet(exIndex, setIndex, { reps: Number(e.target.value) })}
                       className="h-9 w-16 text-center"
-                      disabled={set.done}
                       aria-label={`Répétitions, série ${setIndex + 1}`}
                     />
                   )}
@@ -361,17 +490,17 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
                     onChange={(e) => updateSet(exIndex, setIndex, { loadKg: e.target.value === '' ? null : Number(e.target.value) })}
                     placeholder="kg"
                     className="h-9 w-20 text-center"
-                    disabled={set.done}
                     aria-label={`Charge, série ${setIndex + 1}`}
                   />
                   <Button
                     size="sm"
                     variant={set.done ? 'secondary' : 'default'}
-                    onClick={() => markSetDone(exIndex, setIndex)}
-                    disabled={set.done}
+                    onClick={() => toggleSetDone(exIndex, setIndex)}
                     className="ml-auto gap-1.5 h-9 shrink-0"
+                    aria-label={set.done ? `Annuler la validation, série ${setIndex + 1}` : `Valider la série ${setIndex + 1}`}
+                    title={set.done ? 'Modifier — retire la validation' : 'Valider'}
                   >
-                    <Check className="w-3.5 h-3.5" /> {set.done ? 'Fait' : 'Valider'}
+                    {set.done ? <Undo2 className="w-3.5 h-3.5" /> : <Check className="w-3.5 h-3.5" />} {set.done ? 'Fait' : 'Valider'}
                   </Button>
                 </div>
               ))}
