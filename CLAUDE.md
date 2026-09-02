@@ -633,6 +633,62 @@ Tailwind ajoutées (ring de focus, badge ambre PR, opacité de l'exercice sauté
 conventions déjà en place ailleurs dans l'app (voir Design System plus haut) mais n'ont pas été
 vérifiées à l'écran — à confirmer par l'utilisateur au premier usage réel.
 
+## Suivi en direct v3 — corrections après premier vrai usage (captures d'écran)
+
+Retour utilisateur, deux captures d'écran d'un vrai téléphone à l'appui (la vérification visuelle
+manquante ci-dessus, faite cette fois par l'utilisateur plutôt que par Playwright) : "ça me plaît,
+il faut juste fixer les boutons Fait et Valider... la planche latérale affiche 25 reps au lieu de 25
+secondes... je ne sais pas pourquoi tu rajoutes le poids pour ce type d'exercice... un timer plus
+grand écran pour les exercices tenus."
+
+**Débordement des boutons "Fait"/"Valider" hors du cadre de la carte** — chaque ligne de série
+(numéro + input reps/temps + libellé unité + input charge + bouton) dépassait la largeur utile d'un
+écran de téléphone (~340px), le bouton étant poussé hors du cadre visible plutôt que de passer à la
+ligne. Corrigé par plusieurs réductions cumulées plutôt qu'un seul gros changement : bouton
+Valider/Fait devenu icône seule (`size="icon"`, `Check`/`Undo2`, texte "Valider"/"Fait" retiré —
+retour utilisateur : "peut-être juste le logo" — le libellé survit en `aria-label`/`title` pour
+l'accessibilité) ; numéro de série réduit à un simple chiffre (`#`, largeur `w-5`) plutôt que "Série
+N" répété sur chaque ligne ; le libellé d'unité "reps ×"/"tenu ×" répété par ligne est retiré au
+profit d'une seule ligne d'en-tête de colonnes au-dessus de la liste (`#` / `Reps` ou `Temps` /
+`Charge`), alignée sur les mêmes largeurs `w-5`/`w-16`/`w-9` que les lignes — plus proche du tableau
+compact de Hevy que d'un libellé répété. Marge confortable désormais même sur un iPhone SE.
+
+**⚠️ `isHoldReps()` seule ne suffisait pas** — capture d'écran à l'appui : "Planche latérale"
+affichée en reps (25) plutôt qu'en temps tenu, alors que "Planche" juste au-dessus s'affichait
+correctement. Cause : `isHoldReps()` ne lit QUE la chaîne `reps` texte-libre générée par l'IA (le
+suffixe "s" de "30-45s") — un signal fragile qui peut manquer selon la génération, comme ici. Corrigé
+en ajoutant un second signal, structuré et fiable celui-là : les patterns `anti-extension`/
+`anti-rotation-lateral` (gainage) sont TOUJOURS tenus dans cette app par construction (voir S05/
+`CORE_PATTERNS`, `strengthSessionValidator.ts` — jamais comptés en répétitions). `isHold` devient
+`isHoldReps(reps) || pattern === 'anti-extension' || pattern === 'anti-rotation-lateral'` — le
+pattern sert de garde-fou structuré même quand le texte libre de l'IA omet la convention "s".
+
+**Charge (kg) masquée pour le gainage** — retour utilisateur : "je ne sais pas pourquoi tu rajoutes
+le poids... je ne sais pas si c'est nécessaire pour ce type d'exercice". Le champ Charge n'a
+jamais de sens réel pour `anti-extension`/`anti-rotation-lateral` dans cette app : la génération IA
+documente déjà ces patterns comme `loadGuidance: "Poids du corps"` (voir S05,
+`plan-week-sessions-output.test.ts`) — masquer le champ plutôt que de le laisser vide-mais-visible
+aligne l'UI sur ce que l'IA produit déjà réellement, sans qu'il s'agisse d'une règle inventée pour
+l'occasion. `isCorePattern` (même détection que `isHold` ci-dessus, sans le repli textuel) gate le
+rendu de l'input.
+
+**Chrono grand écran pour un exercice tenu** (`holdTimer`, overlay `fixed inset-0 z-[60]`) — retour
+utilisateur : "quand on est en position planche, ce qu'on veut c'est pouvoir regarder le temps
+facilement... dès qu'on a fini on appuie sur le chronomètre, ça arrête le temps de l'exercice, ça le
+met dans l'application et ça lance le temps de pause". Un bouton ▶ à côté du champ temps (visible
+tant que la série n'est pas faite) ouvre un plein écran — nom de l'exercice + chrono géant (`text-8xl`)
+qui compte depuis l'instant du tap — dont TOUTE la surface est une zone de tap pour arrêter (pas
+besoin de viser un petit bouton en position planche). `stopHoldTimer()`/`finishHoldSet()` posent le
+temps écoulé dans `reps` ET marquent la série faite EN UN SEUL `updateSet` (plutôt que deux appels
+séparés dont l'ordre serait fragile), ce qui déclenche directement le décompte de repos derrière —
+exactement l'enchaînement demandé. Complète la saisie manuelle du champ (toujours possible, pour le
+cas où le téléphone n'est pas dans une position lisible pendant l'exercice), ne la remplace pas.
+
+**`ex.reps` d'un exercice tenu affiché en "dernière fois"** — corrigé au passage pour rester cohérent
+avec le fix ci-dessus : `lastKnown.reps` (une chaîne "30", venant de `ExerciseHistoryPoint`) passe
+maintenant par `formatTimer(Number(...))` quand `isHold`, pour afficher "0:30" plutôt que l'entier nu
+"30" qui laissait croire à des répétitions.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
