@@ -24,7 +24,7 @@
  *
  * Deliberately still advisory-only for anything precision-formatted:
  * generating a structured workout or a periodized plan and pushing it to
- * Intervals.icu stays the job of the dedicated "Proposition du jour" / "Plan"
+ * Intervals.icu stays the job of the dedicated "Aujourd'hui" / "Plan"
  * tabs — see the system prompt below. Only the small, low-risk Coach Memory
  * writes below get tools; deleting a goal/injury is deliberately NOT exposed
  * here (a stray chat message shouldn't be able to silently delete data) —
@@ -245,7 +245,7 @@ Actions que tu peux réellement effectuer (via les outils fournis) :
 Limites importantes :
 - Tu peux discuter d'une séance, donner un avis, expliquer un choix — mais tu ne génères PAS toi-même de
   séance structurée à envoyer sur Intervals.icu ni de plan d'entraînement complet : ce sont les onglets
-  dédiés "Proposition du jour" et "Plan" qui font ça, avec un format précis. Si on te demande une séance du
+  dédiés "Aujourd'hui" et "Plan" qui font ça, avec un format précis. Si on te demande une séance du
   jour ou un plan complet, réponds normalement sur le fond (ex: donne une idée générale) mais renvoie vers
   ces onglets pour la version structurée envoyable.
 - Tu n'as pas accès à des informations médicales au-delà de ce que l'utilisateur a lui-même renseigné dans
