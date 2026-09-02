@@ -117,6 +117,42 @@ export function zoneForPct(pct: number): ZoneInfo {
   return { zone: z.zone, label: z.label, color: ZONE_COLORS[z.zone] ?? ZONE_COLORS[1] }
 }
 
+export interface WorkoutProfileBar {
+  /** Part de la durée totale de la séance (0-100). */
+  widthPct: number
+  /** %FTP de l'étape relatif au PIC de la séance (0-100, jamais un %FTP absolu — voir commentaire de workoutProfileBars). */
+  heightPct: number
+  color: string
+}
+
+/**
+ * Convertit un profil de séance (parseStructuredWorkoutProfile) en barres
+ * pour un mini graphique façon "workout builder" Intervals.icu — retour
+ * utilisateur, sur la bande de jours du calendrier : "pourquoi là, on
+ * n'utilise pas à la façon intervalles la vue avec les zones cible, le
+ * temps... un peu comme un graphique... ça serait sûrement un petit peu
+ * plus visuel" (que la simple pastille de couleur unique utilisée jusqu'ici).
+ * `heightPct` est relatif au PIC de la séance (jamais une échelle %FTP
+ * absolue) — sinon une sortie d'endurance (30-60%) et une séance VO2max
+ * (110-120%) rendraient toutes les deux des barres "hautes" ou "basses" sans
+ * repère commun ; relatif au pic, chaque séance reste lisible sur son propre
+ * profil. Plancher à 4% pour qu'une étape de récupération à faible %FTP
+ * reste visible plutôt que de s'aplatir à ~0px. [] pour une séance vide ou
+ * dont le script n'a pas pu être parsé (jamais NaN) — l'appelant retombe
+ * alors sur l'ancien traitement pastille de couleur unique.
+ */
+export function workoutProfileBars(steps: WorkoutProfileStep[]): WorkoutProfileBar[] {
+  if (steps.length === 0) return []
+  const totalDuration = steps.reduce((sum, s) => sum + s.durationSeconds, 0)
+  if (totalDuration === 0) return []
+  const peakPct = Math.max(...steps.map((s) => s.pctFtp), 1)
+  return steps.map((s) => ({
+    widthPct: (s.durationSeconds / totalDuration) * 100,
+    heightPct: Math.max(4, Math.min(100, (s.pctFtp / peakPct) * 100)),
+    color: zoneForPct(s.pctFtp).color,
+  }))
+}
+
 export interface CompletedRideIntensityInput extends PowerFieldsLike {
   icu_intensity?: number | null
 }

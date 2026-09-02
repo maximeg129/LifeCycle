@@ -15,6 +15,7 @@ import {
   distributeWeekdayOffsets,
   assignSessionDates,
   clampDateToWeek,
+  nextAvailableWeekDate,
   matchSessionCompletion,
   type PlanWeekContent,
   type PlanWeek,
@@ -418,6 +419,49 @@ describe('clampDateToWeek', () => {
   it('accepts the exact boundary dates unchanged', () => {
     expect(clampDateToWeek(week.startDate, week)).toBe(week.startDate)
     expect(clampDateToWeek(week.endDate, week)).toBe(week.endDate)
+  })
+})
+
+describe('nextAvailableWeekDate', () => {
+  const week: PlanWeekSkeleton = { weekNumber: 2, startDate: '2026-09-14', endDate: '2026-09-20' }
+  const sessions = [
+    { sessionKind: 'cycling', date: '2026-09-14' },
+    { sessionKind: 'cycling', date: '2026-09-16' },
+    { sessionKind: 'strength', date: '2026-09-17' },
+  ] as unknown as PlanWeekSessionWithValidation[]
+
+  it('returns the from-date itself when it is free', () => {
+    expect(nextAvailableWeekDate(week, sessions, 1, '2026-09-15')).toBe('2026-09-15')
+  })
+
+  it('skips days already taken by another session', () => {
+    // 09-16 (this session, excluded) is free from itself; but starting from
+    // 09-14 (taken), the next free day is 09-15
+    expect(nextAvailableWeekDate(week, sessions, 1, '2026-09-14')).toBe('2026-09-15')
+  })
+
+  it('excludes the session being moved from the "taken" set', () => {
+    // session index 1 owns 09-16 — searching from there should return 09-16 itself, not skip past it
+    expect(nextAvailableWeekDate(week, sessions, 1, '2026-09-16')).toBe('2026-09-16')
+  })
+
+  it('clamps a from-date before the week to the week start', () => {
+    expect(nextAvailableWeekDate(week, sessions, 1, '2026-09-01')).toBe('2026-09-15')
+  })
+
+  it('returns null when the from-date is already past the week end', () => {
+    expect(nextAvailableWeekDate(week, sessions, 1, '2026-09-21')).toBeNull()
+  })
+
+  it('returns null when every remaining day in the week is already taken', () => {
+    const fullWeek = ['2026-09-14', '2026-09-15', '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20']
+      .map((date) => ({ sessionKind: 'cycling', date }) as unknown as PlanWeekSessionWithValidation)
+    expect(nextAvailableWeekDate(week, fullWeek, -1, '2026-09-14')).toBeNull()
+  })
+
+  it('ignores sessions with no assigned date', () => {
+    const withUndated = [...sessions, { sessionKind: 'cycling' } as unknown as PlanWeekSessionWithValidation]
+    expect(nextAvailableWeekDate(week, withUndated, 1, '2026-09-14')).toBe('2026-09-15')
   })
 })
 

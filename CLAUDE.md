@@ -892,6 +892,51 @@ Textes de Stella (`coach-chat-flow.ts`, system prompt) mis à jour en cohérence
 corrigés au moment de celle-ci) plutôt que "Aujourd'hui" et "Plan", les vrais libellés actuels vers
 lesquels Stella renvoie l'athlète quand on lui demande une séance/un plan structuré.
 
+## Plan calendrier v3 : statut visible, reprogrammer une séance manquée, mini-graphique de séance
+
+Retour utilisateur, capture d'écran de la semaine dépliée à l'appui : "on ne retourne pas les séances
+qui ont effectivement été effectuées... on ne sait pas si la séance est effectuée ou pas effectuée ou
+si elle a été loupée. Il faudrait sûrement pouvoir donner la possibilité de, si une séance est
+loupée [...] remettre quelque part dans la semaine... pourquoi là on n'utilise pas à la façon
+intervalles la vue avec les zones cible, le temps... un peu comme un graphique, comme c'est sur
+intervalles, ça serait sûrement un petit peu plus visuel." Trois demandes distinctes, sur la bande de
+jours compacte de `PlanWeekCalendar` (la vue "preview" visible directement sous la semaine dépliée) :
+
+**1. Statut réalisée/manquée invisible à ce niveau compact** — la feuille de détail
+(`PlanSessionDetail`, ouverte au tap d'un jour) affichait déjà des badges "Réalisée"/"Manquée" clairs,
+mais la bande de jours elle-même ne portait qu'un traitement discret (opacité + barré pour une séance
+manquée, rien pour une séance réalisée) — insuffisant pour juger d'un coup d'œil sans ouvrir chaque
+jour. Chaque tuile de séance dans la bande affiche désormais une icône explicite
+(`CheckCircle2`/`XCircle`, même vocabulaire que `PlanSessionDetail`) en plus du traitement existant.
+
+**2. Reprogrammer une séance manquée** — le déplacement d'une séance existait déjà (sélecteur de date
+dans `PlanSessionDetail`, borné à la semaine) mais restait un geste générique, pas une action pensée
+pour ce cas précis. `nextAvailableWeekDate()` (`training-plan-types.ts`, pur/testé) trouve le premier
+jour de la semaine — à partir de DEMAIN, jamais un jour déjà passé — qui n'est pas déjà pris par une
+autre séance de la semaine ; un nouveau bouton "Reprogrammer" apparaît à côté du badge "Manquée" dans
+`PlanSessionDetail` et y déplace directement la séance en un tap (`onMoveDate` réutilisé tel quel).
+Désactivé (jamais un repli inventé) si la semaine est déjà pleine à partir de demain — l'athlète
+retombe alors sur le sélecteur de date manuel juste en dessous. **"Régénérer le plan pour la fin de
+la semaine"** (l'autre volet de cette demande) n'a pas nécessité de nouveau mécanisme : le bouton
+"Régénérer" de `PlanWeekCalendar` (déjà en place, régénère l'intégralité des séances type de la
+semaine via l'IA) couvre déjà ce besoin — pas dupliqué.
+
+**3. Mini-graphique de profil de séance, façon "workout builder" Intervals.icu** — remplace la simple
+pastille de couleur unique (une couleur pour toute la séance) par un profil par étape. `WorkoutProfileBar`/
+`workoutProfileBars()` (`plan-calendar-types.ts`, pur/testé) convertissent le profil déjà parsé
+(`parseStructuredWorkoutProfile`, voir "vue calendrier" plus haut) en barres : largeur = part de la
+durée totale, hauteur = **%FTP relatif au PIC de la séance** (jamais une échelle %FTP absolue — sinon
+une sortie d'endurance à 30-60% et une séance VO2max à 110-120% rendraient toutes les deux des barres
+"hautes" ou "basses" sans repère commun ; relatif au pic, chaque séance reste lisible sur son propre
+profil), couleur = zone Coggan (`zoneForPct`, même échelle que `sessionZone` — pas une deuxième
+palette). Plancher à 4% de hauteur pour qu'une étape de récupération à faible %FTP reste visible
+plutôt que de s'aplatir à ~0px. Nouveau composant `WorkoutProfileChart` (`workout-profile-chart.tsx`,
+rendu pur — la logique de calcul vit dans `workoutProfileBars`, testée séparément), utilisé à deux
+tailles : compact (12px de haut) dans chaque tuile de la bande de jours, détaillé (48px) en tête de
+`PlanSessionDetail`. Cycling uniquement (`session.sessionKind !== 'strength'`) — la musculation n'a
+pas de %FTP, garde son traitement icône haltère existant ; `[]` (composant qui ne rend rien) pour une
+séance sans script structuré exploitable, jamais un graphique vide ou inventé.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
