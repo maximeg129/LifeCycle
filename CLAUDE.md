@@ -31,7 +31,7 @@ src/
 │   ├── cycling/metric/[id]/page.tsx  # Page détail d'une tuile Vue d'ensemble : courbe ~180j + explication (metric-info.ts) — une seule route dynamique pour les 8 métriques ; pour `riegel`, affiche `PowerCurveCard` (saisie des records + calculateur TTE) à la place du graphique, qui n'existe pas pour cette métrique
 │   ├── cycling/budget/page.tsx   # Page détail du widget "Budget de la semaine" : `KJBudgetWidget` + méthode de calcul (load-types.ts)
 │   ├── cycling/governor/page.tsx # Page détail du "Gouverneur de charge interne" : `GovernorWidget` + méthode de calcul des 6 signaux (governor-types.ts/use-governor.ts)
-│   ├── coach/page.tsx            # Hub coaching IA — 6 sous-onglets, dont 4 visibles dans la TabsList (Plan [défaut, fusionne Aujourd'hui + plan périodisé], Journal, Météo & Tenue, Stella) + 2 démotés dans un menu "Plus" (Mémoire coach, Bibliothèque — voir COACH_UX_AUDIT.md)
+│   ├── coach/page.tsx            # Hub coaching IA — 7 sous-onglets, dont 5 visibles dans la TabsList (Aujourd'hui [défaut, séance du jour], Plan [plan périodisé complet — onglet séparé, pas fusionné avec Aujourd'hui, voir "vue calendrier v2"], Journal, Météo & Tenue, Stella) + 2 démotés dans un menu "Plus" (Mémoire coach, Bibliothèque — voir COACH_UX_AUDIT.md)
 │   ├── garage/page.tsx           # Matériel + Chaînes + Garde-robe (Firestore) — sorti de Cyclisme, sa propre destination de nav
 │   ├── nutrition/page.tsx        # Plan nutrition + livre de recettes (Firestore)
 │   ├── nutrition/fueling/page.tsx # Page détail du widget "Fueling vs Workload" : brûlé/mangé/écart + méthode de calcul (fueling-types.ts)
@@ -227,9 +227,12 @@ que dans Garage (à côté du reste du matériel) ; les données (`cyclingClothi
 l'UI a changé de page.
 
 **Coach** (`src/app/coach/page.tsx`) regroupe tout ce qui concerne planifier/faire/relire une
-sortie et la relation coach : **Plan** (onglet par défaut — voir "Plan figé par jour" ci-dessous,
-Proposition du jour y a fusionné), Journal (ex-"Sorties", le journal d'activités, déplacé depuis
-Cyclisme > Vue d'ensemble), Météo & Tenue (l'ex-page `/weather`, qui redirige maintenant ici —
+sortie et la relation coach : **Aujourd'hui** (onglet par défaut — la séance du jour, voir "Plan
+figé par jour" ci-dessous ; Proposition du jour y a fusionné), **Plan** (le plan périodisé complet —
+onglet séparé, pas fusionné avec Aujourd'hui malgré un temps où ça a été le cas, voir "Plan
+d'entraînement — vue calendrier v2" plus bas pour le pourquoi du retour en arrière), Journal
+(ex-"Sorties", le journal d'activités, déplacé depuis Cyclisme > Vue d'ensemble), Météo & Tenue
+(l'ex-page `/weather`, qui redirige maintenant ici —
 `next.config.ts` — et qui renvoie vers Garage > Garde-robe plutôt que d'embarquer son propre CRUD
 vêtements), Stella, Mémoire coach — remplace l'ancien onglet "Coaching" de Cyclisme. Planifier une
 sortie avec la bonne intensité et planifier une sortie avec la bonne tenue sont le même geste ; les
@@ -326,7 +329,9 @@ onglets séparés pour la même notion de "mon plan" n'avait plus de sens. Fusio
 `TabsContent` distincts. Vérification hors ligne de ce chantier (pas de ANTHROPIC_API_KEY dans ce
 sandbox, voir plus bas la technique de vérification via fixtures) :
 `daily-workout-recommendation-output.test.ts` (même patron `satisfies`-le-vrai-schéma que
-`plan-week-sessions-output.test.ts`).
+`plan-week-sessions-output.test.ts`). ⚠️ Défusionnés par la suite, une fois `TrainingPlanTab` devenu
+un vrai écran de gestion — voir "Aujourd'hui et Plan redéfusionnés" plus bas, après la section
+"vue calendrier v2".
 
 **Audit UX Coach vs concurrents (Join/Frive/TrainerRoad) → bandeau "à traiter" + démotion 6→4
 onglets** — retour utilisateur : "je suis toujours pas convaincue de la présentation et de
@@ -844,6 +849,49 @@ Note : `checkLoadProgressionWithoutDeload` (planValidator.ts) ne produit en prat
 `'block'` aujourd'hui (seulement `'insufficient_data'|'warn'|'ok'`) — `buildPlanAttentionItems` gère
 ce cas par cohérence de type, sans dépendre de cette garantie fragile.
 
+## Coach — Aujourd'hui et Plan redéfusionnés
+
+Retour utilisateur, après usage réel de la fusion documentée dans "Page Coach restructurée : 7 → 6
+sous-onglets" (plus haut) : "je reste vraiment pas sûre d'avoir le côté plan et séances du jour sur
+le même onglet... est-ce que tu peux faire une analyse critique et voir ce qui serait le plus
+acceptable pour l'athlète ?"
+
+**Diagnostic** — au moment de la fusion, "Aujourd'hui" (`DailyWorkoutTab`) et "Plan"
+(`TrainingPlanTab`) étaient tous les deux légers : la fusion avait du sens, planifier une séance et
+consulter son plan étaient le même geste mental. Depuis, `TrainingPlanTab` a grossi de façon
+organique (le chantier "vue calendrier" : grille du plan entier, semaine dépliée inline, badge de
+vigilance, journal des recalibrations — voir les deux sections "vue calendrier" ci-dessus) — il est
+devenu un vrai écran de *gestion*, consulté par intermittence, pas un compagnon léger du geste
+quotidien. Un séparateur visuel ("Plan complet") avait déjà été ajouté une fois pour rendre le long
+scroll résultant plus lisible — un pansement sur le symptôme, pas la cause.
+
+**Relu contre `COACH_UX_AUDIT.md` §2-3** (recherche Join/Frive/TrainerRoad déjà faite pour l'audit
+précédent) : le motif commun des 3 concurrents n'est pas "plan vs séance du jour" sur un même écran
+ou pas — Join fusionne bien readiness + séance du jour + *aperçu* de la semaine sur un seul écran,
+mais c'est un résumé compact, pas un calendrier de 12 semaines éditable avec journal d'historique.
+TrainerRoad sépare explicitement : son écran "Career" (glance quotidien : prochaine séance +
+progression) est une destination, son "Calendar" (parcourir/éditer le plan) en est une autre. Le vrai
+distinguo est **coup d'œil quotidien vs écran de gestion occasionnel** — pas la présence ou non d'un
+plan à l'écran.
+
+**Décision, tranchée par l'utilisateur après une analyse à deux options** (`AskUserQuestion` :
+séparer en deux onglets vs garder fusionné avec le plan replié par défaut) : **séparer à nouveau**.
+`coach/page.tsx` : `VALID_TABS` passe de 6 à 7 entrées (`'today'` ajouté, `'plan'` inchangé) ;
+`TabsList` affiche désormais 5 déclencheurs (Aujourd'hui, Plan, Journal, Météo & Tenue, Stella) au
+lieu de 4 — le menu "Plus" (Mémoire coach/Bibliothèque) reste inchangé à 2. "Aujourd'hui"
+(`PendingFeedbackBanner` + `DailyWorkoutTab`) redevient l'onglet par défaut et son propre
+`TabsContent` ; "Plan" (`TrainingPlanTab` seul, plus de séparateur "Plan complet" — devenu inutile,
+les deux sont maintenant deux écrans distincts) redevient sa propre destination. Bénéfice secondaire
+non cherché : `TrainingPlanTab` (code-splitté via `next/dynamic`) ne charge plus au premier rendu de
+la page — avant, il partageait le même `TabsContent` qu'Aujourd'hui donc chargeait dès l'ouverture,
+"à la demande" en théorie seulement ; maintenant qu'il a son propre onglet, le lazy-loading devient
+réel.
+
+Textes de Stella (`coach-chat-flow.ts`, system prompt) mis à jour en cohérence — référençaient encore
+"Proposition du jour" et "Plan" (les noms d'onglets d'avant la fusion documentée plus haut, jamais
+corrigés au moment de celle-ci) plutôt que "Aujourd'hui" et "Plan", les vrais libellés actuels vers
+lesquels Stella renvoie l'athlète quand on lui demande une séance/un plan structuré.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
@@ -1218,8 +1266,9 @@ inventés) et choisir la tenue.
   indoor). `weatherAlert` s'affiche dans un bandeau distinct (couleur destructive) des warnings jaunes
   génériques, pour rester visible comme le changement structurel qu'il est plutôt qu'un simple point
   d'attention.
-- Usage : `src/components/cycling/daily-workout-tab.tsx` (haut du sous-onglet "Plan" de Coach — onglet par
-  défaut ; Proposition du jour y a fusionné, voir "Page Coach restructurée" plus haut)
+- Usage : `src/components/cycling/daily-workout-tab.tsx` (sous-onglet "Aujourd'hui" de Coach — onglet
+  par défaut ; Proposition du jour y a fusionné, voir "Page Coach restructurée" et "Aujourd'hui et
+  Plan redéfusionnés" plus haut)
 - Réutilise `buildCoachContext` (blessures/objectifs/style de vie/faits retenus/gouverneur/budget kJ) comme
   `recoveryInsight`, plus le CTL/ATL/TSB courant et les séances des 7 derniers jours (`summarizeRecentSessions`
   dans `daily-workout-types.ts`). L'utilisateur peut éditer le titre/durée/script avant envoi. Poussée sur le
