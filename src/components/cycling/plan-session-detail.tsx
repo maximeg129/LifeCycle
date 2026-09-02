@@ -15,26 +15,29 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Loader2, Send, Apple, Dumbbell, PlayCircle, CheckCircle2, XCircle, ShieldAlert } from 'lucide-react'
-import { format } from 'date-fns'
+import { Loader2, Send, Apple, Dumbbell, PlayCircle, CheckCircle2, XCircle, ShieldAlert, CalendarClock } from 'lucide-react'
+import { addDays, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { LogStrengthSessionDialog } from './log-strength-session-dialog'
 import { LiveStrengthSessionView } from './live-strength-session-view'
-import type { PlanWeek, PlanWeekSessionWithValidation, SessionCompletion } from './training-plan-types'
+import { WorkoutProfileChart } from './workout-profile-chart'
+import { nextAvailableWeekDate, type PlanWeek, type PlanWeekSessionWithValidation, type SessionCompletion } from './training-plan-types'
 
 interface Props {
   session: PlanWeekSessionWithValidation
   index: number
   week: PlanWeek
   completion: SessionCompletion
+  /** yyyy-MM-dd — pour proposer un jour de report qui ne soit jamais dans le passé (voir "Reprogrammer" ci-dessous). */
+  today: string
   isSending: boolean
   canSendToIntervals: boolean
   onSend: (session: PlanWeekSessionWithValidation, index: number, dateId: string) => void
   onMoveDate: (index: number, newDate: string) => void
 }
 
-export function PlanSessionDetail({ session, index, week, completion, isSending, canSendToIntervals, onSend, onMoveDate }: Props) {
+export function PlanSessionDetail({ session, index, week, completion, today, isSending, canSendToIntervals, onSend, onMoveDate }: Props) {
   // Retour utilisateur : "un système de suivi de la seance a la salle, avec
   // chronometre, temps de repos" — vue plein écran gardée en state local
   // plutôt qu'un Dialog. Local à CETTE carte (pas au niveau semaine comme
@@ -42,6 +45,19 @@ export function PlanSessionDetail({ session, index, week, completion, isSending,
   // visible à la fois (la feuille de détail du jour tapé), donc plus besoin
   // de partager cet état entre plusieurs cartes d'une même liste.
   const [liveOpen, setLiveOpen] = useState(false)
+
+  // Retour utilisateur : "il faudrait sûrement pouvoir donner la
+  // possibilité de, si une séance est loupée, [la] remettre quelque part
+  // dans la semaine" — premier jour disponible à partir de DEMAIN (jamais
+  // un jour déjà passé), qui n'est pas déjà pris par une autre séance de
+  // cette semaine. Null si la semaine est déjà pleine à partir de demain —
+  // le bouton se désactive plutôt que de proposer un repli inventé.
+  const rescheduleDate = nextAvailableWeekDate(
+    week,
+    week.sampleSessions ?? [],
+    index,
+    format(addDays(new Date(`${today}T00:00:00`), 1), 'yyyy-MM-dd')
+  )
 
   return (
     <div className="rounded-xl border border-border bg-card/60 p-3 space-y-2">
@@ -60,9 +76,21 @@ export function PlanSessionDetail({ session, index, week, completion, isSending,
               </Badge>
             )}
             {completion.status === 'missed' && (
-              <Badge variant="outline" className="text-[10px] gap-1 border-destructive/40 text-destructive bg-destructive/5">
-                <XCircle className="w-3 h-3" /> Manquée
-              </Badge>
+              <>
+                <Badge variant="outline" className="text-[10px] gap-1 border-destructive/40 text-destructive bg-destructive/5">
+                  <XCircle className="w-3 h-3" /> Manquée
+                </Badge>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => rescheduleDate && onMoveDate(index, rescheduleDate)}
+                  disabled={!rescheduleDate}
+                  className="h-6 px-2 text-[10px] gap-1"
+                  title={rescheduleDate ? `Déplacer au ${format(new Date(`${rescheduleDate}T00:00:00`), 'EEEE d MMM', { locale: fr })}` : 'Aucun jour libre restant cette semaine — choisissez une date ci-dessous'}
+                >
+                  <CalendarClock className="w-3 h-3" /> Reprogrammer
+                </Button>
+              </>
             )}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">{session.rationale}</p>
@@ -72,6 +100,9 @@ export function PlanSessionDetail({ session, index, week, completion, isSending,
           <span className="text-xs text-muted-foreground whitespace-nowrap">{session.durationMinutes} min</span>
         </div>
       </div>
+      {(!session.sessionKind || session.sessionKind === 'cycling') && (
+        <WorkoutProfileChart structuredWorkout={session.structuredWorkout} height={48} />
+      )}
       {session.fueling && session.fueling.neededOnBike && (!session.sessionKind || session.sessionKind === 'cycling') && (
         <div className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20 text-xs">
           <Apple className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />

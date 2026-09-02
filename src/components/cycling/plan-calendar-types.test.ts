@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseStructuredWorkoutProfile, averageIntensityPct, zoneForPct, completedRideZone } from './plan-calendar-types'
+import { parseStructuredWorkoutProfile, averageIntensityPct, zoneForPct, completedRideZone, workoutProfileBars } from './plan-calendar-types'
 
 const EXAMPLE_SCRIPT = `Échauffement
 - 15m ramp 55-65%
@@ -111,5 +111,39 @@ describe('completedRideZone', () => {
   it('returns null when neither icu_intensity nor a computable watts/ftp ratio is available', () => {
     expect(completedRideZone({}, 250)).toBeNull()
     expect(completedRideZone({ icu_average_watts: 200 }, null)).toBeNull()
+  })
+})
+
+describe('workoutProfileBars', () => {
+  it('returns [] for an empty step list', () => {
+    expect(workoutProfileBars([])).toEqual([])
+  })
+
+  it('sizes bar width by share of total duration', () => {
+    // 600s + 300s = 900s total -> 66.67% / 33.33%
+    const bars = workoutProfileBars([{ durationSeconds: 600, pctFtp: 50 }, { durationSeconds: 300, pctFtp: 100 }])
+    expect(bars[0].widthPct).toBeCloseTo(66.67, 1)
+    expect(bars[1].widthPct).toBeCloseTo(33.33, 1)
+  })
+
+  it('sizes bar height relative to the session peak, not an absolute %FTP scale', () => {
+    // peak = 100 -> heights 50% and 100%, regardless of how "hard" 100% is in absolute terms
+    const bars = workoutProfileBars([{ durationSeconds: 300, pctFtp: 50 }, { durationSeconds: 300, pctFtp: 100 }])
+    expect(bars[0].heightPct).toBeCloseTo(50, 1)
+    expect(bars[1].heightPct).toBeCloseTo(100, 1)
+  })
+
+  it('floors height at 4% so a low-intensity recovery step stays visible', () => {
+    const bars = workoutProfileBars([{ durationSeconds: 300, pctFtp: 1 }, { durationSeconds: 300, pctFtp: 100 }])
+    expect(bars[0].heightPct).toBe(4)
+  })
+
+  it('gives every bar a real color', () => {
+    const bars = workoutProfileBars([{ durationSeconds: 300, pctFtp: 60 }])
+    expect(bars[0].color).toMatch(/^#[0-9a-f]{6}$/i)
+  })
+
+  it('returns [] rather than dividing by zero when total duration is 0', () => {
+    expect(workoutProfileBars([{ durationSeconds: 0, pctFtp: 100 }])).toEqual([])
   })
 })

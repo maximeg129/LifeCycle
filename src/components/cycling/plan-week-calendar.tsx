@@ -15,11 +15,12 @@
 import { useMemo, useState } from 'react'
 import { addDays, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { Dumbbell, Wand2, Loader2 } from 'lucide-react'
+import { Dumbbell, Wand2, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
 import { PlanSessionDetail } from './plan-session-detail'
+import { WorkoutProfileChart } from './workout-profile-chart'
 import { sessionZone, type ZoneInfo } from './plan-calendar-types'
 import type { PlanWeek, PlanWeekSessionWithValidation, SessionCompletion } from './training-plan-types'
 import type { IntervalsActivity } from '@/lib/intervals-api'
@@ -121,15 +122,31 @@ export function PlanWeekCalendar({ week, isGenerating, sendingSessionKey, canSen
                   <div
                     key={i}
                     className={cn(
-                      'rounded-md px-1.5 py-1 text-[10px] font-medium leading-tight',
-                      completion.status === 'missed' && 'opacity-50 line-through'
+                      'rounded-md px-1.5 py-1 space-y-1',
+                      completion.status === 'missed' && 'opacity-60'
                     )}
-                    style={session.sessionKind === 'strength' ? undefined : { backgroundColor: zone ? `${zone.color}26` : 'hsl(var(--muted))', color: zone?.color }}
+                    style={session.sessionKind === 'strength' ? undefined : { backgroundColor: zone ? `${zone.color}26` : 'hsl(var(--muted))' }}
                   >
-                    <span className={cn('flex items-center gap-1', session.sessionKind === 'strength' && 'text-primary bg-primary/10 rounded px-1 py-0.5 -mx-1')}>
+                    <span
+                      className={cn(
+                        'flex items-center gap-1 text-[10px] font-medium leading-tight',
+                        session.sessionKind === 'strength' && 'text-primary bg-primary/10 rounded px-1 py-0.5 -mx-1'
+                      )}
+                      style={session.sessionKind === 'strength' ? undefined : { color: zone?.color }}
+                    >
+                      {/* Retour utilisateur : "on ne sait pas si la séance est
+                          effectuée ou pas effectuée ou si elle a été loupée" —
+                          la pastille de couleur seule ne le disait pas à ce
+                          niveau compact ; icône explicite en plus du
+                          traitement opacité/barré déjà en place. */}
+                      {completion.status === 'done' && <CheckCircle2 className="w-2.5 h-2.5 shrink-0 text-primary" />}
+                      {completion.status === 'missed' && <XCircle className="w-2.5 h-2.5 shrink-0 text-destructive" />}
                       {session.sessionKind === 'strength' && <Dumbbell className="w-2.5 h-2.5 shrink-0" />}
-                      <span className="truncate">{session.title}</span>
+                      <span className={cn('truncate', completion.status === 'missed' && 'line-through')}>{session.title}</span>
                     </span>
+                    {session.sessionKind !== 'strength' && (
+                      <WorkoutProfileChart structuredWorkout={session.structuredWorkout} height={12} />
+                    )}
                   </div>
                 ))}
               </div>
@@ -153,6 +170,7 @@ export function PlanWeekCalendar({ week, isGenerating, sendingSessionKey, canSen
                 index={index}
                 week={week}
                 completion={completion}
+                today={todayIso}
                 isSending={sendingSessionKey === `${week.weekNumber}-${index}`}
                 canSendToIntervals={canSendToIntervals}
                 onSend={onSend}

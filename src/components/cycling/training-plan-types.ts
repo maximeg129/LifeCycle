@@ -231,6 +231,40 @@ export function clampDateToWeek(dateIso: string, week: PlanWeekSkeleton): string
   return dateIso
 }
 
+/**
+ * Retour utilisateur, sur une séance manquée : "il faudrait sûrement
+ * pouvoir donner la possibilité de... remettre [la séance] quelque part
+ * dans la semaine" — première date de la semaine, à partir de fromDateIso
+ * (inclus), qui n'est pas déjà prise par une AUTRE séance de la même
+ * semaine (sessions[].date, la séance qu'on déplace elle-même exclue via
+ * excludeIndex). Pure arithmétique de dates — jamais confiée à l'IA, même
+ * principe que distributeWeekdayOffsets/assignSessionDates. Null si la
+ * semaine est déjà pleine à partir de cette date (chaque jour restant a
+ * déjà sa propre séance) — l'athlète choisit alors manuellement via le
+ * sélecteur de date existant, jamais un repli inventé (ex. pousser dans la
+ * semaine suivante, qui violerait clampDateToWeek).
+ */
+export function nextAvailableWeekDate(
+  week: PlanWeekSkeleton,
+  sessions: PlanWeekSessionWithValidation[],
+  excludeIndex: number,
+  fromDateIso: string
+): string | null {
+  const used = new Set(
+    sessions.filter((_, i) => i !== excludeIndex).map((s) => s.date).filter((d): d is string => !!d)
+  )
+  const clampedStart = fromDateIso < week.startDate ? week.startDate : fromDateIso
+  if (clampedStart > week.endDate) return null
+  let cursor = new Date(`${clampedStart}T00:00:00`)
+  const end = new Date(`${week.endDate}T00:00:00`)
+  while (cursor <= end) {
+    const iso = format(cursor, 'yyyy-MM-dd')
+    if (!used.has(iso)) return iso
+    cursor = addDays(cursor, 1)
+  }
+  return null
+}
+
 // ── Réalisé vs prévu — retour utilisateur ────────────────────────────────
 //
 // "comment lier les seances realisees aux seance prevues, lien entre plan
