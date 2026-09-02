@@ -553,6 +553,86 @@ l'annule, dé-valider une AUTRE série (plus ancienne, pendant qu'un repos plus 
 le décompte en cours tranquille — évite qu'une simple correction de charge sur une vieille série ne
 coupe le repos en cours d'un athlète qui vient d'enchaîner une série plus tard dans la séance.
 
+## Suivi en direct v2 — record personnel, contexte, repos ajustable, écran allumé, technique
+
+Retour utilisateur, en réponse à une liste de propositions inspirées d'un tour d'horizon de Hevy :
+badge record personnel (oui, avec un vrai soin UX/UI), contexte "dernière fois" visible en direct
+(oui), note par exercice pendant la séance (non — préféré : une note de séance globale AVANT
+l'envoi Intervals.icu), série improvisée/exercice libre ajouté en direct (non aux deux), sauter un
+exercice explicitement (oui), ajuster le repos en direct (oui), calculateur de plaques (non) — plus
+deux demandes indépendantes : écran toujours allumé pendant le suivi, et un accordéon de bonne
+technique par exercice.
+
+**Badge record personnel** (`isNewPersonalRecord`, `LiveStrengthSessionView`) — `exercisePRMap`
+(calculé une fois à l'ouverture, `useMemo`) retient la charge max déjà loguée par exercice
+(`exerciseHistory`, jamais la séance en cours). Valider une série dont la charge dépasse ce max ET
+toute série déjà faite plus tôt dans CETTE séance déclenche un toast "🏆 Nouveau record personnel !"
+et marque la série (`prSetKeys`, clé `exIndex-setIndex`) — un `Trophy` ambre reste affiché sur la
+ligne, fond ambre plutôt que le fond lime habituel d'une série "faite", pour rester visible après le
+toast. Dé-valider la série retire le badge (même logique que `restKeyRef` pour le repos). Jamais un
+score inventé (pas de 1RM estimé) — juste "cette charge bat-elle la meilleure connue ?".
+
+**Contexte "dernière fois"** — la donnée servait déjà à préremplir les champs
+(`buildFreshProgress`) mais n'était jusqu'ici jamais réaffichée en clair pendant la séance,
+contrairement à `LogStrengthSessionDialog` (saisie rétroactive). Une ligne `Dernière fois (date) :
+Nx... @ Ykg` sous le nom de l'exercice, dès qu'un historique existe.
+
+**Note de séance avant export** (`StrengthLogExportButton`, nouveau composant) — retour
+utilisateur : "pas nécessaire [par exercice], nous pouvons faire une note après la séance avant
+d'envoyer sur intervalles". Le bouton d'export du Journal (`rides-journal-tab.tsx`) devient une
+`Popover` avec un `Textarea` optionnel plutôt qu'un envoi immédiat au clic — "Envoyer sans note"
+reste un simple clic, la Popover n'ajoute une étape que si l'athlète a effectivement quelque chose à
+dire. `exportLog(log, note?)` (`use-strength-log-export.ts`) ajoute la note à la `description`
+envoyée à Intervals.icu (`"\n\nNotes : ..."`, Intervals.icu n'a pas de champ notes dédié sur une
+activité manuelle) ET la persiste (`StrengthSessionLog.sessionNotes`) pour rester visible même sans
+export.
+
+**Sauter un exercice explicitement** (`skippedExercises`, `toggleSkipExercise`) — ne rien valider
+suffisait déjà techniquement (`handleFinish` filtre les exercices à 0 série faite), mais restait
+ambigu visuellement ("pas encore fait" vs "volontairement sauté"). Un bouton "Passer" par exercice,
+disponible uniquement tant qu'aucune série n'est validée (sauter un exercice déjà entamé n'a pas de
+sens — "Recommencer" est le geste pour repartir de zéro sur un exercice mal engagé) ; l'exercice
+sauté s'affiche grisé, ses champs masqués.
+
+**Repos ajustable en direct** (`adjustRest`) — boutons `-15s`/`+15s` dans le bandeau de repos, à
+côté de "Passer". Ajuste uniquement le décompte EN COURS (`restEndAt`), clampé à 0 — la durée par
+défaut des prochaines séries reste celle décidée par l'IA (`restSeconds`), pas modifiée en cascade.
+
+**Écran toujours allumé** (Screen Wake Lock API) — retour utilisateur : "l'écran de l'iPhone ne
+s'éteint pas parce que c'est vraiment pénible de faire le suivi". Contrairement au Bluetooth (voir
+la discussion capteur HR — Web Bluetooth n'est PAS supporté sur iOS, position de principe
+WebKit/Apple, y compris sous Chrome sur iPhone qui tourne sur le même moteur WebKit imposé par
+Apple), Wake Lock EST supporté par Safari iOS depuis la version 16.4 — vérifié à jour, pas juste la
+mémoire d'entraînement du modèle. `navigator.wakeLock.request('screen')` à l'ouverture, redemandé à
+chaque retour de visibilité (l'OS relâche automatiquement le verrou quand l'onglet passe en
+arrière-plan) — feature-detect + échec avalé silencieusement (permission refusée, navigateur
+ancien), jamais bloquant pour la séance elle-même.
+
+**Accordéon "bonne technique"** (`exercise-technique.ts`, contenu statique, testé) — retour
+utilisateur : "un lien aussi descriptif, condensé en accordéon... la bonne technique à avoir". Keyé
+par `pattern` (le mouvement — bilatéral lourd, charnière de hanche, unilatéral, anti-extension,
+anti-rotation/latéral, cheville/mollet — champ déjà présent sur chaque `StrengthExercise` du schéma
+S05) plutôt que par nom d'exercice exact : le nom est du texte libre généré par l'IA ("Squat",
+"Presse à cuisses"...), donc non énumérable, alors que les 6 patterns du référentiel couvrent déjà
+tout exercice muscu que cette app génère. Contenu rédigé une fois et relu — pas soumis à la
+discipline "jamais un chiffre inventé" (ce sont des repères techniques génériques établis, pas une
+donnée personnelle de l'athlète), mais jamais généré à la volée par le modèle non plus. Un
+`Accordion` collapsible en bas de chaque carte d'exercice (masqué si l'exercice est sauté).
+
+**Vérification pause/reprise/recommencer/terminer** — relu à la demande de l'utilisateur : les
+quatre s'enchaînent correctement (`elapsedSeconds` reste cohérent à travers pause→reprise→
+terminer, `handleRestart` remet bien tout l'état à zéro y compris pause/repos/RPE/badges PR/
+exercices sautés). Aucun bug trouvé — confirmé sans changement de code.
+
+**⚠️ Vérification visuelle non faite dans ce sandbox** — la page jetable habituelle
+(`preview-strength-session`, même patron que `preview-recipe` pour la landing page) a été créée puis
+supprimée sans capture Playwright exploitable : le serveur de dev de ce sandbox échoue sur TOUTE
+page (pas seulement celle-ci) avec une erreur de décodage de `favicon.ico` ("The PNG is not in RGBA
+format"), un problème d'environnement préexistant sans rapport avec ce changement. Les classes
+Tailwind ajoutées (ring de focus, badge ambre PR, opacité de l'exercice sauté...) suivent les
+conventions déjà en place ailleurs dans l'app (voir Design System plus haut) mais n'ont pas été
+vérifiées à l'écran — à confirmer par l'utilisateur au premier usage réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

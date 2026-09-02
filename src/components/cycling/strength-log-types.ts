@@ -102,6 +102,16 @@ export interface StrengthSessionLog {
    * qu'un chiffre halluciné.
    */
   sessionRpe?: number
+  /**
+   * Note de séance libre — retour utilisateur : "note par exercice pendant
+   * la séance pas nécessaire, nous pouvons faire une note après la séance
+   * avant d'envoyer sur intervalles". Une seule note globale, saisie au
+   * moment de l'export plutôt qu'une note par exercice pendant le suivi en
+   * direct (voir StrengthLogExportButton) — ajoutée à la description
+   * envoyée à Intervals.icu ET conservée ici pour rester visible même sans
+   * export.
+   */
+  sessionNotes?: string
   createdAt?: unknown
 }
 
