@@ -1049,13 +1049,30 @@ dans ce chantier — l'utilisateur a demandé un plan avant d'aller plus loin) :
 (dégradation de puissance sur effort long — documentée dans son propre code comme "le cœur
 différenciant du produit... aucun équivalent n'existe") et `decoupling.ts` (découplage cardiaque
 Pw:HR) sont déjà calculées pour l'analyse IA d'une sortie (`use-ride-analysis.ts`) mais jamais
-montrées comme un chiffre autonome ; `criticalPower.ts` (modèle CP/W′) pareil, déjà utilisé en
-interne (contexte coach) sans jamais être sa propre tuile ; `impulseResponse.ts` (modèle Banister
-fitness-fatigue, alternative de simulation au CTL/ATL directement lus depuis Intervals.icu) et
-`metabolism.ts` (équation Ten-Haaf, plus fiable que Mifflin-St Jeor selon R32 mais bloquée tant que
-`TEN_HAAF_COEFFICIENTS`, evidence/constants.ts, reste `pending`) ne sont carrément pas branchés à
+montrées comme un chiffre autonome ; `criticalPower.ts` (modèle CP/W′) pareil à l'époque de cet
+audit — depuis affiché comme sa propre tuile, voir juste en dessous ; `impulseResponse.ts` (modèle
+Banister fitness-fatigue, alternative de simulation au CTL/ATL directement lus depuis Intervals.icu)
+et `metabolism.ts` (équation Ten-Haaf, plus fiable que Mifflin-St Jeor selon R32 mais bloquée tant
+que `TEN_HAAF_COEFFICIENTS`, evidence/constants.ts, reste `pending`) ne sont carrément pas branchés à
 l'UI. Chacun a son propre commentaire de fichier documentant précisément pourquoi/dans quel contexte
 l'utiliser — point de départ pour une future proposition détaillée plutôt qu'une redécouverte.
+
+**Tuile Puissance critique (CP/W′)** — retour utilisateur, en réponse directe à la question "quelle
+ampleur donner à ces métriques non affichées ?" (`AskUserQuestion`) : construire la tuile CP/W′ en
+priorité. `riegel-prefer-critical-power-side-cycling` (`evidence/rules.ts`) fait de ce modèle
+l'alternative à privilégier côté vélo par rapport à l'indice Riegel déjà affiché — physiologiquement
+fondé (Jones et al. 2010, Travail = CP × durée + W′) plutôt qu'un simple ajustement statistique.
+`fitCriticalPower()` (`criticalPower.ts`, déjà existant/testé, jusqu'ici utilisé seulement en
+interne pour le contexte coach) est maintenant appelé côté UI sur les mêmes 3 records personnels
+que Riegel (`usePowerCurve`) — aucune nouvelle saisie demandée à l'athlète. Nouvelle `MetricTile`
+"Puissance critique" dans la grille "Entraînement" de `performance-bento.tsx`, juste après FTP
+(masquée si le modèle ne peut pas être ajusté — moins de 2 records valides). Nouvel id `criticalPower`
+sur `/cycling/metric/[id]` (`metric-info.ts`) : comme Riegel, pas de courbe d'historique (recalculé
+à la volée depuis les mêmes 3 records, jamais stocké jour par jour) — affiche `PowerCurveCard` (le
+même composant de saisie que Riegel) plutôt qu'un graphique vide, plus un encart W′ dédié sous le
+verdict citant la règle qui motive la tuile. L'entrée `readiness` de `metric-info.ts` a été
+corrigée au passage : son texte référençait encore l'ancien comportement de préférence au capteur,
+périmé depuis le correctif ci-dessus.
 
 ## Modèle de Données Firestore
 

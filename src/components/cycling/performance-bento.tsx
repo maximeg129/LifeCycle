@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils'
 import type { IntervalsAthlete } from '@/lib/intervals-api'
 import { usePowerCurve } from './use-power-curve'
 import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/endurance'
+import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { RingGauge } from './ring-gauge'
 import { tsbRingPercent, tsbRingColor, readinessRingColor, sleepRingPercent, sleepRingColor } from './ring-metrics'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
@@ -150,9 +151,16 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
   const powerCurve = usePowerCurve()
   const lifestyle = useLifestyleData()
 
-  const enduranceIndex = fitEnduranceCurve(
-    [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
-  )?.enduranceIndex ?? null
+  const powerRecords = [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
+  const enduranceIndex = fitEnduranceCurve(powerRecords)?.enduranceIndex ?? null
+  // Retour utilisateur, audit des indicateurs Cyclisme : "mettre tous les
+  // indicateurs que nous avons défini" — riegel-prefer-critical-power-
+  // side-cycling (evidence/rules.ts) fait de ce modèle l'alternative à
+  // privilégier côté vélo par rapport à Riegel (physiologiquement fondé,
+  // pas un simple ajustement statistique) ; jamais affiché nulle part
+  // avant ce correctif malgré la règle. Mêmes 3 records personnels que
+  // Riegel — aucune saisie supplémentaire demandée à l'athlète.
+  const criticalPowerModel = fitCriticalPower(powerRecords)
 
   const rawTsb = athlete.tsb
   const tsb = rawTsb != null && !isNaN(rawTsb) ? Math.round(rawTsb) : null
@@ -262,6 +270,15 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
             sublabel={athlete.ftp && athlete.weight && athlete.weight > 0 ? `${(athlete.ftp / athlete.weight).toFixed(2)} W/kg` : undefined}
             href="/cycling/metric/ftp"
           />
+          {criticalPowerModel != null && (
+            <MetricTile
+              label="Puissance critique"
+              value={Math.round(criticalPowerModel.cpWatts)}
+              unit="W"
+              sublabel={`W′ ${(criticalPowerModel.wPrimeJoules / 1000).toFixed(1)} kJ`}
+              href="/cycling/metric/criticalPower"
+            />
+          )}
         </div>
       </div>
 

@@ -5,7 +5,7 @@
 // dans le temps (quand l'historique existe — voir metric-detail-page.tsx
 // pour les métriques qui n'ont pas encore de suivi dans le temps).
 
-export type MetricId = 'tsb' | 'ctl' | 'atl' | 'ftp' | 'riegel' | 'sleep' | 'hrv' | 'restingHr' | 'readiness'
+export type MetricId = 'tsb' | 'ctl' | 'atl' | 'ftp' | 'riegel' | 'criticalPower' | 'sleep' | 'hrv' | 'restingHr' | 'readiness'
 
 export interface MetricInfo {
   id: MetricId
@@ -74,6 +74,17 @@ export const METRIC_INFO: Record<MetricId, MetricInfo> = {
     ],
     goodDirection: 'higher',
   },
+  criticalPower: {
+    id: 'criticalPower',
+    label: 'Puissance critique (CP)',
+    unit: 'W',
+    tagline: 'La puissance théoriquement soutenable indéfiniment — le modèle physiologique à privilégier côté vélo.',
+    explanation: [
+      "La Puissance Critique (CP) vient du modèle hyperbolique puissance-durée (Jones et al. 2010) : Travail = CP × durée + W′, ajusté sur les 3 mêmes records personnels que l'indice Riegel. Contrairement à l'indice Riegel (un ajustement statistique), la CP est physiologiquement fondée — c'est le modèle à privilégier côté vélo quand les deux sont disponibles.",
+      "W′ (la réserve de travail au-dessus de CP, en kilojoules) mesure la capacité anaérobie mobilisable avant l'épuisement — un effort à 105% de CP consomme cette réserve, un effort sous la CP ne l'entame pas dans ce modèle. L'interprétation classique \"CP = aérobie, W′ = anaérobie\" reste simpliste : les deux paramètres sont en réalité interdépendants.",
+    ],
+    goodDirection: 'higher',
+  },
   sleep: {
     id: 'sleep',
     label: 'Sommeil',
@@ -111,9 +122,9 @@ export const METRIC_INFO: Record<MetricId, MetricInfo> = {
     id: 'readiness',
     label: 'Readiness',
     unit: '/100',
-    tagline: 'Un score composite 0-100 — sommeil, stress et humeur combinés (ou le score du capteur connecté).',
+    tagline: 'Un score composite 0-100 — sommeil, stress et humeur combinés, toujours calculé par l\'app.',
     explanation: [
-      "Quand un capteur connecté (WHOOP via Intervals.icu) fournit son propre score de récupération, c'est celui-ci qui est utilisé — plus fiable qu'une heuristique locale. Sinon, un score léger est calculé à partir de la qualité de sommeil, du stress et de l'humeur saisis manuellement.",
+      "Ce score est une moyenne de la qualité de sommeil, du stress (inversé) et de l'humeur des dernières 24h — jamais le score de récupération propriétaire d'un capteur connecté (WHOOP ou autre), même quand un est disponible : sa composition doit rester explicite et lisible, pas une boîte noire.",
       "Ce n'est pas une mesure médicale — juste un signal parmi d'autres pour décider si c'est le jour de pousser ou de lever le pied.",
     ],
     goodDirection: 'higher',
