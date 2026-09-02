@@ -521,6 +521,38 @@ plutôt qu'en résumé tronqué.
   absent, `session_rpe` n'est simplement pas envoyé — Load reste "?" côté Intervals.icu plutôt qu'un
   nombre halluciné.
 
+## Suivi en direct — pause/reprise, recommencer, modifier une série validée
+
+Retour utilisateur : "revoir le fonctionnement du chronomètre... qu'on puisse mettre pause et/ou
+recommencer le training, il faudrait aussi pouvoir modifier lorsqu'un exercice a été validé" —
+inspiré d'un tour d'horizon de Hevy (référence du marché pour le suivi de musculation en direct).
+
+**Pause/reprise** (`LiveStrengthSessionView`) — le chrono de séance était jusqu'ici un simple
+horodatage de départ sans façon de le suspendre. `isPaused`/`pausedAtRef`/`totalPausedMsRef` :
+`elapsedSeconds` se fige à l'instant de la mise en pause plutôt que de continuer à avancer, et
+soustrait le temps cumulé passé en pause une fois repris — jamais remis à zéro par une pause, juste
+suspendu. Conséquence directe et voulue : le `durationSeconds` envoyé à l'export Intervals.icu (voir
+section ci-dessus) exclut déjà le temps de pause, sans changement côté export. État persisté dans le
+brouillon localStorage (`StrengthSessionDraft.isPaused`/`pausedAt`/`totalPausedMs`) au même titre que
+la progression, pour qu'une pause en cours au moment d'une fermeture accidentelle de l'onglet reste
+exacte à la réouverture.
+
+**Recommencer** (`handleRestart`) — remet TOUT à zéro (progression, chrono, pause, repos, RPE) comme
+une nouvelle ouverture de la même séance ; `buildFreshProgress()` (le même calcul de préremplissage
+que l'ouverture initiale, extrait en fonction réutilisable plutôt que dupliqué) reconstruit la
+progression vierge. Confirmé via `AlertDialog` (même patron que la suppression de compte dans
+`danger-zone-card.tsx`) car destructif — contrairement à dé-valider une seule série (voir ci-dessous),
+il n'y a pas de retour en arrière possible une fois confirmé.
+
+**Modifier une série déjà validée** — les champs reps/temps tenu/charge d'une série restent
+désormais éditables même une fois "faite" (plus de `disabled={set.done}`, Hevy laisse pareillement
+les champs toujours éditables) ; le bouton "Fait" devient un bouton d'annulation (icône `Undo2`) qui
+redé-valide la série plutôt que de rester inerte une fois cochée. `restKeyRef` retient quelle série
+précise (`exIndex-setIndex`) a déclenché le décompte de repos en cours : dé-valider CETTE série
+l'annule, dé-valider une AUTRE série (plus ancienne, pendant qu'un repos plus récent tourne) laisse
+le décompte en cours tranquille — évite qu'une simple correction de charge sur une vieille série ne
+coupe le repos en cours d'un athlète qui vient d'enchaîner une série plus tard dans la séance.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
