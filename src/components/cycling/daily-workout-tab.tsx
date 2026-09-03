@@ -134,6 +134,17 @@ export function DailyWorkoutTab() {
   // indoorRequested) : ce n'est pas un paramètre de génération IA, juste
   // "qu'est-ce qu'on affiche aujourd'hui", à re-décider à chaque ouverture.
   const [wantsGym, setWantsGym] = useState(false)
+  // Retour utilisateur : "je me demande s'il ne serait pas intéressant
+  // d'avoir... la séance du jour proposée sur le plan, et un bouton...
+  // de proposition alternative où l'utilisateur clique et ça l'emmène sur
+  // la capacité de dire combien de temps tu as disponible, où tu es, etc."
+  // — quand le plan a déjà daté une séance vélo aujourd'hui, le formulaire
+  // temps/lieu/heure n'est plus la vue par défaut : la séance du plan
+  // s'affiche directement (aucun appel IA nécessaire juste pour la voir),
+  // et ce formulaire devient l'action secondaire "proposer autre chose"
+  // (moins de temps disponible, envie d'ailleurs...). Jamais persisté —
+  // même statut que wantsGym, un choix d'affichage du moment.
+  const [showAlternativeForm, setShowAlternativeForm] = useState(false)
 
   // Prefill from today's already-generated proposal (Firestore singleton),
   // so reopening the tab doesn't lose it or force a regeneration.
@@ -168,6 +179,22 @@ export function DailyWorkoutTab() {
     if (!draft) return
     const ok = await sendToIntervals(draft)
     if (ok) setWasSent(true)
+  }
+
+  // "Utiliser cette séance" sur l'aperçu de la séance du plan — même appel
+  // que handleGenerate ci-dessus (le flow ajuste plannedSession si besoin,
+  // le renvoie telle quelle sinon), mais avec les paramètres de la séance
+  // du plan elle-même plutôt que le formulaire temps/lieu/heure : la
+  // durée prévue, en extérieur, sans lieu de départ précisé (le lieu n'est
+  // qu'une option de la proposition alternative, jamais une exigence pour
+  // suivre le plan tel quel).
+  const handleUsePlanSession = async () => {
+    if (!todaysPlanSession) return
+    const proposal = await generate(todaysPlanSession.session.durationMinutes, undefined, false)
+    if (proposal) {
+      setDraft(proposal)
+      setWasSent(false)
+    }
   }
 
   const updateDraft = (patch: Partial<DailyWorkoutRecommendationOutput>) => {
@@ -232,6 +259,15 @@ export function DailyWorkoutTab() {
     )
   }
 
+  // Le formulaire temps/lieu/heure n'est la vue par défaut QUE quand il n'y
+  // a rien à prévisualiser (pas de plan actif, ou le plan n'a pas daté de
+  // séance vélo aujourd'hui) — sinon la séance du plan s'affiche d'abord,
+  // le formulaire ne redevenant visible qu'après un tap explicite sur
+  // "Proposer une séance alternative", ou une fois un draft déjà généré
+  // (pour rester ajustable/régénérable, comme avant ce changement).
+  const showPlanPreview = !!todaysPlanSession && !showAlternativeForm && !draft
+  const formVisible = !showPlanPreview
+
   return (
     <div className="space-y-6">
       <Card className="bg-card/40 border-border">
@@ -239,10 +275,12 @@ export function DailyWorkoutTab() {
           <CardTitle className="text-base flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-primary" /> Proposition du jour
           </CardTitle>
-          <CardDescription>
-            Indiquez le temps dont vous disposez aujourd&apos;hui — l&apos;IA propose une séance adaptée à votre forme actuelle
-            (charge interne, TSB, blessures, objectifs), que vous pouvez ajuster avant de l&apos;envoyer sur Intervals.icu.
-          </CardDescription>
+          {formVisible && (
+            <CardDescription>
+              Indiquez le temps dont vous disposez aujourd&apos;hui — l&apos;IA propose une séance adaptée à votre forme actuelle
+              (charge interne, TSB, blessures, objectifs), que vous pouvez ajuster avant de l&apos;envoyer sur Intervals.icu.
+            </CardDescription>
+          )}
           <div className="flex flex-wrap gap-2">
             {planWeek && (
               <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
@@ -288,8 +326,22 @@ export function DailyWorkoutTab() {
             </div>
           </div>
         </CardHeader>
-        {!wantsGym && (<>
+        {!wantsGym && formVisible && (<>
         <CardContent className="flex flex-wrap items-end gap-4">
+          {/* Retour d'ici vers l'aperçu de la séance du plan — n'a de sens
+              que si on est venu de là (showAlternativeForm) et qu'aucun
+              draft n'a encore été généré ; une fois un draft présent, ce
+              formulaire reste la seule vue (il sert aussi à le régénérer),
+              revenir en arrière n'aurait plus rien à montrer de plus. */}
+          {showAlternativeForm && todaysPlanSession && !draft && (
+            <button
+              type="button"
+              onClick={() => setShowAlternativeForm(false)}
+              className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-left -mb-2"
+            >
+              ← Revenir à la séance prévue par le plan
+            </button>
+          )}
           <div className="space-y-2">
             <Label htmlFor="available-minutes">Temps disponible (min)</Label>
             <Input
@@ -407,6 +459,45 @@ export function DailyWorkoutTab() {
         )
       ) : isLoadingStored && !draft ? (
         <Skeleton className="h-64 w-full rounded-2xl" />
+      ) : showPlanPreview && todaysPlanSession ? (
+        // Retour utilisateur : "on aurait... la séance du jour proposée
+        // sur le plan, et un bouton... de proposition alternative où
+        // l'utilisateur clique et ça l'emmène [définir] combien de temps
+        // tu as disponible, où tu es, etc." — la séance déjà datée par le
+        // plan s'affiche directement (title/durée/intensité/motif, aucun
+        // appel IA nécessaire juste pour la voir) ; "Utiliser cette
+        // séance" ne fait qu'UN appel (le même que la proposition
+        // alternative, avec les paramètres de la séance du plan) plutôt
+        // que zéro, pour garder l'unique chemin d'envoi déjà existant
+        // (verdict/warnings/édition avant "Envoyer sur Intervals.icu").
+        <Card className="bg-card/60 border-primary/20 border-2">
+          <CardHeader className="space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className="gap-1.5 font-normal text-xs">
+                <Target className="w-3 h-3" /> Semaine {todaysPlanSession.weekNumber} du plan
+              </Badge>
+              <Badge variant="secondary">{todaysPlanSession.session.intensityLabel}</Badge>
+            </div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Bike className="w-4 h-4 text-primary" /> {todaysPlanSession.session.title}
+            </CardTitle>
+            <CardDescription>{todaysPlanSession.session.rationale}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" /> {todaysPlanSession.session.durationMinutes} min
+            </p>
+            <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
+              <Button onClick={handleUsePlanSession} disabled={isGenerating} className="gap-2">
+                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                Utiliser cette séance
+              </Button>
+              <Button variant="outline" onClick={() => setShowAlternativeForm(true)}>
+                Proposer une séance alternative
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : !draft ? (
         <EmptyState
           icon={Clock}
