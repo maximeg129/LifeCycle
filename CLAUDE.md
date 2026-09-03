@@ -1472,6 +1472,35 @@ connecte jamais lui-même à Garmin ni aux autres fabricants ; (3) Intervals.icu
 intermédiaire, conformément à ses propres conditions d'utilisation — sans citer un numéro de section
 précis, puisque le texte exact n'a pas pu être vérifié directement.
 
+## Coach Aujourd'hui : graphique de profil + envoi direct de la séance du plan
+
+Retour utilisateur, capture d'écran de l'aperçu de séance du plan à l'appui : "j'aimerais bien que
+sur la séance du jour ça montre la séance graphiquement (celle qui a déjà été définie dans le plan)
+et que le bouton soit simplement envoi vers intervals ou proposer une alternative."
+
+**Profil graphique** — `WorkoutProfileChart` (déjà utilisé sur le calendrier du plan, voir "Plan
+calendrier v3" plus haut) ajouté dans la carte `showPlanPreview` (`daily-workout-tab.tsx`), en
+hauteur détaillée (48px, même taille que `PlanSessionDetail`) — remplace la simple description
+textuelle comme seul repère visuel de l'intensité par étape de la séance.
+
+**Envoi direct, sans aller-retour IA** — avant ce correctif, "Utiliser cette séance" appelait
+`generate()` (le flow `dailyWorkoutRecommendation`) avec les paramètres de la séance du plan, pour
+que l'IA la "recopie" (l'ajustant seulement si la météo/récupération le justifie) avant de pouvoir
+l'envoyer — un aller-retour IA pour une séance déjà entièrement définie (title/durée/
+`structuredWorkout`) n'avait plus de sens une fois que l'objectif est juste de l'envoyer telle
+quelle. **`sendPlanSessionDirectly()`** (`use-daily-workout.ts`) reprend le même mécanisme que
+`sendSessionToIntervals()` (`use-training-plan.ts`, bouton "Envoyer" de l'onglet Plan) : `POST
+/api/intervals/events` avec `planSessionExternalId(planId, weekNumber, sessionIndex)` — le MÊME
+externalId que la séance du Plan, donc envoyer depuis "Aujourd'hui" et depuis l'onglet Plan continue
+de mettre à jour LE MÊME événement calendrier, jamais deux pour la même journée (invariant déjà en
+place, juste plus court à atteindre). Le bouton devient "Envoyer sur Intervals.icu" (`Send`, même
+icône que le reste de l'app) ; "Proposer une séance alternative" reste inchangé — c'est le SEUL
+chemin qui passe encore par l'IA (formulaire temps/lieu/heure, pour une sortie différente de celle
+prévue par le plan). Pas d'état persisté pour "déjà envoyée" (`planSessionSent`, état local
+uniquement, comme l'ancien `wasSent`) — re-cliquer reste sans danger, même externalId, upsert côté
+Intervals.icu plutôt qu'un doublon (même garantie que le bouton "Envoyer" de l'onglet Plan, qui
+n'a jamais eu besoin de ce suivi non plus).
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

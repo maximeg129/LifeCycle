@@ -19,6 +19,7 @@ import { LogStrengthSessionDialog } from './log-strength-session-dialog'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { findWeekStrengthSession, type PlanWeekSessionWithValidation } from './training-plan-types'
 import { IntervalsOnboardingNotice } from './intervals-onboarding-notice'
+import { WorkoutProfileChart } from './workout-profile-chart'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_MINUTES = 60
@@ -101,9 +102,11 @@ export function DailyWorkoutTab() {
     isLoadingStored,
     isGenerating,
     isSending,
+    isSendingPlanSession,
     canSendToIntervals,
     generate,
     sendToIntervals,
+    sendPlanSessionDirectly,
     todaysPlanSession,
     todaysPlanSessionIsStrength,
     generateWeekSessions,
@@ -146,6 +149,12 @@ export function DailyWorkoutTab() {
   // (moins de temps disponible, envie d'ailleurs...). Jamais persisté —
   // même statut que wantsGym, un choix d'affichage du moment.
   const [showAlternativeForm, setShowAlternativeForm] = useState(false)
+  // Feedback visuel local (jamais persisté — même statut que wasSent avant
+  // un rechargement) : "Envoyé" une fois sendPlanSessionDirectly réussi,
+  // pour distinguer un premier envoi d'un ré-envoi — cliquer à nouveau reste
+  // sans danger (même externalId, upsert côté Intervals.icu, jamais un
+  // doublon).
+  const [planSessionSent, setPlanSessionSent] = useState(false)
 
   // Prefill from today's already-generated proposal (Firestore singleton),
   // so reopening the tab doesn't lose it or force a regeneration.
@@ -182,20 +191,15 @@ export function DailyWorkoutTab() {
     if (ok) setWasSent(true)
   }
 
-  // "Utiliser cette séance" sur l'aperçu de la séance du plan — même appel
-  // que handleGenerate ci-dessus (le flow ajuste plannedSession si besoin,
-  // le renvoie telle quelle sinon), mais avec les paramètres de la séance
-  // du plan elle-même plutôt que le formulaire temps/lieu/heure : la
-  // durée prévue, en extérieur, sans lieu de départ précisé (le lieu n'est
-  // qu'une option de la proposition alternative, jamais une exigence pour
-  // suivre le plan tel quel).
-  const handleUsePlanSession = async () => {
-    if (!todaysPlanSession) return
-    const proposal = await generate(todaysPlanSession.session.durationMinutes, undefined, false)
-    if (proposal) {
-      setDraft(proposal)
-      setWasSent(false)
-    }
+  // "Envoyer sur Intervals.icu" sur l'aperçu de la séance du plan — retour
+  // utilisateur, capture d'écran à l'appui : "que le bouton soit simplement
+  // envoi vers intervals ou proposer une alternative". La séance du plan
+  // est déjà entièrement définie (title/durée/structuredWorkout) : plus
+  // d'aller-retour IA pour la "recopier" avant de pouvoir l'envoyer (voir
+  // sendPlanSessionDirectly, use-daily-workout.ts) — un seul geste.
+  const handleSendPlanSession = async () => {
+    const ok = await sendPlanSessionDirectly()
+    if (ok) setPlanSessionSent(true)
   }
 
   const updateDraft = (patch: Partial<DailyWorkoutRecommendationOutput>) => {
@@ -472,11 +476,14 @@ export function DailyWorkoutTab() {
         // l'utilisateur clique et ça l'emmène [définir] combien de temps
         // tu as disponible, où tu es, etc." — la séance déjà datée par le
         // plan s'affiche directement (title/durée/intensité/motif, aucun
-        // appel IA nécessaire juste pour la voir) ; "Utiliser cette
-        // séance" ne fait qu'UN appel (le même que la proposition
-        // alternative, avec les paramètres de la séance du plan) plutôt
-        // que zéro, pour garder l'unique chemin d'envoi déjà existant
-        // (verdict/warnings/édition avant "Envoyer sur Intervals.icu").
+        // appel IA nécessaire juste pour la voir). Retour utilisateur,
+        // capture d'écran à l'appui : profil de séance affiché
+        // graphiquement (WorkoutProfileChart, même composant que le
+        // calendrier du plan) plutôt qu'une description texte seule, et
+        // "Envoyer sur Intervals.icu" envoie la séance telle quelle
+        // directement (sendPlanSessionDirectly) — plus d'aller-retour IA
+        // ("Utiliser cette séance" appelait auparavant generate() juste
+        // pour "recopier" une séance déjà entièrement définie).
         <Card className="bg-card/60 border-primary/20 border-2">
           <CardHeader className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
@@ -491,13 +498,19 @@ export function DailyWorkoutTab() {
             <CardDescription>{todaysPlanSession.session.rationale}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <WorkoutProfileChart structuredWorkout={todaysPlanSession.session.structuredWorkout} height={48} />
             <p className="text-sm text-muted-foreground flex items-center gap-1.5">
               <Clock className="w-3.5 h-3.5" /> {todaysPlanSession.session.durationMinutes} min
             </p>
             <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
-              <Button onClick={handleUsePlanSession} disabled={isGenerating} className="gap-2">
-                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-                Utiliser cette séance
+              <Button
+                onClick={handleSendPlanSession}
+                disabled={isSendingPlanSession || !canSendToIntervals}
+                className="gap-2"
+                title={canSendToIntervals ? undefined : 'Renseignez vos identifiants Intervals.icu dans Réglages'}
+              >
+                {isSendingPlanSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {planSessionSent ? 'Ré-envoyer sur Intervals.icu' : 'Envoyer sur Intervals.icu'}
               </Button>
               <Button variant="outline" onClick={() => setShowAlternativeForm(true)}>
                 Proposer une séance alternative
