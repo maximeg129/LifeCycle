@@ -1330,6 +1330,61 @@ Réglages) n'avaient aucune action dans leur `PageHeader` — suppression pure, 
 **Comportement inchangé, aucun test à toucher** : ce chantier ne touche que la mise en page (JSX +
 classes), aucune logique pure — la suite de 825 tests passe sans modification.
 
+## Chaînes : sorties liées, stockées à chaque sync plutôt que recalculées au clic
+
+Retour utilisateur, sur la tuile "194 km" (Chaînes, Garage) : "crois-tu qu'en cliquant sur les km on
+puisse voir les sorties liées ?" — le nombre était jusqu'ici du texte brut, sans lien ni requête
+possible (`km-sync.ts` n'agrège qu'un delta total, aucun id d'activité individuel n'était jamais
+gardé). Deux options posées : (1) reconstruire la liste à la volée au clic (filtrer les activités
+Intervals.icu par `gear.id` + date), ou (2) stocker les activités qui contribuent à chaque sync.
+Décision utilisateur après une première proposition orientée option 1 : "Non en fait l'option 2
+semble plus robuste vérifie ? Attention à bien mettre les sorties sur la chaîne qui est montée en ce
+moment" — et une correction sur le fenêtrage : "Pas depuis le dernier fartage mais depuis le dernier
+montage."
+
+**`LinkedRide`** (`chain-types.ts`) — `{activityId, name, date, km}`, nouveau champ `Chain.linkedRides?:
+LinkedRide[]` (optionnel — absent sur toute chaîne créée avant ce chantier, chaque lecteur retombe
+sur `[]`). Conservé pour toute la vie de la chaîne, à travers les cycles montage/démontage — même
+convention "jamais supprimé" que la sous-collection `waxHistory` — plutôt que remis à zéro à chaque
+montage : `ridesSinceMount()` (pur, testé) est ce qui scope l'affichage à la période de montage EN
+COURS (`date >= chain.mountedDate`), pas un vidage de la liste elle-même. Filtre volontairement sur
+`mountedDate` et non `lastWaxDate` : `kmSinceWax` se remet à zéro à chaque fartage alors que la
+chaîne reste généralement montée à travers plusieurs fartages — scoper par date de fartage aurait
+fait disparaître des sorties que l'athlète s'attend toujours à voir.
+
+**`extractLinkedRides()`** (`km-sync.ts`) — même règle de correspondance que
+`computeGearKmFromActivities()` (même gear id, distance réelle, strictement après la date de coupure),
+factorisée dans un seul prédicat privé `matchesGearSinceCutoff()` partagé par les deux, pour que la
+liste de sorties et le delta km ne puissent jamais compter des activités différentes. Renvoie les
+activités elles-mêmes (id/nom/date/km arrondi individuellement) plutôt que leur somme.
+
+**Attribution garantie à la chaîne montée EN CE MOMENT** (le point de vigilance explicite de
+l'utilisateur) — `applyKmDeltaToBikeDependents()` reçoit maintenant un paramètre optionnel
+`newlyLinkedRides` et l'écrit (`arrayUnion(...)`) dans le MÊME appel `updateDoc()` que le delta
+km, sur le MÊME `chainToUpdate` que `planKmDeltaUpdate()` a déjà choisi (`bikeChains.find(c =>
+c.status === 'montee')`, déjà testé) — jamais une deuxième écriture séparée qui pourrait cibler une
+chaîne différente si un montage change entre les deux. `use-intervals.tsx` (`applyGearKmSync`, le
+vrai chemin de sync Intervals.icu) calcule `newlyLinkedRides` via `extractLinkedRides(fullHistory,
+bike.externalGearId, bike.lastSyncDate)` — capturé AVANT que `bike.lastSyncDate` soit écrasé par le
+sync en cours, pour qu'une sortie ne soit jamais rattachée deux fois à la même chaîne d'un sync à
+l'autre. Le chemin d'édition manuelle du km (`gear-tab.tsx`, `handleUpdateKm`) ne fournit jamais
+`newlyLinkedRides` — une correction manuelle n'a aucune activité réelle à attribuer, honnête plutôt
+que d'inventer un lien.
+
+**⚠️ Limite honnête, symétrique à celle déjà acceptée pour le km total lui-même** — comme
+`computeGearKmFromActivities()` ne redescend jamais si une activité est supprimée après coup côté
+Intervals.icu, `linkedRides` est un instantané pris au moment du sync, jamais recalculé
+rétroactivement si l'historique change ensuite (activité éditée/supprimée) ; et si `bike.totalKm`
+a été ajusté par une édition manuelle entre deux vrais syncs, le delta recalculé et la liste de
+sorties (bornée par date) peuvent légèrement diverger — jamais la mauvaise chaîne, au pire une liste
+imprécise sur la bonne.
+
+**`chain-card.tsx`** — nouvelle section "Sorties depuis le montage (N)" (`Collapsible`, même patron
+que "Historique de fartage" juste en dessous), masquée si la chaîne n'a jamais été montée
+(`chain.mountedDate` null — rien à scoper). Chaque ligne (nom, date, km) est un lien
+`https://intervals.icu/activities/{activityId}` — même URL que les autres liens sortants vers
+Intervals.icu déjà dans l'app (Journal, `PlanSessionDetail`).
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

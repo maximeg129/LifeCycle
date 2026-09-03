@@ -13,7 +13,26 @@ export interface Chain {
   totalKm: number
   waxThresholdKm: number
   replaceThresholdKm: number
+  /**
+   * Real Intervals.icu activities that fed into this chain's km, appended by
+   * `applyKmDeltaToBikeDependents()` (km-sync.ts) every sync — never touched
+   * by the manual km-edit path, which has no real activities to attribute.
+   * Kept for the chain's whole lifetime, across mount/unmount cycles (same
+   * "never delete the record" convention as `waxHistory`) — `ridesSinceMount`
+   * is what scopes it down to the CURRENT mount period for display, not a
+   * reset on unmount. Absent on a chain created before this field existed —
+   * every reader must default to `[]`.
+   */
+  linkedRides?: LinkedRide[]
   createdAt: Timestamp
+}
+
+/** One real Intervals.icu activity that contributed km to a chain, recorded at sync time. */
+export interface LinkedRide {
+  activityId: string
+  name: string | null
+  date: string // yyyy-MM-dd, from the activity's start_date_local
+  km: number
 }
 
 export interface WaxHistoryEntry {
@@ -58,4 +77,23 @@ export function needsReplacementCheck(chain: Pick<Chain, 'totalKm' | 'replaceThr
 export function waxProgressPct(chain: Pick<Chain, 'kmSinceWax' | 'waxThresholdKm'>): number {
   if (!chain.waxThresholdKm || chain.waxThresholdKm <= 0) return 0
   return Math.min(100, Math.round((chain.kmSinceWax / chain.waxThresholdKm) * 100))
+}
+
+/**
+ * `linkedRides` scoped to the chain's CURRENT mount period — retour
+ * utilisateur : "pas depuis le dernier fartage mais depuis le dernier
+ * montage" (kmSinceWax resets at every fartage, but a chain usually stays
+ * mounted across several fartages, so scoping the ride list by wax date
+ * would hide rides the athlete would still expect to see). `mountedDate` is
+ * a plain yyyy-MM-dd string, comparable lexicographically like everywhere
+ * else in this codebase (see `computeGearKmFromActivities`). Never mounted
+ * yet (`mountedDate` null) → no period to scope to, so `[]` rather than
+ * guessing. Newest first — most recent ride is what the athlete wants to
+ * confirm first ("did this sync actually pick up my ride this morning?").
+ */
+export function ridesSinceMount(chain: Pick<Chain, 'linkedRides' | 'mountedDate'>): LinkedRide[] {
+  if (!chain.mountedDate) return []
+  return (chain.linkedRides ?? [])
+    .filter((r) => r.date >= chain.mountedDate!)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0))
 }

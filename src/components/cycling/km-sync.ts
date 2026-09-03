@@ -10,13 +10,30 @@
 // again (which is exactly what happened: the manual-edit path was never
 // updated when chain tracking was added, so a manual km correction bumped
 // components but left the mounted chain's km frozen).
+//
+// ── Sorties liées à une chaîne (retour utilisateur) ────────────────────────
+// "Est-ce qu'en cliquant sur les km on peut voir les sorties liées ?" — deux
+// options envisagées : (1) reconstruire la liste à la volée en filtrant les
+// activités par gear.id + date au clic, ou (2) stocker les activités qui ont
+// contribué à chaque sync, choisie explicitement par l'utilisateur ("l'option
+// 2 semble plus robuste") — plus rapide à afficher (pas de fetch au clic), et
+// PAS moins fiable pour l'usage réel : la chaîne actuellement montée est déjà
+// l'unique destination du delta km (`planKmDeltaUpdate`), donc lui attribuer
+// aussi la liste des sorties dans le MÊME appel `updateDoc` que le delta
+// (`extractLinkedRides` → `newlyLinkedRides` ci-dessous) élimine tout risque
+// de l'attribuer à la mauvaise chaîne — jamais deux écritures séparées qui
+// pourraient diverger si le montage change entre les deux. Seule limite
+// honnête, symétrique à celle déjà acceptée pour le km total lui-même
+// (`computeGearKmFromActivities` ne redescend jamais si une activité est
+// supprimée après coup côté Intervals.icu) : un snapshot pris au moment du
+// sync, jamais recalculé rétroactivement si l'historique change ensuite.
 
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc, updateDoc, arrayUnion } from 'firebase/firestore'
 import type { Firestore } from 'firebase/firestore'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import type { BikeComponent } from './gear-types'
-import type { Chain } from './chain-types'
+import type { Chain, LinkedRide } from './chain-types'
 
 export interface ApplyKmDeltaParams {
   db: Firestore
@@ -26,6 +43,8 @@ export interface ApplyKmDeltaParams {
   /** All chains for this bike, any status — used to find the mounted one. */
   bikeChains: Chain[]
   delta: number
+  /** Real activities behind this sync's delta (from `extractLinkedRides`) — omitted/empty for the manual km-edit path, which has no real rides to attribute. */
+  newlyLinkedRides?: LinkedRide[]
 }
 
 export interface ApplyKmDeltaResult {
@@ -41,6 +60,28 @@ export interface ActivityKmLike {
   gear?: { id?: string } | null
   start_date_local?: string
   distance?: number // meters
+}
+
+/** `ActivityKmLike` plus what's needed to record the activity itself as a linked ride, not just count its distance. */
+export interface ActivityLinkLike extends ActivityKmLike {
+  id: string
+  name?: string
+}
+
+/**
+ * Shared match rule for "does this activity belong in this bike's km sync" —
+ * same gear id, real distance, and (when a cutoff is given) strictly after
+ * it. Used by both `computeGearKmFromActivities` (the sum) and
+ * `extractLinkedRides` (the same activities, kept whole) so the two can
+ * never disagree on which activities counted.
+ */
+function matchesGearSinceCutoff(a: ActivityKmLike, externalGearId: string, sinceDateExclusive: string | null): boolean {
+  if (a.gear?.id !== externalGearId) return false
+  if (!a.distance || a.distance <= 0) return false
+  if (sinceDateExclusive && a.start_date_local) {
+    return a.start_date_local.slice(0, 10) > sinceDateExclusive
+  }
+  return true
 }
 
 /**
@@ -61,16 +102,30 @@ export interface ActivityKmLike {
  */
 export function computeGearKmFromActivities(activities: ActivityKmLike[], externalGearId: string, sinceDateExclusive: string | null): number {
   const totalMeters = activities
-    .filter((a) => {
-      if (a.gear?.id !== externalGearId) return false
-      if (!a.distance || a.distance <= 0) return false
-      if (sinceDateExclusive && a.start_date_local) {
-        return a.start_date_local.slice(0, 10) > sinceDateExclusive
-      }
-      return true
-    })
+    .filter((a) => matchesGearSinceCutoff(a, externalGearId, sinceDateExclusive))
     .reduce((sum, a) => sum + (a.distance || 0), 0)
   return Math.round(totalMeters / 1000)
+}
+
+/**
+ * The individual activities behind a `computeGearKmFromActivities` delta —
+ * exact same match rule, kept whole instead of summed, so a chain can record
+ * precisely which sorties contributed once its km bumps (see file header).
+ * Per-activity km is rounded individually here for display, so summing this
+ * list can differ by a km or two from `computeGearKmFromActivities`'s own
+ * total (rounded once, from the raw meter sum) — a display nuance, not a
+ * data bug: the chain's actual km total always comes from that function, not
+ * from summing this list back up.
+ */
+export function extractLinkedRides(activities: ActivityLinkLike[], externalGearId: string, sinceDateExclusive: string | null): LinkedRide[] {
+  return activities
+    .filter((a) => matchesGearSinceCutoff(a, externalGearId, sinceDateExclusive))
+    .map((a) => ({
+      activityId: a.id,
+      name: a.name ?? null,
+      date: (a.start_date_local ?? '').slice(0, 10),
+      km: Math.round((a.distance || 0) / 1000),
+    }))
 }
 
 export interface KmDeltaPlan<TComponent, TChain> {
@@ -96,16 +151,22 @@ export function planKmDeltaUpdate<TComponent extends { category: string }, TChai
 }
 
 /** Bumps a bike's non-chain components and its currently-mounted hot-wax chain by `delta` km. No-op if delta <= 0. */
-export async function applyKmDeltaToBikeDependents({ db, uid, bikeComponents, bikeChains, delta }: ApplyKmDeltaParams): Promise<ApplyKmDeltaResult> {
+export async function applyKmDeltaToBikeDependents({ db, uid, bikeComponents, bikeChains, delta, newlyLinkedRides }: ApplyKmDeltaParams): Promise<ApplyKmDeltaResult> {
   if (delta <= 0) return { chainUpdated: false, componentsUpdated: 0 }
 
   const { chainToUpdate, componentsToUpdate } = planKmDeltaUpdate(bikeComponents, bikeChains)
 
   if (chainToUpdate) {
     const chainRef = doc(db, `users/${uid}/chains`, chainToUpdate.id)
+    // Same `chainToUpdate` — the chain planKmDeltaUpdate already picked as
+    // the one currently mounted — same updateDoc call as the km bump below:
+    // the ride list can never land on a different chain than the km delta
+    // itself, even if a mount changes between two separate writes (there
+    // isn't a second write to race against).
     await updateDoc(chainRef, {
       kmSinceWax: chainToUpdate.kmSinceWax + delta,
       totalKm: chainToUpdate.totalKm + delta,
+      ...(newlyLinkedRides && newlyLinkedRides.length > 0 ? { linkedRides: arrayUnion(...newlyLinkedRides) } : {}),
     }).catch(() => {
       errorEmitter.emit('permission-error', new FirestorePermissionError({ path: chainRef.path, operation: 'update' }))
     })

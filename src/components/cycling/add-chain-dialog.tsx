@@ -51,6 +51,7 @@ export function AddChainDialog({ bikes }: { bikes: Bike[] }) {
       mountedDate: null,
       kmSinceWax: 0,
       totalKm: 0,
+      linkedRides: [],
       waxThresholdKm: Number(fd.get('waxThresholdKm')) || DEFAULT_WAX_THRESHOLD_KM,
       replaceThresholdKm: Number(fd.get('replaceThresholdKm')) || DEFAULT_REPLACE_THRESHOLD_KM,
       createdAt: serverTimestamp(),

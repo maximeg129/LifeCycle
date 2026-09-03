@@ -8,7 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { Droplets, Bike as BikeIcon, ArrowDownToLine, ArrowUpFromLine, History, Plus, Pencil, Trash2, ChevronDown, AlertTriangle } from 'lucide-react'
+import { Droplets, Bike as BikeIcon, ArrowDownToLine, ArrowUpFromLine, History, Plus, Pencil, Trash2, ChevronDown, AlertTriangle, Activity, ExternalLink } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
@@ -17,7 +17,7 @@ import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import {
   type Chain, type WaxHistoryEntry, CHAIN_STATUS_LABELS,
-  computeWaxLevel, needsReplacementCheck, waxProgressPct,
+  computeWaxLevel, needsReplacementCheck, waxProgressPct, ridesSinceMount,
 } from './chain-types'
 import { type Bike } from './gear-types'
 import { AddWaxHistoryDialog } from './add-wax-history-dialog'
@@ -42,6 +42,7 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
   const { user } = useUser()
   const db = useFirestore()
   const [showHistory, setShowHistory] = useState(false)
+  const [showRides, setShowRides] = useState(false)
   const [addingHistory, setAddingHistory] = useState(false)
   const [editingHistory, setEditingHistory] = useState<WithIdEntry | null>(null)
   const [editingChain, setEditingChain] = useState(false)
@@ -55,6 +56,7 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
   const waxLevel = computeWaxLevel(chain)
   const needsCheck = needsReplacementCheck(chain)
   const progress = waxProgressPct(chain)
+  const rides = ridesSinceMount(chain)
 
   const chainRef = () => doc(db!, `users/${user!.uid}/chains`, chain.id)
 
@@ -157,6 +159,45 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
         <span>Cumul total : {chain.totalKm} km</span>
         {chain.lastWaxDate && <span>Farté le {format(parseISO(chain.lastWaxDate), 'dd MMM', { locale: fr })}</span>}
       </div>
+
+      {/* Sorties liées — retour utilisateur : "en cliquant sur les km on
+          puisse voir les sorties liées". Scopé depuis le dernier MONTAGE
+          (chain.mountedDate, ridesSinceMount) plutôt que depuis le dernier
+          fartage : kmSinceWax se remet à zéro à chaque fartage, mais la
+          chaîne reste généralement montée à travers plusieurs fartages —
+          l'athlète s'attend toujours à voir ces sorties-là. */}
+      {chain.mountedDate && (
+        <Collapsible open={showRides} onOpenChange={setShowRides}>
+          <CollapsibleTrigger asChild>
+            <button className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+              <Activity className="w-3 h-3" /> Sorties depuis le montage ({rides.length})
+              <ChevronDown className={cn('w-3 h-3 transition-transform', showRides && 'rotate-180')} />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2 space-y-1">
+            {rides.length === 0 ? (
+              <p className="text-[11px] text-muted-foreground">
+                Aucune sortie synchronisée depuis le montage — le prochain &quot;Sync km&quot; les ajoutera.
+              </p>
+            ) : rides.map((r) => (
+              <a
+                key={r.activityId}
+                href={`https://intervals.icu/activities/${r.activityId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground hover:text-primary border-b border-border/30 pb-1 last:border-none"
+              >
+                <span className="truncate min-w-0">
+                  {r.name || 'Sortie'} · {format(parseISO(r.date), 'dd MMM', { locale: fr })}
+                </span>
+                <span className="flex items-center gap-1 shrink-0 text-foreground">
+                  {r.km} km <ExternalLink className="w-2.5 h-2.5" />
+                </span>
+              </a>
+            ))}
+          </CollapsibleContent>
+        </Collapsible>
+      )}
 
       {needsCheck && (
         <div className="p-2.5 rounded-xl bg-orange-500/5 border border-orange-500/20 flex items-center gap-2 text-[11px] text-orange-600">
