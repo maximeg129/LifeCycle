@@ -1295,6 +1295,41 @@ plus 100, sous le nouveau calcul continu — remplacée par 80→55, qui sature 
 deux nouveaux tests valident directement le cœur du correctif — une tendance HRV modérée (+10%) score
 75, une tendance légère (+5%) score 63 — plutôt que les anciens 50/100 plats.
 
+## Retrait du `PageHeader` sur les pages de nav principale (déjà fait pour Cyclisme)
+
+Retour utilisateur, capture d'écran de la page Coach à l'appui (le bandeau "COACHING IA / Coach"
+cerclé en jaune) : "remove this header in all tabs it is not necessary as the user know from the
+nav bar at the bottom where he is." Suite directe du même raisonnement déjà appliqué à Cyclisme
+(voir "Chaque tuile de Vue d'ensemble renvoie vers..." plus haut — le `PageHeader` "Performance /
+LifeCycle Vault" y avait été supprimé pour la même raison), jamais généralisé au reste de l'app
+jusqu'ici.
+
+**Portée : les destinations de `navItems` + Réglages, PAS les pages détail.** `sidebar.tsx` surligne
+un item de nav via `isActive = pathname === item.href` — un **exact match**, pas un `startsWith`.
+Donc la sidebar/bottom nav surlignent bien "Coach" sur `/coach`, "Cyclisme" sur `/cycling`, etc.,
+mais ne surlignent RIEN sur une sous-page comme `/cycling/budget`, `/cycling/governor`,
+`/cycling/metric/[id]`, `/nutrition/fueling`, `/finance` ou `/lifestyle` — sur ces pages-là, le
+`PageHeader` reste la SEULE indication de l'écran sur lequel on se trouve, donc il reste. Retiré
+uniquement sur : `coach/page.tsx`, `garage/page.tsx`, `nutrition/page.tsx`, `home-management/
+page.tsx`, `settings/page.tsx` (Réglages n'est pas dans `navItems` mais reçoit le même traitement
+`pathname === '/settings'` dans `sidebar.tsx` — même surlignage, même redondance).
+
+**Mécanique identique à Cyclisme** : suppression de l'import + du rendu `<PageHeader
+category="..." title="..." />`, `<main>` passe de `p-4 md:p-8` à `px-4 pt-20 pb-4 md:p-8` — `pt-20`
+remplace la clearance mobile (`mt-16 md:mt-0`) que `PageHeader` apportait via son propre style,
+pour ne pas passer sous le header mobile fixe. Un commentaire dans chaque fichier documente le
+choix, pointant vers le même raisonnement plutôt que de le redupliquer intégralement partout.
+
+**`nutrition/page.tsx` — seule page à porter des `actions` réelles dans son `PageHeader`** (les
+dialogues "Objectifs" et "Ajouter une recette", via `actions={<>...</>}`) : ces boutons ne sont PAS
+redondants avec la nav (ce sont de vraies actions, pas un libellé de page), donc ils restent — juste
+posés dans un simple `<div className="flex items-center justify-end gap-3">` en haut du flux
+plutôt que dans le bandeau titre disparu. Les autres pages traitées (Coach, Garage, Maison,
+Réglages) n'avaient aucune action dans leur `PageHeader` — suppression pure, rien à replacer.
+
+**Comportement inchangé, aucun test à toucher** : ce chantier ne touche que la mise en page (JSX +
+classes), aucune logique pure — la suite de 825 tests passe sans modification.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

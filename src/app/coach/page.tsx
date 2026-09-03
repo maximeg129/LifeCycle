@@ -30,7 +30,6 @@ import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { AuthGuard } from '@/components/layout/auth-guard'
-import { PageHeader } from '@/components/ui/page-header'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
@@ -182,9 +181,13 @@ export default function CoachPage() {
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
-      <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
-        <PageHeader category="Coaching IA" title="Coach" />
-
+      {/* No PageHeader on cette page — retour utilisateur : le bandeau
+          "Coaching IA / Coach" fait doublon avec la sidebar desktop + la
+          bottom nav mobile, qui surlignent déjà "Coach" comme page active
+          (pathname exact match, voir sidebar.tsx). pt-20 (au lieu du p-4
+          habituel) remplace la clearance mobile que PageHeader apportait
+          via son propre mt-16 — même traitement que Cyclisme. */}
+      <main className="px-4 pt-20 pb-4 md:p-8 max-w-7xl mx-auto space-y-6">
         <Suspense fallback={<Skeleton className="h-12 w-full rounded-lg" />}>
           <CoachTabs />
         </Suspense>

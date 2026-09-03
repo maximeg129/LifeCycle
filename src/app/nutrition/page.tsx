@@ -31,7 +31,6 @@ import { RecipeCard } from '@/components/nutrition/recipe-card'
 import { RecipeDetailDialog } from '@/components/nutrition/recipe-detail-dialog'
 import { RecipeQuickLog } from '@/components/nutrition/recipe-quick-log'
 import type { Recipe } from '@/components/nutrition/recipe-types'
-import { PageHeader } from '@/components/ui/page-header'
 import { EmptyState } from '@/components/ui/empty-state'
 import { MEAL_TYPE_LABELS, progressPct } from '@/components/nutrition/nutrition-types'
 import { MealPlanWeekView } from '@/components/nutrition/meal-plan-week-view'
@@ -88,17 +87,16 @@ export default function NutritionPage() {
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
-      <main className="p-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        <PageHeader
-          category="Nutrition & Fueling"
-          title="Plan & Livre de Cuisine"
-          actions={
-            <>
-              <NutritionGoalsDialog current={goals} />
-              <RecipeAddDialog />
-            </>
-          }
-        />
+      {/* No PageHeader — même raisonnement que Cyclisme/Coach/Garage/Maison/
+          Réglages : la sidebar/bottom nav surlignent déjà "Nutrition" comme
+          page active. Les actions (Objectifs/Ajouter recette) restent —
+          elles ne sont pas redondantes, juste posées en flux plutôt que
+          dans le bandeau titre disparu. */}
+      <main className="px-4 pt-20 pb-4 md:p-8 max-w-7xl mx-auto space-y-8">
+        <div className="flex items-center justify-end gap-3">
+          <NutritionGoalsDialog current={goals} />
+          <RecipeAddDialog />
+        </div>
 
         <Tabs defaultValue="plan" className="space-y-6">
           <TabsList className="bg-muted/50 border border-border/40 p-1 rounded-full w-fit mx-auto md:mx-0">
