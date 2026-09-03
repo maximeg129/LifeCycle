@@ -153,6 +153,7 @@ export function useDailyWorkout() {
 
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSending, setIsSending] = useState(false)
+  const [isSendingPlanSession, setIsSendingPlanSession] = useState(false)
 
   const generate = useCallback(async (rawMinutes: number, ride?: StoredRide, indoorRequested?: boolean): Promise<DailyWorkoutRecommendationOutput | null> => {
     if (!user || !db) return null
@@ -310,6 +311,51 @@ export function useDailyWorkout() {
     }
   }, [creds, user, db, todayId, stored?.planSessionRef, toast])
 
+  // Retour utilisateur, capture d'écran à l'appui : "que le bouton soit
+  // simplement envoi vers intervals ou proposer une alternative" — la
+  // séance du plan est déjà entièrement définie (title/durée/
+  // structuredWorkout), donc l'envoyer directement plutôt que de d'abord
+  // passer par un aller-retour IA (generate()) pour la "recopier". Même
+  // mécanisme que sendSessionToIntervals (use-training-plan.ts, bouton
+  // "Envoyer" de l'onglet Plan) : le MÊME externalId (planSessionExternalId)
+  // que la séance du Plan, pour que l'envoi depuis Aujourd'hui et depuis
+  // l'onglet Plan mettent à jour LE MÊME événement calendrier, jamais deux
+  // pour la même journée. "Proposer une séance alternative" reste le seul
+  // chemin qui passe encore par l'IA (formulaire temps/lieu/heure).
+  const sendPlanSessionDirectly = useCallback(async (): Promise<boolean> => {
+    if (!todaysPlanSession?.planId) return false
+    if (!creds?.intervalsAthleteId || !creds?.intervalsApiKey) {
+      toast({ variant: 'destructive', title: 'Intervals.icu non connecté', description: 'Renseignez vos identifiants dans Réglages.' })
+      return false
+    }
+    setIsSendingPlanSession(true)
+    try {
+      const externalId = planSessionExternalId(todaysPlanSession.planId, todaysPlanSession.weekNumber, todaysPlanSession.index)
+      const event = buildWorkoutEventPayload(todaysPlanSession.session, todayId, externalId)
+      const res = await fetch('/api/intervals/events', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-intervals-athlete-id': creds.intervalsAthleteId,
+          'x-intervals-api-key': creds.intervalsApiKey,
+        },
+        body: JSON.stringify(event),
+      })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Erreur ${res.status}`)
+      }
+      toast({ title: 'Envoyé sur Intervals.icu', description: `${todaysPlanSession.session.title} — ${format(new Date(), 'dd/MM/yyyy')}` })
+      return true
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Erreur inconnue'
+      toast({ variant: 'destructive', title: "Échec de l'envoi", description: message })
+      return false
+    } finally {
+      setIsSendingPlanSession(false)
+    }
+  }, [todaysPlanSession, creds, todayId, toast])
+
   return {
     stored: stored?.proposal ?? null,
     storedAvailableMinutes: stored?.availableMinutes ?? null,
@@ -329,9 +375,11 @@ export function useDailyWorkout() {
     isLoadingStored: loadingStored,
     isGenerating,
     isSending,
+    isSendingPlanSession,
     canSendToIntervals,
     generate,
     sendToIntervals,
+    sendPlanSessionDirectly,
     generateWeekSessions,
     generatingSessionsForWeek,
   }
