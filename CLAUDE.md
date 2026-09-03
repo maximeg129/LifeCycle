@@ -1449,6 +1449,29 @@ vérifiable ; route dédiée `/onboarding` plutôt qu'une section dans une page 
 **Étape 4 — attribution Garmin** : chantier séparé, PR distincte — voir section suivante de ce fichier
 (ajoutée par cette PR).
 
+## Attribution des données Garmin (conditions d'utilisation Intervals.icu)
+
+Retour utilisateur : Intervals.icu impose une attribution des données Garmin quand elles transitent
+par leur API (section 1.1 de leurs conditions d'utilisation). **Accès réseau direct au texte des ToS
+impossible depuis ce sandbox** (même limite déjà documentée ailleurs dans ce fichier pour
+intervals.icu/Join/Frive/TrainerRoad — seuls `raw.githubusercontent.com`/`api.github.com` restent
+joignables) — formule générique rédigée après validation explicite de l'utilisateur sur ce point
+(`AskUserQuestion`, "Garmin-sourced data" comme ancrage), à ajuster si le texte exact des ToS
+s'avère différent une fois l'accès réseau direct possible.
+
+**Placement** : nouvelle carte "À propos des données" tout en bas de `/onboarding`, après la carte
+sur le délai de sync — pas une page séparée (l'app n'en crée pas une pour ce seul besoin) et pas
+`/settings` (qui reste focalisée sur l'action de connexion elle-même, pas une mention légale).
+`/onboarding` est déjà l'endroit où l'app explique, à l'étape 2, que Garmin/Strava/Wahoo se
+connectent côté Intervals.icu — cette carte prolonge naturellement cette explication plutôt que
+d'être un ajout hors contexte ailleurs dans l'app.
+
+**Contenu** : la formule couvre trois points — (1) les données affichées, y compris d'origine Garmin
+("Garmin-sourced data"), viennent d'Intervals.icu, pas d'une connexion directe ; (2) LifeCycle ne se
+connecte jamais lui-même à Garmin ni aux autres fabricants ; (3) Intervals.icu reste le seul
+intermédiaire, conformément à ses propres conditions d'utilisation — sans citer un numéro de section
+précis, puisque le texte exact n'a pas pu être vérifié directement.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

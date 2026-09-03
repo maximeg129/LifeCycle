@@ -13,7 +13,7 @@
 // et les bandeaux non-bloquants de Coach>Aujourd'hui/Plan.
 
 import Link from 'next/link'
-import { ArrowLeft, CheckCircle2, ExternalLink, Settings2, UserPlus, Link2, KeyRound, Clock } from 'lucide-react'
+import { ArrowLeft, CheckCircle2, ExternalLink, Settings2, UserPlus, Link2, KeyRound, Clock, BadgeInfo } from 'lucide-react'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { AuthGuard } from '@/components/layout/auth-guard'
 import { PageHeader } from '@/components/ui/page-header'
@@ -163,6 +163,38 @@ export default function OnboardingPage() {
               heures selon leur propre synchro). CTL/ATL/TSB ont besoin d&apos;un peu d&apos;historique (plusieurs
               jours d&apos;activités) pour devenir significatifs — une seule sortie fraîchement importée ne suffit
               pas à peupler tout de suite les tuiles Vue d&apos;ensemble.
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* Attribution Garmin — retour utilisateur : "Intervals.icu impose
+            une attribution des données Garmin quand elles transitent par
+            Intervals.icu (section 1.1 de leurs terms)". Formule générique
+            (validée par l'utilisateur, AskUserQuestion — texte exact des
+            ToS non vérifiable depuis ce sandbox, réseau bloqué vers
+            intervals.icu comme documenté ailleurs dans CLAUDE.md). Placée
+            ici plutôt que dans une page "À propos" séparée : c'est déjà
+            l'endroit où l'app explique que Garmin/Strava/Wahoo se
+            connectent côté Intervals.icu (étape 2 ci-dessus) — cette carte
+            prolonge naturellement cette explication. */}
+        <Card className="lc-card">
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-muted rounded-[10px] flex items-center justify-center shrink-0">
+                <BadgeInfo className="w-5 h-5 text-muted-foreground" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-semibold">À propos des données</CardTitle>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="pt-0 pl-[3.75rem] space-y-2 text-sm text-muted-foreground leading-relaxed">
+            <p>
+              Les données d&apos;activité affichées dans LifeCycle — y compris celles d&apos;origine Garmin
+              (Garmin-sourced data) — proviennent de votre compte Intervals.icu, qui les récupère lui-même
+              depuis la source que vous avez connectée (Garmin Connect, Strava, Wahoo, ou autre).
+              LifeCycle ne se connecte jamais directement à Garmin ni aux autres fabricants : Intervals.icu
+              reste le seul intermédiaire, conformément à ses propres conditions d&apos;utilisation.
             </p>
           </CardContent>
         </Card>
