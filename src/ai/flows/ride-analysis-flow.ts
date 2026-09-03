@@ -170,7 +170,7 @@ export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult
       a.trainingLoad != null ? `Charge d'entraînement : ${a.trainingLoad}` : '',
       a.avgHeartrate != null ? `FC moyenne : ${a.avgHeartrate} bpm${a.maxHeartrate != null ? ` (max ${a.maxHeartrate})` : ''}` : '',
       a.avgCadence != null ? `Cadence moyenne : ${Math.round(a.avgCadence)} rpm` : '',
-      a.rpe != null ? `RPE ressenti (athlète) : ${a.rpe}/10` : '',
+      a.rpe != null ? `RPE (perception d'effort, athlète) : ${a.rpe}/10 (échelle 1 = très facile → 10 = effort maximal ; un chiffre BAS est un signal FAVORABLE — charge interne faible et bien tolérée — jamais un ressenti négatif)` : '',
       a.feel != null ? `Feeling ressenti (athlète) : ${a.feel > 0.1 ? 'positif' : a.feel < -0.1 ? 'négatif' : 'neutre'}` : '',
     ].filter(Boolean).join('\n'));
 
@@ -219,6 +219,7 @@ Analyse les données ci-dessous et produis une analyse honnête, concrète et en
 Si un profil de durabilité est fourni, commente si la puissance tient ou décline à mesure que le travail s'accumule pendant la sortie (paliers kJ/kg) — c'est une lecture différente de la puissance moyenne globale, jamais interchangeable avec elle. Cette comparaison reste interne à CETTE sortie (à froid vs fatigué) : ne prétends JAMAIS comparer à l'historique de l'athlète ou à un seuil labo/un autre athlète, aucune de ces deux comparaisons n'est fournie ici.
 Si un découplage puissance:FC est fourni, ne l'interprète JAMAIS automatiquement comme un signe de fatigue — contextualise (chaleur, hydratation/hypovolémie, dénivelé, intensité variable sur la sortie) plutôt que d'affirmer une cause précise que les données ne permettent pas de trancher.
 Si une répartition 3 zones est fournie, la cible ~80% en zone basse intensité est une observation DESCRIPTIVE d'athlètes s'entraînant 10-13 fois/semaine, JAMAIS une prescription universelle — ne dis jamais à l'athlète qu'il "devrait" viser 80% sur CETTE sortie (une sortie seuil/intervalles n'a aucune raison d'être en zone basse), décris seulement où se situe cette sortie et laisse le contexte du plan/objectif de l'athlète, pas ce chiffre seul, dicter si c'était le bon choix.
+Le RPE et le Feeling sont deux mesures subjectives distinctes de l'athlète — ne les confonds jamais et ne les traite jamais comme contradictoires l'un envers l'autre sans raison réelle. Un RPE bas (proche de 1) et un Feeling positif racontent la MÊME histoire cohérente (séance facile, bien vécue) : ne présente JAMAIS cette combinaison comme un "ressenti négatif inexpliqué" à investiguer, ni comme un écart entre le ressenti et la charge objective — c'est le signal normal et attendu d'une séance facile bien tolérée, pas une anomalie.
 
 Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme exacte
 (plus les champs de contrat obligatoires décrits plus haut) :

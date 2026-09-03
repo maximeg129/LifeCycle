@@ -1501,6 +1501,40 @@ uniquement, comme l'ancien `wasSent`) — re-cliquer reste sans danger, même ex
 Intervals.icu plutôt qu'un doublon (même garantie que le bouton "Envoyer" de l'onglet Plan, qui
 n'a jamais eu besoin de ce suivi non plus).
 
+## Analyse de sortie : fix mauvaise interprétation du RPE bas
+
+Retour utilisateur, deux captures d'écran à l'appui (l'analyse IA d'une sortie, et la vraie page
+Intervals.icu de cette même sortie montrant RPE=3 "Easy" et Feel="Good") : "Je pense que l'IA fait
+une mauvaise interprétation du RPE." L'analyse générée affirmait un "ressenti négatif inexpliqué...
+à investiguer" alors qu'aucune des deux données réelles n'est négative — RPE 3/10 est un effort
+perçu comme FACILE (échelle 1=repos, 10=maximal, donc un chiffre bas est un signal FAVORABLE) et
+Feel="Good" est explicitement positif. Contradiction interne à la même sortie de l'IA : un autre
+passage du même texte lisait pourtant correctement "RPE 3/10... bonne tolérance, pas de fatigue
+accumulée évidente."
+
+**Data layer vérifiée saine** (`bestRpe()`/`feelToScore()`, `intervals-api.ts`) — les deux
+helpers sont corrects et documentés (`feelToScore`: Feel Good → +1, cohérent avec la capture
+d'écran). Le bug n'est pas une valeur mal extraite mais une échelle non ancrée dans le prompt.
+
+**Root cause** (`ride-analysis-flow.ts`) — `feel` était déjà pré-interprété en texte
+(`'positif'/'négatif'/'neutre'`) avant d'entrer dans le prompt, exactement la discipline "jamais
+laisser une échelle à l'appréciation du modèle" déjà en place ailleurs dans l'app (`windAdvice`,
+`isSevereWeather()`...). `rpe`, lui, était injecté en nombre brut : `"RPE ressenti (athlète) :
+3/10"` — sans direction ni ancrage. Le libellé "ressenti" combiné à un chiffre bas invite à une
+lecture en score de satisfaction (bas = mauvais), l'inverse du sens réel du RPE (bas = facile). Le
+propre composant UI de saisie du RPE dans cette app (`quick-feedback-widget.tsx`) ancre déjà
+correctement ce sens ("RPE (1 = facile, 10 = proche du TTE)") — cet ancrage n'avait simplement
+jamais été porté dans le prompt du flow `rideAnalysis`.
+
+**Correctif, deux volets** : (1) la ligne RPE du prompt cite désormais l'échelle et sa direction
+en toutes lettres (`"1 = très facile → 10 = effort maximal ; un chiffre BAS est un signal FAVORABLE
+— charge interne faible et bien tolérée — jamais un ressenti négatif"`), même traitement que `feel`
+plutôt qu'un chiffre nu ; (2) une règle explicite ajoutée au system prompt interdit spécifiquement
+la contradiction observée : un RPE bas et un Feeling positif ne doivent jamais être présentés comme
+contradictoires ou comme un écart ressenti/charge à investiguer — c'est le signal normal d'une
+séance facile bien tolérée. Changement de texte de prompt uniquement, aucune logique pure touchée
+— 832/832 tests inchangés, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
