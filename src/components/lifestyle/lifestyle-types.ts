@@ -1,5 +1,8 @@
 // ── Firestore document shapes (client-side, ids added by useCollection/useDoc) ──
 
+import { windowedTrendSignal, type DatedValue, type Signal } from '@/components/cycling/governor-types'
+import { GOVERNOR_BASELINE_WINDOW, requireConstant } from '@/domain/cycling/evidence/constants'
+
 export interface HealthMetric {
   userId: string
   date: { seconds: number; nanoseconds: number } | null
@@ -259,26 +262,84 @@ export function formatSleepDuration(hours: number): string {
 }
 
 /**
- * Lightweight 0-100 readiness heuristic from the most recent entry — not a
- * medical score. Always used, never a connected device's own proprietary
- * recovery/readiness score (WHOOP via Intervals.icu) — retour utilisateur,
- * suite à l'audit des indicateurs de Cyclisme : "éviter tous indicateurs
- * qui restent propriétaires". Cette fonction remplace resolveReadiness()
- * (qui préférait le score du capteur quand présent) pour honorer la règle
- * déjà écrite dans ce projet, jusqu'ici pas totalement respectée par ce
- * ring précis — voir readiness-composition-explicit-weighting,
+ * Nombre de jours d'historique à fetcher AU-DELÀ de la fenêtre affichée
+ * pour que computeReadiness() puisse comparer HRV/FC repos à une ligne de
+ * base — réutilise GOVERNOR_BASELINE_WINDOW (même fenêtre ≥4 semaines déjà
+ * utilisée par le gouverneur de charge interne pour exactement le même
+ * besoin, principle-2 dans evidence/rules.ts : "HRV, sommeil et bien-être
+ * s'interprètent... rapportée à une ligne de base individuelle établie sur
+ * ≥ 4 semaines") plutôt qu'une deuxième fenêtre inventée pour l'occasion.
+ */
+export function readinessBaselineLookbackDays(): number {
+  return requireConstant(GOVERNOR_BASELINE_WINDOW, 'GOVERNOR_BASELINE_WINDOW').baselineDays
+}
+
+/**
+ * Convertit un Signal (windowedTrendSignal — tendance récente 7j vs ligne
+ * de base ≥4 semaines, jamais une valeur isolée) sur la même échelle 0-100
+ * que les autres composantes de computeReadiness. `null` (composante
+ * omise, jamais un 50 par défaut trompeur) tant qu'il n'y a pas assez de
+ * points dans les deux fenêtres — voir windowedTrendSignal.
+ */
+function trendToReadinessScore(signal: Signal): number | null {
+  if (signal == null) return null
+  return signal === 1 ? 100 : signal === -1 ? 0 : 50
+}
+
+/**
+ * Lightweight 0-100 readiness heuristic — not a medical score. Always
+ * computed here, never a connected device's own proprietary recovery/
+ * readiness score (WHOOP via Intervals.icu) — retour utilisateur, suite à
+ * l'audit des indicateurs de Cyclisme : "éviter tous indicateurs qui
+ * restent propriétaires". Cette fonction remplace resolveReadiness() (qui
+ * préférait le score du capteur quand présent) pour honorer la règle déjà
+ * écrite dans ce projet — voir readiness-composition-explicit-weighting,
  * evidence/rules.ts : la composition du score readiness doit avoir "une
  * pondération explicite et visible/modifiable par l'utilisateur", ce
- * qu'un score de capteur en boîte noire ne peut pas offrir. Compromis
- * assumé : moins précis qu'un capteur haut de gamme quand un est connecté,
- * mais jamais une boîte noire.
+ * qu'un score de capteur en boîte noire ne peut pas offrir.
+ *
+ * `history` (optionnel) ajoute HRV et FC repos comme deux composantes
+ * supplémentaires — retour utilisateur, après un readiness très éloigné du
+ * score WHOOP : "j'ai pas de data point en input n'utilisons pas ces
+ * indicateurs, je suis d'accord sur le changement et l'intégration hrv et
+ * fc". Chacune est une TENDANCE (fenêtre récente 7j vs ligne de base ≥4
+ * semaines, via windowedTrendSignal — déjà utilisé par le gouverneur de
+ * charge interne pour ce même calcul, pas un deuxième algorithme), jamais
+ * une valeur brute du jour comparée à un seuil absolu : le HRV varie
+ * énormément d'une personne à l'autre (voir la tuile HRV), seule la
+ * trajectoire par rapport à SA PROPRE ligne de base a un sens. Omise
+ * (jamais un 50 par défaut) si `history` est absent, si HRV/FC repos n'ont
+ * aucune valeur ce jour-là, ou si l'historique ne couvre pas encore assez
+ * de jours pour établir une ligne de base (`windowedTrendSignal` l'exige
+ * déjà — voir readinessBaselineLookbackDays() ci-dessus pour la fenêtre à
+ * fetcher côté appelant). ⚠️ Le signe d'une variation de HRV reste
+ * ambigu en soi (principle-3-hrv-sign-ambiguous, evidence/rules.ts — une
+ * hausse comme une baisse peuvent signaler une adaptation négative chez un
+ * athlète entraîné) : cette composante ne décide donc jamais seule, elle
+ * n'est qu'une parmi 3 à 5 dans une moyenne, jamais affichée isolément
+ * comme "HRV en baisse = fatigue" (forbidden-hrv-sign-fatigue-freshness).
  */
-export function computeReadiness(latest: HealthMetricLike | undefined): number | null {
+export function computeReadiness(
+  latest: (HealthMetricLike & { dayId?: string }) | undefined,
+  history?: (HealthMetricLike & { dayId: string })[]
+): number | null {
   if (!latest) return null
   const parts: number[] = []
   if (latest.sleepQuality !== undefined) parts.push(latest.sleepQuality)
   if (latest.stressScore !== undefined) parts.push(100 - latest.stressScore)
   if (latest.mood !== undefined) parts.push(latest.mood * 10)
+
+  if (history && latest.dayId) {
+    const referenceIso = latest.dayId
+    const hrvSeries: DatedValue[] = history.filter((d) => d.hrv != null).map((d) => ({ date: d.dayId, value: d.hrv as number }))
+    const hrvScore = trendToReadinessScore(windowedTrendSignal(hrvSeries, referenceIso, 'higher'))
+    if (hrvScore != null) parts.push(hrvScore)
+
+    const rhrSeries: DatedValue[] = history.filter((d) => d.restingHR != null).map((d) => ({ date: d.dayId, value: d.restingHR as number }))
+    const rhrScore = trendToReadinessScore(windowedTrendSignal(rhrSeries, referenceIso, 'lower'))
+    if (rhrScore != null) parts.push(rhrScore)
+  }
+
   if (parts.length === 0) return null
   return Math.round(average(parts))
 }
