@@ -50,7 +50,19 @@ export function QuickFeedbackButton({ activityId, date }: { activityId: string; 
           variant="ghost"
           size="icon"
           className={`h-8 w-8 shrink-0 ${hasFeedback ? 'text-primary' : 'text-muted-foreground'}`}
-          onClick={(e) => { e.preventDefault(); e.stopPropagation() }}
+          // ⚠️ Bug réel trouvé en direct (retour utilisateur : "le menu ne
+          // s'ouvre pas") : preventDefault() ici empêchait le Popover de
+          // s'ouvrir. Radix compose le onClick de ce bouton avec son propre
+          // handler d'ouverture via composeEventHandlers(props.onClick,
+          // context.onOpenToggle) — par défaut { checkForDefaultPrevented:
+          // true } — donc dès que ce handler appelle preventDefault(),
+          // onOpenToggle n'est plus jamais invoqué : le Popover reste fermé
+          // à chaque clic, silencieusement. stopPropagation() seul suffit à
+          // empêcher la ligne parente (un <a> vers Intervals.icu dans le
+          // Journal) de naviguer au clic — même patron déjà correct dans
+          // strength-log-export-button.tsx, jamais besoin de preventDefault
+          // pour ça.
+          onClick={(e) => e.stopPropagation()}
           title="RPE et sensations"
         >
           <MessageCircle className="w-4 h-4" />
