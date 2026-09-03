@@ -1211,6 +1211,34 @@ comportement inchangé : le formulaire reste la vue par défaut (rien à prévis
 draft généré par n'importe quel chemin, le formulaire redevient (ou reste) visible pour rester
 ajustable/régénérable — comportement identique à avant ce correctif.
 
+## ⚠️ Bug réel : `QuickFeedbackButton` (RPE) — `preventDefault()` empêchait le Popover Radix de s'ouvrir
+
+Retour utilisateur, en cherchant où saisir un RPE manquant dans l'app : "le menu ne s'ouvre pas".
+`QuickFeedbackButton` (`quick-feedback-widget.tsx`) est un `<PopoverTrigger asChild>` dont le bouton
+enfant appelait `e.preventDefault(); e.stopPropagation()` — pensé pour empêcher la ligne parente
+(un `<a>` vers Intervals.icu dans le Journal, `rides-journal-tab.tsx`) de naviguer au clic.
+
+**Cause exacte, tracée dans le code de Radix** (`@radix-ui/react-popover`, `PopoverTrigger`) : le
+`onClick` du trigger est composé avec le handler interne d'ouverture via
+`composeEventHandlers(props.onClick, context.onOpenToggle)` — et `composeEventHandlers`
+(`@radix-ui/primitive`) a `checkForDefaultPrevented: true` par défaut : `context.onOpenToggle`
+n'est appelé que si `!event.defaultPrevented`. Dès que le `onClick` du bouton enfant appelle
+`preventDefault()`, `onOpenToggle` n'est donc plus jamais invoqué — le Popover reste fermé à
+chaque clic, silencieusement (aucune erreur console, rien dans les logs). Confirmé en lisant
+directement `node_modules/@radix-ui/react-popover/dist/index.js` et `.../primitive/dist/index.js`,
+pas une supposition.
+
+**`stopPropagation()` seul suffit** à empêcher la navigation du `<a>` parent (l'événement ne se
+propage jamais jusqu'à l'ancêtre, donc son action par défaut — la navigation — ne se déclenche
+jamais) — pas besoin de `preventDefault()` pour ça. Même patron déjà correct ailleurs dans le
+projet, `strength-log-export-button.tsx` (`<PopoverTrigger asChild>` avec
+`onClick={(e) => e.stopPropagation()}` seul) — la comparaison entre les deux fichiers a d'ailleurs
+été le premier indice avant de remonter à la cause exacte côté Radix.
+
+**Audit fait sur toute la base** (`grep` de `Trigger asChild` croisé avec `preventDefault`) : aucun
+autre `PopoverTrigger`/`DialogTrigger`/`DropdownMenuTrigger asChild` du projet ne combine les deux —
+bug isolé à ce seul fichier, corrigé sans toucher au reste.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
