@@ -37,7 +37,7 @@ import { FirestorePermissionError } from '@/firebase/errors'
 import type { IntervalsAthlete, IntervalsActivity, IntervalsWellness, IntervalsFitnessDay, IntervalsPowerCurve } from '@/lib/intervals-api'
 import type { Bike, BikeComponent } from '@/components/cycling/gear-types'
 import type { Chain } from '@/components/cycling/chain-types'
-import { applyKmDeltaToBikeDependents, computeGearKmFromActivities } from '@/components/cycling/km-sync'
+import { applyKmDeltaToBikeDependents, computeGearKmFromActivities, extractLinkedRides } from '@/components/cycling/km-sync'
 
 // ── Credentials ──────────────────────────────────────────────────────
 
@@ -228,6 +228,16 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
           const delta = trueTotalKm - bike.totalKm
           if (delta <= 0) continue
 
+          // Same cutoff the incremental delta above conceptually represents
+          // — captured BEFORE bike.lastSyncDate is overwritten just below,
+          // so a chain never gets the same ride attributed twice across two
+          // syncs. `chain-types.ts`/`km-sync.ts` (retour utilisateur "option
+          // 2... vérifie la robustesse") documents the one honest edge case:
+          // this can under/over-attribute if bike.totalKm was nudged by a
+          // manual km edit between two real syncs — never the wrong chain,
+          // at worst a slightly imprecise ride list on the right one.
+          const newlyLinkedRides = extractLinkedRides(fullHistory, bike.externalGearId, bike.lastSyncDate)
+
           const bikeRef = doc(db, `users/${user.uid}/bikes`, bike.id)
           await updateDoc(bikeRef, { totalKm: trueTotalKm, lastSyncDate: todayStr }).catch(() => {
             errorEmitter.emit('permission-error', new FirestorePermissionError({ path: bikeRef.path, operation: 'update' }))
@@ -242,6 +252,7 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
             bikeComponents,
             bikeChains: chains.filter((c) => c.bikeId === bike.id),
             delta,
+            newlyLinkedRides,
           })
           componentsUpdated += result.componentsUpdated
         }

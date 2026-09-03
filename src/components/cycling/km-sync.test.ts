@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { planKmDeltaUpdate, computeGearKmFromActivities } from './km-sync'
+import { planKmDeltaUpdate, computeGearKmFromActivities, extractLinkedRides } from './km-sync'
 
 describe('planKmDeltaUpdate', () => {
   it('picks the mounted chain when the bike has rotation chains', () => {
@@ -102,5 +102,44 @@ describe('computeGearKmFromActivities', () => {
     // Wahoo. This function never looks at that field at all.
     const activities = [{ gear: { id: gearId }, start_date_local: '2026-08-24T10:00:00', distance: 45000 }]
     expect(computeGearKmFromActivities(activities, gearId, '2026-08-01')).toBe(45)
+  })
+})
+
+// extractLinkedRides shares matchesGearSinceCutoff with computeGearKmFromActivities
+// above (same file, same private predicate) — these tests focus on what's
+// unique to it (shaping the matching activities into rides) rather than
+// re-proving the match rule itself, already covered above. Which CHAIN these
+// rides end up attributed to is planKmDeltaUpdate's job (tested above) —
+// applyKmDeltaToBikeDependents just passes this list straight through to
+// whichever chain that already picked, in the same updateDoc call as the km
+// bump, so the two can't land on different chains.
+describe('extractLinkedRides', () => {
+  const gearId = 'b9419905'
+
+  it('turns matching activities into linked rides, per-activity km rounded individually', () => {
+    const activities = [
+      { id: 'act-1', name: 'Sortie du matin', gear: { id: gearId }, start_date_local: '2026-08-24T10:00:00', distance: 30400 },
+      { id: 'act-2', name: 'Sortie du soir', gear: { id: gearId }, start_date_local: '2026-08-25T18:00:00', distance: 20000 },
+    ]
+    expect(extractLinkedRides(activities, gearId, '2026-08-23')).toEqual([
+      { activityId: 'act-1', name: 'Sortie du matin', date: '2026-08-24', km: 30 },
+      { activityId: 'act-2', name: 'Sortie du soir', date: '2026-08-25', km: 20 },
+    ])
+  })
+
+  it('excludes activities on a different gear or on/before the cutoff, same as the sum', () => {
+    const activities = [
+      { id: 'other-gear', gear: { id: 'other-bike' }, start_date_local: '2026-08-24T10:00:00', distance: 40000 },
+      { id: 'before-cutoff', gear: { id: gearId }, start_date_local: '2026-08-20T10:00:00', distance: 40000 },
+      { id: 'on-cutoff', gear: { id: gearId }, start_date_local: '2026-08-23T10:00:00', distance: 40000 },
+    ]
+    expect(extractLinkedRides(activities, gearId, '2026-08-23')).toEqual([])
+  })
+
+  it('falls back to null name and empty date when the activity is missing them', () => {
+    const activities = [{ id: 'act-1', gear: { id: gearId }, distance: 15000 }]
+    expect(extractLinkedRides(activities, gearId, null)).toEqual([
+      { activityId: 'act-1', name: null, date: '', km: 15 },
+    ])
   })
 })
