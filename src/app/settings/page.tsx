@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
 import { AuthGuard } from '@/components/layout/auth-guard'
-import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -79,9 +78,9 @@ export default function SettingsPage() {
     <div className="min-h-screen bg-background pb-20 md:pb-0 md:pl-64">
       <AppNavigation />
 
-      <main className="p-4 md:p-8 max-w-3xl mx-auto space-y-6">
-        <PageHeader category="Compte" title="Réglages" />
-
+      {/* No PageHeader — même raisonnement que Cyclisme/Coach/Garage/Maison :
+          la sidebar/bottom nav surlignent déjà "Réglages" comme page active. */}
+      <main className="px-4 pt-20 pb-4 md:p-8 max-w-3xl mx-auto space-y-6">
         {/* ── Profil ───────────────────────────────────────────────── */}
         <ProfileCard />
 
