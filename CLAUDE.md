@@ -1385,6 +1385,70 @@ que "Historique de fartage" juste en dessous), masquée si la chaîne n'a jamais
 `https://intervals.icu/activities/{activityId}` — même URL que les autres liens sortants vers
 Intervals.icu déjà dans l'app (Journal, `PlanSessionDetail`).
 
+## Onboarding Intervals.icu — audit "prêt pour quelqu'un d'autre que moi"
+
+Retour utilisateur : "je veux qu'on passe en revue l'app sous l'angle 'prêt à être utilisé par
+quelqu'un d'autre que moi' — documentation et onboarding, pas de nouvelle feature." Chantier en
+quatre étapes explicitement demandées (audit d'abord, validation du plan avant tout code) :
+
+**Étape 1 — audit** (aucun changement de code) : `/settings` était le SEUL écran mentionnant
+Intervals.icu, et supposait déjà un compte existant (deux champs vides + un lien vers
+`intervals.icu/settings`) — aucune mention de créer un compte, aucune mention qu'il faut d'abord
+connecter Garmin/Strava/Wahoo *côté Intervals.icu* (LifeCycle ne s'en charge jamais). Aucune route
+`/help`/`/about`/`/onboarding` n'existait ; `README.md` était le boilerplate Firebase Studio d'origine
+(3 lignes, aucune mention de dépendance externe). Les écrans qui dépendent d'Intervals.icu se
+répartissaient en trois catégories, déjà auditées avant ce chantier : (1) bien gérés —
+`NotConfiguredBanner` (Cyclisme/Journal/PMC, un seul point de gate propre), le bandeau non-bloquant
+de `/lifestyle` (le meilleur exemple existant : informe plutôt que bloque, saisie manuelle en
+repli), `MetricCard`/`isAvailable` (Fueling vs Workload) ; (2) dégradation silencieuse correcte mais
+sans guidage — `SyncButton` et le sélecteur "Lier à Intervals.icu" (Garage) disparaissent simplement
+si non connecté, sans expliquer pourquoi ; (3) le vrai trou — **Coach > Aujourd'hui et Coach > Plan**
+n'avaient aucun bandeau : l'athlète pouvait générer une proposition IA sans connexion (ça fonctionne,
+contexte d'entraînement simplement omis) mais ne découvrait qu'il ne pouvait pas l'envoyer qu'APRÈS
+avoir généré, via une petite ligne grise sous le bouton d'envoi.
+
+**Étape 2 — plan validé par l'utilisateur** (`AskUserQuestion` sur trois choix d'implémentation avant
+tout code : lien clé API `/settings` texte plutôt qu'ancre non vérifiable — accès réseau à
+intervals.icu bloqué dans ce sandbox, même limite déjà documentée ailleurs dans ce fichier pour
+Join/Frive/TrainerRoad ; formule d'attribution générique à rédiger plutôt qu'un texte de ToS non
+vérifiable ; route dédiée `/onboarding` plutôt qu'une section dans une page d'aide plus large).
+
+**Étape 3 — implémentation** :
+- **`/onboarding`** (nouvelle route, pas dans `navItems` — même statut que `/lifestyle`/`/finance`,
+  garde `PageHeader`) — 4 étapes explicites en cartes `.lc-card` : (1) créer un compte Intervals.icu
+  gratuit, (2) connecter sa source d'activité *sur Intervals.icu* (Garmin/Strava/Wahoo — explicitement
+  dit que LifeCycle n'y participe pas), (3) générer la clé API (`intervals.icu/settings`, "tout en bas,
+  section Developer Settings" — instruction textuelle plutôt qu'un lien d'ancre non vérifiable, voir
+  étape 2), (4) la renseigner dans Réglages. Badge de statut dynamique (`useAthlete().isConfigured`,
+  même vérification que le reste de l'app — non-vide, pas une validation d'exactitude) sur l'étape 4 et
+  dans le `PageHeader`. Dernière carte "Combien de temps avant de voir mes données ?" — la synchro
+  LifeCycle est déjà automatique (`use-intervals.tsx`), le vrai délai variable est côté Intervals.icu
+  lui-même selon la source (Strava quasi-immédiat, Garmin plus lent), et CTL/ATL/TSB ont besoin de
+  plusieurs jours d'historique pour devenir significatifs — dit explicitement plutôt que de laisser
+  l'utilisateur croire à un bug si rien ne s'affiche tout de suite après la première sortie importée.
+- **`NotConfiguredBanner`** — CTA principal repointé vers `/onboarding` (guide pas-à-pas) plutôt que
+  `/settings` directement (qui suppose un compte déjà existant) ; lien secondaire discret vers
+  `/settings` conservé pour qui a déjà ses identifiants en main.
+- **`IntervalsOnboardingNotice`** (`intervals-onboarding-notice.tsx`, nouveau composant partagé) —
+  même patron visuel que le bandeau non-bloquant de `/lifestyle`. Affiché sur **Coach > Aujourd'hui**
+  et **Coach > Plan** (les deux tabs qui n'avaient aucun signal avant ce chantier) via
+  `canSendToIntervals` — déjà exposé par `useDailyWorkout()`/`useTrainingPlan()` (même check que le
+  bouton d'envoi désactivé, aucune nouvelle lecture Firestore), donc le bandeau et le bouton ne peuvent
+  jamais se désynchroniser. Non-bloquant par construction : la génération IA continue de fonctionner
+  sans connexion, seul l'envoi vers Intervals.icu reste indisponible — le bandeau le dit avant que
+  l'athlète ait à le découvrir en cliquant "Envoyer".
+- **`/settings`** — nouvelle carte "Pas encore de compte Intervals.icu ?" au-dessus de la carte
+  d'aide existante, qui pointe vers `/onboarding` plutôt que de redupliquer les explications sur cette
+  page (qui reste focalisée sur la saisie des deux champs eux-mêmes, l'étape 4 du guide).
+- **`README.md`** réécrit — était le boilerplate Firebase Studio d'origine (`"take a look at
+  src/app/page.tsx"`, 3 lignes) : section "Dépendances externes" (Intervals.icu, Anthropic, Firebase —
+  chacune avec ce qu'elle fournit et si elle est incontournable), setup dev (`npm install`/`npm run
+  dev`, `ANTHROPIC_API_KEY` requis pour les flows IA), renvoi vers `CLAUDE.md` pour l'architecture et
+  vers `/onboarding` in-app pour le parcours utilisateur final plutôt que de le redupliquer ici.
+
+**Étape 4 — attribution Garmin** : chantier séparé, PR distincte — voir section suivante de ce fichier
+(ajoutée par cette PR).
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
