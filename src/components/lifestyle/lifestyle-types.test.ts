@@ -99,9 +99,9 @@ describe('computeReadiness', () => {
 
 /**
  * Builds 36 consecutive days of history for `field`, referenceDay's most
- * recent 8 days (the "recent" window windowedTrendSignal compares) set to
+ * recent 8 days (the "recent" window splitRecentBaseline compares) set to
  * `recentValue`, the preceding 28 days ("baseline") set to `baselineValue` —
- * enough points in both windows for a real (non-null) trend signal.
+ * enough points in both windows for a real (non-null) trend score.
  */
 function buildTrendHistory(
   field: 'hrv' | 'restingHR',
@@ -122,34 +122,53 @@ function buildTrendHistory(
 describe('computeReadiness — HRV/FC repos (history)', () => {
   const referenceDay = '2026-03-31'
 
-  it('adds a favorable HRV trend (recent > baseline) as a 100 component', () => {
-    const history = buildTrendHistory('hrv', 40, 60, referenceDay)
+  // Un swing >= 20% (READINESS_TREND_FULL_SWING_PCT) sature l'échelle —
+  // ces fixtures sont volontairement bien au-delà pour tester le plafond/
+  // plancher plutôt que la zone intermédiaire (voir les tests "continu"
+  // plus bas pour un swing partiel).
+  it('adds a strongly favorable HRV trend (recent >> baseline) as a saturated 100 component', () => {
+    const history = buildTrendHistory('hrv', 40, 60, referenceDay) // +50%
     expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(100)
   })
 
-  it('adds an unfavorable HRV trend (recent < baseline) as a 0 component', () => {
-    const history = buildTrendHistory('hrv', 60, 40, referenceDay)
+  it('adds a strongly unfavorable HRV trend (recent << baseline) as a saturated 0 component', () => {
+    const history = buildTrendHistory('hrv', 60, 40, referenceDay) // -33%
     expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(0)
   })
 
-  it('adds a favorable resting-HR trend (recent LOWER than baseline) as a 100 component', () => {
-    const history = buildTrendHistory('restingHR', 65, 55, referenceDay)
+  it('adds a strongly favorable resting-HR trend (recent MUCH lower than baseline) as a saturated 100 component', () => {
+    const history = buildTrendHistory('restingHR', 80, 55, referenceDay) // -31%, lower-better
     expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(100)
   })
 
-  it('adds an unfavorable resting-HR trend (recent HIGHER than baseline) as a 0 component', () => {
-    const history = buildTrendHistory('restingHR', 55, 65, referenceDay)
+  it('adds a strongly unfavorable resting-HR trend (recent MUCH higher than baseline) as a saturated 0 component', () => {
+    const history = buildTrendHistory('restingHR', 55, 80, referenceDay)
     expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(0)
   })
 
-  it('blends a favorable HRV trend with sleepQuality (average of the two)', () => {
-    const history = buildTrendHistory('hrv', 40, 60, referenceDay)
+  // Le point même de ce correctif (retour utilisateur, écart persistant
+  // avec WHOOP) : une tendance NETTEMENT favorable pèse plus qu'une
+  // tendance à peine favorable, plutôt que les deux comptant pour le même
+  // "+1" (ancien comportement 0/50/100). Valeurs exactes calculées à la
+  // main : +10% -> 50+(10/20)*50=75 ; +5% -> 50+(5/20)*50=62.5 -> 63.
+  it('scores a moderate favorable HRV trend proportionally, not saturated', () => {
+    const history = buildTrendHistory('hrv', 100, 110, referenceDay) // +10%
+    expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(75)
+  })
+
+  it('scores a mild favorable HRV trend closer to neutral than to 100', () => {
+    const history = buildTrendHistory('hrv', 100, 105, referenceDay) // +5%
+    expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(63)
+  })
+
+  it('blends a strongly favorable HRV trend with sleepQuality (average of the two)', () => {
+    const history = buildTrendHistory('hrv', 40, 60, referenceDay) // saturates to 100
     expect(computeReadiness({ date: null, dayId: referenceDay, sleepQuality: 80 }, history)).toBe(90)
   })
 
   it('computes readiness purely from HRV+resting-HR trends when sleep/stress/mood are all absent', () => {
-    const hrvHistory = buildTrendHistory('hrv', 40, 60, referenceDay)
-    const rhrHistory = buildTrendHistory('restingHR', 65, 55, referenceDay)
+    const hrvHistory = buildTrendHistory('hrv', 40, 60, referenceDay) // saturates to 100
+    const rhrHistory = buildTrendHistory('restingHR', 80, 55, referenceDay) // saturates to 100
     const history = hrvHistory.map((d, i) => ({ ...d, restingHR: rhrHistory[i].restingHR }))
     expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(100)
   })
@@ -164,7 +183,7 @@ describe('computeReadiness — HRV/FC repos (history)', () => {
   })
 
   it('omits HRV/RHR when there is not enough baseline history yet', () => {
-    // Only 5 days of history — windowedTrendSignal needs >=2 points in a
+    // Only 5 days of history — splitRecentBaseline needs >=2 points in a
     // preceding baseline window it simply doesn't have here.
     const short: (HealthMetricLike & { dayId: string })[] = ['2026-03-27', '2026-03-28', '2026-03-29', '2026-03-30', '2026-03-31'].map((dayId) => ({
       date: null,
