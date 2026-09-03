@@ -49,7 +49,7 @@ const SOURCE_RULE_IDS: Partial<Record<MetricId, string[]>> = {
   tsb: ['forbidden-tsb-universal-optimal'],
   hrv: ['principle-3-hrv-sign-ambiguous', 'forbidden-hrv-sign-fatigue-freshness'],
   criticalPower: ['riegel-prefer-critical-power-side-cycling'],
-  readiness: ['readiness-composition-explicit-weighting'],
+  readiness: ['readiness-composition-explicit-weighting', 'principle-3-hrv-sign-ambiguous', 'forbidden-hrv-sign-fatigue-freshness'],
 }
 
 const TREND_DAYS = 180 // ~6 mois

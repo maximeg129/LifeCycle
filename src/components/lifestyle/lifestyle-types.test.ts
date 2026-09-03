@@ -7,6 +7,7 @@ import {
   trendPct,
   buildDailySeries,
   computeReadiness,
+  readinessBaselineLookbackDays,
   computeGoalProgress,
   mergeDailyWellness,
   buildMergedDailySeries,
@@ -93,6 +94,95 @@ describe('computeReadiness', () => {
 
   it('works with a partial entry', () => {
     expect(computeReadiness({ date: null, sleepQuality: 60 })).toBe(60)
+  })
+})
+
+/**
+ * Builds 36 consecutive days of history for `field`, referenceDay's most
+ * recent 8 days (the "recent" window windowedTrendSignal compares) set to
+ * `recentValue`, the preceding 28 days ("baseline") set to `baselineValue` —
+ * enough points in both windows for a real (non-null) trend signal.
+ */
+function buildTrendHistory(
+  field: 'hrv' | 'restingHR',
+  baselineValue: number,
+  recentValue: number,
+  referenceDay = '2026-03-31'
+): (HealthMetricLike & { dayId: string })[] {
+  const ref = new Date(referenceDay + 'T00:00:00')
+  const days: (HealthMetricLike & { dayId: string })[] = []
+  for (let i = 35; i >= 0; i--) {
+    const d = new Date(ref)
+    d.setDate(d.getDate() - i)
+    days.push({ date: null, dayId: getDayId(d), [field]: i <= 7 ? recentValue : baselineValue })
+  }
+  return days
+}
+
+describe('computeReadiness — HRV/FC repos (history)', () => {
+  const referenceDay = '2026-03-31'
+
+  it('adds a favorable HRV trend (recent > baseline) as a 100 component', () => {
+    const history = buildTrendHistory('hrv', 40, 60, referenceDay)
+    expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(100)
+  })
+
+  it('adds an unfavorable HRV trend (recent < baseline) as a 0 component', () => {
+    const history = buildTrendHistory('hrv', 60, 40, referenceDay)
+    expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(0)
+  })
+
+  it('adds a favorable resting-HR trend (recent LOWER than baseline) as a 100 component', () => {
+    const history = buildTrendHistory('restingHR', 65, 55, referenceDay)
+    expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(100)
+  })
+
+  it('adds an unfavorable resting-HR trend (recent HIGHER than baseline) as a 0 component', () => {
+    const history = buildTrendHistory('restingHR', 55, 65, referenceDay)
+    expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(0)
+  })
+
+  it('blends a favorable HRV trend with sleepQuality (average of the two)', () => {
+    const history = buildTrendHistory('hrv', 40, 60, referenceDay)
+    expect(computeReadiness({ date: null, dayId: referenceDay, sleepQuality: 80 }, history)).toBe(90)
+  })
+
+  it('computes readiness purely from HRV+resting-HR trends when sleep/stress/mood are all absent', () => {
+    const hrvHistory = buildTrendHistory('hrv', 40, 60, referenceDay)
+    const rhrHistory = buildTrendHistory('restingHR', 65, 55, referenceDay)
+    const history = hrvHistory.map((d, i) => ({ ...d, restingHR: rhrHistory[i].restingHR }))
+    expect(computeReadiness({ date: null, dayId: referenceDay }, history)).toBe(100)
+  })
+
+  it('omits HRV/RHR (falls back to sleep/stress/mood only) when history is not supplied', () => {
+    expect(computeReadiness({ date: null, dayId: referenceDay, sleepQuality: 80 })).toBe(80)
+  })
+
+  it('omits HRV/RHR when latest has no dayId, even if history is supplied', () => {
+    const history = buildTrendHistory('hrv', 40, 60, referenceDay)
+    expect(computeReadiness({ date: null, sleepQuality: 80 }, history)).toBe(80)
+  })
+
+  it('omits HRV/RHR when there is not enough baseline history yet', () => {
+    // Only 5 days of history — windowedTrendSignal needs >=2 points in a
+    // preceding baseline window it simply doesn't have here.
+    const short: (HealthMetricLike & { dayId: string })[] = ['2026-03-27', '2026-03-28', '2026-03-29', '2026-03-30', '2026-03-31'].map((dayId) => ({
+      date: null,
+      dayId,
+      hrv: 60,
+    }))
+    expect(computeReadiness({ date: null, dayId: referenceDay, sleepQuality: 80 }, short)).toBe(80)
+  })
+
+  it('returns null when only HRV/RHR were candidates and neither has a usable trend', () => {
+    const short: (HealthMetricLike & { dayId: string })[] = [{ date: null, dayId: referenceDay, hrv: 60 }]
+    expect(computeReadiness({ date: null, dayId: referenceDay }, short)).toBeNull()
+  })
+})
+
+describe('readinessBaselineLookbackDays', () => {
+  it('matches GOVERNOR_BASELINE_WINDOW (28 days, ≥4 semaines per principle-2)', () => {
+    expect(readinessBaselineLookbackDays()).toBe(28)
   })
 })
 

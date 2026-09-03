@@ -136,9 +136,15 @@ export function useGovernor(): GovernorResult {
     // numbers right above, from the exact same underlying data.
     const wellnessByDay = new Map<string, WellnessLike>(wellness.data.map((w) => [w.id, w]))
     const mergedDaily = buildMergedDailySeries(healthMetrics || [], wellnessByDay, sleepDayIds)
+    // mergedDaily couvre déjà 36 jours (7 récents + 21+ de marge, voir
+    // `oldest` plus haut) — largement assez pour la ligne de base ≥4
+    // semaines qu'exige maintenant computeReadiness() pour ses composantes
+    // HRV/FC repos (voir lifestyle-types.ts) : aucun fetch supplémentaire
+    // nécessaire ici, contrairement à useLifestyleData() qui a dû élargir
+    // le sien pour le même besoin.
     const sleepSeries: DatedValue[] = mergedDaily
       .map((day) => {
-        const readiness = computeReadiness(day)
+        const readiness = computeReadiness(day, mergedDaily)
         if (readiness == null) return null
         return { date: day.dayId, value: readiness }
       })

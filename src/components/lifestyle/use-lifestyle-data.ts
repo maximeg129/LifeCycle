@@ -12,6 +12,7 @@ import {
   buildMergedDailySeries,
   pickLatestWithData,
   computeReadiness,
+  readinessBaselineLookbackDays,
 } from './lifestyle-types'
 
 const HISTORY_DAYS = 7
@@ -27,21 +28,31 @@ export function useLifestyleData(days: number = HISTORY_DAYS) {
   const db = useFirestore()
   const uid = user?.uid ?? null
 
-  const dayIds = useMemo(() => getLastDayIds(days), [days])
-  const oldestDayId = dayIds[0]
+  // computeReadiness() now folds in HRV/FC repos as trend-vs-baseline
+  // (windowedTrendSignal, ≥4 semaines) — retour utilisateur, readiness très
+  // éloigné de WHOOP. Ça exige plus d'historique que la fenêtre affichée
+  // (`days`, souvent 7) fournit à elle seule, donc TOUT est fetché sur une
+  // fenêtre élargie (`extendedDayIds`) ; `dayIds`/`dailySeries` restent
+  // scopés à `days` pour ne rien changer aux consommateurs existants
+  // (ex. le graphe 7 jours de /lifestyle) — l'historique supplémentaire ne
+  // sert qu'en interne, à nourrir la ligne de base de computeReadiness.
+  const baselineLookbackDays = readinessBaselineLookbackDays()
+  const extendedDayIds = useMemo(() => getLastDayIds(days + baselineLookbackDays), [days, baselineLookbackDays])
+  const dayIds = useMemo(() => extendedDayIds.slice(baselineLookbackDays), [extendedDayIds, baselineLookbackDays])
+  const extendedOldestDayId = extendedDayIds[0]
   const newestDayId = dayIds[dayIds.length - 1]
 
   const metricsQuery = useMemoFirebase(() => {
     if (!uid || !db) return null
     const start = new Date()
-    start.setDate(start.getDate() - (days - 1))
+    start.setDate(start.getDate() - (days + baselineLookbackDays - 1))
     start.setHours(0, 0, 0, 0)
     return query(
       collection(db, `users/${uid}/healthMetrics`),
       where('date', '>=', Timestamp.fromDate(start)),
       orderBy('date', 'asc')
     )
-  }, [db, uid, days])
+  }, [db, uid, days, baselineLookbackDays])
   const { data: metrics, isLoading: loadingMetrics } = useCollection<HealthMetric>(metricsQuery)
 
   const goalsQuery = useMemoFirebase(() => {
@@ -52,23 +63,31 @@ export function useLifestyleData(days: number = HISTORY_DAYS) {
 
   // Auto-synced wellness (WHOOP or any device feeding Intervals.icu) — a
   // no-op with empty data when Intervals.icu isn't connected, so this hook
-  // degrades gracefully to manual-only entries exactly like before.
-  const wellness = useWellness(oldestDayId, newestDayId)
+  // degrades gracefully to manual-only entries exactly like before. Filters
+  // an already-cached 180-day context array (see use-intervals.tsx,
+  // WELLNESS_WINDOW_DAYS) rather than issuing a new network fetch, so
+  // widening the requested range here costs nothing extra.
+  const wellness = useWellness(extendedOldestDayId, newestDayId)
 
   const derived = useMemo(() => {
     const list = metrics || []
     const wellnessByDay = new Map<string, WellnessLike>(wellness.data.map((w) => [w.id, w]))
-    const dailySeries = buildMergedDailySeries(list, wellnessByDay, dayIds)
+    const extendedDailySeries = buildMergedDailySeries(list, wellnessByDay, extendedDayIds)
+    // The publicly-returned series stays exactly `days` long, sliced off
+    // the end of the wider fetch — every existing consumer sees the same
+    // shape as before this change.
+    const dailySeries = extendedDailySeries.slice(baselineLookbackDays)
     const latest = pickLatestWithData(dailySeries)
-    const readiness = computeReadiness(latest)
+    const readiness = computeReadiness(latest, extendedDailySeries)
     // Per-day readiness for the whole window (not just the latest day) —
     // only the metric detail pages need this trend; every other call site
-    // just ignores it.
+    // just ignores it. Each day looks back into extendedDailySeries for its
+    // own HRV/FC repos baseline, not just the `days`-scoped dailySeries.
     const readinessSeries = dailySeries
-      .map((d) => ({ dayId: d.dayId, value: computeReadiness(d) }))
+      .map((d) => ({ dayId: d.dayId, value: computeReadiness(d, extendedDailySeries) }))
       .filter((d): d is { dayId: string; value: number } => d.value != null)
     return { dailySeries, latest, readiness, readinessSeries }
-  }, [metrics, dayIds, wellness.data])
+  }, [metrics, extendedDayIds, baselineLookbackDays, wellness.data])
 
   return {
     uid,

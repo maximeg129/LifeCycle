@@ -1134,6 +1134,50 @@ l'unité déjà utilisée partout ailleurs dans l'app. **Portée volontairement 
 remplacer est une décision UI distincte (déjà anticipée dans le commentaire de fichier de
 `metabolism.ts` comme "Phase 5"), pas le scope de "sourcer les coefficients" demandé ici.
 
+## Readiness : intégration HRV/FC repos (tendance vs ligne de base)
+
+Retour utilisateur, après une question sur l'écart entre le readiness de l'app et le score WHOOP :
+"si on a pas de data point en input n'utilisons pas ces indicateurs, je suis d'accord sur le
+changement et l'intégration hrv et fc". Diagnostic posé avant de coder : `computeReadiness()`
+(voir "Indicateurs Cyclisme — audit propriétaire" plus haut) ne moyennait que sommeil/stress/humeur
+— jamais le HRV ni la FC repos, alors que ce sont précisément les deux signaux qui dominent le score
+Recovery de WHOOP. Sur un jour de bon sommeil mais de HRV effondré par une charge accumulée (le cas
+que WHOOP est justement fait pour détecter), le readiness de l'app restait haut faute de jamais
+regarder le HRV.
+
+**HRV/FC repos ajoutés comme TENDANCE, pas valeur brute** — `computeReadiness()` accepte désormais un
+second paramètre optionnel `history` (le reste de la série mergée). Quand fourni, deux composantes
+supplémentaires rejoignent la moyenne (sleepQuality/stress/mood, inchangées) : la tendance HRV et FC
+repos de la fenêtre récente (7j) par rapport à une ligne de base (28j), via `windowedTrendSignal()`
+— **réutilisé tel quel depuis `governor-types.ts`** (déjà utilisé par le gouverneur de charge interne
+pour exactement ce calcul) plutôt qu'un deuxième algorithme de comparaison à une baseline. Jamais la
+valeur brute du jour comparée à un seuil absolu : le HRV varie trop d'une personne à l'autre pour
+qu'un chiffre isolé ait un sens, seule la trajectoire par rapport à SA PROPRE ligne de base compte
+(principle-2, evidence/rules.ts) — et cette trajectoire ne pèse jamais seule dans le score : c'est une
+composante parmi 3 à 5 dans une moyenne, jamais un verdict affiché isolément (`principle-3-hrv-sign-
+ambiguous`/`forbidden-hrv-sign-fatigue-freshness` : le signe d'une variation de HRV reste ambigu en
+soi, une hausse comme une baisse pouvant signaler une adaptation négative). Le signal `-1/0/+1/null`
+de `windowedTrendSignal()` se convertit simplement en `0/50/100` sur la même échelle que les autres
+composantes ; `null` (baseline insuffisante, ou champ absent ce jour-là) omet la composante de la
+moyenne plutôt que d'y substituer un 50 par défaut — exactement la demande utilisateur ("si on a pas
+de data point... n'utilisons pas ces indicateurs").
+
+**`useLifestyleData()` élargit son fetch interne, sans changer sa fenêtre affichée** — calculer une
+tendance 7j vs baseline 28j exige plus d'historique que les 7 jours que ce hook fetch par défaut
+(fenêtre déjà utilisée par le graphe 7 jours de `/lifestyle`, entre autres). `dayIds`/`dailySeries`
+retournés publiquement restent scopés à `days` (aucun changement de forme pour les consommateurs
+existants) ; en interne, une `extendedDayIds` (`days + 28`) alimente le fetch Firestore
+`healthMetrics` (coût réel mais modeste — peu de docs pour une app mono-utilisateur) ET la requête
+`useWellness()` (coût nul : ce hook filtre un contexte déjà entièrement synchronisé sur 180 jours,
+voir `WELLNESS_WINDOW_DAYS` dans `use-intervals.tsx` — élargir la plage demandée ne déclenche aucun
+fetch réseau supplémentaire). `use-governor.ts` n'a rien eu à changer côté fetch : ses 36 jours déjà
+récupérés pour ses propres signaux couvraient déjà largement le besoin — seul son appel à
+`computeReadiness()` a été mis à jour pour lui passer cet historique déjà en main.
+
+**`readinessBaselineLookbackDays()`** (`lifestyle-types.ts`) réutilise `GOVERNOR_BASELINE_WINDOW`
+(evidence/constants.ts, déjà la fenêtre ≥4 semaines du gouverneur) plutôt qu'une deuxième constante
+inventée pour l'occasion — un seul référentiel de "ligne de base" dans toute l'app.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

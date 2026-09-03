@@ -122,9 +122,10 @@ export const METRIC_INFO: Record<MetricId, MetricInfo> = {
     id: 'readiness',
     label: 'Readiness',
     unit: '/100',
-    tagline: 'Un score composite 0-100 — sommeil, stress et humeur combinés, toujours calculé par l\'app.',
+    tagline: 'Un score composite 0-100 — sommeil, stress, humeur, HRV et FC repos combinés, toujours calculé par l\'app.',
     explanation: [
-      "Ce score est une moyenne de la qualité de sommeil, du stress (inversé) et de l'humeur des dernières 24h — jamais le score de récupération propriétaire d'un capteur connecté (WHOOP ou autre), même quand un est disponible : sa composition doit rester explicite et lisible, pas une boîte noire.",
+      "Ce score est une moyenne de jusqu'à 5 composantes, chacune omise si la donnée manque ce jour-là (jamais un 50 par défaut) : la qualité de sommeil, le stress (inversé) et l'humeur des dernières 24h, plus le HRV et la FC repos — ces deux derniers comparés à votre propre ligne de base (moyenne des 4 dernières semaines), jamais à un seuil absolu, puisque leur valeur brute varie énormément d'une personne à l'autre. Jamais le score de récupération propriétaire d'un capteur connecté (WHOOP ou autre), même quand un est disponible : sa composition doit rester explicite et lisible, pas une boîte noire.",
+      "Le signe d'une variation de HRV reste ambigu en soi — une hausse comme une baisse peuvent signaler une adaptation négative chez un athlète entraîné — c'est pourquoi HRV et FC repos ne pèsent jamais seuls : ce sont deux composantes parmi 3 à 5 dans une moyenne, jamais un verdict isolé du type \"HRV en baisse = fatigue\".",
       "Ce n'est pas une mesure médicale — juste un signal parmi d'autres pour décider si c'est le jour de pousser ou de lever le pied.",
     ],
     goodDirection: 'higher',
