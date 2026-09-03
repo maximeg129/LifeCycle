@@ -182,6 +182,27 @@ export default function SettingsPage() {
             </div>
           </CardHeader>
           <CardContent className="space-y-6">
+            {/* Pas encore de compte Intervals.icu — retour utilisateur (audit
+                onboarding) : cette carte supposait jusqu'ici un compte déjà
+                existant (ces deux champs, un lien direct vers
+                intervals.icu/settings), sans jamais mentionner qu'il fallait
+                d'abord en créer un ET y connecter Garmin/Strava/Wahoo. Lien
+                vers le guide pas-à-pas plutôt que de dupliquer ces
+                explications ici. */}
+            <div className="p-4 bg-primary/5 rounded-xl border border-primary/20">
+              <p className="text-sm font-semibold mb-1">Pas encore de compte Intervals.icu ?</p>
+              <p className="text-xs text-muted-foreground leading-relaxed mb-3">
+                Créer le compte, y connecter votre montre/appli (Garmin, Strava, Wahoo...) et générer la clé API sont
+                trois étapes distinctes, expliquées pas à pas dans le guide de démarrage.
+              </p>
+              <Link
+                href="/onboarding"
+                className="inline-flex items-center text-primary font-semibold hover:underline gap-1 text-xs"
+              >
+                Voir le guide de démarrage <ChevronRight className="w-3 h-3" />
+              </Link>
+            </div>
+
             <div className="p-4 bg-muted/50 rounded-xl border border-border/50">
               <p className="text-sm font-semibold mb-1">Besoin d'aide ?</p>
               <p className="text-xs text-muted-foreground leading-relaxed mb-3">

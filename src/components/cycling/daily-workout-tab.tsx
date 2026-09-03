@@ -18,6 +18,7 @@ import { LiveStrengthSessionView } from './live-strength-session-view'
 import { LogStrengthSessionDialog } from './log-strength-session-dialog'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { findWeekStrengthSession, type PlanWeekSessionWithValidation } from './training-plan-types'
+import { IntervalsOnboardingNotice } from './intervals-onboarding-notice'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_MINUTES = 60
@@ -245,6 +246,9 @@ export function DailyWorkoutTab() {
   if (todaysPlanSessionIsStrength && todaysPlanSession) {
     return (
       <div className="space-y-6">
+        {!canSendToIntervals && (
+          <IntervalsOnboardingNotice message="Intervals.icu non connecté — le suivi de cette séance reste local, rien n'est envoyé sur votre calendrier." />
+        )}
         <StrengthSessionCard
           session={todaysPlanSession.session}
           weekNumber={todaysPlanSession.weekNumber}
@@ -270,6 +274,9 @@ export function DailyWorkoutTab() {
 
   return (
     <div className="space-y-6">
+      {!canSendToIntervals && (
+        <IntervalsOnboardingNotice message="Intervals.icu non connecté — vous pouvez générer une proposition, mais pas l'envoyer sur votre calendrier." />
+      )}
       <Card className="bg-card/40 border-border">
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">

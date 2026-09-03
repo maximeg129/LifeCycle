@@ -25,6 +25,7 @@ import { PlanOverviewGrid } from './plan-overview-grid'
 import { PlanWeekCalendar } from './plan-week-calendar'
 import { buildPlanAttentionItems } from './plan-attention-types'
 import { PlanAttentionBadge } from './plan-attention-badge'
+import { IntervalsOnboardingNotice } from './intervals-onboarding-notice'
 
 const DEFAULT_WEEKLY_MINUTES = 360
 
@@ -259,6 +260,9 @@ export function TrainingPlanTab() {
   if (!activePlan || showNewPlanForm) {
     return (
       <div className="space-y-6">
+        {!canSendToIntervals && (
+          <IntervalsOnboardingNotice message="Intervals.icu non connecté — le plan peut se générer, mais les séances ne pourront pas être envoyées sur votre calendrier." />
+        )}
         {NewPlanForm}
         {!activePlan && (
           <EmptyState
@@ -273,6 +277,9 @@ export function TrainingPlanTab() {
 
   return (
     <div className="space-y-6">
+      {!canSendToIntervals && (
+        <IntervalsOnboardingNotice message="Intervals.icu non connecté — le plan reste consultable, mais les séances ne pourront pas être envoyées sur votre calendrier." />
+      )}
       <Card className="bg-card/60 border-primary/20 border-2">
         <CardHeader className="flex flex-row items-start justify-between gap-4 flex-wrap">
           <div>
