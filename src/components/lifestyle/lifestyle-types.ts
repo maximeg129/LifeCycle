@@ -1,6 +1,6 @@
 // ── Firestore document shapes (client-side, ids added by useCollection/useDoc) ──
 
-import { windowedTrendSignal, type DatedValue, type Signal } from '@/components/cycling/governor-types'
+import { splitRecentBaseline, averageOrNull, type DatedValue } from '@/components/cycling/governor-types'
 import { GOVERNOR_BASELINE_WINDOW, requireConstant } from '@/domain/cycling/evidence/constants'
 
 export interface HealthMetric {
@@ -275,15 +275,46 @@ export function readinessBaselineLookbackDays(): number {
 }
 
 /**
- * Convertit un Signal (windowedTrendSignal — tendance récente 7j vs ligne
- * de base ≥4 semaines, jamais une valeur isolée) sur la même échelle 0-100
- * que les autres composantes de computeReadiness. `null` (composante
- * omise, jamais un 50 par défaut trompeur) tant qu'il n'y a pas assez de
- * points dans les deux fenêtres — voir windowedTrendSignal.
+ * Ampleur (en %) de l'écart à la ligne de base qui sature l'échelle 0-100
+ * (0 ou 100) — un choix de réactivité du produit, pas une valeur
+ * scientifique sourcée (même statut que SEVERE_WIND_THRESHOLD_KMH dans
+ * ai/weather.ts) : ±20% de part et d'autre de la ligne de base couvre déjà
+ * une variation HRV/FC repos marquée, sans laisser le moindre bruit
+ * quotidien saturer l'échelle à la moindre variation. Retour utilisateur,
+ * écart persistant avec WHOOP (90% chez eux, 50% dans l'app) même après
+ * l'intégration HRV/FC repos : la première version ne notait la tendance
+ * qu'en 0/50/100 (favorable/neutre/défavorable) — une tendance HRV
+ * NETTEMENT favorable et une tendance à peine favorable comptaient
+ * exactement pareil, diluant tout signal fort dans la moyenne avec le
+ * sommeil. Un score continu, proportionnel à l'ampleur réelle de l'écart,
+ * corrige ça.
  */
-function trendToReadinessScore(signal: Signal): number | null {
-  if (signal == null) return null
-  return signal === 1 ? 100 : signal === -1 ? 0 : 50
+const READINESS_TREND_FULL_SWING_PCT = 20
+
+/**
+ * Score continu 0-100 (50 = pile sur la ligne de base) à partir de la même
+ * comparaison fenêtre récente (7j) / ligne de base (≥4 semaines) que le
+ * gouverneur de charge interne — `splitRecentBaseline()`/`averageOrNull()`
+ * (`governor-types.ts`) réutilisés tels quels, pas une deuxième fenêtre.
+ * Contrairement à `windowedTrendSignal()` (qui réduit tout ça à un signal
+ * discret -1/0/+1 pour le verdict vert/orange/rouge du gouverneur — un
+ * bon choix pour un verdict catégoriel, mais qui aplatit l'AMPLEUR d'une
+ * tendance forte), ce score reste proportionnel à l'écart réel : une
+ * tendance HRV nettement favorable pèse davantage dans la moyenne
+ * qu'une tendance à peine favorable, plutôt que les deux comptant pour le
+ * même "+1". `null` (jamais un 50 par défaut) si les deux fenêtres n'ont
+ * pas au moins 2 points chacune — même garde que windowedTrendSignal.
+ */
+function trendReadinessScore(series: DatedValue[], referenceIso: string, favorableDirection: 'higher' | 'lower'): number | null {
+  const { recent, baseline } = splitRecentBaseline(series, referenceIso)
+  if (recent.length < 2 || baseline.length < 2) return null
+  const recentAvg = averageOrNull(recent)
+  const baselineAvg = averageOrNull(baseline)
+  if (recentAvg == null || baselineAvg == null || baselineAvg === 0) return null
+  const pctChange = ((recentAvg - baselineAvg) / baselineAvg) * 100
+  const favorablePct = favorableDirection === 'lower' ? -pctChange : pctChange
+  const raw = 50 + (favorablePct / READINESS_TREND_FULL_SWING_PCT) * 50
+  return Math.max(0, Math.min(100, Math.round(raw)))
 }
 
 /**
@@ -310,14 +341,17 @@ function trendToReadinessScore(signal: Signal): number | null {
  * trajectoire par rapport à SA PROPRE ligne de base a un sens. Omise
  * (jamais un 50 par défaut) si `history` est absent, si HRV/FC repos n'ont
  * aucune valeur ce jour-là, ou si l'historique ne couvre pas encore assez
- * de jours pour établir une ligne de base (`windowedTrendSignal` l'exige
- * déjà — voir readinessBaselineLookbackDays() ci-dessus pour la fenêtre à
- * fetcher côté appelant). ⚠️ Le signe d'une variation de HRV reste
- * ambigu en soi (principle-3-hrv-sign-ambiguous, evidence/rules.ts — une
- * hausse comme une baisse peuvent signaler une adaptation négative chez un
- * athlète entraîné) : cette composante ne décide donc jamais seule, elle
- * n'est qu'une parmi 3 à 5 dans une moyenne, jamais affichée isolément
- * comme "HRV en baisse = fatigue" (forbidden-hrv-sign-fatigue-freshness).
+ * de jours pour établir une ligne de base — voir
+ * readinessBaselineLookbackDays() ci-dessus pour la fenêtre à fetcher côté
+ * appelant. Score CONTINU (voir trendReadinessScore() ci-dessus, pas un
+ * simple favorable/défavorable) : une tendance HRV/FC repos nettement
+ * marquée pèse plus dans la moyenne qu'une tendance à peine perceptible.
+ * ⚠️ Le signe d'une variation de HRV reste ambigu en soi
+ * (principle-3-hrv-sign-ambiguous, evidence/rules.ts — une hausse comme
+ * une baisse peuvent signaler une adaptation négative chez un athlète
+ * entraîné) : cette composante ne décide donc jamais seule, elle n'est
+ * qu'une parmi 3 à 5 dans une moyenne, jamais affichée isolément comme
+ * "HRV en baisse = fatigue" (forbidden-hrv-sign-fatigue-freshness).
  */
 export function computeReadiness(
   latest: (HealthMetricLike & { dayId?: string }) | undefined,
@@ -332,11 +366,11 @@ export function computeReadiness(
   if (history && latest.dayId) {
     const referenceIso = latest.dayId
     const hrvSeries: DatedValue[] = history.filter((d) => d.hrv != null).map((d) => ({ date: d.dayId, value: d.hrv as number }))
-    const hrvScore = trendToReadinessScore(windowedTrendSignal(hrvSeries, referenceIso, 'higher'))
+    const hrvScore = trendReadinessScore(hrvSeries, referenceIso, 'higher')
     if (hrvScore != null) parts.push(hrvScore)
 
     const rhrSeries: DatedValue[] = history.filter((d) => d.restingHR != null).map((d) => ({ date: d.dayId, value: d.restingHR as number }))
-    const rhrScore = trendToReadinessScore(windowedTrendSignal(rhrSeries, referenceIso, 'lower'))
+    const rhrScore = trendReadinessScore(rhrSeries, referenceIso, 'lower')
     if (rhrScore != null) parts.push(rhrScore)
   }
 

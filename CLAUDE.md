@@ -1239,6 +1239,62 @@ projet, `strength-log-export-button.tsx` (`<PopoverTrigger asChild>` avec
 autre `PopoverTrigger`/`DialogTrigger`/`DropdownMenuTrigger asChild` du projet ne combine les deux —
 bug isolé à ce seul fichier, corrigé sans toucher au reste.
 
+## Readiness : score de tendance HRV/FC repos continu, plus discret 0/50/100
+
+Retour utilisateur, après le correctif "intégration HRV/FC repos" ci-dessus (déjà en place) : "I
+still have big gap between readiness and what whoop give me, today I am at 90% on whoop but only
+50% in our app; it is a major gap that we should close."
+
+**Diagnostic** — l'intégration HRV/FC repos précédente convertissait déjà la tendance récente (7j)
+vs ligne de base (28j, `windowedTrendSignal`, `governor-types.ts`) en composante de score, mais via
+le signal discret `-1/0/+1` que ce helper produit pour le verdict catégoriel du gouverneur (vert/
+orange/rouge). `trendToReadinessScore()` mappait alors ce signal en `0/50/100` — donc N'IMPORTE
+QUELLE tendance favorable, qu'elle soit à peine positive (+2%) ou massivement positive (+50%,
+calibre WHOOP 90%), contribuait de façon identique, plafonnée à 100. Une journée avec un sommeil
+correct (disons 80) et une tendance HRV/FC repos réellement excellente ne se distinguait donc pas,
+dans la moyenne, d'une journée avec le même sommeil et une tendance à peine favorable — le signal
+fort était dilué au lieu de tirer le score vers le haut proportionnellement à sa vraie force. Ce
+n'est pas seulement "ne colle pas à la boîte noire de WHOOP" : c'est un défaut structurel de la
+formule elle-même, qui aplatit une information continue (l'ampleur réelle de la tendance) en trois
+paliers grossiers.
+
+**`trendReadinessScore()`** (`lifestyle-types.ts`) remplace `trendToReadinessScore(signal)` —
+réutilise `splitRecentBaseline()`/`averageOrNull()` (`governor-types.ts`, les primitives de
+fenêtrage sous-jacentes à `windowedTrendSignal`, déjà partagées/testées) directement plutôt que le
+signal discret déjà aplati, pour calculer un score CONTINU 0-100 proportionnel au vrai `%` d'écart
+entre la moyenne récente et la ligne de base — `favorableDirection` (`'higher'`/`'lower'`, HRV vs FC
+repos) détermine le sens qui compte comme amélioration, exactement comme avant. `null` si moins de 2
+points dans l'une des deux fenêtres, ou ligne de base à 0 — comportement de garde inchangé (voir
+"si on a pas de data point... n'utilisons pas ces indicateurs", déjà acté).
+
+**`READINESS_TREND_FULL_SWING_PCT = 20`** — constante plate documentée, même statut que
+`SEVERE_WIND_THRESHOLD_KMH` (`ai/weather.ts`) : un choix de réactivité produit/UX, PAS une valeur
+scientifique sourcée (donc hors du système `Constant<T>`/`sourced`/`pending` de
+`evidence/constants.ts`, réservé aux valeurs citées). Un écart de ±20% entre moyenne récente et
+ligne de base sature désormais le score à 0 ou 100 ; un écart plus petit est mis à l'échelle
+linéairement autour de 50 (`50 + (favorablePct / 20) * 50`, clampé [0,100]) — ex. +10% → 75, +5% →
+63. Le seuil de 20% a été choisi car cohérent avec l'ordre de grandeur des tendances HRV/FC repos
+déjà observées ailleurs dans l'app (le gouverneur de charge, `governor-types.ts`, utilise des seuils
+du même ordre pour son propre signal discret) — pas dérivé d'une étude, donc explicitement une
+constante plate plutôt que `sourced`.
+
+**Ce que ce correctif NE fait PAS, consciemment** : il ne calibre pas la formule pour reproduire
+le chiffre exact de WHOOP (95% ou 50% un jour donné) — ça contredirait directement
+`readiness-composition-explicit-weighting` (`evidence/rules.ts`, déjà invoqué pour la suppression de
+`resolveReadiness()` plus haut dans ce fichier) : la formule doit rester une composition
+transparente/auditable, jamais réglée pour imiter la sortie d'une boîte noire propriétaire. Le
+correctif est justifié sur son propre mérite structurel (proportionnalité — ne plus diluer un signal
+réellement fort au même palier qu'un signal à peine favorable), pas sur un objectif de faire
+correspondre un chiffre externe précis. La signature publique de `computeReadiness(latest, history?)`
+est inchangée — aucun appelant (`use-lifestyle-data.ts`, `use-governor.ts`) n'a eu besoin d'être
+modifié.
+
+**Tests** (`lifestyle-types.test.ts`) — les 4 tests de saturation existants (tendance HRV/FC repos
+fortement favorable/défavorable → 100/0) ont vu leur fixture FC repos resserrée (65→55 devenait 88,
+plus 100, sous le nouveau calcul continu — remplacée par 80→55, qui sature toujours proprement) ;
+deux nouveaux tests valident directement le cœur du correctif — une tendance HRV modérée (+10%) score
+75, une tendance légère (+5%) score 63 — plutôt que les anciens 50/100 plats.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
