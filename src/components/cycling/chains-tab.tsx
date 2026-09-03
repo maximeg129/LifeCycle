@@ -46,7 +46,7 @@ export function ChainsTab() {
           </h3>
           <p className="text-sm text-muted-foreground">Suivi des chaînes fartées, dédiées chacune à un vélo.</p>
           <p className="text-xs text-muted-foreground/70 mt-1">
-            La chaîne montée sur un vélo reçoit automatiquement les km à chaque synchro Intervals.icu (bouton &quot;Sync km&quot; dans l&apos;onglet Matériel).
+            La chaîne montée sur un vélo reçoit automatiquement les km à chaque synchronisation Intervals.icu — déclenchée seule à l&apos;ouverture de l&apos;app, ou manuellement depuis Réglages.
           </p>
         </div>
         <AddChainDialog bikes={activeBikes} />

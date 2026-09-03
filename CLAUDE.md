@@ -1535,6 +1535,47 @@ contradictoires ou comme un écart ressenti/charge à investiguer — c'est le s
 séance facile bien tolérée. Changement de texte de prompt uniquement, aucune logique pure touchée
 — 832/832 tests inchangés, tsc/eslint/build clean.
 
+## Garage : preuve visible de la synchro automatique (pas un bug de synchro)
+
+Retour utilisateur : "le sync du matériel et des chaînes ne semble pas fonctionner
+automatiquement." Diagnostic mené par élimination (`AskUserQuestion` à deux reprises,
+vélo bien lié à Intervals.icu confirmé, aucun toast même après rechargement complet) plutôt que par
+supposition : `applyGearKmSync()` (`use-intervals.tsx`) — le même chemin que le bouton
+"Synchroniser" de Réglages, déclenché automatiquement une fois par session via l'effet
+`hasAutoSyncedRef` — est structurellement sain (relu intégralement, aucune régression trouvée) et
+tourne bien silencieusement quand il n'y a rien de nouveau à réconcilier (comportement voulu, voir
+commentaire "Silent when there was nothing to reconcile"). **Le vrai problème n'était pas un bug de
+synchro mais un problème de confiance/visibilité** : l'utilisateur a formulé lui-même le diagnostic
+exact — "je pense vraiment que c'est simplement lié aux chaînes qui attendent le déclenchement du
+sync en appuyant sur un bouton que nous avons précédemment enlevé" — et avait raison sur la cause
+perçue, pas sur le mécanisme réel.
+
+**Trois textes obsolètes retrouvés par `grep`, tous antérieurs à "Un seul bouton Synchroniser, dans
+Réglages" (consolidation du bouton) et jamais mis à jour depuis** : `chain-card.tsx` ("le prochain
+'Sync km' les ajoutera"), `gear-tab.tsx` (tooltip "date du dernier CLIC sur Synchroniser"),
+`chains-tab.tsx` ("bouton 'Sync km' dans l'onglet Matériel"). Ces trois textes affirmaient
+littéralement à l'utilisateur qu'une action manuelle sur un bouton disparu était nécessaire —
+exactement la croyance rapportée, activement entretenue par l'app elle-même plutôt que corrigée.
+Réécrits pour refléter le mécanisme réel (synchro automatique à l'ouverture, ou manuelle depuis
+Réglages) sans jamais réintroduire de bouton sur ces pages — la consolidation à un seul bouton dans
+Réglages reste une décision volontaire inchangée.
+
+**`SyncStatusLine`** (`sync-status-line.tsx`, nouveau composant partagé, affiché en haut de
+`/garage` au-dessus des onglets Matériel/Chaînes/Garde-robe) — la vraie lacune structurelle
+derrière la confusion : `lastSyncedAt`/`isSyncing` (déjà suivis par `IntervalsProvider`, déjà
+utilisés par `SyncButton`) n'étaient affichés NULLE PART dans l'app avant ce correctif, pas même
+dans Réglages à côté du bouton lui-même. Ligne en lecture seule (pas de bouton — celui de Réglages
+reste le seul), format `formatDistanceToNow` (même convention que `rides-journal-tab.tsx`) :
+"Synchronisé à l'instant (automatique)" une fois la synchro de session passée, spinner tant qu'elle
+tourne, message honnête si elle n'a encore jamais tourné cette session. Donne enfin une preuve
+visuelle réelle que le mécanisme automatique s'est exécuté, plutôt que de laisser l'absence de toast
+(silencieuse par design quand rien n'a bougé) se lire comme "rien ne s'est passé".
+
+**Portée volontairement limitée** : aucun changement de logique de synchro elle-même (comportement
+identique, 832/832 tests inchangés) — uniquement de la visibilité/documentation in-app, cohérent
+avec le diagnostic : le mécanisme automatique fonctionne déjà correctement, il manquait seulement
+la preuve.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
