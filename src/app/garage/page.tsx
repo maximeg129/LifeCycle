@@ -15,6 +15,7 @@ import { AuthGuard } from '@/components/layout/auth-guard'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Wrench, Droplets, Shirt } from 'lucide-react'
+import { SyncStatusLine } from '@/components/cycling/sync-status-line'
 
 const GearTab = dynamic(() => import('@/components/cycling/gear-tab').then(m => m.GearTab), {
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
@@ -35,6 +36,10 @@ export default function GaragePage() {
       {/* No PageHeader — même raisonnement que Cyclisme/Coach : la sidebar/
           bottom nav surlignent déjà "Garage" comme page active. */}
       <main className="px-4 pt-20 pb-4 md:p-8 max-w-7xl mx-auto space-y-6">
+        {/* Preuve que la synchro auto (bikes/composants/chaînes) tourne
+            réellement à l'ouverture — voir sync-status-line.tsx : le seul
+            bouton manuel de l'app reste dans Réglages, décision inchangée. */}
+        <SyncStatusLine />
         <Tabs defaultValue="gear">
           <TabsList className="bg-card/30 border border-border/60 p-1 h-auto flex flex-wrap gap-1">
             <TabsTrigger value="gear" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">

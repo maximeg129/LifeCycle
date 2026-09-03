@@ -177,7 +177,7 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
           <CollapsibleContent className="pt-2 space-y-1">
             {rides.length === 0 ? (
               <p className="text-[11px] text-muted-foreground">
-                Aucune sortie synchronisée depuis le montage — le prochain &quot;Sync km&quot; les ajoutera.
+                Aucune sortie synchronisée depuis le montage — la prochaine synchronisation automatique (ou manuelle depuis Réglages) les ajoutera.
               </p>
             ) : rides.map((r) => (
               <a

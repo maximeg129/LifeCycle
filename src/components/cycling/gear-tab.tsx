@@ -311,7 +311,7 @@ export function GearTab() {
                               </SelectContent>
                             </Select>
                             {bike.lastSyncDate && (
-                              <span className="text-[10px] text-muted-foreground" title="Date du dernier clic sur Synchroniser — n'indique pas si les km ont bougé ce jour-là">
+                              <span className="text-[10px] text-muted-foreground" title="Date de la dernière synchronisation (automatique à l'ouverture de l'app, ou manuelle depuis Réglages) — n'indique pas si les km ont bougé ce jour-là">
                                 Dernier sync : {bike.lastSyncDate}
                               </span>
                             )}
