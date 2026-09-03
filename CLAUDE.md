@@ -1178,6 +1178,39 @@ récupérés pour ses propres signaux couvraient déjà largement le besoin — 
 (evidence/constants.ts, déjà la fenêtre ≥4 semaines du gouverneur) plutôt qu'une deuxième constante
 inventée pour l'occasion — un seul référentiel de "ligne de base" dans toute l'app.
 
+## Coach — "Aujourd'hui" affiche la séance du plan directement, formulaire en action secondaire
+
+Retour utilisateur : "on devrait voir la séance qui est proposée [par] le plan... je me demande s'il
+ne serait pas intéressant d'avoir ça sur l'onglet Aujourd'hui où on aurait les actions à faire
+[bandeau RPE manquant, déjà présent — voir "Audit UX Coach" plus haut], puis la séance du jour
+proposée sur le plan, et un bouton... de proposition alternative où l'utilisateur clique et ça
+l'emmène [définir] combien de temps tu as disponible, où tu es, etc." — pour si l'athlète a moins de
+temps que prévu, par exemple.
+
+**Avant ce correctif**, `DailyWorkoutTab` affichait TOUJOURS le formulaire temps disponible/intérieur-
+extérieur/lieu/heure en premier, que le plan ait déjà daté une séance vélo aujourd'hui ou non — il
+fallait cliquer "Proposer une séance" (un appel IA) juste pour voir ce que le plan prévoyait déjà
+(le flow utilise en interne `plannedSession`, voir plus haut, mais ne l'affiche qu'après génération).
+
+**`showPlanPreview`** (`daily-workout-tab.tsx`) — quand `todaysPlanSession` existe (séance CYCLING
+déjà datée aujourd'hui par le plan) et qu'aucun draft n'a encore été généré, une carte compacte
+affiche directement titre/durée/intensité/motif de CETTE séance — aucun appel IA nécessaire juste
+pour la voir, ces champs sont déjà dans `PlanWeekSession`. Deux actions : **"Utiliser cette séance"**
+appelle `generate()` (même chemin qu'avant, `plannedSession` ajusté-ou-inchangé par l'IA) avec les
+paramètres de la séance du plan elle-même (sa durée, extérieur, sans lieu) — garde le même chemin
+d'envoi unique (verdict/warnings/édition avant "Envoyer sur Intervals.icu"), un seul appel plutôt que
+zéro, pour ne pas dupliquer la logique d'ajustement/validation déjà en place. **"Proposer une séance
+alternative"** révèle le formulaire temps/lieu/heure existant (`showAlternativeForm`, nouvel état
+local, jamais persisté — même statut que `wantsGym`) — exactement le geste demandé : "combien de
+temps tu as disponible, où tu es" pour une sortie différente (moins de temps, ailleurs...). Un lien
+"← Revenir à la séance prévue par le plan" permet de rebrousser chemin tant qu'aucun draft n'a encore
+été généré depuis le formulaire.
+
+**Sans séance datée par le plan aujourd'hui** (pas de plan actif, ou jour sans séance vélo prévue) —
+comportement inchangé : le formulaire reste la vue par défaut (rien à prévisualiser). Une fois un
+draft généré par n'importe quel chemin, le formulaire redevient (ou reste) visible pour rester
+ajustable/régénérable — comportement identique à avant ce correctif.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
