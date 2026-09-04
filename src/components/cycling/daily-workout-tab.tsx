@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, AlertTriangle, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldAlert, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike } from 'lucide-react'
+import { Sparkles, Loader2, Send, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -20,6 +20,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { findWeekStrengthSession, type PlanWeekSessionWithValidation } from './training-plan-types'
 import { IntervalsOnboardingNotice } from './intervals-onboarding-notice'
 import { WorkoutProfileChart } from './workout-profile-chart'
+import { PlanAttentionBadge } from './plan-attention-badge'
+import { buildPlanAttentionItems } from './plan-attention-types'
 import { cn } from '@/lib/utils'
 
 const DEFAULT_MINUTES = 60
@@ -217,6 +219,19 @@ export function DailyWorkoutTab() {
   // ci-dessous. Calculé AVANT le early-return qui suit — les Hooks ne
   // peuvent pas être conditionnels (react-hooks/rules-of-hooks).
   const weekStrengthSession = useMemo(() => findWeekStrengthSession(planWeek), [planWeek])
+
+  // Retour utilisateur : "les warnings pas détaillés, mais mis sur le côté
+  // avec une pastille" — même consolidation que le badge de vigilance du
+  // Plan (voir plan-attention-types.ts/PlanAttentionBadge, training-plan-
+  // tab.tsx) : draft.verdict/recommendation/warnings ont exactement la
+  // forme AttentionSource attendue (contrat de sortie coach partagé, voir
+  // outputContract.ts) — un seul aplatissement réutilisé tel quel plutôt
+  // qu'une deuxième logique de consolidation pour cette carte. `null` pour
+  // loadProgression (concept propre au Plan, sans équivalent ici).
+  const attentionItems = useMemo(
+    () => (draft ? buildPlanAttentionItems({ verdict: draft.verdict, recommendation: draft.recommendation, warnings: draft.warnings }, null) : []),
+    [draft]
+  )
 
   // Retour utilisateur, indirect — découvert en construisant l'aperçu de
   // séance prévue de la page Cyclisme : depuis la séparation Aujourd'hui/
@@ -539,6 +554,11 @@ export function DailyWorkoutTab() {
                 </Badge>
               )}
               <Badge variant="secondary">{draft.intensityLabel}</Badge>
+              {/* Retour utilisateur : "les warnings pas détaillés, mais mis
+                  sur le côté avec une pastille" — même traitement compact
+                  que le badge de vigilance du Plan, posé ici dans la ligne
+                  de badges plutôt qu'empilé sous forme de blocs dépliés. */}
+              <PlanAttentionBadge items={attentionItems} />
             </div>
             {/* Retour utilisateur : "le plan d'entrainement ne devrais t
                 il pas etre figé avec les seances par jour ?" — distingue
@@ -572,6 +592,13 @@ export function DailyWorkoutTab() {
             </div>
           </CardHeader>
           <CardContent className="space-y-5">
+            {/* Retour utilisateur : même repère visuel que la carte "séance
+                du jour" (aperçu du plan, voir plus bas) plutôt que du texte
+                seul — le graphique est désormais affiché directement, pas
+                caché derrière l'accordéon "script" (qui reste plus bas pour
+                l'édition texte elle-même). */}
+            <WorkoutProfileChart structuredWorkout={draft.structuredWorkout} height={48} />
+
             {/* Retour utilisateur, capture d'écran à l'appui : "ayons un
                 accordéon aussi ici pour l'explication" — rationale (2-4
                 phrases) était le dernier bloc de texte toujours visible en
@@ -617,16 +644,10 @@ export function DailyWorkoutTab() {
               </div>
             )}
 
-            {draft.warnings.length > 0 && (
-              <div className="space-y-2">
-                {draft.warnings.map((w, i) => (
-                  <div key={i} className="flex items-start gap-2 p-3 rounded-xl bg-yellow-500/5 border border-yellow-500/20 text-sm">
-                    <AlertTriangle className="w-4 h-4 text-yellow-500 shrink-0 mt-0.5" />
-                    <span>{w}</span>
-                  </div>
-                ))}
-              </div>
-            )}
+            {/* draft.warnings est désormais consolidé dans le badge de
+                vigilance du header (attentionItems/PlanAttentionBadge) au
+                lieu d'un bloc par warning ici — voir le commentaire sur
+                attentionItems plus haut. */}
 
             {draft.windAdvice && (
               <div className="flex items-start gap-2 p-3 rounded-xl bg-primary/5 border border-primary/20 text-sm">
@@ -658,40 +679,16 @@ export function DailyWorkoutTab() {
               </div>
             )}
 
-            {/* Verdict/motif/incertitude — champs du contrat de sortie coach
-                (withCoachOutputContract, ai/coach/outputContract.ts), déjà
-                calculés par invokeCoachJson sur chaque proposition mais
-                jusqu'ici jamais affichés. "reasons" EST le motif de chaque
-                ajustement de séance ; "verdict" distingue une proposition
-                qui suit les règles sans réserve (ok, pas de bandeau) d'une
-                qui porte une réserve à afficher (warn, jaune) ou qui
-                enfreindrait un red-flag si suivie telle quelle (block,
-                destructive — la séance ci-dessus reste affichée pour
-                transparence, mais l'envoi vers Intervals.icu est bloqué). */}
-            {/* Champs du contrat de sortie coach (verdict/reasons/uncertainty)
-                gardés défensivement (draft.verdict && ..., (draft.reasons ?? [])
-                plutôt qu'un accès direct : une proposition déjà stockée dans
-                Firestore AVANT l'introduction de ce contrat (workoutProposals/
-                {yyyy-MM-dd}, un doc par jour, potentiellement ancien) n'a pas
-                ces champs — undefined.length/.map ferait planter toute la
-                page Coach au chargement, pas seulement afficher un vide. Bug
-                réel rencontré en production : premier accès à un draft ancien
-                après le déploiement de cet affichage. */}
-            {draft.verdict && draft.verdict !== 'ok' && (
-              <div
-                className={cn(
-                  'flex items-start gap-2 p-3 rounded-xl border text-sm',
-                  draft.verdict === 'block'
-                    ? 'bg-destructive/5 border-destructive/20'
-                    : 'bg-yellow-500/5 border-yellow-500/20'
-                )}
-              >
-                <ShieldAlert
-                  className={cn('w-4 h-4 shrink-0 mt-0.5', draft.verdict === 'block' ? 'text-destructive' : 'text-yellow-500')}
-                />
-                <span>{draft.recommendation}</span>
-              </div>
-            )}
+            {/* Verdict/recommendation — champs du contrat de sortie coach
+                (withCoachOutputContract, ai/coach/outputContract.ts) — sont
+                désormais aussi consolidés dans le badge de vigilance du
+                header via attentionItems (même traitement que warnings[]
+                ci-dessus), plutôt qu'un bandeau séparé ici. "reasons"/
+                "uncertainty" (le détail du raisonnement, pas un verdict à
+                signaler) restent dans leur propre accordéon juste en
+                dessous — verdict est ce qui pilote le blocage d'envoi
+                (draft.verdict === 'block', voir le bouton plus bas), le
+                reste ("reasons") n'est que contextuel. */}
 
             {/* Retour utilisateur : "c'est pas très user friendly" — motif/
                 incertitude/script repliés par défaut (Collapsible), pour
@@ -730,7 +727,7 @@ export function DailyWorkoutTab() {
             <Collapsible open={showScript} onOpenChange={setShowScript}>
               <CollapsibleTrigger asChild>
                 <button className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
-                  <FileText className="w-3.5 h-3.5" /> {showScript ? 'Masquer' : 'Voir/modifier'} le script de la séance
+                  <FileText className="w-3.5 h-3.5" /> {showScript ? 'Masquer' : 'Modifier'} le script de la séance
                   <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showScript && 'rotate-180')} />
                 </button>
               </CollapsibleTrigger>
@@ -761,7 +758,7 @@ export function DailyWorkoutTab() {
               <p className="text-xs text-muted-foreground text-right">Connectez Intervals.icu dans Réglages pour envoyer la séance.</p>
             )}
             {canSendToIntervals && draft.verdict === 'block' && (
-              <p className="text-xs text-destructive text-right">Envoi bloqué — voir le motif ci-dessus avant de continuer.</p>
+              <p className="text-xs text-destructive text-right">Envoi bloqué — voir le point de vigilance en haut de la carte avant de continuer.</p>
             )}
           </CardContent>
         </Card>

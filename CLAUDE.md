@@ -1576,6 +1576,45 @@ identique, 832/832 tests inchangés) — uniquement de la visibilité/documentat
 avec le diagnostic : le mécanisme automatique fonctionne déjà correctement, il manquait seulement
 la preuve.
 
+## Coach Aujourd'hui : présentation de la séance alternative alignée sur la séance du plan
+
+Retour utilisateur, capture d'écran de la carte "séance alternative" à l'appui (bouton "Masquer le
+script de la séance" affichant du texte brut, warnings en gros blocs empilés) : "j'aimerais qu'on
+s'assure qu'il y ait une certaine consistency à travers les différentes tables... avoir plus ou
+moins la même présentation que ce qu'il y avait précédemment sur la séance du jour... les warnings
+pas détaillés, mais mis sur le côté avec une pastille, avoir des accordéons et voir le visuel
+graphique de la séance." La carte "séance alternative" (`draft`, générée par `dailyWorkoutRecommendation`
+via "Proposer une séance alternative") avait dérivé de la carte "séance du jour" (`showPlanPreview`,
+voir "Coach Aujourd'hui : graphique de profil..." plus haut) sur deux points : un bloc par warning
+au lieu d'une pastille compacte, et le script texte brut derrière un accordéon plutôt que le
+`WorkoutProfileChart` visible directement.
+
+**`attentionItems`/`PlanAttentionBadge` réutilisés tels quels** (déjà construits pour le badge de
+vigilance du Plan, voir "vue calendrier v2" plus haut) — `draft.verdict`/`draft.recommendation`/
+`draft.warnings` ont exactement la forme `AttentionSource` attendue par `buildPlanAttentionItems()`
+(les deux flows partagent le même contrat de sortie coach, `withCoachOutputContract`), donc aucune
+nouvelle logique de consolidation : un seul aplatissement déjà testé, réutilisé par un deuxième
+appelant. Le badge est posé dans la ligne de badges du header (à côté de "Home trainer"/intensité)
+plutôt qu'empilé en bas de carte — remplace à la fois les blocs `warnings[].map()` un par un et le
+bandeau verdict séparé qui existaient avant. `draft.verdict === 'block'` continue de désactiver le
+bouton d'envoi exactement comme avant (comportement inchangé), seul l'affichage a bougé.
+
+**`WorkoutProfileChart` affiché directement** en haut du `CardContent`, avant même "Pourquoi cette
+séance ?" — même composant/même hauteur (48px) que la carte "séance du jour", jamais caché derrière
+l'accordéon script. L'accordéon "Modifier le script de la séance" (renommé depuis "Voir/modifier" —
+le "voir" est maintenant couvert par le graphique, l'accordéon ne sert plus qu'à l'édition texte)
+reste disponible pour qui veut ajuster le script directement, le graphique n'étant pas éditable.
+
+**Ce qui reste volontairement différent** de la carte "séance du jour", et pourquoi — pas une
+incohérence oubliée : `weatherAlert` reste son propre bandeau distinct (décision déjà actée, voir
+"Coach Aujourd'hui" plus haut — "rester visible comme le changement structurel qu'il est") ; le
+bulletin météo compact, le conseil de vent (`windAdvice`) et l'alimentation (`fueling`) n'ont pas
+d'équivalent sur la carte "séance du jour" (celle-ci n'a pas encore d'appel météo, voir
+`sendPlanSessionDirectly` — envoi direct sans aller-retour IA) ; le titre/durée restent éditables ici
+(`draft` est une proposition IA à ajuster avant envoi), quand la séance du plan est déjà figée par
+construction. Changement de présentation uniquement, aucune logique pure touchée — 832/832 tests
+inchangés, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
