@@ -1637,6 +1637,65 @@ forcément sur le formulaire qui a pu défiler hors champ au-dessus. Les deux co
 `handleBackToPlan`, jamais deux logiques différentes de "retour". Changement de comportement/UI
 uniquement, aucune logique pure touchée — 832/832 tests inchangés, tsc/eslint/build clean.
 
+## Analyse de sortie : respect des intervalles (réalisé vs prévu)
+
+Retour utilisateur : "quand on fait l'analyse des activités, que le coach fasse l'analyse de
+l'activité par rapport à l'activité prévue... est-ce que les intervalles sont bien respectés...
+il en découle soit des propositions du coach d'ajustement ou du questionnement par rapport à
+est-ce qu'on doit ajuster le plan." `rideAnalysis` comparait déjà la sortie à la forme actuelle de
+l'athlète (CTL/ATL/TSB) mais jamais à ce qui était concrètement PRÉVU ce jour-là.
+
+**Retrouver la séance prévue pour une date arbitraire** (`findPlannedWorkoutForDate`,
+`use-ride-analysis.ts`) — deux sources, dans l'ordre, jamais un nouveau listener Firestore (une
+lecture ponctuelle par source, au clic "Analyser" uniquement, même discipline "lazy" que le reste
+de ce fichier) : (1) `workoutProposals/{date}` — la proposition IA du jour, qui peut avoir AJUSTÉ
+la séance type du plan (météo, récupération, voir "Proposition du jour ajuste le plan" plus haut)
+— la référence la plus fidèle à ce qui était réellement visé, quand elle existe ; (2) à défaut, la
+séance type datée ce jour dans le plan actif (`trainingPlans` où `status == 'active'`,
+`weeks[].sampleSessions[].date`) — couvre le cas où l'athlète a envoyé une séance depuis l'onglet
+Plan sans jamais passer par "Aujourd'hui". `null` (aucune comparaison, aucun encart, aucune ligne
+de prompt) si aucune des deux ne donne de script exploitable — jamais une comparaison inventée.
+
+**`computeIntervalAdherence()`** (`interval-adherence-types.ts`, pur/testé) — découpe le flux watts
+RÉEL déjà fetché pour `rideAnalysis` (`use-ride-analysis.ts`) séquentiellement selon les DURÉES du
+script prévu (`parseStructuredWorkoutProfile`, `plan-calendar-types.ts` — étendu pour ce chantier
+avec `pctFtpLow`/`pctFtpHigh`, les vraies bornes cible, en plus du `pctFtp` milieu déjà utilisé
+partout ailleurs) : un cumul d'offsets, PAS des repères de tour vérifiés par Intervals.icu (leur
+propre détection auto-intervalles est une fonctionnalité distincte, non câblée — même sandbox
+network-blocked que documenté ailleurs dans ce fichier, aucun moyen de vérifier la forme exacte de
+cet endpoint). Puissance moyenne réelle de chaque tranche → %FTP → comparée à la fourchette cible
+de l'étape correspondante (`below`/`within`/`above`).
+
+**⚠️ Garde-fou explicite sur la méthode** : si l'athlète a dérivé du minutage prévu (parti plus
+tard sur un effort, pris plus de repos qu'annoncé...), les tranches glissent et le rapprochement
+devient trompeur plutôt que juste imprécis. `computeIntervalAdherence` refuse donc de produire un
+résultat (retourne `null`) si la durée réelle totale de la sortie s'écarte de plus de ±25% de la
+durée prévue totale — jamais un découpage qui mentirait sur quel effort a produit quels watts.
+
+**Flow `rideAnalysis`** — deux nouveaux inputs optionnels, `plannedWorkout` (titre/durée/script de
+la séance prévue) et `intervalAdherence` (le détail étape par étape déjà calculé) — indépendants
+l'un de l'autre côté schéma. Nouvelle instruction système : commenter les intervalles tenus dans/
+sous/au-dessus de la cible avec les vrais chiffres, et — si plusieurs vont dans le même sens —
+proposer une piste concrète OU une question ouverte (fatigue du jour, conditions extérieures,
+intensité prescrite à recalibrer) plutôt qu'une affirmation tranchée, exactement la demande
+utilisateur ("propositions... ou questionnement"). Rappel explicite que le découpage n'est pas un
+repère de tour vérifié — ton mesuré exigé pour un écart faible (quelques %), jamais présenté comme
+un intervalle "manqué" avec certitude.
+
+**Encart "Respect des intervalles"** (`RideAnalysisDialog`) — même patron que Durabilité/
+Découplage (chiffre réel affiché en complément du texte IA, jamais un remplacement) : une ligne par
+étape (cible vs réalisé, icône ✓/↓/↑), un résumé "N/M étapes dans la cible", et le même rappel de
+méthode que le prompt (découpage approximatif, pas des tours vérifiés) pour ne jamais laisser
+croire à une précision que les données ne permettent pas.
+
+**Persistance** — `plannedWorkout`/`intervalAdherence` rejoignent `durability`/`decoupling` dans
+`StoredRideAnalysis` (`users/{uid}/rideAnalyses/{activityId}`), `null` (jamais `undefined`) quand
+non calculables — même raison de persister que les deux encarts existants : recalculer exigerait
+de refetcher les streams ET de relire la séance prévue de ce jour-là à chaque ouverture.
+
+Tests (`interval-adherence-types.test.ts`, nouveau ; `plan-calendar-types.test.ts` mis à jour pour
+les nouveaux champs `pctFtpLow`/`pctFtpHigh`) — 838/838 au total, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

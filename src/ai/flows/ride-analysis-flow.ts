@@ -56,6 +56,28 @@ const DurabilityTierSchema = z.object({
 });
 type DurabilityTierInput = z.infer<typeof DurabilityTierSchema>;
 
+// Réalisé vs prévu (interval-adherence-types.ts, components/coach/) — retour
+// utilisateur : "que le coach fasse l'analyse de l'activité par rapport à
+// l'activité prévue... est-ce que les intervalles sont bien respectés...
+// il en découle soit des propositions du coach d'ajustement ou du
+// questionnement par rapport à est-ce qu'on doit ajuster le plan." Les deux
+// champs ci-dessous sont TOUS DEUX optionnels et indépendants l'un de
+// l'autre côté schéma (le hook appelant les fournit ou les omet ensemble en
+// pratique, mais rien ici ne le suppose) : `plannedWorkout` peut être fourni
+// sans `intervalAdherence` (séance prévue trouvée mais pas de flux watts, ou
+// durée réelle trop différente pour un découpage fiable — voir
+// computeIntervalAdherence).
+const IntervalAdherenceStepSchema = z.object({
+  index: z.number(),
+  targetDurationSeconds: z.number(),
+  targetPctLow: z.number(),
+  targetPctHigh: z.number(),
+  actualAvgWatts: z.number(),
+  actualPctFtp: z.number(),
+  verdict: z.enum(['below', 'within', 'above']),
+});
+type IntervalAdherenceStepInput = z.infer<typeof IntervalAdherenceStepSchema>;
+
 const RideAnalysisInputSchema = z.object({
   activity: z.object({
     name: z.string().optional(),
@@ -107,6 +129,20 @@ const RideAnalysisInputSchema = z.object({
     .describe(
       'Profil de durabilité (MMP par palier de travail accumulé kJ/kg franchi pendant cette sortie) — voir domain/cycling/metrics/durability.ts. Absent si pas de flux watts ou pas de poids athlète connu.'
     ),
+  plannedWorkout: z
+    .object({
+      title: z.string(),
+      durationMinutes: z.number(),
+      structuredWorkout: z.string().describe('Script "workout builder" Intervals.icu de la séance qui était PRÉVUE ce jour-là (plan d\'entraînement ou proposition IA) — jamais généré par ce flow, seulement recopié pour contexte.'),
+    })
+    .optional()
+    .describe("La séance prévue ce jour-là, si elle a pu être retrouvée (plan actif daté ce jour, ou proposition IA du jour) — absente si aucun plan/proposition ne couvre cette date."),
+  intervalAdherence: z
+    .array(IntervalAdherenceStepSchema)
+    .optional()
+    .describe(
+      'Comparaison étape par étape entre le script prévu et la puissance réellement tenue — découpage SÉQUENTIEL du flux watts réel selon les durées prévues (PAS des repères de tour vérifiés par Intervals.icu), donc approximatif si le rythme réel a dérivé du minutage prévu. Absent si aucune séance prévue trouvée, pas de flux watts/FTP, ou durée réelle trop éloignée de la durée prévue pour que ce découpage reste fiable.'
+    ),
   coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, goals, lifestyle, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
 }).describe('Input for the ride analysis flow.');
 
@@ -152,6 +188,26 @@ function formatDurability(tiers: DurabilityTierInput[] | undefined): string {
     return `  - ${t.tierKJPerKg} kJ/kg franchi : ${mmpText}`;
   });
   return `DURABILITÉ — puissance maximale moyenne (MMP) par palier de travail accumulé déjà franchi pendant cette sortie (comparaison à froid vs fatigué, DANS cette même sortie) :\n${lines.join('\n')}`;
+}
+
+const VERDICT_LABEL: Record<IntervalAdherenceStepInput['verdict'], string> = {
+  below: 'en dessous de la cible',
+  within: 'dans la cible',
+  above: 'au-dessus de la cible',
+};
+
+/**
+ * Réalisé vs prévu, étape par étape — retour utilisateur : "est-ce que les
+ * intervalles sont bien respectés ?". Formatte tel quel le découpage déjà
+ * calculé par computeIntervalAdherence (interval-adherence-types.ts,
+ * components/coach/) — ce flow ne recalcule rien, juste narre.
+ */
+function formatIntervalAdherence(steps: IntervalAdherenceStepInput[] | undefined): string {
+  if (!steps || steps.length === 0) return '';
+  const lines = steps.map((s) =>
+    `  - Étape ${s.index + 1} (${formatDurationLabel(s.targetDurationSeconds)}, cible ${s.targetPctLow}-${s.targetPctHigh}%FTP) : tenue à ${s.actualPctFtp}%FTP (${s.actualAvgWatts}W) — ${VERDICT_LABEL[s.verdict]}`
+  );
+  return `RESPECT DES INTERVALLES (découpage séquentiel du flux réel selon les durées du script prévu — PAS des repères de tour vérifiés, approximatif si le rythme réel a dérivé du minutage prévu) :\n${lines.join('\n')}`;
 }
 
 export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult<RideAnalysisOutput>> {
@@ -211,6 +267,13 @@ export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult
     const durabilityText = formatDurability(parsed.durability);
     if (durabilityText) sections.push(durabilityText);
 
+    if (parsed.plannedWorkout) {
+      sections.push(`SÉANCE PRÉVUE CE JOUR-LÀ : "${parsed.plannedWorkout.title}" (${parsed.plannedWorkout.durationMinutes} min)\n${parsed.plannedWorkout.structuredWorkout}`);
+    }
+
+    const intervalAdherenceText = formatIntervalAdherence(parsed.intervalAdherence);
+    if (intervalAdherenceText) sections.push(intervalAdherenceText);
+
     const coachContextBlock = parsed.coachContext ? `${parsed.coachContext}\n\n` : '';
 
     const system = `${coachContextBlock}Tu es un coach cycliste expert qui analyse une sortie terminée pour l'athlète, à partir de vraies données Intervals.icu (jamais inventées). Réponds entièrement en français.
@@ -220,6 +283,7 @@ Si un profil de durabilité est fourni, commente si la puissance tient ou décli
 Si un découplage puissance:FC est fourni, ne l'interprète JAMAIS automatiquement comme un signe de fatigue — contextualise (chaleur, hydratation/hypovolémie, dénivelé, intensité variable sur la sortie) plutôt que d'affirmer une cause précise que les données ne permettent pas de trancher.
 Si une répartition 3 zones est fournie, la cible ~80% en zone basse intensité est une observation DESCRIPTIVE d'athlètes s'entraînant 10-13 fois/semaine, JAMAIS une prescription universelle — ne dis jamais à l'athlète qu'il "devrait" viser 80% sur CETTE sortie (une sortie seuil/intervalles n'a aucune raison d'être en zone basse), décris seulement où se situe cette sortie et laisse le contexte du plan/objectif de l'athlète, pas ce chiffre seul, dicter si c'était le bon choix.
 Le RPE et le Feeling sont deux mesures subjectives distinctes de l'athlète — ne les confonds jamais et ne les traite jamais comme contradictoires l'un envers l'autre sans raison réelle. Un RPE bas (proche de 1) et un Feeling positif racontent la MÊME histoire cohérente (séance facile, bien vécue) : ne présente JAMAIS cette combinaison comme un "ressenti négatif inexpliqué" à investiguer, ni comme un écart entre le ressenti et la charge objective — c'est le signal normal et attendu d'une séance facile bien tolérée, pas une anomalie.
+Si une séance prévue et un respect des intervalles sont fournis, commente si les intervalles ont été tenus dans la cible, en dessous, ou au-dessus — cite les vrais chiffres (%FTP cible vs réalisé) plutôt que de rester vague ("bien tenu" / "un peu court"). Si plusieurs intervalles vont dans le même sens (systématiquement sous ou au-dessus de la cible), propose une piste concrète OU une question ouverte à l'athlète plutôt qu'une affirmation tranchée : fatigue accumulée du jour, conditions extérieures (vent, dénivelé, chaleur) ayant pu justifier l'écart, ou intensité prescrite par le plan à recalibrer (FTP sous/sur-estimé, cible trop ambitieuse en ce moment) — utilise "improvementAreas"/"recommendation" pour ça. Le découpage n'est PAS un repère de tour vérifié par Intervals.icu (juste un cumul des durées prévues sur le flux réel) : reste mesuré, ne dis jamais avec certitude absolue qu'un intervalle précis a été "manqué" pour un écart de quelques % seulement — parle d'écart notable plutôt que d'échec quand la marge est faible.
 
 Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme exacte
 (plus les champs de contrat obligatoires décrits plus haut) :
