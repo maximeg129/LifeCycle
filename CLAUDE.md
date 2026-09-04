@@ -1615,6 +1615,28 @@ d'équivalent sur la carte "séance du jour" (celle-ci n'a pas encore d'appel m�
 construction. Changement de présentation uniquement, aucune logique pure touchée — 832/832 tests
 inchangés, tsc/eslint/build clean.
 
+## Coach Aujourd'hui : revenir à la séance du plan après une alternative
+
+Retour utilisateur : "Une fois la séance alternative proposée on devrais pouvoir revenir sur la
+séance initiale." Le lien "← Revenir à la séance prévue par le plan" (formulaire "Proposer une
+séance alternative") disparaissait dès qu'un draft avait été généré, sur l'hypothèse initiale
+qu'"il n'y aurait plus rien de plus à montrer" une fois la génération lancée — faux : la séance du
+plan reste consultable/envoyable même après avoir vu une alternative, l'athlète peut simplement
+avoir changé d'avis.
+
+**`handleBackToPlan()`** (`daily-workout-tab.tsx`) — remet `draft` à `null` et `showAlternativeForm`
+à `false`, ce qui refait réapparaître `showPlanPreview` (aucune autre condition n'avait changé).
+N'efface rien côté Firestore (`workoutProposals/{yyyy-MM-dd}` reste inchangé) : une remise à zéro de
+l'affichage local uniquement — régénérer une alternative écrase à nouveau ce même doc comme avant.
+
+**Deux points d'entrée**, chacun là où l'athlète regarde à ce moment précis : le lien du formulaire
+(inchangé dans son placement, juste rebranché sur `handleBackToPlan`) pour le cas déjà couvert
+avant (aucun draft encore généré) ; un second lien identique ajouté directement en tête de la carte
+de résultat (le draft généré) — c'est là que l'attention est portée juste après une génération, pas
+forcément sur le formulaire qui a pu défiler hors champ au-dessus. Les deux convergent vers le même
+`handleBackToPlan`, jamais deux logiques différentes de "retour". Changement de comportement/UI
+uniquement, aucune logique pure touchée — 832/832 tests inchangés, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

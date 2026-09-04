@@ -187,6 +187,20 @@ export function DailyWorkoutTab() {
     }
   }
 
+  // Retour utilisateur : "une fois la séance alternative proposée on
+  // devrait pouvoir revenir sur la séance initiale" — avant ce correctif,
+  // le lien "← Revenir à la séance prévue par le plan" disparaissait dès
+  // qu'un draft existait (voir le commentaire historique juste au-dessus
+  // de son premier usage plus bas), sur l'idée qu'"il n'y aurait plus rien
+  // de plus à montrer" — faux : la séance du plan reste consultable/
+  // envoyable même après avoir généré une alternative. N'efface rien côté
+  // Firestore (workoutProposals/{date} reste tel quel) — juste une remise
+  // à zéro de l'affichage local, régénérable à tout moment.
+  const handleBackToPlan = () => {
+    setDraft(null)
+    setShowAlternativeForm(false)
+  }
+
   const handleSend = async () => {
     if (!draft) return
     const ok = await sendToIntervals(draft)
@@ -356,13 +370,14 @@ export function DailyWorkoutTab() {
         <CardContent className="flex flex-wrap items-end gap-4">
           {/* Retour d'ici vers l'aperçu de la séance du plan — n'a de sens
               que si on est venu de là (showAlternativeForm) et qu'aucun
-              draft n'a encore été généré ; une fois un draft présent, ce
-              formulaire reste la seule vue (il sert aussi à le régénérer),
-              revenir en arrière n'aurait plus rien à montrer de plus. */}
+              draft n'a encore été généré ; une fois un draft présent, le
+              lien équivalent vit directement sur la carte de résultat plus
+              bas (handleBackToPlan), plus proche de ce que l'athlète est
+              en train de regarder à ce moment-là. */}
           {showAlternativeForm && todaysPlanSession && !draft && (
             <button
               type="button"
-              onClick={() => setShowAlternativeForm(false)}
+              onClick={handleBackToPlan}
               className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-left -mb-2"
             >
               ← Revenir à la séance prévue par le plan
@@ -542,6 +557,21 @@ export function DailyWorkoutTab() {
       ) : (
         <Card className="bg-card/60 border-primary/20 border-2">
           <CardHeader className="space-y-3">
+            {/* Retour utilisateur : "une fois la séance alternative
+                proposée on devrait pouvoir revenir sur la séance
+                initiale" — équivalent du lien du formulaire (plus haut),
+                mais posé ici sur la carte de résultat elle-même : c'est
+                là que l'athlète regarde une fois un draft généré, pas
+                forcément le formulaire qui a pu défiler hors champ. */}
+            {todaysPlanSession && (
+              <button
+                type="button"
+                onClick={handleBackToPlan}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors text-left"
+              >
+                ← Revenir à la séance prévue par le plan
+              </button>
+            )}
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <Input
                 value={draft.title}
