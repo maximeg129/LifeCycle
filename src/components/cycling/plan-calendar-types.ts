@@ -30,6 +30,23 @@ export interface WorkoutProfileStep {
   durationSeconds: number
   /** Milieu de la fourchette cible %FTP de cette étape (ex. "95-105%" → 100). */
   pctFtp: number
+  /**
+   * Bornes réelles de la fourchette cible (ex. "95-105%" → 95/105 ; une
+   * cible à valeur unique comme "55%" → 55/55) — retour utilisateur :
+   * "est-ce que les intervalles sont bien respectés ?" (voir "Analyse de
+   * sortie : respect des intervalles" dans CLAUDE.md). `pctFtp` (le
+   * milieu) reste inchangé pour tous les usages existants (couleur de
+   * zone, hauteur de barre) ; ces deux champs ne servent qu'au
+   * rapprochement réalisé/prévu, qui a besoin du VRAI intervalle cible,
+   * pas d'un point unique. Optionnels — toujours posés par
+   * `parseStructuredWorkoutProfile` ci-dessous, mais un step construit à
+   * la main ailleurs (tests, `workoutProfileBars`/`averageIntensityPct`
+   * qui n'ont besoin que de `pctFtp`) n'a pas à les fournir ;
+   * `computeIntervalAdherence` (interval-adherence-types.ts) retombe sur
+   * `pctFtp` pour les deux bornes si absents.
+   */
+  pctFtpLow?: number
+  pctFtpHigh?: number
 }
 
 const STEP_LINE_RE = /^-\s*(\d+(?:\.\d+)?)\s*(s|m|h)\b.*?(\d+(?:\.\d+)?)\s*(?:-\s*(\d+(?:\.\d+)?))?\s*%/i
@@ -70,7 +87,7 @@ export function parseStructuredWorkoutProfile(script: string | undefined | null)
       const durationSeconds = toSeconds(Number(m[1]), m[2])
       const lo = Number(m[3])
       const hi = m[4] != null ? Number(m[4]) : lo
-      blockSteps.push({ durationSeconds, pctFtp: (lo + hi) / 2 })
+      blockSteps.push({ durationSeconds, pctFtp: (lo + hi) / 2, pctFtpLow: lo, pctFtpHigh: hi })
     }
     for (let i = 0; i < repeatCount; i++) steps.push(...blockSteps)
   }

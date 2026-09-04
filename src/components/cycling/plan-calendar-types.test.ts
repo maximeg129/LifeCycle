@@ -24,24 +24,27 @@ describe('parseStructuredWorkoutProfile', () => {
     expect(repeated).toHaveLength(4)
   })
 
-  it('takes the midpoint of a ramp/range target', () => {
+  it('takes the midpoint of a ramp/range target, keeping the real bounds too', () => {
     const steps = parseStructuredWorkoutProfile(EXAMPLE_SCRIPT)
-    expect(steps[0]).toEqual({ durationSeconds: 900, pctFtp: 60 })
+    expect(steps[0]).toEqual({ durationSeconds: 900, pctFtp: 60, pctFtpLow: 55, pctFtpHigh: 65 })
   })
 
-  it('handles a single-value target (no range)', () => {
+  it('handles a single-value target (no range) — low/high collapse to the same value', () => {
     const steps = parseStructuredWorkoutProfile('Retour au calme\n- 10m 55%')
-    expect(steps).toEqual([{ durationSeconds: 600, pctFtp: 55 }])
+    expect(steps).toEqual([{ durationSeconds: 600, pctFtp: 55, pctFtpLow: 55, pctFtpHigh: 55 }])
   })
 
   it('converts hours and seconds correctly', () => {
     const steps = parseStructuredWorkoutProfile('Section\n- 1h 60%\n- 30s 150%')
-    expect(steps).toEqual([{ durationSeconds: 3600, pctFtp: 60 }, { durationSeconds: 30, pctFtp: 150 }])
+    expect(steps).toEqual([
+      { durationSeconds: 3600, pctFtp: 60, pctFtpLow: 60, pctFtpHigh: 60 },
+      { durationSeconds: 30, pctFtp: 150, pctFtpLow: 150, pctFtpHigh: 150 },
+    ])
   })
 
   it('skips a step line it cannot parse (e.g. an absolute-watts target) rather than throwing', () => {
     const steps = parseStructuredWorkoutProfile('Section\n- 5m 250w\n- 5m 100%')
-    expect(steps).toEqual([{ durationSeconds: 300, pctFtp: 100 }])
+    expect(steps).toEqual([{ durationSeconds: 300, pctFtp: 100, pctFtpLow: 100, pctFtpHigh: 100 }])
   })
 
   it('returns an empty array for missing/empty input', () => {

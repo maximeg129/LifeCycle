@@ -8,10 +8,23 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Sparkles, Loader2, TrendingUp, Zap, Target, BatteryMedium, HeartPulse } from 'lucide-react'
+import { Sparkles, Loader2, TrendingUp, Zap, Target, BatteryMedium, HeartPulse, ListChecks, CheckCircle2, ArrowDown, ArrowUp } from 'lucide-react'
 import { useRideAnalysis } from './use-ride-analysis'
 import { summarizeDurabilityForDisplay } from './ride-analysis-types'
+import type { IntervalAdherenceVerdict } from './interval-adherence-types'
 import { cn } from '@/lib/utils'
+
+/** Icône + couleur par verdict — même vocabulaire "dans la cible / en dessous / au-dessus" que le prompt IA (ride-analysis-flow.ts), pour que le texte et l'encart chiffré ne puissent jamais se contredire visuellement. */
+const ADHERENCE_ICON: Record<IntervalAdherenceVerdict, typeof CheckCircle2> = {
+  within: CheckCircle2,
+  below: ArrowDown,
+  above: ArrowUp,
+}
+const ADHERENCE_COLOR: Record<IntervalAdherenceVerdict, string> = {
+  within: 'text-green-600',
+  below: 'text-orange-600',
+  above: 'text-orange-600',
+}
 
 interface Props {
   activityId: string
@@ -21,7 +34,7 @@ interface Props {
 }
 
 export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange }: Props) {
-  const { analysis, durability, decoupling, isLoadingStored, isGenerating, canAnalyze, generate } = useRideAnalysis(open ? activityId : null)
+  const { analysis, durability, decoupling, plannedWorkout, intervalAdherence, isLoadingStored, isGenerating, canAnalyze, generate } = useRideAnalysis(open ? activityId : null)
   const durabilitySummary = summarizeDurabilityForDisplay(durability)
 
   return (
@@ -105,6 +118,40 @@ export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange }
                   {decoupling.decouplingPct > 0 ? '+' : ''}{decoupling.decouplingPct.toFixed(1)}%
                   {decoupling.decouplingPct > 0 ? ' — dérive cardiaque (FC monte plus que la puissance)' : ' — pas de dérive notable'}
                 </p>
+              </div>
+            )}
+
+            {/* Réalisé vs prévu — retour utilisateur : "est-ce que les
+                intervalles sont bien respectés ?". Même patron que les deux
+                encarts ci-dessus (chiffre réel, en complément du texte IA
+                qui commente déjà ces mêmes données — jamais un
+                remplacement). Découpage séquentiel (interval-adherence-
+                types.ts), pas des tours vérifiés par Intervals.icu — d'où
+                le rappel de méthode sous le titre plutôt qu'une affirmation
+                nue. */}
+            {plannedWorkout && intervalAdherence && (
+              <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
+                <h5 className="font-bold text-xs flex items-center gap-1.5">
+                  <ListChecks className="w-3.5 h-3.5 text-primary" /> Respect des intervalles
+                </h5>
+                <p className="text-xs text-muted-foreground">
+                  Vs "{plannedWorkout.title}" — {intervalAdherence.withinCount}/{intervalAdherence.steps.length} étape{intervalAdherence.steps.length > 1 ? 's' : ''} dans la cible
+                  (découpage approximatif du flux réel selon le script prévu, pas des tours vérifiés).
+                </p>
+                <div className="space-y-1">
+                  {intervalAdherence.steps.map((s) => {
+                    const Icon = ADHERENCE_ICON[s.verdict]
+                    return (
+                      <div key={s.index} className="flex items-center justify-between text-sm">
+                        <span className="text-muted-foreground flex items-center gap-1.5">
+                          <Icon className={cn('w-3.5 h-3.5 shrink-0', ADHERENCE_COLOR[s.verdict])} />
+                          Étape {s.index + 1} — cible {s.targetPctLow}{s.targetPctHigh !== s.targetPctLow ? `-${s.targetPctHigh}` : ''}%FTP
+                        </span>
+                        <span className="font-data">{s.actualPctFtp}%FTP ({s.actualAvgWatts}W)</span>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             )}
 

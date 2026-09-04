@@ -12,7 +12,7 @@
 // explicit "Analyser" click does.
 
 import { useCallback, useState } from 'react'
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore'
+import { doc, getDoc, getDocs, collection, query, where, setDoc, serverTimestamp } from 'firebase/firestore'
 import { format } from 'date-fns'
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
 import { useToast } from '@/hooks/use-toast'
@@ -32,6 +32,9 @@ import { computeNormalizedPower, computePowerZoneDistribution, computeHrZoneDist
 import { computeDurabilityProfile } from '@/domain/cycling/metrics/durability'
 import { computeDecoupling, type DecouplingResult } from '@/domain/cycling/metrics/decoupling'
 import { computePowerZoneDistribution3, type ThreeZoneBucket } from '@/domain/cycling/metrics/zones'
+import { computeIntervalAdherence, type IntervalAdherenceResult } from './interval-adherence-types'
+import { parseStructuredWorkoutProfile } from '@/components/cycling/plan-calendar-types'
+import type { PlanWeek } from '@/components/cycling/training-plan-types'
 import { describeActionDispatchError } from '@/lib/utils'
 
 interface IntervalsCredentialsDoc {
@@ -52,6 +55,22 @@ interface StoredRideAnalysis {
   // la durabilité).
   durability: DurabilityRideEntry[] | null
   decoupling: DecouplingResult | null
+  // Retour utilisateur : "que le coach fasse l'analyse de l'activité par
+  // rapport à l'activité prévue... est-ce que les intervalles sont bien
+  // respectés". Même raison de persister que durability/decoupling
+  // ci-dessus — recalculer exigerait de refetcher les streams ET de
+  // relire la séance prévue de ce jour-là. `null` si aucune séance
+  // prévue n'a pu être retrouvée pour cette date, ou si computeInterval-
+  // Adherence a refusé de produire un résultat (voir sa propre doc).
+  plannedWorkout: PlannedWorkoutLike | null
+  intervalAdherence: IntervalAdherenceResult | null
+}
+
+/** Le sous-ensemble d'une séance prévue (proposition IA du jour ou séance type du plan) dont rideAnalysis a besoin — jamais le document entier, qui porte des champs propres à sa propre collection (sentToIntervals, verdict du contrat coach...) sans rapport avec l'analyse d'une sortie. */
+interface PlannedWorkoutLike {
+  title: string
+  durationMinutes: number
+  structuredWorkout: string
 }
 
 function toZoneInput(zones: (PowerZoneBucket | HrZoneBucket)[] | null, totalSeconds: number) {
@@ -73,6 +92,60 @@ function toThreeZoneInput(zones: ThreeZoneBucket[] | null, totalSeconds: number)
     minutes: Math.round((z.seconds / 60) * 10) / 10,
     pctOfRide: totalSeconds > 0 ? Math.round((z.seconds / totalSeconds) * 1000) / 10 : 0,
   }))
+}
+
+/**
+ * Retrouve la séance PRÉVUE pour la date d'une activité — pour comparer
+ * réalisé vs prévu (voir interval-adherence-types.ts). Deux sources, dans
+ * l'ordre de préférence, jamais un deuxième listener Firestore (une seule
+ * lecture ponctuelle par source, appelée seulement au clic "Analyser" —
+ * même discipline "lazy" que le reste de ce fichier) :
+ *
+ * 1. `workoutProposals/{date}` — la proposition IA du jour, qui peut avoir
+ *    AJUSTÉ la séance type du plan (météo, récupération — voir
+ *    "Proposition du jour ajuste le plan" dans CLAUDE.md) : c'est donc la
+ *    référence la plus fidèle à ce qui était réellement visé ce jour-là,
+ *    quand elle existe.
+ * 2. À défaut, la séance type datée ce jour dans le plan actif
+ *    (`trainingPlans` où `status == 'active'`, `weeks[].sampleSessions`) —
+ *    couvre le cas où l'athlète a envoyé une séance directement depuis
+ *    l'onglet Plan sans jamais passer par "Aujourd'hui".
+ *
+ * `null` si aucune des deux ne donne de script exploitable — jamais une
+ * comparaison inventée. Best-effort : une erreur de lecture sur l'une des
+ * deux sources n'interrompt jamais l'analyse elle-même (voir les `catch`
+ * silencieux), exactement comme streamsError plus bas dans generate().
+ */
+async function findPlannedWorkoutForDate(
+  db: NonNullable<ReturnType<typeof useFirestore>>,
+  uid: string,
+  activityDate: string
+): Promise<PlannedWorkoutLike | null> {
+  try {
+    const proposalSnap = await getDoc(doc(db, `users/${uid}/workoutProposals/${activityDate}`))
+    if (proposalSnap.exists()) {
+      const proposal = (proposalSnap.data() as { proposal?: PlannedWorkoutLike }).proposal
+      if (proposal?.structuredWorkout) {
+        return { title: proposal.title, durationMinutes: proposal.durationMinutes, structuredWorkout: proposal.structuredWorkout }
+      }
+    }
+  } catch {
+    // Best-effort — l'analyse tourne quand même sans comparaison prévu/réalisé.
+  }
+
+  try {
+    const planSnap = await getDocs(query(collection(db, `users/${uid}/trainingPlans`), where('status', '==', 'active')))
+    const weeks = (planSnap.docs[0]?.data() as { weeks?: PlanWeek[] } | undefined)?.weeks ?? []
+    const week = weeks.find((w) => activityDate >= w.startDate && activityDate <= w.endDate)
+    const session = week?.sampleSessions?.find((s) => s.date === activityDate && s.sessionKind !== 'strength')
+    if (session?.structuredWorkout) {
+      return { title: session.title, durationMinutes: session.durationMinutes, structuredWorkout: session.structuredWorkout }
+    }
+  } catch {
+    // Best-effort, même raisonnement que ci-dessus.
+  }
+
+  return null
 }
 
 /** activityId: pass null while there's nothing to load yet (e.g. a closed dialog) — avoids an Intervals.icu fetch per row just from the Sorties list rendering. */
@@ -192,6 +265,18 @@ export function useRideAnalysis(activityId: string | null) {
       const totalSeconds = activity.moving_time ?? watts?.length ?? heartrate?.length ?? 0
 
       const today = format(new Date(), 'yyyy-MM-dd')
+      const activityDate = activity.start_date_local?.slice(0, 10) ?? today
+
+      // Réalisé vs prévu (interval-adherence-types.ts) — retour utilisateur :
+      // "que le coach fasse l'analyse de l'activité par rapport à
+      // l'activité prévue... est-ce que les intervalles sont bien
+      // respectés". `plannedWorkout` null si aucune séance prévue n'a pu
+      // être retrouvée pour cette date (pas de plan actif, jour de repos,
+      // proposition non générée) — pas une erreur, juste rien à comparer.
+      const plannedWorkout = await findPlannedWorkoutForDate(db, user.uid, activityDate)
+      const plannedSteps = plannedWorkout ? parseStructuredWorkoutProfile(plannedWorkout.structuredWorkout) : []
+      const intervalAdherence = plannedWorkout ? computeIntervalAdherence(watts, plannedSteps, ftp) : null
+
       const coachContext = buildCoachContext({
         today,
         injuries: memory.injuries,
@@ -209,7 +294,7 @@ export function useRideAnalysis(activityId: string | null) {
         activity: {
           name: activity.name ?? undefined,
           type: activity.type ?? undefined,
-          date: activity.start_date_local?.slice(0, 10) ?? today,
+          date: activityDate,
           distanceKm: activity.distance != null ? Math.round(activity.distance / 100) / 10 : undefined,
           durationMinutes: activity.moving_time != null ? Math.round(activity.moving_time / 60) : 0,
           avgWatts: avgWatts ?? undefined,
@@ -236,6 +321,8 @@ export function useRideAnalysis(activityId: string | null) {
           tsb: athlete.data.tsb,
         } : undefined,
         durability,
+        plannedWorkout: plannedWorkout ?? undefined,
+        intervalAdherence: intervalAdherence?.steps,
         coachContext,
       })
 
@@ -250,6 +337,8 @@ export function useRideAnalysis(activityId: string | null) {
         analysis: result.data,
         durability: durability ?? null,
         decoupling: decoupling ?? null,
+        plannedWorkout: plannedWorkout ?? null,
+        intervalAdherence: intervalAdherence ?? null,
         createdAt: serverTimestamp(),
       }
       try {
@@ -271,6 +360,8 @@ export function useRideAnalysis(activityId: string | null) {
     analysis: stored?.analysis ?? null,
     durability: stored?.durability ?? null,
     decoupling: stored?.decoupling ?? null,
+    plannedWorkout: stored?.plannedWorkout ?? null,
+    intervalAdherence: stored?.intervalAdherence ?? null,
     isLoadingStored,
     isGenerating,
     canAnalyze: !!creds?.intervalsAthleteId && !!creds?.intervalsApiKey,
