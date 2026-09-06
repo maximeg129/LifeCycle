@@ -19,6 +19,24 @@ export interface Bike {
   isActive: boolean
   externalGearId: string | null // Intervals.icu / Strava gear ID
   lastSyncDate: string | null   // ISO date of last km sync
+  /**
+   * Last `trueTotalKm` (km-sync.ts, computed from real Intervals.icu
+   * activity history) captured for this bike's gear — the reference a sync
+   * measures NEW riding against, deliberately kept separate from `totalKm`
+   * itself. Bug this fixes, found live: `totalKm` can be a real-world
+   * odometer figure entered manually (at bike creation, or via a later
+   * manual correction in Garage) that has nothing to do with what
+   * Intervals.icu has ever tracked for this gear — comparing the synced
+   * total directly against `totalKm` (the old design) meant a bike whose
+   * manual km was ever set/nudged ABOVE what Intervals.icu tracks would
+   * never sync again, no matter how many real rides followed: the gap was
+   * never about new riding, so no new riding could ever close it. Absent on
+   * any bike synced before this field existed — `computeGearSyncDelta`
+   * (km-sync.ts) treats that exactly like a fresh link, comparing against
+   * `totalKm` once (so a bike linked after months of riding still catches
+   * up its full history in one sync) and capturing this field from then on.
+   */
+  gearSyncBaselineKm?: number | null
   createdAt: Timestamp
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { planKmDeltaUpdate, computeGearKmFromActivities, extractLinkedRides } from './km-sync'
+import { planKmDeltaUpdate, computeGearKmFromActivities, computeGearSyncDelta, extractLinkedRides } from './km-sync'
 
 describe('planKmDeltaUpdate', () => {
   it('picks the mounted chain when the bike has rotation chains', () => {
@@ -102,6 +102,53 @@ describe('computeGearKmFromActivities', () => {
     // Wahoo. This function never looks at that field at all.
     const activities = [{ gear: { id: gearId }, start_date_local: '2026-08-24T10:00:00', distance: 45000 }]
     expect(computeGearKmFromActivities(activities, gearId, '2026-08-01')).toBe(45)
+  })
+})
+
+describe('computeGearSyncDelta', () => {
+  it('catches up the full history in one go on a first-ever sync (no baseline yet)', () => {
+    // Bike created at 0 km, linked after months of riding already tracked
+    // on Intervals.icu — same "catch up in one sync" intent already covered
+    // by computeGearKmFromActivities's own first-sync test above.
+    const plan = computeGearSyncDelta({ totalKm: 0 }, 1200)
+    expect(plan).toEqual({ delta: 1200, newTotalKm: 1200, newBaselineKm: 1200 })
+  })
+
+  it('captures the baseline without crediting anything when totalKm already sits above what Intervals.icu tracks (the bug this fixes)', () => {
+    // Real bug, caught live: a bike created with a manual real-world
+    // odometer figure (5000 km) higher than what Intervals.icu has ever
+    // tracked for its linked gear (800 km so far) — the OLD design compared
+    // trueTotalKm straight against totalKm forever, so this bike (and its
+    // mounted chain) would NEVER sync again, no matter how much new real
+    // riding followed, since 800 < 5000 stays true until real riding closes
+    // a 4200 km gap that was never about new riding in the first place.
+    const plan = computeGearSyncDelta({ totalKm: 5000 }, 800)
+    expect(plan).toEqual({ delta: 0, newTotalKm: 5000, newBaselineKm: 800 })
+  })
+
+  it('detects new real riding on the next sync via the baseline, even though totalKm never caught up to trueTotalKm', () => {
+    // Continues the case above: the athlete then rides 40 km (Intervals.icu
+    // now tracks 840 km for this gear). The stuck comparison against
+    // totalKm (5000) would still show a negative delta forever — but
+    // comparing against the baseline captured last sync (800) correctly
+    // detects the 40 new km, and adds it ON TOP of the real-world totalKm
+    // rather than discarding it.
+    const plan = computeGearSyncDelta({ totalKm: 5000, gearSyncBaselineKm: 800 }, 840)
+    expect(plan).toEqual({ delta: 40, newTotalKm: 5040, newBaselineKm: 840 })
+  })
+
+  it('reports nothing to credit once a baseline is already caught up and no new riding happened', () => {
+    const plan = computeGearSyncDelta({ totalKm: 5040, gearSyncBaselineKm: 840 }, 840)
+    expect(plan).toEqual({ delta: 0, newTotalKm: 5040, newBaselineKm: 840 })
+  })
+
+  it('treats a baseline of exactly 0 as already captured, not as "no baseline yet"', () => {
+    // Loose-equality nullish check (`!= null`) — 0 is a legitimate baseline
+    // (a bike whose gear had no tracked history at all when first linked),
+    // must never be mistaken for "undefined" and re-trigger the one-time
+    // catch-up-against-totalKm path a second time.
+    const plan = computeGearSyncDelta({ totalKm: 0, gearSyncBaselineKm: 0 }, 30)
+    expect(plan).toEqual({ delta: 30, newTotalKm: 30, newBaselineKm: 30 })
   })
 })
 
