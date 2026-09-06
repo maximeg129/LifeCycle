@@ -1696,6 +1696,46 @@ de refetcher les streams ET de relire la séance prévue de ce jour-là à chaqu
 Tests (`interval-adherence-types.test.ts`, nouveau ; `plan-calendar-types.test.ts` mis à jour pour
 les nouveaux champs `pctFtpLow`/`pctFtpHigh`) — 838/838 au total, tsc/eslint/build clean.
 
+## Analyse de sortie : fix RPE bas + Feeling négatif (garde-fou asymétrique, suite du correctif RPE)
+
+Retour utilisateur, nouvelle capture d'écran d'une analyse IA à l'appui ("Sortie de récupération
+active bien dosée en charge, mais signal de bien-être à investiguer" / "Signal d'alerte : Feeling
+négatif rapporté malgré des indicateurs objectifs et subjectifs favorables (RPE bas, durée
+supportée, fréquence cardiaque stable). Cette divergence mérite une clarification rapide.") :
+**"Il existe toujours une erreur d'interprétation du RPE ; c'est inverse RPE bas = easy ; fait en
+sorte de modifier et ajuster ces références dans tous les documents et dans l'analyse ia."**
+
+**Diagnostic** — le RPE lui-même N'ÉTAIT PAS mal interprété dans ce texte : le corps du résumé
+disait correctement "RPE très bas (3/10) — effort parfaitement maîtrisé et bien toléré", exactement
+la lecture attendue depuis le correctif précédent (voir section juste au-dessus, "fix mauvaise
+interprétation du RPE bas"). Le vrai problème était la règle garde-fou ajoutée par ce correctif
+précédent (`ride-analysis-flow.ts`) : elle interdisait explicitement de présenter un **RPE bas +
+Feeling POSITIF** comme un "ressenti négatif inexpliqué" — mais ne disait RIEN du cas miroir, **RPE
+bas + Feeling NÉGATIF**, qui est exactement la combinaison de ce screenshot. Rien n'empêchait donc
+le modèle de traiter cette combinaison comme une anomalie méritant une escalade ("signal d'alerte",
+"mérite une clarification rapide") — un abus symétrique au bug déjà corrigé, dans le même
+mécanisme de garde-fou incomplet plutôt qu'une régression du fix lui-même.
+
+**Audit élargi** (fichiers grep sur `RPE`/`rpe`, "dans tous les documents" pris au sérieux) —
+`quick-feedback-widget.tsx` (ancre déjà correctement "RPE (1 = facile, 10 = proche du TTE)"),
+`use-governor.ts` (`windowedTrendSignal(rpeSeries, newest, 'lower')` — un RPE en baisse est bien
+`'lower-better'`, direction correcte), `pending-feedback-banner.tsx` (ne décrit pas l'échelle, juste
+présence/absence) : tous corrects, aucune autre inversion trouvée. Le seul document à corriger était
+donc `ride-analysis-flow.ts` lui-même (le prompt) et ce fichier (la documentation du correctif
+précédent, qui ne mentionnait que le cas positif).
+
+**Correctif** — la règle garde-fou est étendue pour couvrir explicitement le cas miroir : un RPE bas
+et un Feeling négatif ne sont pas non plus une anomalie en soi — le Feeling reflète le bien-être
+général du moment (stress, sommeil, vie personnelle, motivation), qui peut se dégrader pour des
+raisons totalement indépendantes de l'effort physique de CETTE sortie ; un RPE bas dit seulement que
+la séance était physiologiquement facile, il ne prédit rien sur le moral de l'athlète ce jour-là.
+Le prompt interdit désormais explicitement de présenter cette combinaison comme un "signal d'alerte"
+ou une divergence qui "mérite une clarification" — le Feeling négatif peut être mentionné
+factuellement s'il est pertinent, sans escalade, sauf si d'autres indicateurs objectifs RÉELLEMENT
+fournis (FC anormalement élevée, découplage marqué, TSB très négatif...) corroborent une vraie
+inquiétude — jamais le RPE ou le Feeling seuls comme preuve d'un problème. Changement de texte de
+prompt uniquement, aucune logique pure touchée — 838/838 tests inchangés, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
