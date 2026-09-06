@@ -1736,6 +1736,59 @@ fournis (FC anormalement élevée, découplage marqué, TSB très négatif...) c
 inquiétude — jamais le RPE ou le Feeling seuls comme preuve d'un problème. Changement de texte de
 prompt uniquement, aucune logique pure touchée — 838/838 tests inchangés, tsc/eslint/build clean.
 
+## Chaînes : sync bloqué à vie par un kilométrage manuel supérieur au réel Intervals.icu
+
+Retour utilisateur, capture d'écran de Chaîne 3 à l'appui (montée le 4 septembre, "Sorties depuis
+le montage (0)" et "0 km" alors que 2 sorties réelles auraient dû être détectées depuis) : "vérifie
+le code" — le mécanisme automatique fonctionne déjà pour d'autres chaînes/vélos (voir "Garage :
+preuve visible de la synchro automatique" plus haut), donc pas la même cause.
+
+**Root cause, confirmée en relisant `applyGearKmSync` (`use-intervals.tsx`)** : le delta qui
+déclenche TOUT (bump kmSinceWax/totalKm de la chaîne montée, ET la capture de `newlyLinkedRides`,
+voir "Chaînes : sorties liées" plus haut) se calculait `trueTotalKm - bike.totalKm` — comparant le
+vrai total Intervals.icu directement au champ `totalKm` du vélo. Or `totalKm` peut être une
+**saisie manuelle réelle**, sans rapport avec ce qu'Intervals.icu a jamais suivi pour ce gear :
+champ "Kilométrage actuel" à la création du vélo (`add-bike-dialog.tsx`), ou correction manuelle
+ultérieure (`handleUpdateKm`, `gear-tab.tsx`) — ni l'un ni l'autre ne touche jamais `lastSyncDate`
+ni ne se coordonne avec le total réellement suivi côté Intervals.icu. Si cette valeur manuelle est
+UNE SEULE FOIS supérieure ou égale à ce qu'Intervals.icu calcule pour ce gear (cas courant : un
+vélo existant depuis des années, ajouté à l'app avec son vrai kilométrage, lié à Intervals.icu
+seulement depuis peu — l'historique Intervals.icu ne remonte pas aussi loin), `delta <= 0` reste
+vrai **pour toujours**, quel que soit le nombre de vraies sorties qui suivent : l'écart n'a jamais
+été une question de nouvelle sortie, donc aucune nouvelle sortie ne peut jamais le combler. La
+synchro automatique se tait alors silencieusement à chaque session (comportement volontaire quand
+"rien à réconcilier" — voir `SyncStatusLine` — mais ici il y avait bien quelque chose à réconcilier,
+juste jamais détectable par ce calcul).
+
+**`computeGearSyncDelta()`** (`km-sync.ts`, pur/testé) — découple "combien de nouvelle distance
+Intervals.icu a-t-il suivi" de la valeur absolue de `totalKm`, via un nouveau champ
+**`Bike.gearSyncBaselineKm`** (`gear-types.ts`) : le dernier `trueTotalKm` capturé, jamais confondu
+avec `totalKm` lui-même.
+- **Pas encore de baseline** (vélo créé avant ce champ, ou tout juste lié) — comportement
+  IDENTIQUE à avant : compare `trueTotalKm` directement à `totalKm`, pour qu'un vélo lié après des
+  mois de sorties rattrape toujours tout son historique en un seul sync (voir
+  `GEAR_HISTORY_OLDEST`) plutôt que de repartir d'un `totalKm` arbitraire.
+- **Baseline déjà capturée** — compare `trueTotalKm` à ELLE, plus jamais à la valeur absolue de
+  `totalKm` : la nouvelle distance réelle s'ajoute par-dessus (`bike.totalKm + delta`), jamais un
+  remplacement pur qui écraserait une saisie manuelle réelle.
+- **Point clé du correctif** : la baseline est capturée MÊME quand `delta <= 0` (rien à créditer ce
+  cycle) — sinon un vélo bloqué dans le scénario ci-dessus ne l'obtiendrait jamais, puisque chaque
+  sync recalculerait le même delta négatif contre `totalKm` indéfiniment. C'est cette capture
+  "silencieuse" qui débloque tout : dès le PROCHAIN sync avec une vraie nouvelle sortie, le delta se
+  calcule contre la baseline fraîchement posée plutôt que contre l'écart historique jamais lié à une
+  nouvelle sortie.
+
+**Migration transparente pour les vélos déjà correctement synchronisés** : `gearSyncBaselineKm`
+absent → traité comme "pas encore de baseline" au prochain sync ; si `totalKm` était déjà à jour
+(cas normal, la grande majorité), `delta` calculé contre `totalKm` sera 0 ou légèrement positif
+(une sortie du jour) — comportement inchangé, juste la baseline se pose au passage. Aucune
+migration Firestore nécessaire, aucune règle `firestore.rules` à toucher (`bikes/{bikeId}` n'a pas
+d'allowlist de champs, seulement `isExistingOwner`).
+
+Tests (`km-sync.test.ts`, 5 nouveaux dont un qui reproduit exactement le scénario du bug : `totalKm`
+manuel à 5000, Intervals.icu à 800, puis +40 km réels détectés au sync suivant malgré l'écart
+jamais comblé) — 843/843 au total, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

@@ -37,7 +37,7 @@ import { FirestorePermissionError } from '@/firebase/errors'
 import type { IntervalsAthlete, IntervalsActivity, IntervalsWellness, IntervalsFitnessDay, IntervalsPowerCurve } from '@/lib/intervals-api'
 import type { Bike, BikeComponent } from '@/components/cycling/gear-types'
 import type { Chain } from '@/components/cycling/chain-types'
-import { applyKmDeltaToBikeDependents, computeGearKmFromActivities, extractLinkedRides } from '@/components/cycling/km-sync'
+import { applyKmDeltaToBikeDependents, computeGearKmFromActivities, computeGearSyncDelta, extractLinkedRides } from '@/components/cycling/km-sync'
 
 // ── Credentials ──────────────────────────────────────────────────────
 
@@ -225,8 +225,30 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
 
         for (const bike of linkedBikes) {
           const trueTotalKm = computeGearKmFromActivities(fullHistory, bike.externalGearId, null)
-          const delta = trueTotalKm - bike.totalKm
-          if (delta <= 0) continue
+          // computeGearSyncDelta (km-sync.ts) decouples "how much NEW riding
+          // has Intervals.icu tracked" from bike.totalKm's absolute value —
+          // see Bike.gearSyncBaselineKm (gear-types.ts) for the bug this
+          // fixes: a manually-entered/corrected totalKm sitting ABOVE what
+          // Intervals.icu tracks for this gear used to block every future
+          // sync forever, since the old `delta = trueTotalKm - bike.totalKm`
+          // never turned positive again regardless of new real riding.
+          const hadBaseline = bike.gearSyncBaselineKm != null
+          const plan = computeGearSyncDelta(bike, trueTotalKm)
+
+          if (plan.delta <= 0) {
+            // Persist the freshly captured baseline even with nothing to
+            // credit yet — otherwise a bike stuck comparing against an
+            // inflated totalKm would recompute the exact same non-positive
+            // delta against it forever, never getting the chance to switch
+            // to the baseline-relative comparison above.
+            if (!hadBaseline) {
+              const bikeRef = doc(db, `users/${user.uid}/bikes`, bike.id)
+              await updateDoc(bikeRef, { gearSyncBaselineKm: plan.newBaselineKm }).catch(() => {
+                errorEmitter.emit('permission-error', new FirestorePermissionError({ path: bikeRef.path, operation: 'update' }))
+              })
+            }
+            continue
+          }
 
           // Same cutoff the incremental delta above conceptually represents
           // — captured BEFORE bike.lastSyncDate is overwritten just below,
@@ -239,11 +261,11 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
           const newlyLinkedRides = extractLinkedRides(fullHistory, bike.externalGearId, bike.lastSyncDate)
 
           const bikeRef = doc(db, `users/${user.uid}/bikes`, bike.id)
-          await updateDoc(bikeRef, { totalKm: trueTotalKm, lastSyncDate: todayStr }).catch(() => {
+          await updateDoc(bikeRef, { totalKm: plan.newTotalKm, gearSyncBaselineKm: plan.newBaselineKm, lastSyncDate: todayStr }).catch(() => {
             errorEmitter.emit('permission-error', new FirestorePermissionError({ path: bikeRef.path, operation: 'update' }))
           })
           bikesUpdated++
-          totalNewKm += delta
+          totalNewKm += plan.delta
 
           const bikeComponents = components.filter((c) => c.bikeId === bike.id && c.status !== 'retired')
           const result = await applyKmDeltaToBikeDependents({
@@ -251,7 +273,7 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
             uid: user.uid,
             bikeComponents,
             bikeChains: chains.filter((c) => c.bikeId === bike.id),
-            delta,
+            delta: plan.delta,
             newlyLinkedRides,
           })
           componentsUpdated += result.componentsUpdated

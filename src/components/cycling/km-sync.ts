@@ -128,6 +128,55 @@ export function extractLinkedRides(activities: ActivityLinkLike[], externalGearI
     }))
 }
 
+export interface GearSyncBikeLike {
+  totalKm: number
+  /** See `Bike.gearSyncBaselineKm` (gear-types.ts) for what this is and the bug it fixes. */
+  gearSyncBaselineKm?: number | null
+}
+
+export interface GearSyncDeltaPlan {
+  /** Real NEW riding this sync should credit — 0 if there's nothing to apply (chain/components untouched, no `newlyLinkedRides` capture). */
+  delta: number
+  /** `bike.totalKm` to persist. Only meaningful when `delta > 0` — equals the current `totalKm` unchanged otherwise. */
+  newTotalKm: number
+  /** `bike.gearSyncBaselineKm` to persist — ALWAYS, even when `delta` is 0, so a bike stuck comparing against an inflated `totalKm` (see file header) gets a fresh, always-comparable reference instead of recomputing the same non-positive delta forever. */
+  newBaselineKm: number
+}
+
+/**
+ * Decides how much NEW riding a sync should credit a bike (and, through it,
+ * its chain/components) — decoupled from whatever `bike.totalKm` happens to
+ * display. See `Bike.gearSyncBaselineKm` (gear-types.ts) for the bug this
+ * fixes: a manually-entered/corrected `totalKm` sitting ABOVE what
+ * Intervals.icu tracks for this gear used to permanently block every future
+ * sync (old design: `delta = trueTotalKm - bike.totalKm`, which stayed
+ * negative forever regardless of new riding).
+ *
+ * No baseline yet (bike created before this field existed, or just linked)
+ * → same behaviour as the original design: compare `trueTotalKm` straight
+ * against `bike.totalKm`, so a bike linked after months of riding still
+ * catches up its FULL history in one sync (see `GEAR_HISTORY_OLDEST`,
+ * `use-intervals.tsx`) rather than crawling forward from an arbitrary
+ * starting `totalKm`. Baseline already captured → compare `trueTotalKm` to
+ * IT instead, immune to `totalKm`'s absolute value from then on — real new
+ * riding is added on top of whatever `totalKm` already displays
+ * (`bike.totalKm + delta`, never replaced outright), so a manually-entered
+ * real-world odometer figure is never silently discarded.
+ */
+export function computeGearSyncDelta(bike: GearSyncBikeLike, trueTotalKm: number): GearSyncDeltaPlan {
+  const hasBaseline = bike.gearSyncBaselineKm != null
+  const delta = hasBaseline ? trueTotalKm - bike.gearSyncBaselineKm! : trueTotalKm - bike.totalKm
+
+  if (delta <= 0) {
+    return { delta: 0, newTotalKm: bike.totalKm, newBaselineKm: trueTotalKm }
+  }
+  return {
+    delta,
+    newTotalKm: hasBaseline ? bike.totalKm + delta : trueTotalKm,
+    newBaselineKm: trueTotalKm,
+  }
+}
+
 export interface KmDeltaPlan<TComponent, TChain> {
   /** The currently-mounted chain for this bike, or null if none/no rotation chains configured. */
   chainToUpdate: TChain | null
