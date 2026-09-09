@@ -42,6 +42,10 @@ const DailyWorkoutRecommendationInputSchema = z.object({
     type: z.string().optional(),
     durationMinutes: z.number().optional(),
     trainingLoad: z.number().optional(),
+    intensityZone: z.object({
+      zone: z.number().describe('1-7, échelle Coggan (1 Récupération → 7 Neuromusculaire).'),
+      label: z.string().describe('Nom français de la zone, ex. "Seuil", "Endurance".'),
+    }).nullable().optional().describe('Intensité RÉELLE de cette séance (IF/NP-FTP si disponible, sinon puissance moyenne/FTP) — null si aucune des deux n\'est calculable (pas de FTP connu, pas de puissance). Un chiffre BAS de trainingLoad ne dit rien sur l\'intensité (une longue sortie facile peut avoir une charge élevée) : c\'est CE champ, pas trainingLoad, qui dit si une séance récente était dure.'),
   })).describe('Last ~7 days of completed sessions, oldest first. Empty array if none.'),
   planWeek: z.object({
     weekNumber: z.number(),
@@ -108,7 +112,8 @@ function formatRecentSessions(sessions: DailyWorkoutRecommendationInput['recentS
     const type = s.type || 'séance';
     const duration = s.durationMinutes != null ? `${s.durationMinutes}min` : 'durée inconnue';
     const load = s.trainingLoad != null ? `, charge ${Math.round(s.trainingLoad)}` : '';
-    return `- ${s.date}: ${type}, ${duration}${load}`;
+    const zone = s.intensityZone ? `, intensité réelle Z${s.intensityZone.zone} (${s.intensityZone.label})` : '';
+    return `- ${s.date}: ${type}, ${duration}${load}${zone}`;
   }).join('\n');
 }
 
@@ -265,6 +270,17 @@ Règles impératives :
 - Si le gouverneur de charge interne est dégradé (🔴) ou si le TSB est très négatif, propose une séance
   d'intensité réduite (endurance ou récupération active) plutôt qu'une séance à haute intensité, et dis-le
   explicitement dans rationale.
+- Regarde l'intensité RÉELLE (intensityZone, PAS trainingLoad — un chiffre de charge élevé peut venir d'une
+  longue sortie facile) des séances récentes ci-dessus, en particulier la PLUS RÉCENTE (hier, ou aujourd'hui
+  si déjà faite). Si elle était en Z4 (Seuil) ou au-dessus (Z5 VO2max, Z6 Anaérobie, Z7 Neuromusculaire — une
+  course avec des relances compte, même si sa durée totale semble modérée), NE PROPOSE PAS une nouvelle
+  séance à haute intensité aujourd'hui : privilégie l'endurance ou la récupération active (Z1-Z2), même si
+  CTL/ATL/TSB ne le signalent pas encore — un seul effort dur ne fait souvent pas bouger significativement
+  ces indicateurs lissés sur plusieurs jours, donc ne pas s'y fier seuls pour ce jugement à court terme.
+  Dis-le explicitement dans rationale en citant la séance de la veille (ex. "course d'hier en Z5 VO2max :
+  séance d'endurance aujourd'hui pour la récupération"). Exception : si un plan d'entraînement en cours
+  prescrit explicitement un enchaînement d'intensité sur plusieurs jours consécutifs (rare — bloc spécifique
+  pré-objectif), respecte le plan plutôt que cette règle, et dis-le aussi dans rationale.
 - S'il y a une blessure active, adapte ou évite ce qui pourrait l'aggraver, et mentionne l'adaptation dans warnings.
 - S'il y a un objectif proche avec une priorité haute, oriente le contenu de la séance vers sa spécificité
   (ex: un objectif "grimpeur" appelle du travail en côte ou en seuil, pas uniquement de l'endurance plate).

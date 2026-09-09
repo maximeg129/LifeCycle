@@ -74,6 +74,39 @@ describe('summarizeRecentSessions', () => {
   it('returns an empty array for an empty input', () => {
     expect(summarizeRecentSessions([], '2026-08-28', 7)).toEqual([])
   })
+
+  it('classifies each session\'s real intensity zone from icu_intensity, independent of trainingLoad', () => {
+    // Retour utilisateur : "j'ai fait une course avec quand même assez de
+    // haute intensité" — icu_intensity (NP/FTP) is the signal that should
+    // catch this, even when trainingLoad alone wouldn't say much about how
+    // hard the session actually was.
+    const raceDay: ActivityLike[] = [
+      { start_date_local: '2026-08-27T09:00:00', type: 'Race', moving_time: 5400, icu_training_load: 80, icu_intensity: 1.02 },
+    ]
+    const result = summarizeRecentSessions(raceDay, '2026-08-28', 7)
+    expect(result[0].intensityZone).toEqual({ zone: 4, label: 'Seuil' })
+  })
+
+  it('falls back to average watts / FTP when icu_intensity is absent', () => {
+    const activities: ActivityLike[] = [
+      { start_date_local: '2026-08-27T09:00:00', type: 'Ride', moving_time: 3600, average_watts: 190 },
+    ]
+    expect(summarizeRecentSessions(activities, '2026-08-28', 7, 200)[0].intensityZone).toEqual({ zone: 4, label: 'Seuil' })
+  })
+
+  it('reports null intensityZone when neither icu_intensity nor FTP/watts is available', () => {
+    const activities: ActivityLike[] = [
+      { start_date_local: '2026-08-27T09:00:00', type: 'Ride', moving_time: 3600 },
+    ]
+    expect(summarizeRecentSessions(activities, '2026-08-28', 7)[0].intensityZone).toBeNull()
+  })
+
+  it('classifies an easy endurance session as low zone even with a high trainingLoad number (a long ride can rack up load without being intense)', () => {
+    const longEasyRide: ActivityLike[] = [
+      { start_date_local: '2026-08-27T09:00:00', type: 'Ride', moving_time: 4 * 3600, icu_training_load: 150, icu_intensity: 0.6 },
+    ]
+    expect(summarizeRecentSessions(longEasyRide, '2026-08-28', 7)[0].intensityZone).toEqual({ zone: 2, label: 'Endurance' })
+  })
 })
 
 describe('buildRideDateTime', () => {

@@ -9,6 +9,7 @@ import { format, subDays } from 'date-fns'
 import type { PlannedWorkoutEvent } from '@/lib/intervals-api'
 import type { DailyWorkoutRecommendationInput } from '@/ai/flows/daily-workout-recommendation-flow'
 import type { Signal } from './governor-types'
+import { completedRideZone, type CompletedRideIntensityInput } from './plan-calendar-types'
 
 /**
  * Traduit un Signal du gouverneur (1/0/-1/null, fenêtre 7j vs 28j — voir
@@ -78,7 +79,7 @@ export function clampAvailableMinutes(minutes: number): number {
   return Math.min(MAX_AVAILABLE_MINUTES, Math.max(MIN_AVAILABLE_MINUTES, rounded))
 }
 
-export interface ActivityLike {
+export interface ActivityLike extends CompletedRideIntensityInput {
   start_date_local?: string | null
   type?: string | null
   moving_time?: number | null
@@ -87,14 +88,31 @@ export interface ActivityLike {
 
 /**
  * Reduces raw Intervals.icu activities to the lean per-session summary the
- * AI flow's prompt needs (date/type/duration/load), for the N days before
- * `referenceDateStr` (yyyy-MM-dd). Oldest first, matching how the flow's
- * prompt renders them.
+ * AI flow's prompt needs (date/type/duration/load/intensity zone), for the
+ * N days before `referenceDateStr` (yyyy-MM-dd). Oldest first, matching how
+ * the flow's prompt renders them.
+ *
+ * `athleteFtp` (optional — omit when FTP isn't known) feeds `intensityZone`
+ * via `completedRideZone()` (plan-calendar-types.ts, already used for the
+ * plan calendar's own per-day coloring — same classification, not a second
+ * one): retour utilisateur — "j'ai fait une course avec quand même assez de
+ * haute intensité, je ne suis pas sûr que le coach ne me reproposerait pas
+ * une séance à haute intensité aujourd'hui". Before this, only `trainingLoad`
+ * (an opaque TSS-like figure) hinted at how hard a session was — it can't
+ * distinguish a long steady endurance ride from a shorter, harder one with
+ * a similar total load, so the flow had no reliable signal to avoid
+ * stacking two high-intensity days back to back. `icu_intensity` (NP/FTP,
+ * preferred by `completedRideZone`) already accounts for a variable effort
+ * like a race — its normalized power stays high even when the raw average
+ * pace looks moderate — so it's a meaningfully better proxy than average
+ * watts alone for "how hard did this really feel," without any new fetch
+ * (already part of `ACTIVITY_FIELDS`, `intervals-api.ts`).
  */
 export function summarizeRecentSessions(
   activities: ActivityLike[],
   referenceDateStr: string,
-  windowDays = 7
+  windowDays = 7,
+  athleteFtp?: number | null
 ): DailyWorkoutRecommendationInput['recentSessions'] {
   const referenceDate = new Date(`${referenceDateStr}T00:00:00`)
   const oldest = subDays(referenceDate, windowDays).toISOString().slice(0, 10)
@@ -104,12 +122,16 @@ export function summarizeRecentSessions(
       const d = a.start_date_local?.slice(0, 10)
       return !!d && d >= oldest && d <= referenceDateStr
     })
-    .map((a) => ({
-      date: (a.start_date_local as string).slice(0, 10),
-      type: a.type ?? undefined,
-      durationMinutes: a.moving_time != null ? Math.round(a.moving_time / 60) : undefined,
-      trainingLoad: a.icu_training_load ?? undefined,
-    }))
+    .map((a) => {
+      const zone = completedRideZone(a, athleteFtp)
+      return {
+        date: (a.start_date_local as string).slice(0, 10),
+        type: a.type ?? undefined,
+        durationMinutes: a.moving_time != null ? Math.round(a.moving_time / 60) : undefined,
+        trainingLoad: a.icu_training_load ?? undefined,
+        intensityZone: zone ? { zone: zone.zone, label: zone.label } : null,
+      }
+    })
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 

@@ -184,7 +184,7 @@ export function useDailyWorkout() {
           ftp: athlete.data.ftp,
           weightKg: athlete.data.weight,
         } : undefined,
-        recentSessions: summarizeRecentSessions(recentActivities.data, todayId, SESSIONS_WINDOW_DAYS),
+        recentSessions: summarizeRecentSessions(recentActivities.data, todayId, SESSIONS_WINDOW_DAYS, athlete.data?.ftp),
         planWeek: planWeek ? {
           weekNumber: planWeek.weekNumber,
           phase: planWeek.phase,
