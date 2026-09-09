@@ -1789,6 +1789,57 @@ Tests (`km-sync.test.ts`, 5 nouveaux dont un qui reproduit exactement le scénar
 manuel à 5000, Intervals.icu à 800, puis +40 km réels détectés au sync suivant malgré l'écart
 jamais comblé) — 843/843 au total, tsc/eslint/build clean.
 
+## Coach Aujourd'hui : intensité réelle des séances récentes (éviter d'enchaîner deux jours intenses)
+
+Retour utilisateur : "j'ai l'impression que le coach ne prend pas en compte les activités passées...
+par exemple hier j'ai fait une course avec quand même assez de haute intensité, je ne suis pas sûr
+que le coach me reproposerait pas une sortie à haute intensité aujourd'hui, mais sûrement plus une
+sortie en zone deux."
+
+**Diagnostic** — `dailyWorkoutRecommendation` recevait déjà les séances des 7 derniers jours
+(`recentSessions`, `daily-workout-types.ts`), mais chaque entrée ne portait que `date`/`type`/
+`durationMinutes`/`trainingLoad` (icu_training_load, une charge agrégée de type TSS). Deux
+problèmes : (1) ce chiffre ne dit RIEN sur l'intensité réelle — une longue sortie facile peut
+afficher une charge élevée, une course courte mais intense une charge plus modeste ; (2) même en
+lisant ce chiffre correctement, aucune règle du system prompt n'instruisait explicitement le modèle
+à éviter d'enchaîner deux jours à haute intensité — seuls TSB/gouverneur (des indicateurs lissés sur
+plusieurs jours, qui ne bougent souvent pas beaucoup après un seul effort dur) et la récupération
+nocturne (sommeil/HRV/FC repos) influençaient l'intensité proposée. Le contexte était fourni au
+modèle (bloc "SÉANCES RÉCENTES" dans le prompt) mais jamais exploité par une règle explicite pour ce
+cas précis — un vrai trou de structuration, pas un problème d'affichage.
+
+**`intensityZone` sur chaque séance récente** (`summarizeRecentSessions()`, `daily-workout-types.ts`)
+— réutilise `completedRideZone()` (`plan-calendar-types.ts`, déjà en place pour la couleur du
+calendrier du plan, même classification Coggan 7 zones, pas une deuxième) : préfère `icu_intensity`
+(NP/FTP — déjà chargé, `ACTIVITY_FIELDS` dans `intervals-api.ts`, aucun nouveau fetch) à la
+puissance moyenne/FTP en repli. `icu_intensity` (puissance NORMALISÉE) est le bon signal pour une
+course/sortie irrégulière : contrairement à une simple moyenne, la pondération de la puissance
+normalisée reste élevée même quand le rythme moyen brut paraît modéré — exactement le cas "course
+avec des relances" cité par l'utilisateur. `null` (jamais deviné) si ni `icu_intensity` ni
+FTP+puissance ne sont disponibles.
+
+**Nouvelle règle impérative** (`daily-workout-recommendation-flow.ts`, system prompt) : si la
+séance récente la PLUS RÉCENTE (hier, ou aujourd'hui si déjà faite) était classée
+Z4 (Seuil) ou au-dessus, le modèle ne doit PAS reproposer une séance à haute intensité — privilégier
+l'endurance/récupération active (Z1-Z2), même si CTL/ATL/TSB ne le signalent pas encore (rappel
+explicite dans la règle : un seul effort dur ne fait souvent pas bouger ces indicateurs lissés).
+Exception explicite : un plan d'entraînement en cours peut légitimement prescrire un enchaînement
+d'intensité sur plusieurs jours consécutifs (bloc spécifique pré-objectif, rare) — la règle cède
+alors devant le plan, et le modèle doit le dire dans `rationale`. `formatRecentSessions()` affiche
+désormais la zone réelle à côté de la charge pour chaque séance (`"Z4 (Seuil)"`), pour que le
+raisonnement du modèle soit vérifiable dans les logs du prompt.
+
+**Portée volontairement limitée à `dailyWorkoutRecommendation`** ("Aujourd'hui", le geste
+quotidien) — `planWeekSessions` (génère le contenu type d'UNE semaine entière à partir de sa phase/
+focus, voir plus haut) reste délibérément non-adaptatif à ce qui a été réellement réalisé jour par
+jour : ce n'est pas son rôle (déjà documenté — "distinct de dailyWorkoutRecommendation, PAS des
+séances adaptées... à la récupération du moment"), l'adaptation au jour le jour appartient
+entièrement à ce flow.
+
+Tests (`daily-workout-types.test.ts`, 4 nouveaux : classification via `icu_intensity`, repli
+puissance/FTP, `null` sans donnée exploitable, et le cas "longue sortie facile ≠ intense malgré une
+charge élevée" qui motive tout ce correctif) — 847/847 au total, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
