@@ -2008,7 +2008,7 @@ simple, séance non manquée ignorée, semaine pleine laissée en l'état, deux 
 résolues sans collision, séance manquée sans date ignorée) — 854/854 au total, tsc/eslint/build
 clean.
 
-## ⚠️ Bug réel : `redirect_uri` Strava résolvait à l'adresse interne du conteneur (`0.0.0.0:8080`)
+## Bug réel corrigé et confirmé : `redirect_uri` Strava résolvait à l'adresse interne du conteneur (`0.0.0.0:8080`)
 
 Retour utilisateur, premier essai réel de "Connecter Strava" en prod, capture d'écran de l'erreur
 Strava à l'appui : `{"message":"Bad Request","errors":[{"resource":"Application",
@@ -2039,11 +2039,13 @@ construisaient une URL depuis la requête — `/api/strava/callback/route.ts` av
 ses 4 redirections vers `/settings`, jamais encore manifesté puisque le flow n'avait jamais dépassé
 l'étape `/api/strava/authorize` en prod.
 
-**⚠️ Non vérifié en conditions réelles par moi-même** (accès réseau au domaine bloqué depuis ce
-sandbox, voir plus haut) — le correctif repose sur le fait que `x-forwarded-host`/`x-forwarded-proto`
-sont bien posés correctement par le proxy de Firebase App Hosting (comportement standard d'un proxy
-inverse, et seul moyen documenté de récupérer l'hôte public derrière ce genre de réécriture) ; à
-confirmer par l'utilisateur au prochain essai réel une fois déployé.
+**✅ Confirmé en conditions réelles par l'utilisateur** après déploiement ("Oui, ça marche, Strava
+est bien connecté maintenant") — le correctif reposait sur le fait que `x-forwarded-host`/
+`x-forwarded-proto` sont bien posés correctement par le proxy de Firebase App Hosting (comportement
+standard d'un proxy inverse), jamais vérifiable directement depuis ce sandbox (accès réseau au
+domaine `*.hosted.app` bloqué, voir plus haut) — confirmation obtenue par retour utilisateur plutôt
+que par test direct, cohérent avec la discipline déjà en place ailleurs dans ce fichier (demander
+l'évidence réelle plutôt que deviner).
 
 Tests (`request-origin.test.ts`, nouveau — reconstruction depuis les en-têtes forwarded, défaut
 `https` si `x-forwarded-proto` absent, repli sur l'origine donnée si `x-forwarded-host` absent,
