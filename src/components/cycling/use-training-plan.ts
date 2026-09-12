@@ -30,6 +30,7 @@ import {
   weeksUntilEvent,
   buildPlanWeekSkeleton,
   mergePlanWeeks,
+  currentPlanWeek,
   planSessionExternalId,
   weekNeedsRecalibration,
   computeActualWeeklyMinutes,
@@ -37,6 +38,7 @@ import {
   applyRecalibration,
   clampDateToWeek,
   matchSessionCompletion,
+  planAutoRescheduleMoves,
   type PlanWeek,
   type PlanWeekChange,
   type PlanWeekSessionWithValidation,
@@ -482,6 +484,59 @@ export function useTrainingPlan() {
       .map((a) => ({ id: a.id, startDate: (a.start_date_local as string).slice(0, 10), durationMinutes: (a.moving_time ?? 0) / 60 }))
     return matchSessionCompletion(session, week.weekNumber, sessionIndex, todayId, cyclingActivities, strengthLogs.logs)
   }, [planActivities.data, strengthLogs.logs, todayId])
+
+  // ── Auto-reprogrammation des séances manquées — audit Join Cycling ──────
+  //
+  // Retour utilisateur : "auto-ajustement en cas de séance ratée", inspiré
+  // de Join ("if you miss a workout... Join will automatically adjust its
+  // schedule to compensate"). Même discipline "automatique mais documenté"
+  // que la recalibration hebdomadaire ci-dessus (toast explicite, jamais
+  // silencieux comme le sync Intervals.icu) — déclenché au même moment
+  // (ouverture de l'onglet Plan, seul appelant de ce hook). Scopé à la
+  // SEMAINE COURANTE (currentPlanWeek) : c'est la seule qui a des
+  // sampleSessions en pratique (les autres restent lazy, voir "vue
+  // calendrier v2"), donc la seule où une séance peut être 'missed'.
+  const autoReschedulingRef = useRef(false)
+  useEffect(() => {
+    if (!activePlan || isLoadingPlan || planActivities.isLoading || autoReschedulingRef.current) return
+    const week = currentPlanWeek(activePlan.weeks, todayId)
+    if (!week?.sampleSessions?.length) return
+    const statuses = week.sampleSessions.map((s, i) => getSessionCompletion(week, s, i).status)
+    const moves = planAutoRescheduleMoves(week, week.sampleSessions, statuses, todayId)
+    if (moves.length === 0) return
+
+    autoReschedulingRef.current = true
+    void (async () => {
+      try {
+        const byIndex = new Map(moves.map((m) => [m.sessionIndex, m.toDate]))
+        const weeks = activePlan.weeks.map((w) => {
+          if (w.weekNumber !== week.weekNumber || !w.sampleSessions) return w
+          return { ...w, sampleSessions: w.sampleSessions.map((s, i) => (byIndex.has(i) ? { ...s, date: byIndex.get(i)! } : s)) }
+        })
+        const ref = doc(db!, `users/${user!.uid}/trainingPlans/${activePlan.id}`)
+        try {
+          await updateDoc(ref, { weeks })
+          const describe = (m: typeof moves[number]) =>
+            `${m.title} (${format(new Date(`${m.fromDate}T00:00:00`), 'dd/MM')} → ${format(new Date(`${m.toDate}T00:00:00`), 'dd/MM')})`
+          toast({
+            title: moves.length > 1 ? 'Séances manquées reprogrammées' : 'Séance manquée reprogrammée',
+            description: moves.map(describe).join(' · '),
+          })
+        } catch {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+        }
+      } finally {
+        autoReschedulingRef.current = false
+      }
+    })()
+    // Même discipline que l'effet de recalibration ci-dessus : activePlan
+    // change d'identité à chaque snapshot Firestore (même un no-op) —
+    // dépendre de l'objet complet redéclencherait cet effect en boucle.
+    // autoReschedulingRef + le déplacement lui-même (qui fait disparaître le
+    // statut 'missed' au prochain rendu, puisque la date change) sont les
+    // vraies gardes, pas ce tableau de dépendances.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePlan?.id, activePlan?.weeks.length, todayId, isLoadingPlan, planActivities.isLoading])
 
   /** Pushes one plan-week sample session to Intervals.icu on a chosen date — same event path as "Proposition du jour", with a date-independent externalId so re-picking the date moves rather than duplicates the entry. */
   const sendSessionToIntervals = useCallback(async (

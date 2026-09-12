@@ -17,11 +17,13 @@ import {
   clampDateToWeek,
   nextAvailableWeekDate,
   matchSessionCompletion,
+  planAutoRescheduleMoves,
   type PlanWeekContent,
   type PlanWeek,
   type PlanWeekAdjustment,
   type PlanWeekSessionWithValidation,
   type PlanWeekSkeleton,
+  type SessionCompletionStatus,
 } from './training-plan-types'
 
 describe('clampWeeklyMinutes', () => {
@@ -462,6 +464,61 @@ describe('nextAvailableWeekDate', () => {
   it('ignores sessions with no assigned date', () => {
     const withUndated = [...sessions, { sessionKind: 'cycling' } as unknown as PlanWeekSessionWithValidation]
     expect(nextAvailableWeekDate(week, withUndated, 1, '2026-09-14')).toBe('2026-09-15')
+  })
+})
+
+describe('planAutoRescheduleMoves', () => {
+  const week: PlanWeekSkeleton = { weekNumber: 2, startDate: '2026-09-14', endDate: '2026-09-20' }
+  const todayIso = '2026-09-17' // Thursday
+
+  it('moves a missed session to the next free day from tomorrow', () => {
+    const sessions = [
+      { title: 'Sortie tempo', sessionKind: 'cycling', date: '2026-09-15' }, // Tue, missed
+      { title: 'Muscu', sessionKind: 'strength', date: '2026-09-19' },
+    ] as unknown as PlanWeekSessionWithValidation[]
+    const statuses: SessionCompletionStatus[] = ['missed', 'upcoming']
+    const moves = planAutoRescheduleMoves(week, sessions, statuses, todayIso)
+    expect(moves).toEqual([{ sessionIndex: 0, title: 'Sortie tempo', fromDate: '2026-09-15', toDate: '2026-09-18' }])
+  })
+
+  it('produces no move for a session that is not missed', () => {
+    const sessions = [
+      { title: 'Sortie tempo', sessionKind: 'cycling', date: '2026-09-19' },
+    ] as unknown as PlanWeekSessionWithValidation[]
+    const statuses: SessionCompletionStatus[] = ['upcoming']
+    expect(planAutoRescheduleMoves(week, sessions, statuses, todayIso)).toEqual([])
+  })
+
+  it('never proposes a day already taken, and keeps a missed session in place if the week is full from tomorrow', () => {
+    const sessions = [
+      { title: 'Manquée', sessionKind: 'cycling', date: '2026-09-15' },
+      { title: 'Vendredi', sessionKind: 'cycling', date: '2026-09-18' },
+      { title: 'Samedi', sessionKind: 'cycling', date: '2026-09-19' },
+      { title: 'Dimanche', sessionKind: 'cycling', date: '2026-09-20' },
+    ] as unknown as PlanWeekSessionWithValidation[]
+    const statuses: SessionCompletionStatus[] = ['missed', 'upcoming', 'upcoming', 'upcoming']
+    expect(planAutoRescheduleMoves(week, sessions, statuses, todayIso)).toEqual([])
+  })
+
+  it('resolves two missed sessions the same week without colliding', () => {
+    const sessions = [
+      { title: 'Lundi manquée', sessionKind: 'cycling', date: '2026-09-14' },
+      { title: 'Mardi manquée', sessionKind: 'cycling', date: '2026-09-15' },
+    ] as unknown as PlanWeekSessionWithValidation[]
+    const statuses: SessionCompletionStatus[] = ['missed', 'missed']
+    const moves = planAutoRescheduleMoves(week, sessions, statuses, todayIso)
+    expect(moves).toEqual([
+      { sessionIndex: 0, title: 'Lundi manquée', fromDate: '2026-09-14', toDate: '2026-09-18' },
+      { sessionIndex: 1, title: 'Mardi manquée', fromDate: '2026-09-15', toDate: '2026-09-19' },
+    ])
+  })
+
+  it('leaves a missed session with no date untouched', () => {
+    const sessions = [
+      { title: 'Sans date', sessionKind: 'cycling' },
+    ] as unknown as PlanWeekSessionWithValidation[]
+    const statuses: SessionCompletionStatus[] = ['missed']
+    expect(planAutoRescheduleMoves(week, sessions, statuses, todayIso)).toEqual([])
   })
 })
 
