@@ -618,3 +618,160 @@ export function computePlanProgress(
   const weekCompletionPercent = sessionsTotal > 0 ? Math.round((sessionsDone / sessionsTotal) * 100) : null
   return { daysRemaining, weekCompletionPercent, sessionsDone, sessionsTotal }
 }
+
+// ── Plan glissant sur 7 jours — chantier "repenser planification/séances/
+// feedback" (pièce A), version légère ───────────────────────────────────
+//
+// Retour utilisateur : "si cela est modifié a tout moment, on part sur 7
+// jours glissant de plan et disponibilité, a chaque changement on
+// recalibre." Décision (AskUserQuestion, "version légère") : le stockage
+// hebdomadaire lundi-dimanche (weeks[]/sampleSessions) reste la SEULE
+// source de vérité — pas de deuxième structure de données "vue glissante".
+// Ce qui suit ajoute juste un reséquencement MÉCANIQUE INSTANTANÉ (jamais un
+// appel IA, même discipline que distributeWeekdayOffsets/
+// assignSessionDatesByAvailability) des séances PAS ENCORE réalisées dans
+// les 7 prochains jours calendaires glissants, déclenché côté client
+// (use-training-plan.ts) chaque fois que weeklyAvailabilityMinutes change.
+// Une séance déjà 'done'/'missed' n'est JAMAIS déplacée par ce mécanisme —
+// l'auto-reprogrammation des séances manquées (planAutoRescheduleMoves
+// ci-dessus) reste le seul geste pour celles-là. Ne bouge jamais une séance
+// hors des bornes de SA PROPRE semaine (même contrainte que
+// clampDateToWeek) — seulement entre les jours de cette semaine qui tombent
+// dans la fenêtre glissante.
+
+/** Les 7 dates calendaires à partir d'aujourd'hui (inclus), dans l'ordre. */
+export function rollingWindowDates(todayIso: string): string[] {
+  const start = new Date(`${todayIso}T00:00:00`)
+  return Array.from({ length: 7 }, (_, i) => format(addDays(start, i), 'yyyy-MM-dd'))
+}
+
+/** Minutes disponibles pour une date donnée, d'après le jour de la semaine qu'elle représente (weeklyAvailabilityMinutes est indexé Lundi→Dimanche, même ordre que buildPlanWeekSkeleton). */
+export function weekdayAvailabilityForDate(dateIso: string, weeklyAvailability: WeekdayAvailabilityMinutes): number {
+  const jsDay = new Date(`${dateIso}T00:00:00`).getDay() // 0=dimanche..6=samedi (Date.getDay())
+  const mondayIndexed = (jsDay + 6) % 7 // 0=lundi..6=dimanche
+  return weeklyAvailability[mondayIndexed]
+}
+
+export interface RollingWeekInput {
+  week: PlanWeekSkeleton
+  sessions: PlanWeekSessionWithValidation[]
+  /** Un statut par session, même ordre/index que `sessions` — voir matchSessionCompletion. */
+  completionStatuses: SessionCompletionStatus[]
+}
+
+export interface RollingRescheduleMove {
+  weekNumber: number
+  sessionIndex: number
+  title: string
+  fromDate: string
+  toDate: string
+}
+
+/**
+ * Une séance dont la durée dépasse encore la capacité du jour où elle a
+ * atterri, même après reséquencement au mieux — signal qu'un simple
+ * déplacement de date ne suffit plus, il faudrait un vrai ajustement de
+ * CONTENU (durée/script) pour que la séance rentre réellement dans le
+ * nouveau budget du jour. Jamais résolu automatiquement ici (pure mécanique
+ * de dates, aucun appel IA) : juste remonté pour que l'appelant informe
+ * l'athlète, qui peut régénérer la semaine via le bouton existant
+ * (planWeekSessions) s'il le souhaite.
+ */
+export interface RollingOversizedSession {
+  weekNumber: number
+  sessionIndex: number
+  title: string
+  date: string
+  durationMinutes: number
+  availableMinutes: number
+}
+
+export interface RollingRescheduleResult {
+  /** Uniquement les semaines dont au moins une séance a effectivement bougé — jamais une semaine inchangée, pour que l'appelant sache exactement quoi réécrire. */
+  updatedSessionsByWeek: Map<number, PlanWeekSessionWithValidation[]>
+  moves: RollingRescheduleMove[]
+  oversizedSessions: RollingOversizedSession[]
+}
+
+/**
+ * Reséquence mécaniquement les séances PAS ENCORE réalisées ('upcoming'
+ * uniquement — jamais 'done'/'missed'/'unscheduled') de chaque semaine
+ * fournie, en tenant compte de la disponibilité qui vient de changer, mais
+ * seulement sur les jours de CETTE semaine qui tombent dans la fenêtre
+ * glissante des 7 prochains jours. En pratique, presque toujours seulement
+ * la semaine courante (les suivantes restent lazy — voir "vue calendrier
+ * v2" dans CLAUDE.md) ; les autres semaines fournies sans recoupement avec
+ * la fenêtre ressortent simplement inchangées (absentes de
+ * `updatedSessionsByWeek`). Même heuristique de bin-packing "plus grosse
+ * séance d'abord, jour de plus grande capacité restante" que
+ * assignSessionDatesByAvailability — une seule variante de cet algorithme
+ * dans toute l'app, pas une deuxième.
+ */
+export function recalibrateRollingWindow(
+  weeksInput: RollingWeekInput[],
+  weeklyAvailability: WeekdayAvailabilityMinutes,
+  todayIso: string
+): RollingRescheduleResult {
+  const windowDates = new Set(rollingWindowDates(todayIso))
+  const moves: RollingRescheduleMove[] = []
+  const oversizedSessions: RollingOversizedSession[] = []
+  const updatedSessionsByWeek = new Map<number, PlanWeekSessionWithValidation[]>()
+
+  for (const { week, sessions, completionStatuses } of weeksInput) {
+    // Capacité restante par date de CETTE semaine qui tombe dans la fenêtre
+    // glissante — initialisée depuis la disponibilité hebdo, puis réduite
+    // par les séances FIXES (déjà faites/manquées) qui occupent déjà ce
+    // jour, pour ne jamais faire déborder un jour en y replaçant une autre
+    // séance par-dessus une séance déjà réelle.
+    const remainingByDate = new Map<string, number>()
+    for (let d = new Date(`${week.startDate}T00:00:00`); format(d, 'yyyy-MM-dd') <= week.endDate; d = addDays(d, 1)) {
+      const iso = format(d, 'yyyy-MM-dd')
+      if (windowDates.has(iso)) remainingByDate.set(iso, weekdayAvailabilityForDate(iso, weeklyAvailability))
+    }
+    if (remainingByDate.size === 0) continue // cette semaine ne recoupe pas la fenêtre glissante
+
+    const movable: { index: number; durationMinutes: number }[] = []
+    sessions.forEach((s, i) => {
+      if (!s.date) return
+      const status = completionStatuses[i]
+      if (status === 'done' || status === 'missed') {
+        if (remainingByDate.has(s.date)) remainingByDate.set(s.date, remainingByDate.get(s.date)! - s.durationMinutes)
+        return
+      }
+      if (status !== 'upcoming') return
+      if (!windowDates.has(s.date)) return // hors fenêtre glissante — inchangée pour l'instant
+      movable.push({ index: i, durationMinutes: s.durationMinutes })
+    })
+    if (movable.length === 0) continue
+
+    const order = [...movable].sort((a, b) => b.durationMinutes - a.durationMinutes)
+    const dates = [...remainingByDate.keys()].sort()
+    const newDateByIndex = new Map<number, string>()
+    for (const { index, durationMinutes } of order) {
+      let bestDate = dates[0]
+      for (const d of dates) {
+        if ((remainingByDate.get(d) ?? 0) > (remainingByDate.get(bestDate) ?? 0)) bestDate = d
+      }
+      newDateByIndex.set(index, bestDate)
+      remainingByDate.set(bestDate, (remainingByDate.get(bestDate) ?? 0) - durationMinutes)
+    }
+
+    const updated = sessions.map((s, i) => {
+      const newDate = newDateByIndex.get(i)
+      if (!newDate || newDate === s.date) return s
+      moves.push({ weekNumber: week.weekNumber, sessionIndex: i, title: s.title, fromDate: s.date!, toDate: newDate })
+      return { ...s, date: newDate }
+    })
+    if (moves.some((m) => m.weekNumber === week.weekNumber)) updatedSessionsByWeek.set(week.weekNumber, updated)
+
+    for (const { index, durationMinutes } of movable) {
+      const newDate = newDateByIndex.get(index)!
+      const cap = weekdayAvailabilityForDate(newDate, weeklyAvailability)
+      if (cap > 0 && durationMinutes > cap) {
+        oversizedSessions.push({ weekNumber: week.weekNumber, sessionIndex: index, title: sessions[index].title, date: newDate, durationMinutes, availableMinutes: cap })
+      }
+    }
+  }
+
+  return { updatedSessionsByWeek, moves, oversizedSessions }
+}

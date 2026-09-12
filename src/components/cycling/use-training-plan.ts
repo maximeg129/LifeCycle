@@ -16,6 +16,7 @@ import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { useAthlete } from '@/hooks/use-intervals'
 import { useCoachMemory } from './use-coach-memory'
+import { useTrainingPreferences } from './use-training-preferences'
 import { buildCoachContext } from './coach-context'
 import { useGovernor } from './use-governor'
 import { useKJBudget } from './use-kj-budget'
@@ -40,10 +41,13 @@ import {
   clampDateToWeek,
   matchSessionCompletion,
   planAutoRescheduleMoves,
+  recalibrateRollingWindow,
   type PlanWeek,
   type PlanWeekChange,
   type PlanWeekSessionWithValidation,
   type SessionCompletion,
+  type RollingWeekInput,
+  type WeekdayAvailabilityMinutes,
 } from './training-plan-types'
 import { buildWorkoutEventPayload } from './daily-workout-types'
 import type { CoachGoal } from './coach-memory-types'
@@ -164,6 +168,10 @@ export function useTrainingPlan() {
   // prevues" — même source que le journal muscu (Sorties/Journal), pas une
   // deuxième lecture de la collection.
   const strengthLogs = useStrengthLogs()
+  // Plan glissant sur 7 jours (chantier "repenser planification/séances/
+  // feedback", pièce A) — voir l'effet plus bas, déclenché quand
+  // weeklyAvailabilityMinutes change.
+  const trainingPreferences = useTrainingPreferences()
 
   // Intervals credentials — same direct-read pattern as use-daily-workout.ts
   // (IntervalsProvider deliberately doesn't expose the raw athleteId/apiKey).
@@ -607,6 +615,91 @@ export function useTrainingPlan() {
     // vraies gardes, pas ce tableau de dépendances.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePlan?.id, activePlan?.weeks.length, todayId, isLoadingPlan, planActivities.isLoading])
+
+  // ── Plan glissant sur 7 jours — chantier "repenser planification/séances/
+  // feedback" (pièce A), version légère ──────────────────────────────────
+  //
+  // Retour utilisateur : "si cela est modifié a tout moment, on part sur 7
+  // jours glissant de plan et disponibilité, a chaque changement on
+  // recalibre." Reséquencement MÉCANIQUE INSTANTANÉ (jamais un appel IA —
+  // voir recalibrateRollingWindow, training-plan-types.ts), déclenché quand
+  // weeklyAvailabilityMinutes change RÉELLEMENT (pas à chaque montage/
+  // snapshot Firestore, sinon toute ouverture de l'onglet redéclencherait un
+  // reséquencement sans qu'aucune disponibilité n'ait bougé) — prevAvailabilityRef
+  // capture la valeur précédente pour ne comparer qu'un vrai changement, et
+  // le premier rendu (ref encore `undefined`) sert seulement de référence,
+  // sans jamais reséquencer sur un simple chargement de page.
+  const prevAvailabilityRef = useRef<string | undefined>(undefined)
+  const rollingRecalibratingRef = useRef(false)
+  useEffect(() => {
+    if (!activePlan || isLoadingPlan || planActivities.isLoading || trainingPreferences.isLoading) return
+    const availability = trainingPreferences.data?.weeklyAvailabilityMinutes
+    // Signature stable indépendante de l'identité de tableau (un nouveau
+    // snapshot Firestore recrée un nouveau tableau à chaque lecture même à
+    // contenu identique) — seul un vrai changement de valeurs doit déclencher.
+    const signature = availability ? JSON.stringify(availability) : undefined
+    const previous = prevAvailabilityRef.current
+    prevAvailabilityRef.current = signature
+    // Pas de disponibilité configurée (curseurs jamais touchés) — même garde
+    // que useGenerateWeekSessions (hasConfiguredAvailability), rien à
+    // recalibrer sur une préférence qui n'existe pas. Première lecture
+    // (previous encore undefined) — capture la référence sans reséquencer,
+    // voir le commentaire ci-dessus.
+    const hasConfiguredAvailability = !!availability && availability.length === 7 && availability.some((m) => m > 0)
+    if (!hasConfiguredAvailability || previous === undefined || previous === signature) return
+    if (rollingRecalibratingRef.current) return
+
+    const weeksInput: RollingWeekInput[] = activePlan.weeks
+      .filter((w) => !!w.sampleSessions?.length)
+      .map((w) => ({
+        week: w,
+        sessions: w.sampleSessions!,
+        completionStatuses: w.sampleSessions!.map((s, i) => getSessionCompletion(w, s, i).status),
+      }))
+    if (weeksInput.length === 0) return
+
+    const { updatedSessionsByWeek, moves, oversizedSessions } = recalibrateRollingWindow(
+      weeksInput,
+      availability as WeekdayAvailabilityMinutes,
+      todayId
+    )
+    if (updatedSessionsByWeek.size === 0) return
+
+    rollingRecalibratingRef.current = true
+    void (async () => {
+      try {
+        const weeks = activePlan.weeks.map((w) => {
+          const updated = updatedSessionsByWeek.get(w.weekNumber)
+          return updated ? { ...w, sampleSessions: updated } : w
+        })
+        const ref = doc(db!, `users/${user!.uid}/trainingPlans/${activePlan.id}`)
+        try {
+          await updateDoc(ref, { weeks })
+          const describe = (m: (typeof moves)[number]) =>
+            `${m.title} (${format(new Date(`${m.fromDate}T00:00:00`), 'dd/MM')} → ${format(new Date(`${m.toDate}T00:00:00`), 'dd/MM')})`
+          toast({
+            title: 'Plan réajusté à la nouvelle disponibilité',
+            description: moves.map(describe).join(' · '),
+          })
+          if (oversizedSessions.length > 0) {
+            toast({
+              title: oversizedSessions.length > 1 ? 'Certaines séances ne rentrent plus dans le temps disponible' : 'Une séance ne rentre plus dans le temps disponible',
+              description: `${oversizedSessions.map((o) => o.title).join(', ')} — régénérez la semaine pour ajuster leur contenu.`,
+            })
+          }
+        } catch {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+        }
+      } finally {
+        rollingRecalibratingRef.current = false
+      }
+    })()
+    // Même discipline que les deux effets ci-dessus : ne dépendre que des
+    // signaux qui font réellement foi (le signature de disponibilité captée
+    // dans prevAvailabilityRef, pas l'identité de activePlan/planActivities
+    // qui change à chaque snapshot Firestore même sans changement réel).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activePlan?.id, activePlan?.weeks.length, trainingPreferences.data?.weeklyAvailabilityMinutes, trainingPreferences.isLoading, todayId, isLoadingPlan, planActivities.isLoading])
 
   /** Pushes one plan-week sample session to Intervals.icu on a chosen date — same event path as "Proposition du jour", with a date-independent externalId so re-picking the date moves rather than duplicates the entry. */
   const sendSessionToIntervals = useCallback(async (

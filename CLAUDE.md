@@ -2051,7 +2051,7 @@ Tests (`request-origin.test.ts`, nouveau — reconstruction depuis les en-têtes
 `https` si `x-forwarded-proto` absent, repli sur l'origine donnée si `x-forwarded-host` absent,
 schéma non-https respecté) — 858/858 au total, tsc/eslint/build clean.
 
-## Repenser planification/séances/feedback — chantier en 3 pièces (C livrée, B/A à venir)
+## Repenser planification/séances/feedback — chantier en 3 pièces (C/A livrées, B2 restante)
 
 Retour utilisateur : "on dois repenser je pense l'application un peu plus en profondeur, on focalise
 sur la plannification, les séances, les feedbacks. Inspire toi de ce que fait Join et Frive sur la
@@ -2216,9 +2216,53 @@ Tests (`buildSystemPrompt.test.ts`, 2 nouveaux : scope de `strengthSessionAnalys
 `data-export-types.test.ts` mis à jour pour `strengthSessionAnalyses`) — 873/873 au total, tsc/eslint/
 build clean.
 
-**A. Plan glissant sur 7 jours** (restante — reséquencement mécanique instantané de la disponibilité
-sur une fenêtre glissante ancrée sur *aujourd'hui*, sans toucher au stockage hebdomadaire lundi-
-dimanche existant).
+**A. Plan glissant sur 7 jours, version légère** — retour utilisateur : "si cela est modifié a tout
+moment, on part sur 7 jours glissant de plan et disponibilité, a chaque changement on recalibre."
+Décision (`AskUserQuestion`, "version légère") : le stockage hebdomadaire lundi-dimanche (`weeks[]`/
+`sampleSessions`) reste la SEULE source de vérité — pas de deuxième structure "vue glissante". Ce
+chantier ajoute juste un reséquencement MÉCANIQUE INSTANTANÉ (jamais un appel IA, même discipline que
+`distributeWeekdayOffsets`/`assignSessionDatesByAvailability`) des séances PAS ENCORE réalisées dans
+les 7 prochains jours calendaires glissants, dès que `weeklyAvailabilityMinutes` change.
+
+- **`rollingWindowDates(todayIso)`** (`training-plan-types.ts`, pur/testé) — les 7 dates calendaires à
+  partir d'aujourd'hui inclus. **`weekdayAvailabilityForDate(dateIso, weeklyAvailability)`** — minutes
+  disponibles pour une date donnée, d'après le jour de la semaine qu'elle représente (`Date.getDay()`
+  réindexé Lundi=0..Dimanche=6, même ordre que `buildPlanWeekSkeleton`).
+- **`recalibrateRollingWindow(weeksInput, weeklyAvailability, todayIso)`** (pur/testé) — pour chaque
+  semaine fournie, ne touche QUE les séances 'upcoming' (jamais 'done'/'missed'/'unscheduled' —
+  l'auto-reprogrammation des séances manquées, `planAutoRescheduleMoves`, reste le seul geste pour
+  celles-là) dont la date tombe dans la fenêtre glissante ET dans les bornes de LEUR PROPRE semaine
+  (jamais déplacée dans une autre semaine, même contrainte que `clampDateToWeek`). Même heuristique de
+  bin-packing "plus grosse séance d'abord, jour de plus grande capacité restante" que
+  `assignSessionDatesByAvailability` — une seule variante de cet algorithme dans toute l'app. Une
+  séance déjà 'done'/'missed' sur un jour de la fenêtre consomme sa capacité (durée réelle si connue)
+  sans jamais bouger elle-même — pour ne pas faire déborder ce jour en y replaçant une autre séance
+  par-dessus. En pratique, presque toujours seulement la semaine courante est concernée (les suivantes
+  restent lazy, voir "vue calendrier v2" plus haut) — les autres semaines fournies sans recoupement
+  avec la fenêtre ressortent simplement inchangées.
+- **Cas "durée ne rentre plus"** — `RollingOversizedSession[]` (sortie annexe de
+  `recalibrateRollingWindow`) signale une séance dont la durée dépasse encore la capacité du jour où
+  elle a atterri, même après reséquencement au mieux. Jamais résolu automatiquement (pure mécanique de
+  dates, aucun appel IA déclenché depuis cette fonction) : `use-training-plan.ts` se contente d'un
+  toast informatif invitant l'athlète à régénérer la semaine (bouton existant, `planWeekSessions`) —
+  pas un nouveau flow IA inventé pour ce cas, le mécanisme de régénération répond déjà exactement au
+  besoin ("un appel IA n'est nécessaire que si la durée ne rentre plus", et il existe déjà).
+- **Déclenchement** (`useTrainingPlan()`, nouvel effet) — `useTrainingPreferences()` threadé dans ce
+  hook ; `prevAvailabilityRef` capture une signature (`JSON.stringify`) de
+  `weeklyAvailabilityMinutes` pour ne déclencher que sur un VRAI changement de valeurs (jamais au
+  premier rendu/à chaque snapshot Firestore, qui recrée un nouveau tableau à identité différente même
+  à contenu inchangé — même piège déjà documenté pour les deux effets voisins,
+  recalibration/auto-reprogrammation). Même garde `hasConfiguredAvailability` que
+  `useGenerateWeekSessions` (au moins un jour non-nul) — rien à recalibrer sur une préférence jamais
+  configurée. Écrit directement `weeks` (comme `moveSessionDate`/`adjustSessionForLocation`) et affiche
+  un toast listant chaque déplacement (`titre (dd/MM → dd/MM)`, même format que
+  `planAutoRescheduleMoves`) — jamais silencieux comme le sync Intervals.icu, même discipline
+  "automatique mais documenté" déjà actée pour la recalibration hebdomadaire.
+
+Tests (`training-plan-types.test.ts`, 9 nouveaux : `rollingWindowDates`, `weekdayAvailabilityForDate`
+×3, `recalibrateRollingWindow` ×5 — rééquilibrage bin-packing, séance fixe qui consomme sa capacité +
+cas oversized, semaine hors fenêtre inchangée, séance sans date ignorée, aucun déplacement quand le
+meilleur jour est déjà le jour actuel) — 882/882 au total, tsc/eslint/build clean.
 
 ## Refonte inspirée de Frive/Join — chantier en 4 pièces, toutes livrées
 
