@@ -90,6 +90,18 @@ export interface StrengthSessionLog {
    */
   intervalsActivityId?: string
   /**
+   * Id de l'activité Strava créée pour cette séance, une fois exportée —
+   * retour utilisateur : "let's integrate Strava publishing of activities".
+   * Même limite/même garde que `intervalsActivityId` juste au-dessus :
+   * l'API Strava (`POST /api/v3/activities`) n'a pas d'upsert par id
+   * externe non plus — renvoyer créerait un doublon plutôt qu'une mise à
+   * jour, donc ce champ désactive le bouton d'export Strava une fois
+   * présent (voir `use-strava-log-export.ts`). Indépendant de
+   * `intervalsActivityId` : les deux exports sont deux gestes manuels
+   * distincts, l'un n'implique pas l'autre.
+   */
+  stravaActivityId?: string
+  /**
    * RPE de séance (1-10, "distance par rapport au TTE") — retour
    * utilisateur : "je ne sais pas si c'est possible le [Load]". Load sur
    * Intervals.icu est calculé PAR EUX à partir de la FC (aucune FC captée
