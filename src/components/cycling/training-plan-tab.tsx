@@ -16,7 +16,8 @@ import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { useTrainingPlan } from './use-training-plan'
 import { useTrainingPreferences } from './use-training-preferences'
-import { currentPlanWeek, PHASE_LABELS, PHASE_BADGE_CLASS } from './training-plan-types'
+import { currentPlanWeek, computePlanProgress, PHASE_LABELS, PHASE_BADGE_CLASS } from './training-plan-types'
+import { RingGauge } from './ring-gauge'
 import { upcomingGoals } from './coach-memory-types'
 import { EmptyState } from '@/components/ui/empty-state'
 import { checkLoadProgressionWithoutDeload } from '@/domain/cycling/validation/planValidator'
@@ -118,6 +119,18 @@ export function TrainingPlanTab() {
   }
 
   const week = activePlan ? currentPlanWeek(activePlan.weeks, today) : null
+
+  // Retour utilisateur, capture d'écran de l'écran de progression Join à
+  // l'appui : "les éléments visuels de réalisation/complétion du plan
+  // comme sur Join sont intéressants." Voir computePlanProgress
+  // (training-plan-types.ts) pour le pourquoi du scope semaine courante
+  // uniquement (jamais tout le plan — la plupart des semaines n'ont pas
+  // de sampleSessions générées, voir "vue calendrier v2").
+  const currentWeekCompletions = useMemo(
+    () => (week && week.sampleSessions ? week.sampleSessions.map((s, i) => getSessionCompletion(week, s, i)) : []),
+    [week, getSessionCompletion]
+  )
+  const planProgress = activePlan ? computePlanProgress(activePlan, week, currentWeekCompletions, today) : null
 
   // Retour utilisateur : "pour que l'athlète sache ce qu'il a à faire" —
   // sélectionne la semaine courante dès qu'elle est connue, sans geste
@@ -339,12 +352,34 @@ export function TrainingPlanTab() {
           (COACH_UX_AUDIT.md §5). */}
       <Card className="lc-card">
         <CardHeader className="flex flex-row items-start justify-between gap-4 flex-wrap">
-          <div>
-            <CardTitle className="text-lg">{activePlan.name}</CardTitle>
-            <CardDescription>
-              {activePlan.eventName} — {format(new Date(`${activePlan.eventDate}T00:00:00`), 'dd MMMM yyyy', { locale: fr })}
-              {' · '}{activePlan.weeks.length} semaines
-            </CardDescription>
+          <div className="flex items-center gap-3">
+            {/* Anneau de progression façon Join — % de séances réalisées
+                cette semaine (RingGauge, même composant que les anneaux
+                Forme/Récupération/Sommeil de Cyclisme). "—" plutôt qu'un
+                0% trompeur tant que la semaine n'a pas encore de
+                sampleSessions générées (voir computePlanProgress). */}
+            {planProgress && (
+              <RingGauge percent={planProgress.weekCompletionPercent ?? 0} color="hsl(var(--primary))" trackColor="hsl(var(--border))" size={56} strokeWidth={6}>
+                <span className="text-xs font-bold font-data">
+                  {planProgress.weekCompletionPercent != null ? `${planProgress.weekCompletionPercent}%` : '—'}
+                </span>
+              </RingGauge>
+            )}
+            <div>
+              <CardTitle className="text-lg">{activePlan.name}</CardTitle>
+              <CardDescription>
+                {activePlan.eventName} — {format(new Date(`${activePlan.eventDate}T00:00:00`), 'dd MMMM yyyy', { locale: fr })}
+                {' · '}{activePlan.weeks.length} semaines
+              </CardDescription>
+              {planProgress && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  {planProgress.daysRemaining >= 0
+                    ? `${planProgress.daysRemaining} jour${planProgress.daysRemaining === 1 ? '' : 's'} avant l'objectif`
+                    : `Objectif dépassé de ${Math.abs(planProgress.daysRemaining)} jour${Math.abs(planProgress.daysRemaining) === 1 ? '' : 's'}`}
+                  {planProgress.weekCompletionPercent != null && ` · ${planProgress.sessionsDone}/${planProgress.sessionsTotal} séances cette semaine`}
+                </p>
+              )}
+            </div>
           </div>
           <div className="flex gap-2">
             {/* Retour utilisateur : "en gardant l'option peut-être via un

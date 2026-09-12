@@ -19,11 +19,13 @@ import {
   matchSessionCompletion,
   planAutoRescheduleMoves,
   assignSessionDatesByAvailability,
+  computePlanProgress,
   type PlanWeekContent,
   type PlanWeek,
   type PlanWeekAdjustment,
   type PlanWeekSessionWithValidation,
   type PlanWeekSkeleton,
+  type SessionCompletion,
   type SessionCompletionStatus,
   type WeekdayAvailabilityMinutes,
 } from './training-plan-types'
@@ -680,5 +682,48 @@ describe('findWeekStrengthSession', () => {
   it('returns the first strength session when several exist', () => {
     const week = { ...baseWeek, sampleSessions: [minimalStrengthSession('Force A'), minimalStrengthSession('Force B')] }
     expect(findWeekStrengthSession(week)?.index).toBe(0)
+  })
+})
+
+describe('computePlanProgress', () => {
+  const plan = { eventDate: '2026-10-15' }
+  const today = '2026-10-01'
+  const week: PlanWeek = { weekNumber: 3, startDate: '2026-09-28', endDate: '2026-10-04', phase: 'build', focus: 'Volume', targetWeeklyMinutes: 360 }
+  const completion = (status: SessionCompletionStatus): SessionCompletion => ({ status })
+
+  it('computes days remaining until plan.eventDate, regardless of week state', () => {
+    const result = computePlanProgress(plan, null, [], today)
+    expect(result.daysRemaining).toBe(14)
+  })
+
+  it('returns a negative daysRemaining when the event has already passed — never hidden', () => {
+    const result = computePlanProgress({ eventDate: '2026-09-20' }, null, [], today)
+    expect(result.daysRemaining).toBe(-11)
+  })
+
+  it('returns null weekCompletionPercent when the current week has no sampleSessions yet — never a misleading 0%', () => {
+    const result = computePlanProgress(plan, week, [], today)
+    expect(result.weekCompletionPercent).toBeNull()
+    expect(result.sessionsTotal).toBe(0)
+  })
+
+  it('computes the completion percent from the current week sessions only', () => {
+    const withSessions = { ...week, sampleSessions: [minimalSession('A'), minimalSession('B'), minimalSession('C'), minimalSession('D')] }
+    const completions = [completion('done'), completion('done'), completion('missed'), completion('upcoming')]
+    const result = computePlanProgress(plan, withSessions, completions, today)
+    expect(result).toEqual({ daysRemaining: 14, weekCompletionPercent: 50, sessionsDone: 2, sessionsTotal: 4 })
+  })
+
+  it('rounds a non-exact completion percent', () => {
+    const withSessions = { ...week, sampleSessions: [minimalSession('A'), minimalSession('B'), minimalSession('C')] }
+    const completions = [completion('done'), completion('missed'), completion('missed')]
+    const result = computePlanProgress(plan, withSessions, completions, today)
+    expect(result.weekCompletionPercent).toBe(33)
+  })
+
+  it('never counts a done status from a session outside the current week — caller passes only the relevant completions', () => {
+    const withSessions = { ...week, sampleSessions: [minimalSession('A')] }
+    const result = computePlanProgress(plan, withSessions, [completion('done')], today)
+    expect(result).toEqual({ daysRemaining: 14, weekCompletionPercent: 100, sessionsDone: 1, sessionsTotal: 1 })
   })
 })

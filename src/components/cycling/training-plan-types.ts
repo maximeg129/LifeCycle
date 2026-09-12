@@ -8,7 +8,7 @@
 // content onto that skeleton by index. Same separation of concerns as
 // daily-workout-types.ts (AI content vs. deterministic mechanics).
 
-import { addDays, format } from 'date-fns'
+import { addDays, differenceInCalendarDays, format } from 'date-fns'
 import { mondayOf } from './load-types'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 import type { StrengthSessionValidationSummary } from '@/domain/cycling/validation/strengthSessionValidator'
@@ -575,4 +575,46 @@ export function applyRecalibration(weeks: PlanWeek[], adjustments: PlanWeekAdjus
     if (changed) delete updated.sampleSessions
     return updated
   })
+}
+
+// ── Anneau de progression du plan — chantier Frive/Join ──────────────────
+//
+// Retour utilisateur, capture d'écran de l'écran de progression Join à
+// l'appui : "les éléments visuels de réalisation/complétion du plan comme
+// sur Join sont intéressants." Deux nombres honnêtes, jamais un seul score
+// composite inventé (même discipline que le refus du "JOIN Level", voir
+// CLAUDE.md "Audit Join Cycling") :
+// - joursRestants : simple arithmétique de dates jusqu'à l'objectif
+//   (plan.eventDate) — toujours disponible, quel que soit l'état du plan.
+// - pourcentageComplet : % de séances RÉALISÉES parmi celles de la SEMAINE
+//   COURANTE uniquement (getSessionCompletion(), déjà en place) — jamais
+//   une moyenne sur tout le plan : seule la semaine courante a en pratique
+//   des sampleSessions générées (les autres restent lazy, voir "vue
+//   calendrier v2" plus haut dans CLAUDE.md — l'utilisateur a lui-même
+//   tranché contre la génération anticipée de tout le plan). Calculer un
+//   taux global inclurait donc silencieusement des semaines jamais
+//   générées comme "0% fait", ce qui mentirait sur leur progression réelle
+//   plutôt que de simplement ne rien savoir d'elles. `null` (jamais 0%
+//   trompeur) si la semaine courante n'a pas encore de sampleSessions.
+export interface PlanProgress {
+  /** Jours jusqu'à plan.eventDate — négatif si l'objectif est déjà passé (jamais masqué, l'athlète doit pouvoir le voir). */
+  daysRemaining: number
+  /** 0-100, séances de la semaine COURANTE uniquement — null si la semaine courante n'a pas (encore) de sampleSessions. */
+  weekCompletionPercent: number | null
+  sessionsDone: number
+  sessionsTotal: number
+}
+
+export function computePlanProgress(
+  plan: { eventDate: string },
+  currentWeek: PlanWeek | null,
+  completions: SessionCompletion[],
+  todayIso: string
+): PlanProgress {
+  const daysRemaining = differenceInCalendarDays(new Date(`${plan.eventDate}T00:00:00`), new Date(`${todayIso}T00:00:00`))
+  const sessions = currentWeek?.sampleSessions ?? []
+  const sessionsTotal = sessions.length
+  const sessionsDone = completions.filter((c) => c.status === 'done').length
+  const weekCompletionPercent = sessionsTotal > 0 ? Math.round((sessionsDone / sessionsTotal) * 100) : null
+  return { daysRemaining, weekCompletionPercent, sessionsDone, sessionsTotal }
 }
