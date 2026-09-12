@@ -15,3 +15,16 @@ env:
     availability:
       - BUILD
       - RUNTIME
+  # Publication Strava (voir CLAUDE.md "Publication Strava") — client_id/
+  # client_secret d'une application API Strava enregistrée par l'athlète
+  # sur son propre compte (developers.strava.com → "My API Application").
+  # Ni l'un ni l'autre n'est nécessaire au BUILD : lus uniquement au
+  # runtime, dans src/app/api/strava/{authorize,callback,refresh}/route.ts.
+  - variable: STRAVA_CLIENT_ID
+    secret: strava-client-id
+    availability:
+      - RUNTIME
+  - variable: STRAVA_CLIENT_SECRET
+    secret: strava-client-secret
+    availability:
+      - RUNTIME

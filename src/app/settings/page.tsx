@@ -22,6 +22,7 @@ import { LanguageCard } from '@/components/settings/language-card'
 import { DataExportCard } from '@/components/settings/data-export-card'
 import { NotificationPrefsCard } from '@/components/settings/notification-prefs-card'
 import { DangerZoneCard } from '@/components/settings/danger-zone-card'
+import { StravaCard } from '@/components/settings/strava-card'
 import { SyncButton } from '@/components/cycling/sync-button'
 
 export default function SettingsPage() {
@@ -257,6 +258,9 @@ export default function SettingsPage() {
             </Button>
           </CardFooter>
         </Card>
+
+        {/* ── Strava ───────────────────────────────────────────────── */}
+        <StravaCard />
 
         {/* ── Rappels ──────────────────────────────────────────────── */}
         <NotificationPrefsCard />

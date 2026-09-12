@@ -31,6 +31,7 @@ import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
 import { RideAnalysisDialog, RideAnalysisTrigger } from './ride-analysis-dialog'
 import { useStrengthLogs } from '@/components/cycling/use-strength-logs'
 import { useStrengthLogExport } from '@/components/cycling/use-strength-log-export'
+import { useStravaLogExport } from '@/components/cycling/use-strava-log-export'
 import { StrengthLogExportButton } from '@/components/cycling/strength-log-export-button'
 import type { StrengthSessionLogWithId } from '@/components/cycling/strength-log-types'
 
@@ -64,6 +65,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
   const fitness = useFitnessChart(fitnessOldest, newest)
   const strengthLogs = useStrengthLogs()
   const { exportLog, sendingLogId, canExport } = useStrengthLogExport()
+  const { exportLog: exportLogToStrava, sendingLogId: sendingLogIdToStrava, canExport: canExportToStrava, disabledReasonFor } = useStravaLogExport()
   const [analyzingRide, setAnalyzingRide] = useState<{ id: string; label: string } | null>(null)
 
   // Map date → charge d'entraînement du jour, pour les activités qui
@@ -160,18 +162,40 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                       envoyée (intervalsActivityId posé) — pas d'upsert côté
                       Intervals.icu pour une activité manuelle, renvoyer
                       créerait un doublon. */}
-                  {entry.log.intervalsActivityId ? (
-                    <span className="hidden sm:flex items-center gap-1 text-[11px] text-primary shrink-0" title="Déjà exportée sur Intervals.icu">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                    </span>
-                  ) : (
-                    <StrengthLogExportButton
-                      log={entry.log}
-                      canExport={canExport}
-                      sending={sendingLogId === entry.log.id}
-                      onExport={exportLog}
-                    />
-                  )}
+                  <div className="flex items-center gap-1 shrink-0">
+                    {entry.log.intervalsActivityId ? (
+                      <span className="hidden sm:flex items-center gap-1 text-[11px] text-primary shrink-0" title="Déjà exportée sur Intervals.icu">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      </span>
+                    ) : (
+                      <StrengthLogExportButton
+                        log={entry.log}
+                        canExport={canExport}
+                        sending={sendingLogId === entry.log.id}
+                        onExport={exportLog}
+                      />
+                    )}
+                    {/* Retour utilisateur : "let's integrate Strava
+                        publishing of activities" — deuxième export manuel,
+                        indépendant du premier (une séance peut être
+                        envoyée sur l'un, l'autre, les deux, ou aucun). Même
+                        garde stravaActivityId qu'intervalsActivityId
+                        ci-dessus — pas d'upsert côté Strava non plus. */}
+                    {entry.log.stravaActivityId ? (
+                      <span className="hidden sm:flex items-center gap-1 text-[11px] text-[#FC4C02] shrink-0" title="Déjà exportée sur Strava">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                      </span>
+                    ) : (
+                      <StrengthLogExportButton
+                        log={entry.log}
+                        canExport={canExportToStrava}
+                        sending={sendingLogIdToStrava === entry.log.id}
+                        onExport={exportLogToStrava}
+                        platformLabel="Strava"
+                        disabledReason={canExportToStrava ? disabledReasonFor(entry.log) : undefined}
+                      />
+                    )}
+                  </div>
                 </div>
               ) : (() => {
               const ride = entry.ride

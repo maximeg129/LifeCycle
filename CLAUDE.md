@@ -1840,6 +1840,100 @@ Tests (`daily-workout-types.test.ts`, 4 nouveaux : classification via `icu_inten
 puissance/FTP, `null` sans donnée exploitable, et le cas "longue sortie facile ≠ intense malgré une
 charge élevée" qui motive tout ce correctif) — 847/847 au total, tsc/eslint/build clean.
 
+## Publication Strava
+
+Retour utilisateur : "let's integrate Strava publishing of activities" — suite de "Strava en
+attente" (voir "Export d'une séance muscu vers Intervals.icu" plus haut), qui posait explicitement
+le prérequis : "l'athlète doit d'abord créer une application API sur son propre compte Strava
+(developers.strava.com → 'My API Application') avant qu'une intégration OAuth ait un
+client_id/client_secret à utiliser." Confirmé fait par l'utilisateur (`AskUserQuestion`) avant de
+construire ce chantier.
+
+**Portée, tranchée par l'utilisateur (`AskUserQuestion`, deux options)** : **séances de musculation
+uniquement** — exactement le geste déjà en place pour Intervals.icu, un deuxième bouton d'export
+manuel à côté. Les sorties vélo continuent d'arriver exclusivement via Intervals.icu (Strava→
+Intervals.icu ou Garmin→Intervals.icu selon la source de l'athlète) — **jamais republiées** vers
+Strava par cette app, pour ne jamais créer de doublon sur un chemin qui les a déjà.
+
+**OAuth "Authorization Code"** (https://developers.strava.com/docs/authentication/) — cette app n'a
+pas de session serveur ni de Firebase Admin SDK côté serveur (voir Authentification), donc le flow
+est entièrement redirections + jetons portés par le navigateur, jamais un état côté serveur :
+1. **`/api/strava/authorize`** (`GET ?uid=<uid>`) — redirige vers l'écran d'autorisation Strava.
+   `redirect_uri` est reconstruit depuis `request.nextUrl.origin` plutôt que codé en dur : Firebase
+   App Hosting attribue un domaine `*.hosted.app` dynamique par backend (voir `next.config.ts`,
+   `allowedOrigins`), donc aucune URL fixe ne serait fiable d'un déploiement à l'autre — c'est à
+   l'athlète de renseigner CE domaine réel comme "Authorization Callback Domain" côté Strava.
+   `state` porte l'uid Firebase, pour que le callback sache à quel document Firestore rattacher les
+   jetons.
+2. **`/api/strava/callback`** — échange le `code` contre les jetons (`exchangeStravaCode()`,
+   `strava-api.ts`, a besoin de `STRAVA_CLIENT_SECRET` donc côté serveur uniquement), puis redirige
+   vers `/settings` avec les jetons dans le **fragment** d'URL (`#strava_tokens=...`, base64), jamais
+   la query string : un fragment n'est jamais transmis au serveur par le navigateur lors de cette
+   redirection (contrairement à une query string, qui finirait dans les journaux d'accès de
+   l'hébergeur). `strava-card.tsx` consomme ce fragment UNE SEULE FOIS au montage puis l'efface
+   immédiatement (`history.replaceState`) — le jeton ne reste dans l'historique du navigateur que le
+   temps de ce montage.
+3. **`users/{uid}/settings/strava`** (`accessToken`/`refreshToken`/`expiresAt`/`athleteId`) — même
+   patron "un doc par intégration" que `settings/intervals`, écrit côté CLIENT une fois le fragment
+   lu (jamais par une route serveur — cette app ne lit/n'écrit Firestore que côté client, voir
+   Authentification). Déjà couvert par le balayage générique de la collection `settings` dans
+   `account-deletion.ts`/`data-export-types.ts` (voir "Sécurité & protection des données — audit"
+   plus haut) — aucun changement nécessaire là.
+4. **`/api/strava/refresh`** — rafraîchit un `access_token` expiré (durée de vie ~6h côté Strava) ;
+   nécessite aussi `STRAVA_CLIENT_SECRET`, donc côté serveur. Strava fait tourner le `refresh_token`
+   à chaque appel — `use-strava.ts` (`getValidAccessToken()`) persiste systématiquement le nouveau
+   couple de jetons, jamais l'ancien réutilisé. Marge de 2 minutes avant expiration réelle avant de
+   déclencher le rafraîchissement, plutôt que d'attendre l'échec.
+
+**⚠️ `state` non signé, risque documenté plutôt que corrigé** (même posture déjà actée pour
+`/api/intervals/*`, voir "Sécurité & protection des données — audit") : un CSRF pourrait en théorie
+rattacher le compte Strava d'un attaquant au uid d'une victime (ses futures exports partiraient
+alors vers CE compte Strava) — n'expose aucune donnée Firestore (les règles restent le vrai
+périmètre de protection), risque d'abus limité plutôt qu'une brèche de données.
+
+**Export d'une séance muscu vers Strava** (`use-strava-log-export.ts`, miroir de
+`use-strength-log-export.ts`) — `POST /api/strava/activities` (proxy, en-tête
+`x-strava-access-token`, même convention que `x-intervals-athlete-id`/`x-intervals-api-key`) →
+`createStravaActivity()` (`strava-api.ts`) → `POST https://www.strava.com/api/v3/activities`.
+`stravaActivityId` (nouveau champ sur `StrengthSessionLog`, même rôle que `intervalsActivityId`) —
+l'API Strava n'a pas d'upsert par id externe non plus, renvoyer créerait un doublon. Description
+réutilise `formatStrengthLogDescription()` telle quelle (même contenu que l'export Intervals.icu —
+une seule fonction de formatage, pas une deuxième pour Strava).
+
+**⚠️ `elapsed_time` REQUIS par Strava, contrairement à Intervals.icu** — `POST /api/v3/activities`
+exige une durée réelle, quand `moving_time` reste optionnel côté Intervals.icu. Une séance loguée
+via le formulaire rétroactif (`log-strength-session-dialog.tsx`, qui ne suit pas le temps) n'a donc
+pas de `durationSeconds` exploitable — jamais une durée inventée pour combler ce trou (même
+discipline que "Weight Lifted"/Load documentée plus haut) : `disabledReasonFor()`
+(`use-strava-log-export.ts`) désactive le bouton d'export Strava avec une raison explicite dans son
+`title` plutôt qu'un échec silencieux au clic. L'export Intervals.icu de la même séance reste,
+lui, disponible (durée optionnelle côté Intervals.icu).
+
+**`StrengthLogExportButton` généralisé** (`strength-log-export-button.tsx`) — servait auparavant
+uniquement Intervals.icu ; accepte désormais `platformLabel` (texte affiché) et `disabledReason`
+(raison de désactivation propre à une plateforme, affichée en `title`) plutôt qu'un deuxième
+composant quasi identique. `rides-journal-tab.tsx` rend les deux boutons côte à côte sur chaque
+entrée muscu du Journal — deux exports manuels totalement indépendants (une séance peut être
+envoyée sur l'un, l'autre, les deux, ou aucun ; chaque plateforme garde sa propre garde anti-
+doublon).
+
+**`StravaCard`** (`src/components/settings/strava-card.tsx`, Réglages, juste après la carte
+Intervals.icu) — bouton "Connecter Strava" (lien simple vers `/api/strava/authorize?uid=...`, pas
+un appel fetch : une redirection OAuth doit être une vraie navigation de page), statut
+connecté/déconnecté, bouton "Déconnecter" (révoque côté Strava via `/api/strava/deauthorize` —
+best-effort, le document Firestore local est supprimé même si l'appel échoue — puis supprime
+`settings/strava`).
+
+**Secrets** (`apphosting.yaml`) — `STRAVA_CLIENT_ID`/`STRAVA_CLIENT_SECRET`, même mécanisme que
+`ANTHROPIC_API_KEY` (`firebase apphosting:secrets:set strava-client-id`/`strava-client-secret`,
+secrets à créer et autoriser pour ce backend avant que l'intégration fonctionne réellement en
+prod) — ni l'un ni l'autre nécessaire au `BUILD`, lus uniquement au runtime dans les routes
+`/api/strava/*`.
+
+Tests (`strava-api.test.ts`, nouveau — `buildStravaActivityBody()`, la construction de requête
+extraite en fonction pure, même discipline que `createManualActivity`/Intervals.icu) — 849/849 au
+total, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
