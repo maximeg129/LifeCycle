@@ -2049,7 +2049,7 @@ Tests (`request-origin.test.ts`, nouveau — reconstruction depuis les en-têtes
 `https` si `x-forwarded-proto` absent, repli sur l'origine donnée si `x-forwarded-host` absent,
 schéma non-https respecté) — 858/858 au total, tsc/eslint/build clean.
 
-## Refonte inspirée de Frive/Join — chantier en 4 pièces (3 livrées, anneau de progression restant)
+## Refonte inspirée de Frive/Join — chantier en 4 pièces, toutes livrées
 
 Retour utilisateur, captures d'écran de Frive (vue semaine avec bascule intérieur/extérieur) et
 Join (marketing "adapts to your availability" + écran de progression) à l'appui : "j'aimerais qu'on
@@ -2139,16 +2139,37 @@ QUELLE séance vélo de la vue Plan (pas seulement "Aujourd'hui", où `indoorReq
   garde que le graphique juste au-dessus). Threadé `PlanSessionDetail` → `PlanWeekCalendar` →
   `training-plan-tab.tsx`, aucun autre appelant de ces deux composants dans l'app.
 
-**4. Restante** (voir task #117 si le tracking de tâches est encore visible, sinon reprendre depuis
-les captures d'écran/retour utilisateur ci-dessus) :
-- **Anneau de progression du plan** — % complété + jours restants, façon Join, calculé depuis
-  `getSessionCompletion()` déjà en place, affiché sur l'onglet Plan.
+**4. Anneau de progression du plan** (`training-plan-types.ts`, `training-plan-tab.tsx`) — retour
+utilisateur, capture d'écran de l'écran de progression Join à l'appui : "les éléments visuels de
+réalisation/complétion du plan comme sur Join sont intéressants."
+
+- **`computePlanProgress()`** (`training-plan-types.ts`, pur/testé) renvoie DEUX nombres honnêtes,
+  jamais un score composite inventé (même discipline que le refus du "JOIN Level", voir "Audit Join
+  Cycling" plus bas) : `daysRemaining` (arithmétique de dates jusqu'à `plan.eventDate`, toujours
+  disponible, négatif — jamais masqué — si l'objectif est déjà passé) et
+  `weekCompletionPercent` (% de séances RÉALISÉES parmi celles de la SEMAINE COURANTE
+  uniquement, via `getSessionCompletion()` déjà en place). **Jamais un taux calculé sur tout le
+  plan** : seule la semaine courante a en pratique des `sampleSessions` générées (les autres
+  restent lazy, voir "vue calendrier v2" — décision utilisateur explicite contre la génération
+  anticipée de tout le plan) ; un taux global compterait donc silencieusement les semaines jamais
+  générées comme "0% fait", ce qui mentirait sur leur progression plutôt que de simplement ne rien
+  en savoir. `weekCompletionPercent` est `null` (jamais un 0% trompeur) tant que la semaine
+  courante n'a pas encore de `sampleSessions`.
+- **UI** — `RingGauge` (déjà utilisé pour les anneaux Forme/Récupération/Sommeil de Cyclisme,
+  `performance-bento.tsx`) réutilisé tel quel dans l'en-tête de la carte de résumé du plan
+  (`training-plan-tab.tsx`) : "—" au centre si `weekCompletionPercent` est `null`, sinon "N%".
+  `trackColor="hsl(var(--border))"` plutôt que le défaut blanc translucide du composant (pensé pour
+  un panneau sombre) — ici sur un `.lc-card` clair. Une ligne de texte juste en dessous du titre
+  ajoute "N jours avant l'objectif" (ou "Objectif dépassé de N jours") + "D/T séances cette semaine"
+  quand disponible.
 
 Tests — pièce 2 : `training-plan-types.test.ts`, 5 nouveaux pour `assignSessionDatesByAvailability`
 (jour de plus grande capacité, plus grosse séance d'abord, round-robin sans disponibilité
 configurée, jamais de placement refusé même saturé, tableau vide). Pièce 3 : `buildSystemPrompt.
-test.ts`, 1 nouveau test de scope + 1 nouveau snapshot committé pour `sessionLocationAdjustment` —
-865/865 au total, tsc/eslint/build clean.
+test.ts`, 1 nouveau test de scope + 1 nouveau snapshot committé pour `sessionLocationAdjustment`.
+Pièce 4 : `training-plan-types.test.ts`, 6 nouveaux pour `computePlanProgress` (jours restants,
+objectif déjà passé, `null` sans sampleSessions, pourcentage exact, arrondi, ne compte que la
+semaine courante) — 871/871 au total, tsc/eslint/build clean.
 
 ## Modèle de Données Firestore
 
