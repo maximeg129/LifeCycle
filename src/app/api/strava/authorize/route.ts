@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { resolvePublicOrigin } from '@/lib/request-origin';
 
 /**
  * Redirige vers l'écran d'autorisation Strava — étape 1 de l'OAuth
@@ -9,6 +10,15 @@ import { NextRequest, NextResponse } from 'next/server';
  * donc aucune URL fixe ne serait fiable d'un déploiement à l'autre — c'est
  * à l'athlète de renseigner CE domaine réel comme "Authorization Callback
  * Domain" côté Strava (developers.strava.com → My API Application).
+ *
+ * ⚠️ Bug réel corrigé : `request.nextUrl.origin` résout à l'adresse
+ * d'écoute INTERNE du conteneur Cloud Run (`https://0.0.0.0:8080`), pas au
+ * domaine public — confirmé en prod via le `redirect_uri` effectivement
+ * reçu par Strava. `resolvePublicOrigin()` (`src/lib/request-origin.ts`)
+ * reconstruit la vraie origine depuis `x-forwarded-host`/`x-forwarded-proto`
+ * (les en-têtes standard qu'un proxy inverse pose pour porter l'hôte
+ * public), avec repli sur `nextUrl.origin` en dev local (pas de proxy
+ * devant `next dev`).
  *
  * `state` porte l'uid Firebase de l'athlète, pour que le callback sache à
  * quel document Firestore rattacher les jetons reçus (cette app n'a pas de
@@ -32,7 +42,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Paramètre uid manquant.' }, { status: 400 });
   }
 
-  const redirectUri = new URL('/api/strava/callback', request.nextUrl.origin).toString();
+  const redirectUri = new URL('/api/strava/callback', resolvePublicOrigin(request.headers, request.nextUrl.origin)).toString();
   const authorizeUrl = new URL('https://www.strava.com/oauth/authorize');
   authorizeUrl.searchParams.set('client_id', clientId);
   authorizeUrl.searchParams.set('redirect_uri', redirectUri);

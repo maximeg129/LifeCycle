@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { exchangeStravaCode } from '@/lib/strava-api';
+import { resolvePublicOrigin } from '@/lib/request-origin';
 
 /**
  * Étape 2 de l'OAuth Strava — échange le `code` contre les jetons (a
@@ -17,21 +18,28 @@ import { exchangeStravaCode } from '@/lib/strava-api';
  * (`history.replaceState`).
  */
 export async function GET(request: NextRequest) {
+  // ⚠️ Bug réel corrigé : `request.nextUrl.origin` résout à l'adresse
+  // d'écoute interne du conteneur Cloud Run (`https://0.0.0.0:8080`), pas
+  // au domaine public — voir le commentaire équivalent dans
+  // /api/strava/authorize/route.ts. Sans ce correctif, ces redirections
+  // renverraient le navigateur vers `https://0.0.0.0:8080/settings...`,
+  // injoignable depuis l'extérieur du conteneur.
+  const origin = resolvePublicOrigin(request.headers, request.nextUrl.origin);
   const code = request.nextUrl.searchParams.get('code');
   const state = request.nextUrl.searchParams.get('state');
   const error = request.nextUrl.searchParams.get('error');
 
   if (error) {
-    return NextResponse.redirect(new URL(`/settings?strava_error=${encodeURIComponent(error)}`, request.nextUrl.origin));
+    return NextResponse.redirect(new URL(`/settings?strava_error=${encodeURIComponent(error)}`, origin));
   }
   if (!code || !state) {
-    return NextResponse.redirect(new URL('/settings?strava_error=missing_code', request.nextUrl.origin));
+    return NextResponse.redirect(new URL('/settings?strava_error=missing_code', origin));
   }
 
   const clientId = process.env.STRAVA_CLIENT_ID;
   const clientSecret = process.env.STRAVA_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return NextResponse.redirect(new URL('/settings?strava_error=not_configured', request.nextUrl.origin));
+    return NextResponse.redirect(new URL('/settings?strava_error=not_configured', origin));
   }
 
   try {
@@ -43,9 +51,9 @@ export async function GET(request: NextRequest) {
       athleteId: tokens.athlete?.id ?? null,
       uid: state,
     })).toString('base64url');
-    return NextResponse.redirect(new URL(`/settings#strava_tokens=${payload}`, request.nextUrl.origin));
+    return NextResponse.redirect(new URL(`/settings#strava_tokens=${payload}`, origin));
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Erreur inconnue';
-    return NextResponse.redirect(new URL(`/settings?strava_error=${encodeURIComponent(message)}`, request.nextUrl.origin));
+    return NextResponse.redirect(new URL(`/settings?strava_error=${encodeURIComponent(message)}`, origin));
   }
 }

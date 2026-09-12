@@ -2008,6 +2008,47 @@ simple, séance non manquée ignorée, semaine pleine laissée en l'état, deux 
 résolues sans collision, séance manquée sans date ignorée) — 854/854 au total, tsc/eslint/build
 clean.
 
+## ⚠️ Bug réel : `redirect_uri` Strava résolvait à l'adresse interne du conteneur (`0.0.0.0:8080`)
+
+Retour utilisateur, premier essai réel de "Connecter Strava" en prod, capture d'écran de l'erreur
+Strava à l'appui : `{"message":"Bad Request","errors":[{"resource":"Application",
+"field":"redirect_uri","code":"invalid"}]}`. Diagnostic initial (avant d'avoir la preuve) :
+mauvais domaine renseigné comme "Authorization Callback Domain" côté Strava — plausible, mais pas
+vérifiable depuis ce sandbox (accès réseau au domaine `*.hosted.app` bloqué, même limite
+network-blocked que documentée partout ailleurs dans ce fichier). Demandé à l'utilisateur l'URL
+complète affichée au moment de l'erreur plutôt que de deviner : elle contenait
+`redirect_uri=https%3A%2F%2F0.0.0.0%3A8080%2Fapi%2Fstrava%2Fcallback` — la preuve directe que le
+bug est côté génération de l'URL, pas côté réglage Strava (qui était probablement déjà correct).
+
+**Root cause** — `/api/strava/authorize/route.ts` et `/api/strava/callback/route.ts` construisaient
+leurs URLs avec `request.nextUrl.origin`, qui s'est avéré résoudre à l'adresse d'écoute INTERNE du
+conteneur Cloud Run (`https://0.0.0.0:8080`) plutôt qu'au domaine public `*.hosted.app`. Même
+famille de piège que celui déjà documenté pour `allowedOrigins` (Server Actions, voir plus haut) —
+"Firebase App Hosting fronte le backend avec son propre proxy, qui réécrit le `Host` pour le
+routage interne" — mais une manifestation différente : là, c'était la vérification CSRF interne de
+Next.js qui échouait ; ici, c'est une URL que l'app construit elle-même (`redirect_uri` OAuth, et
+les redirections `/api/strava/callback` → `/settings`) qui se retrouve fausse.
+
+**`resolvePublicOrigin()`** (`src/lib/request-origin.ts`, pur/testé) — reconstruit la vraie origine
+depuis `x-forwarded-host`/`x-forwarded-proto`, les en-têtes standard qu'un proxy inverse pose pour
+porter l'hôte/schéma tels que vus par le client, même quand il réécrit `Host` lui-même pour son
+routage interne. Repli sur `nextUrl.origin` (le paramètre `fallbackOrigin`) uniquement quand
+`x-forwarded-host` est absent — le cas du dev local (`next dev`, aucun proxy devant), où
+`nextUrl.origin` reste correct. Les deux routes Strava l'utilisent désormais partout où elles
+construisaient une URL depuis la requête — `/api/strava/callback/route.ts` avait le MÊME bug sur
+ses 4 redirections vers `/settings`, jamais encore manifesté puisque le flow n'avait jamais dépassé
+l'étape `/api/strava/authorize` en prod.
+
+**⚠️ Non vérifié en conditions réelles par moi-même** (accès réseau au domaine bloqué depuis ce
+sandbox, voir plus haut) — le correctif repose sur le fait que `x-forwarded-host`/`x-forwarded-proto`
+sont bien posés correctement par le proxy de Firebase App Hosting (comportement standard d'un proxy
+inverse, et seul moyen documenté de récupérer l'hôte public derrière ce genre de réécriture) ; à
+confirmer par l'utilisateur au prochain essai réel une fois déployé.
+
+Tests (`request-origin.test.ts`, nouveau — reconstruction depuis les en-têtes forwarded, défaut
+`https` si `x-forwarded-proto` absent, repli sur l'origine donnée si `x-forwarded-host` absent,
+schéma non-https respecté) — 858/858 au total, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
