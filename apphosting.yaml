@@ -28,3 +28,17 @@ env:
     secret: strava-client-secret
     availability:
       - RUNTIME
+  # Notifications push (chantier "repenser planification/séances/feedback",
+  # voir CLAUDE.md) — la clé PUBLIQUE "Web Push certificate" générée dans
+  # Firebase Console → Project Settings → Cloud Messaging → Web
+  # configuration → "Generate key pair". Pas un secret (c'est la clé
+  # publique utilisée par l'API Push du navigateur, jamais la clé privée
+  # associée que Firebase garde côté serveur) — un simple `env`, pas un
+  # `secret` Secret Manager. `NEXT_PUBLIC_` : lue côté client par
+  # use-push-notifications.ts, donc nécessaire au BUILD (inlinée dans le
+  # bundle par Next.js) en plus du RUNTIME.
+  - variable: NEXT_PUBLIC_FIREBASE_VAPID_KEY
+    value: ""
+    availability:
+      - BUILD
+      - RUNTIME

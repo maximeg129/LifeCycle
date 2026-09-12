@@ -262,6 +262,23 @@ service cloud.firestore {
       }
 
       /**
+       * @description Jetons FCM (notifications push) enregistrés par
+       * appareil — chantier "repenser planification/séances/feedback" (voir
+       * CLAUDE.md). L'id de document EST le jeton lui-même (dédoublonnage
+       * naturel par appareil, base64url-safe donc sans `/`). Écrit/supprimé
+       * côté client (use-push-notifications.ts) — l'ENVOI côté serveur
+       * (push-notifications.ts, Admin SDK) contourne ces règles (accès admin
+       * total), donc cette règle ne protège que le chemin client
+       * (enregistrement/désinscription par l'athlète lui-même).
+       * @path /users/{userId}/fcmTokens/{token}
+       */
+      match /fcmTokens/{token} {
+        allow get, list: if isOwner(userId);
+        allow create, update: if isOwner(userId) && hasValidOwnerField(userId);
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
        * @description Daily AI workout proposals ("Proposition du jour"),
        * keyed by `{yyyy-MM-dd}` — one per day, overwritten on regenerate.
        * @path /users/{userId}/workoutProposals/{dateId}
