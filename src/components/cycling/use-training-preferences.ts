@@ -22,6 +22,15 @@ import { FirestorePermissionError } from '@/firebase/errors'
 export interface TrainingPreferencesDoc {
   includeStrengthTraining?: boolean
   strengthWeeklyMinutes?: number
+  // Disponibilité hebdomadaire par jour — chantier Frive/Join (retour
+  // utilisateur : "définir la disponibilité sur la semaine me paraît
+  // intéressant"). 7 minutes, Lundi→Dimanche (même ordre que
+  // buildPlanWeekSkeleton) — absent tant que l'athlète n'a pas touché les
+  // curseurs, auquel cas assignSessionDatesByAvailability() (training-plan-
+  // types.ts) n'est jamais appelée : use-generate-week-sessions.ts retombe
+  // sur l'étalement mécanique existant (assignSessionDates) plutôt que
+  // d'inventer une disponibilité par défaut.
+  weeklyAvailabilityMinutes?: number[]
   updatedAt?: unknown
 }
 

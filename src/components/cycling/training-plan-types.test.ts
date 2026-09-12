@@ -18,12 +18,14 @@ import {
   nextAvailableWeekDate,
   matchSessionCompletion,
   planAutoRescheduleMoves,
+  assignSessionDatesByAvailability,
   type PlanWeekContent,
   type PlanWeek,
   type PlanWeekAdjustment,
   type PlanWeekSessionWithValidation,
   type PlanWeekSkeleton,
   type SessionCompletionStatus,
+  type WeekdayAvailabilityMinutes,
 } from './training-plan-types'
 
 describe('clampWeeklyMinutes', () => {
@@ -519,6 +521,55 @@ describe('planAutoRescheduleMoves', () => {
     ] as unknown as PlanWeekSessionWithValidation[]
     const statuses: SessionCompletionStatus[] = ['missed']
     expect(planAutoRescheduleMoves(week, sessions, statuses, todayIso)).toEqual([])
+  })
+})
+
+describe('assignSessionDatesByAvailability', () => {
+  const week: PlanWeekSkeleton = { weekNumber: 2, startDate: '2026-09-14', endDate: '2026-09-20' } // Lun 14 -> Dim 20
+
+  const session = (title: string, durationMinutes: number) =>
+    ({ title, durationMinutes } as unknown as PlanWeekSessionWithValidation)
+
+  it('places the single session on the day with the most availability', () => {
+    // Lun=30, Mar=90, Mer=0, Jeu=60, Ven=30, Sam=120, Dim=90
+    const availability: WeekdayAvailabilityMinutes = [30, 90, 0, 60, 30, 120, 90]
+    const result = assignSessionDatesByAvailability(week, [session('Sortie', 60)], availability)
+    expect(result[0].date).toBe('2026-09-19') // Samedi, la plus grande capacité
+  })
+
+  it('places the largest session first, spreading across the highest-capacity days', () => {
+    // Dimanche (100) unique 2e plus grande capacité — Mardi (90) écarté
+    // volontairement de cette valeur pour ne pas créer d'égalité avec lui
+    // (le départage par index de jour choisirait sinon Mardi, plus tôt
+    // dans la semaine, avant Dimanche).
+    const availability: WeekdayAvailabilityMinutes = [30, 90, 0, 60, 30, 120, 100]
+    const sessions = [session('Longue sortie', 180), session('Séance courte', 45)]
+    const result = assignSessionDatesByAvailability(week, sessions, availability)
+    // La plus longue (180) va sur Samedi (120, la plus grande capacité) ;
+    // la plus courte (45) va ensuite sur la 2e plus grande capacité restante
+    // (Dimanche, 100, puisque Samedi est déjà entamé).
+    expect(result[0].date).toBe('2026-09-19') // Samedi
+    expect(result[1].date).toBe('2026-09-20') // Dimanche
+  })
+
+  it('degrades to a deterministic round-robin when no availability is set (all zero)', () => {
+    const availability: WeekdayAvailabilityMinutes = [0, 0, 0, 0, 0, 0, 0]
+    const sessions = [session('A', 60), session('B', 60), session('C', 60)]
+    const result = assignSessionDatesByAvailability(week, sessions, availability)
+    expect(result.map((s) => s.date)).toEqual(['2026-09-14', '2026-09-15', '2026-09-16']) // Lun, Mar, Mer
+  })
+
+  it('never refuses a placement even when every day is already saturated', () => {
+    const availability: WeekdayAvailabilityMinutes = [30, 30, 30, 30, 30, 30, 30]
+    const sessions = [session('A', 300), session('B', 300), session('C', 300), session('D', 300), session('E', 300), session('F', 300), session('G', 300), session('H', 300)]
+    const result = assignSessionDatesByAvailability(week, sessions, availability)
+    expect(result).toHaveLength(8)
+    expect(result.every((s) => !!s.date)).toBe(true)
+  })
+
+  it('returns an empty array for no sessions', () => {
+    const availability: WeekdayAvailabilityMinutes = [60, 60, 60, 60, 60, 60, 60]
+    expect(assignSessionDatesByAvailability(week, [], availability)).toEqual([])
   })
 })
 

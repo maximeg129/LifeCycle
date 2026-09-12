@@ -2049,7 +2049,7 @@ Tests (`request-origin.test.ts`, nouveau — reconstruction depuis les en-têtes
 `https` si `x-forwarded-proto` absent, repli sur l'origine donnée si `x-forwarded-host` absent,
 schéma non-https respecté) — 858/858 au total, tsc/eslint/build clean.
 
-## Refonte inspirée de Frive/Join — chantier en 4 pièces (nav livrée, 3 restantes)
+## Refonte inspirée de Frive/Join — chantier en 4 pièces (nav + disponibilité livrées, 2 restantes)
 
 Retour utilisateur, captures d'écran de Frive (vue semaine avec bascule intérieur/extérieur) et
 Join (marketing "adapts to your availability" + écran de progression) à l'appui : "j'aimerais qu'on
@@ -2074,12 +2074,38 @@ principale. Le badge overdue tâches/plantes de Maison (`useOverdueCounts`, aupa
 nav) se déplace avec elle sur sa nouvelle carte plutôt que de disparaître silencieusement. Bottom
 nav mobile réduite à Cyclisme/Coach/Réglages (+ le bouton flottant Stella séparé, inchangé).
 
-**2-4, restantes** (voir tasks #115-117 si le tracking de tâches est encore visible, sinon
-reprendre depuis les captures d'écran/retour utilisateur ci-dessus) :
-- **Disponibilité hebdomadaire par jour** — remplacer le champ unique "volume hebdo" (`training-
-  plan-tab.tsx`, `weeklyMinutes`) par des curseurs Lundi→Dimanche façon Join, et faire dépendre
-  `assignSessionDates` (`training-plan-types.ts`) de cette disponibilité réelle par jour plutôt
-  que d'un étalement mécanique sur les 7 jours.
+**2. Disponibilité hebdomadaire par jour** (`training-plan-tab.tsx`, `training-plan-types.ts`,
+`use-generate-week-sessions.ts`, `use-training-preferences.ts`) — retour utilisateur : "définir la
+disponibilité sur la semaine me paraît intéressant", façon Join (captures d'écran : un curseur par
+jour de la semaine). Le champ unique "Volume hebdo disponible" (`weeklyMinutes`) du formulaire de
+création de plan est remplacé par 7 `Slider` (`ui/slider.tsx` — jusqu'ici présent dans le design
+system mais jamais réellement utilisé nulle part dans l'app), Lundi→Dimanche, 0-240 min par pas de
+15 — `weeklyMinutes` (le total envoyé à `trainingPlanGeneration`, qui ne raisonne toujours qu'en
+volume hebdo agrégé, jamais par jour) est désormais dérivé par simple somme plutôt que saisi
+directement.
+
+- **`WeekdayAvailabilityMinutes`** (`training-plan-types.ts`) — tuple `[number,...]` de 7 minutes,
+  même ordre que `buildPlanWeekSkeleton` (aligné sur lundi). Persisté dans
+  `settings/trainingPreferences` (`weeklyAvailabilityMinutes?: number[]`, même doc singleton que
+  `includeStrengthTraining`/`strengthWeeklyMinutes` — écriture immédiate au glissement d'un
+  curseur, même patron que ces deux champs existants) plutôt qu'une nouvelle collection.
+- **`assignSessionDatesByAvailability()`** (`training-plan-types.ts`, pur/testé) — variante de
+  `assignSessionDates()` qui tient compte de cette disponibilité réelle. Heuristique de bin-packing
+  "plus grosse séance d'abord" : les séances sont triées par durée décroissante, chacune placée sur
+  le jour qui a encore le plus de capacité RESTANTE (départage par index de jour — lundi d'abord —
+  pour un résultat déterministe), qui peut devenir négative (jamais un placement refusé — cette app
+  ne bloque jamais une séance, elle équilibre juste au mieux). Sans disponibilité configurée (tous
+  les jours à 0 — curseurs jamais touchés), l'algorithme converge naturellement vers un simple
+  round-robin Lundi→Dimanche, sans cas particulier à coder pour ça.
+- **`useGenerateWeekSessions()`** (le point d'appel unique déjà partagé par l'onglet Plan et
+  "Aujourd'hui", voir plus haut "Cyclisme : aperçu de la séance prévue") lit `useTrainingPreferences()`
+  directement — point naturel puisque c'est déjà le seul point d'appel de l'assignation de date —
+  et choisit `assignSessionDatesByAvailability` UNIQUEMENT quand l'athlète a configuré au moins un
+  jour non-nul, sinon retombe sur `assignSessionDates` (comportement identique à avant ce chantier)
+  — pas de changement de comportement pour qui n'a jamais touché les curseurs.
+
+**3-4, restantes** (voir tasks #116-117 si le tracking de tâches est encore visible, sinon reprendre
+depuis les captures d'écran/retour utilisateur ci-dessus) :
 - **Bascule intérieur/extérieur avec régénération réelle** — étendre le principe déjà en place
   pour "Aujourd'hui" (`indoorRequested`, `daily-workout-tab.tsx`) à n'importe quelle séance de la
   vue Plan (`PlanSessionDetail`) : un appel IA réel ajuste le script structuré (pas qu'un badge
@@ -2087,8 +2113,9 @@ reprendre depuis les captures d'écran/retour utilisateur ci-dessus) :
 - **Anneau de progression du plan** — % complété + jours restants, façon Join, calculé depuis
   `getSessionCompletion()` déjà en place, affiché sur l'onglet Plan.
 
-Tests : la suite de tests passe inchangée pour la pièce 1 (mise en page/nav uniquement, aucune
-logique pure touchée) — 858/858, tsc/eslint/build clean.
+Tests (`training-plan-types.test.ts`, 5 nouveaux pour `assignSessionDatesByAvailability` — jour de
+plus grande capacité, plus grosse séance d'abord, round-robin sans disponibilité configurée, jamais
+de placement refusé même saturé, tableau vide) — 863/863 au total, tsc/eslint/build clean.
 
 ## Modèle de Données Firestore
 
