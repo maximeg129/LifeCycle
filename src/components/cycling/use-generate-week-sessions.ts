@@ -32,10 +32,11 @@ import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { buildCoachContext } from './coach-context'
 import { planWeekSessions } from '@/ai/flows/plan-week-sessions-flow'
-import { assignSessionDates, type PlanWeek } from './training-plan-types'
+import { assignSessionDates, assignSessionDatesByAvailability, type PlanWeek, type WeekdayAvailabilityMinutes } from './training-plan-types'
 import { recentStrengthSessionPatterns } from './strength-session-plan-types'
 import { validateStrengthSession } from '@/domain/cycling/validation/strengthSessionValidator'
 import { describeActionDispatchError } from '@/lib/utils'
+import { useTrainingPreferences } from './use-training-preferences'
 import type { useCoachMemory } from './use-coach-memory'
 import type { useKJBudget } from './use-kj-budget'
 import type { useGovernor } from './use-governor'
@@ -59,6 +60,11 @@ export function useGenerateWeekSessions(deps: GenerateWeekSessionsDeps) {
   const { user, db, activePlan, memory, budget, governor, enduranceIndex, criticalPowerModel, athlete } = deps
   const { toast } = useToast()
   const [generatingSessionsForWeek, setGeneratingSessionsForWeek] = useState<number | null>(null)
+  // Disponibilité hebdomadaire par jour — chantier Frive/Join. Lu ici
+  // (plutôt que threadé via `deps`) car ce hook est déjà le seul point
+  // d'appel de l'assignation de date (assignSessionDates), donc le point
+  // naturel où décider QUELLE stratégie d'assignation utiliser.
+  const trainingPrefs = useTrainingPreferences()
 
   const generateWeekSessions = useCallback(async (week: PlanWeek): Promise<boolean> => {
     if (!user || !db || !activePlan) return false
@@ -137,7 +143,21 @@ export function useGenerateWeekSessions(deps: GenerateWeekSessionsDeps) {
       // une date déterministe (jamais confiée à l'IA, voir
       // distributeWeekdayOffsets) dès sa génération, plutôt qu'un
       // sélecteur de date libre non persisté au moment de l'envoi.
-      const datedSessions = assignSessionDates(week, sessionsWithValidation)
+      //
+      // Retour utilisateur (chantier Frive/Join) : "définir la
+      // disponibilité sur la semaine me paraît intéressant" — quand
+      // l'athlète a configuré au moins un jour de disponibilité non-nul,
+      // les séances sont distribuées selon cette vraie disponibilité
+      // (assignSessionDatesByAvailability) plutôt que l'étalement
+      // mécanique. Jamais l'inverse : un athlète qui n'a pas encore touché
+      // les curseurs (tous à 0, ou champ absent) garde le comportement
+      // existant à l'identique — pas de changement de comportement pour
+      // qui n'a pas opté dans cette préférence.
+      const weeklyAvailability = trainingPrefs.data?.weeklyAvailabilityMinutes
+      const hasConfiguredAvailability = !!weeklyAvailability && weeklyAvailability.length === 7 && weeklyAvailability.some((m) => m > 0)
+      const datedSessions = hasConfiguredAvailability
+        ? assignSessionDatesByAvailability(week, sessionsWithValidation, weeklyAvailability as WeekdayAvailabilityMinutes)
+        : assignSessionDates(week, sessionsWithValidation)
 
       const weeks = activePlan.weeks.map((w) =>
         w.weekNumber === week.weekNumber ? { ...w, sampleSessions: datedSessions } : w
@@ -156,7 +176,7 @@ export function useGenerateWeekSessions(deps: GenerateWeekSessionsDeps) {
     } finally {
       setGeneratingSessionsForWeek(null)
     }
-  }, [user, db, activePlan, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, athlete.isConfigured, athlete.data, toast])
+  }, [user, db, activePlan, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, athlete.isConfigured, athlete.data, trainingPrefs.data, toast])
 
   return { generateWeekSessions, generatingSessionsForWeek }
 }

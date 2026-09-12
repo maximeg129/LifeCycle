@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
+import { Slider } from '@/components/ui/slider'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -27,7 +28,25 @@ import { buildPlanAttentionItems } from './plan-attention-types'
 import { PlanAttentionBadge } from './plan-attention-badge'
 import { IntervalsOnboardingNotice } from './intervals-onboarding-notice'
 
-const DEFAULT_WEEKLY_MINUTES = 360
+// Disponibilité hebdomadaire par jour — chantier Frive/Join (retour
+// utilisateur, capture d'écran Join à l'appui : "définir la disponibilité
+// sur la semaine me paraît intéressant"). Remplace le simple volume hebdo
+// total par 7 curseurs jour par jour, Lundi→Dimanche (même ordre que
+// buildPlanWeekSkeleton) — assignSessionDatesByAvailability()
+// (training-plan-types.ts) distribue ensuite les séances type en fonction
+// de cette vraie disponibilité plutôt que d'un étalement mécanique.
+const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'] as const
+// Somme = 360 — un défaut UX plausible (week-end
+// plus disponible qu'un jour de semaine), pas une valeur scientifique.
+const DEFAULT_WEEKLY_AVAILABILITY: number[] = [30, 60, 30, 60, 30, 90, 60]
+
+function formatDayMinutes(minutes: number): string {
+  if (minutes === 0) return 'Repos'
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h === 0) return `${m}min`
+  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`
+}
 
 export function TrainingPlanTab() {
   const {
@@ -44,7 +63,12 @@ export function TrainingPlanTab() {
   // deux" déclencheurs répondant à la même question de clarification.
   const trainingPrefs = useTrainingPreferences()
   const [selectedGoalId, setSelectedGoalId] = useState<string>('')
-  const [weeklyMinutes, setWeeklyMinutes] = useState(DEFAULT_WEEKLY_MINUTES)
+  // Remplace l'ancien volume hebdo unique par 7 curseurs Lundi→Dimanche —
+  // voir DEFAULT_WEEKLY_AVAILABILITY ci-dessus. `weeklyMinutes` (le total
+  // envoyé à generate()/trainingPlanGeneration, qui ne raisonne toujours
+  // qu'en volume hebdo agrégé) est dérivé par simple somme.
+  const [weeklyAvailability, setWeeklyAvailability] = useState<number[]>(DEFAULT_WEEKLY_AVAILABILITY)
+  const weeklyMinutes = weeklyAvailability.reduce((sum, m) => sum + m, 0)
   const [includeStrength, setIncludeStrength] = useState(false)
   const [strengthMinutes, setStrengthMinutes] = useState(60)
   const [showNewPlanForm, setShowNewPlanForm] = useState(false)
@@ -65,6 +89,7 @@ export function TrainingPlanTab() {
     prefsAppliedRef.current = true
     if (trainingPrefs.data.includeStrengthTraining) setIncludeStrength(true)
     if (trainingPrefs.data.strengthWeeklyMinutes) setStrengthMinutes(trainingPrefs.data.strengthWeeklyMinutes)
+    if (trainingPrefs.data.weeklyAvailabilityMinutes?.length === 7) setWeeklyAvailability(trainingPrefs.data.weeklyAvailabilityMinutes)
   }, [trainingPrefs.data])
 
   const handleGenerate = async () => {
@@ -84,6 +109,11 @@ export function TrainingPlanTab() {
   const handleStrengthMinutesChange = (minutes: number) => {
     setStrengthMinutes(minutes)
     trainingPrefs.setPreferences({ strengthWeeklyMinutes: minutes })
+  }
+  const handleAvailabilityChange = (dayIndex: number, minutes: number) => {
+    const next = weeklyAvailability.map((m, i) => (i === dayIndex ? minutes : m))
+    setWeeklyAvailability(next)
+    trainingPrefs.setPreferences({ weeklyAvailabilityMinutes: next })
   }
 
   const week = activePlan ? currentPlanWeek(activePlan.weeks, today) : null
@@ -207,17 +237,34 @@ export function TrainingPlanTab() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2 max-w-[200px]">
-              <Label htmlFor="weekly-minutes">Volume hebdo disponible (min)</Label>
-              <Input
-                id="weekly-minutes"
-                type="number"
-                min={60}
-                max={1500}
-                step={15}
-                value={weeklyMinutes}
-                onChange={(e) => setWeeklyMinutes(Number(e.target.value))}
-              />
+            <div className="space-y-3">
+              <div className="flex items-baseline justify-between">
+                <Label>Disponibilité hebdomadaire</Label>
+                <span className="text-xs text-muted-foreground font-data">
+                  Total : {formatDayMinutes(weeklyMinutes)}
+                </span>
+              </div>
+              <div className="space-y-2.5">
+                {WEEKDAY_LABELS.map((label, i) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <span className="w-8 shrink-0 text-xs text-muted-foreground">{label}</span>
+                    <Slider
+                      value={[weeklyAvailability[i]]}
+                      onValueChange={([v]) => handleAvailabilityChange(i, v)}
+                      min={0}
+                      max={240}
+                      step={15}
+                      className="flex-1"
+                    />
+                    <span className="w-14 shrink-0 text-right text-xs font-data text-muted-foreground">
+                      {formatDayMinutes(weeklyAvailability[i])}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                L&apos;IA distribue les séances type sur les jours où vous avez le plus de temps, plutôt qu&apos;un étalement mécanique.
+              </p>
             </div>
             <div className="space-y-2">
               <div className="flex items-center gap-2">

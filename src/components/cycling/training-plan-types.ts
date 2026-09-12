@@ -224,6 +224,62 @@ export function assignSessionDates(week: PlanWeekSkeleton, sessions: PlanWeekSes
   return sessions.map((s, i) => ({ ...s, date: format(addDays(weekStart, offsets[i]), 'yyyy-MM-dd') }))
 }
 
+// ── Disponibilité hebdomadaire par jour — chantier Frive/Join ────────────
+//
+// Retour utilisateur, capture d'écran Join à l'appui : "définir la
+// disponibilité sur la semaine me paraît intéressant." Avant ce chantier,
+// un seul champ "volume hebdo total" existait (training-plan-tab.tsx) et
+// distributeWeekdayOffsets étalait mécaniquement les séances sur les 7
+// jours sans savoir lesquels l'athlète peut réellement utiliser.
+// weekdayAvailabilityMinutes (settings/trainingPreferences,
+// use-training-preferences.ts) porte désormais 7 curseurs Lundi→Dimanche ;
+// assignSessionDatesByAvailability() ci-dessous distribue les séances en
+// fonction de cette disponibilité réelle plutôt qu'un étalement uniforme.
+
+/** Minutes disponibles par jour, Lundi→Dimanche (même ordre que buildPlanWeekSkeleton, aligné sur lundi). */
+export type WeekdayAvailabilityMinutes = [number, number, number, number, number, number, number]
+
+/**
+ * Variante de assignSessionDates() qui tient compte du temps réellement
+ * disponible chaque jour plutôt que d'étaler mécaniquement les séances.
+ * Heuristique de bin-packing "plus grosse séance d'abord" : les séances
+ * les plus longues sont placées en premier, chacune sur le jour qui a
+ * encore le plus de capacité restante (départage par index de jour —
+ * Lundi d'abord — pour un résultat déterministe). Ne refuse jamais un
+ * placement si la capacité est dépassée : cette app ne bloque jamais une
+ * séance, elle équilibre juste au mieux avec ce qui est disponible.
+ * Sans disponibilité renseignée (tous les jours à 0 — l'athlète n'a pas
+ * encore touché les curseurs), le résultat converge naturellement vers un
+ * simple round-robin Lundi→Dimanche — pas un cas particulier à gérer.
+ */
+export function assignSessionDatesByAvailability(
+  week: PlanWeekSkeleton,
+  sessions: PlanWeekSessionWithValidation[],
+  weekdayAvailability: WeekdayAvailabilityMinutes
+): PlanWeekSessionWithValidation[] {
+  const remaining = [...weekdayAvailability]
+  const weekStart = new Date(`${week.startDate}T00:00:00`)
+
+  // Plus grosse séance d'abord — heuristique de bin-packing classique,
+  // meilleure répartition globale que l'ordre d'arrivée.
+  const order = sessions.map((_, i) => i).sort((a, b) => sessions[b].durationMinutes - sessions[a].durationMinutes)
+
+  const dayIndexBySessionIndex = new Map<number, number>()
+  for (const sessionIndex of order) {
+    let bestDay = 0
+    for (let day = 1; day < 7; day++) {
+      if (remaining[day] > remaining[bestDay]) bestDay = day
+    }
+    dayIndexBySessionIndex.set(sessionIndex, bestDay)
+    remaining[bestDay] -= sessions[sessionIndex].durationMinutes
+  }
+
+  return sessions.map((s, i) => ({
+    ...s,
+    date: format(addDays(weekStart, dayIndexBySessionIndex.get(i)!), 'yyyy-MM-dd'),
+  }))
+}
+
 /** Garde une date choisie par l'athlète (moveSessionDate) à l'intérieur des bornes de la semaine — une séance de la semaine 3 ne doit jamais glisser dans la semaine 2 ou 4. */
 export function clampDateToWeek(dateIso: string, week: PlanWeekSkeleton): string {
   if (dateIso < week.startDate) return week.startDate
