@@ -2049,7 +2049,7 @@ Tests (`request-origin.test.ts`, nouveau — reconstruction depuis les en-têtes
 `https` si `x-forwarded-proto` absent, repli sur l'origine donnée si `x-forwarded-host` absent,
 schéma non-https respecté) — 858/858 au total, tsc/eslint/build clean.
 
-## Refonte inspirée de Frive/Join — chantier en 4 pièces (nav + disponibilité livrées, 2 restantes)
+## Refonte inspirée de Frive/Join — chantier en 4 pièces (3 livrées, anneau de progression restant)
 
 Retour utilisateur, captures d'écran de Frive (vue semaine avec bascule intérieur/extérieur) et
 Join (marketing "adapts to your availability" + écran de progression) à l'appui : "j'aimerais qu'on
@@ -2104,18 +2104,51 @@ directement.
   jour non-nul, sinon retombe sur `assignSessionDates` (comportement identique à avant ce chantier)
   — pas de changement de comportement pour qui n'a jamais touché les curseurs.
 
-**3-4, restantes** (voir tasks #116-117 si le tracking de tâches est encore visible, sinon reprendre
-depuis les captures d'écran/retour utilisateur ci-dessus) :
-- **Bascule intérieur/extérieur avec régénération réelle** — étendre le principe déjà en place
-  pour "Aujourd'hui" (`indoorRequested`, `daily-workout-tab.tsx`) à n'importe quelle séance de la
-  vue Plan (`PlanSessionDetail`) : un appel IA réel ajuste le script structuré (pas qu'un badge
-  "Home trainer" sans effet sur le contenu, comme c'est le cas ailleurs aujourd'hui).
+**3. Bascule intérieur/extérieur avec régénération réelle** (`plan-session-detail.tsx`,
+`plan-week-calendar.tsx`, `use-training-plan.ts`, nouveau flow `adjust-session-location-flow.ts`) —
+retour utilisateur, inspiré de Frive.io : "la possibilité de modifier on the fly la séance si on
+veut la réaliser en intérieur ou en extérieur (le contenu s'adapte réellement)". Étend à N'IMPORTE
+QUELLE séance vélo de la vue Plan (pas seulement "Aujourd'hui", où `indoorRequested` faisait déjà
+ça, voir `daily-workout-recommendation-flow.ts`) — un appel IA réel régénère `sportType` +
+`structuredWorkout`, jamais un simple changement de badge sans effet sur le contenu.
+
+- **Nouveau flow, pas une réutilisation de `dailyWorkoutRecommendation`** — ce dernier raisonne sur
+  "aujourd'hui" (récupération de la nuit, séances récentes, météo réelle), inadapté à une séance du
+  Plan datée n'importe quel autre jour de la semaine. `adjustSessionLocation()`
+  (`adjust-session-location-flow.ts`) est volontairement minimal : durée/intensité cible ne
+  changent JAMAIS (un changement de lieu n'est pas une nouvelle décision d'entraînement), seuls
+  `sportType`/`structuredWorkout` (+ une courte `adaptationNote`) sont réajustés. Réutilise la MÊME
+  guidance qualitative déjà en place pour "Aujourd'hui" (`HOME_TRAINER_ADAPTATION_GUIDANCE`,
+  `home-trainer-adaptation.ts` — refroidissement réduit, pas de récup "gratuite" en descente...)
+  plutôt qu'une deuxième logique d'adaptation home trainer.
+- **Nouveau `CoachFlowId` : `sessionLocationAdjustment`** — ce flow prend une vraie décision
+  d'entraînement (le contenu concret d'une séance), donc passe par `invokeCoachJson`/
+  `withCoachOutputContract` comme les 6 flows coach déjà en périmètre (voir Q2,
+  `docs/OPEN_QUESTIONS.md`) plutôt que `generateJson` en direct (le traitement réservé à
+  `cyclingOutfitRecommendation`/`identifyPlant`, hors sujet cyclisme/entraînement) — même famille de
+  scope que `dailyWorkoutRecommendation` (`session-arbitration`, `buildSystemPrompt.ts`). Nouveau
+  snapshot committé (`buildSystemPrompt.test.ts`) pour ce flow, purement additif.
+- **`adjustSessionForLocation()`** (`use-training-plan.ts`, même patron que `moveSessionDate` juste
+  au-dessus) — appelle le flow puis écrit `sportType`/`structuredWorkout` dans
+  `week.sampleSessions[sessionIndex]` (`updateDoc` sur le plan actif), toast de confirmation citant
+  `adaptationNote`. `adjustingLocationKey` (clé `weekNumber-sessionIndex`, même convention que
+  `sendingSessionKey`) désactive uniquement le bouton de LA séance en cours d'ajustement.
+- **UI** — pill-switcher Extérieur/Home trainer (`plan-session-detail.tsx`, même langage que les
+  boutons de plage des pages détail métrique) sous le `WorkoutProfileChart` de chaque séance —
+  cycling uniquement, et seulement si un script structuré existe déjà (rien à adapter sinon, même
+  garde que le graphique juste au-dessus). Threadé `PlanSessionDetail` → `PlanWeekCalendar` →
+  `training-plan-tab.tsx`, aucun autre appelant de ces deux composants dans l'app.
+
+**4. Restante** (voir task #117 si le tracking de tâches est encore visible, sinon reprendre depuis
+les captures d'écran/retour utilisateur ci-dessus) :
 - **Anneau de progression du plan** — % complété + jours restants, façon Join, calculé depuis
   `getSessionCompletion()` déjà en place, affiché sur l'onglet Plan.
 
-Tests (`training-plan-types.test.ts`, 5 nouveaux pour `assignSessionDatesByAvailability` — jour de
-plus grande capacité, plus grosse séance d'abord, round-robin sans disponibilité configurée, jamais
-de placement refusé même saturé, tableau vide) — 863/863 au total, tsc/eslint/build clean.
+Tests — pièce 2 : `training-plan-types.test.ts`, 5 nouveaux pour `assignSessionDatesByAvailability`
+(jour de plus grande capacité, plus grosse séance d'abord, round-robin sans disponibilité
+configurée, jamais de placement refusé même saturé, tableau vide). Pièce 3 : `buildSystemPrompt.
+test.ts`, 1 nouveau test de scope + 1 nouveau snapshot committé pour `sessionLocationAdjustment` —
+865/865 au total, tsc/eslint/build clean.
 
 ## Modèle de Données Firestore
 

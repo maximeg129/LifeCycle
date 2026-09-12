@@ -37,6 +37,9 @@ interface Props {
   /** Pour colorer une séance déjà faite selon son intensité réelle — voir completedRideZone, plan-calendar-types.ts. */
   activities: IntervalsActivity[]
   athleteFtp: number | null | undefined
+  /** Bascule intérieur/extérieur avec régénération réelle — chantier Frive/Join, voir plan-session-detail.tsx. */
+  adjustingLocationKey: string | null
+  onAdjustLocation: (index: number, targetLocation: 'indoor' | 'outdoor') => void
 }
 
 interface DaySession {
@@ -46,7 +49,7 @@ interface DaySession {
   zone: ZoneInfo | null
 }
 
-export function PlanWeekCalendar({ week, isGenerating, sendingSessionKey, canSendToIntervals, onRegenerate, onSend, onMoveDate, getCompletion, activities, athleteFtp }: Props) {
+export function PlanWeekCalendar({ week, isGenerating, sendingSessionKey, canSendToIntervals, onRegenerate, onSend, onMoveDate, getCompletion, activities, athleteFtp, adjustingLocationKey, onAdjustLocation }: Props) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const todayIso = format(new Date(), 'yyyy-MM-dd')
 
@@ -175,6 +178,8 @@ export function PlanWeekCalendar({ week, isGenerating, sendingSessionKey, canSen
                 canSendToIntervals={canSendToIntervals}
                 onSend={onSend}
                 onMoveDate={onMoveDate}
+                isAdjustingLocation={adjustingLocationKey === `${week.weekNumber}-${index}`}
+                onAdjustLocation={(targetLocation) => onAdjustLocation(index, targetLocation)}
               />
             ))}
           </div>

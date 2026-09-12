@@ -7,6 +7,7 @@ const ALL_FLOW_IDS: CoachFlowId[] = [
   'trainingPlanGeneration',
   'trainingPlanRecalibration',
   'planWeekSessions',
+  'sessionLocationAdjustment',
   'coachChat',
   'rideAnalysis',
   'recoveryInsight',
@@ -30,6 +31,12 @@ describe('selectRulesForFlow', () => {
 
   it('gives dailyWorkoutRecommendation session-arbitration rules but not plan-validation ones', () => {
     const scopes = new Set(selectRulesForFlow('dailyWorkoutRecommendation').map((r) => r.scope))
+    expect(scopes.has('session-arbitration')).toBe(true)
+    expect(scopes.has('plan-validation')).toBe(false)
+  })
+
+  it('gives sessionLocationAdjustment session-arbitration rules but not plan-validation ones — same decision family as dailyWorkoutRecommendation', () => {
+    const scopes = new Set(selectRulesForFlow('sessionLocationAdjustment').map((r) => r.scope))
     expect(scopes.has('session-arbitration')).toBe(true)
     expect(scopes.has('plan-validation')).toBe(false)
   })
