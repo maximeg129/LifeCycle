@@ -37,8 +37,20 @@ env:
   # `secret` Secret Manager. `NEXT_PUBLIC_` : lue côté client par
   # use-push-notifications.ts, donc nécessaire au BUILD (inlinée dans le
   # bundle par Next.js) en plus du RUNTIME.
-  - variable: NEXT_PUBLIC_FIREBASE_VAPID_KEY
-    value: ""
-    availability:
-      - BUILD
-      - RUNTIME
+  #
+  # ⚠️ Bug réel corrigé : une entrée `value: ""` (chaîne vide, tant que la
+  # clé n'est pas encore générée) faisait échouer le build en prod —
+  # Firebase App Hosting refuse le fichier avec "either 'value' or
+  # 'secret' field is required" dès qu'une entrée `env` a `value` vide,
+  # une chaîne vide n'étant apparemment pas considérée comme une valeur
+  # valide par son schéma. use-push-notifications.ts gère déjà
+  # gracieusement l'ABSENCE totale de cette variable (`isConfigured: false`,
+  # aucune tentative d'enregistrement) — l'entrée est donc omise ici tant
+  # qu'aucune vraie clé n'est disponible, comportement identique à un
+  # `value: ""` réussi, sans les faux frais du bug de schéma. À
+  # réintroduire avec la vraie clé une fois générée :
+  # - variable: NEXT_PUBLIC_FIREBASE_VAPID_KEY
+  #   value: "<clé réelle>"
+  #   availability:
+  #     - BUILD
+  #     - RUNTIME
