@@ -2096,27 +2096,68 @@ utilisateur explicite : les deux doivent être visibles EN MÊME TEMPS pour un c
 Comportement inchangé pour tout le reste (envoi, édition du script, warnings, météo...) — 871/871
 tests inchangés (aucune logique pure touchée, uniquement JSX/état local), tsc/eslint/build clean.
 
-**B. Analyse IA automatique et approfondie à la détection de complétion** (restante — cyclisme via
-webhook Intervals.icu `ACTIVITY_ANALYZED`, muscu via déclenchement client à la fin de la séance ;
-notifications push partagées, muscu uniquement pour l'instant ; le vélo reste sur webhook plutôt que
-notification tant que le point ci-dessous n'est pas tranché).
+**B. Analyse IA automatique et approfondie à la détection de complétion** — cyclisme via webhook
+Intervals.icu `ACTIVITY_ANALYZED`, muscu via déclenchement client à la fin de la séance ; notifications
+push partagées, muscu uniquement pour l'instant. Sous-pièce B1 (infra push) livrée ; B2 (webhook vélo)
+et B3 (flow d'analyse muscu) restantes.
+
+⚠️ Architecture retenue, après une correction de trajectoire en cours de cadrage (l'utilisateur a
+trouvé la doc webhook Intervals.icu — `ACTIVITY_UPLOADED`/`ACTIVITY_ANALYZED`, secret embarqué dans le
+payload, délai de 60s de consolidation) : PAS de Cloud Functions séparées. Un webhook est un simple
+`POST` HTTP, déjà servi nativement par les Route Handlers Next.js existants (`/api/intervals/*`) — donc
+une route serveur (B2, restante) + un premier usage MINIMAL et SCOPÉ du Firebase Admin SDK (pour
+mapper `athlete_id` → `uid` et écrire Firestore sans contexte utilisateur connecté), plutôt qu'un
+déploiement séparé. Reverse consciemment la règle "Firestore lu/écrit seulement côté client" déjà
+actée ailleurs dans ce fichier (Authentification/Sécurité) — jamais généralisé au reste de l'app,
+scopé à cette route future + l'envoi de notifications push. Point encore ouvert à la reprise de la
+pièce B2 : vérifier si le webhook Intervals.icu s'applique aux athlètes en clé API personnelle (le
+modèle de cette app) ou seulement aux athlètes connectés via leur flow OAuth ("athlete_id obtenu via
+OAuth flow" dans leur doc) — à confirmer sur la page "Manage App" avant de coder la route.
+
+**B1. Infra notifications push (FCM)** — prérequis partagé par B2 (vélo) et B3 (muscu) : le résultat
+d'une analyse peut arriver après que l'athlète a fermé l'app, la notification est la seule façon de le
+savoir sans revenir vérifier.
+
+- **`src/lib/firebase-admin.ts`** (nouveau, `firebase-admin` ajouté aux dépendances) — singleton Admin
+  SDK, authentifié par Application Default Credentials (ADC — Firebase App Hosting attache
+  automatiquement un compte de service à son backend Cloud Run, ADC le trouve tout seul via les
+  métadonnées de l'instance, aucune clé à générer/stocker). `GOOGLE_APPLICATION_CREDENTIALS_JSON`
+  (repli dev local uniquement, ADC n'étant généralement pas disponible hors GCP). **⚠️ Point
+  opérationnel non vérifiable depuis ce sandbox** (pas de `gcloud`/`firebase` CLI ici) : s'assurer que
+  le compte de service du backend a bien le rôle IAM Firestore nécessaire — probablement déjà le cas
+  (rôle Editor hérité par défaut du compte de service Compute Engine), à confirmer au premier essai
+  réel plutôt que supposé.
+- **`src/lib/push-notifications.ts`** — `sendPushNotification(uid, {title, body, url?})`, best-effort
+  par construction (une notification qui échoue ne doit jamais faire échouer l'appelant — l'analyse
+  elle-même est déjà persistée avant cet appel). Un jeton FCM mort (`messaging/registration-token-
+  not-registered`/`invalid-registration-token`) est supprimé silencieusement de `fcmTokens` — pas une
+  erreur, un ménage normal.
+- **`public/sw.js` étendu** (pas un second service worker `firebase-messaging-sw.js` séparé — celui-ci
+  est DÉJÀ enregistré à la racine du site, voir `layout.tsx` — deux workers à la racine entreraient en
+  conflit de scope) : SDK Firebase "compat" chargé via `importScripts` (seule variante utilisable hors
+  module JS), config Firebase dupliquée depuis `src/firebase/config.ts` (mêmes valeurs publiques déjà
+  committées en clair là-bas — jamais des secrets, la sécurité vient des règles Firestore) ;
+  `onBackgroundMessage` affiche la notification quand aucun onglet n'a le focus, `notificationclick`
+  ouvre/refocalise sur `payload.data.url`.
+- **`src/hooks/use-push-notifications.ts`** — `requestPermissionAndRegister()`/`unregister()`. Le
+  jeton FCM lui-même sert d'id de document (`users/{uid}/fcmTokens/{token}`, base64url-safe donc sans
+  `/`) — réinscrire le même appareil réécrit le même doc plutôt que d'empiler des doublons.
+  `NEXT_PUBLIC_FIREBASE_VAPID_KEY` (clé PUBLIQUE "Web Push certificate", générée dans Firebase Console
+  → Project Settings → Cloud Messaging → Web configuration — pas un secret Secret Manager, un simple
+  `env`/`value` dans `apphosting.yaml`, actuellement vide/à renseigner) : absente → `isConfigured`
+  false, aucune tentative d'enregistrement plutôt qu'un échec silencieux.
+- **`PushNotificationsCard`** (`src/components/settings/push-notifications-card.tsx`, Réglages, juste
+  après Strava) — distincte de `NotificationPrefsCard` (juste en dessous, déjà existante) : celle-ci
+  règle des rappels IN-APP (tâches/plantes en retard), pas de vraies notifications système.
+- **`fcmTokens`** ajoutée à `firestore.rules` (règle standard path-based ownership — mais l'ENVOI côté
+  serveur contourne ces règles via l'Admin SDK, donc cette règle ne protège que le chemin client
+  d'enregistrement/désinscription) et à `TOP_LEVEL_COLLECTIONS`
+  (`account-deletion.ts`/`data-export-types.ts`) — même discipline que l'audit sécurité documenté plus
+  haut, pour ne pas répéter l'oubli de collections déjà corrigé une fois dans ce fichier.
 
 **A. Plan glissant sur 7 jours** (restante — reséquencement mécanique instantané de la disponibilité
 sur une fenêtre glissante ancrée sur *aujourd'hui*, sans toucher au stockage hebdomadaire lundi-
 dimanche existant).
-
-⚠️ Architecture retenue pour B, après une correction de trajectoire en cours de cadrage (l'utilisateur
-a trouvé la doc webhook Intervals.icu — `ACTIVITY_UPLOADED`/`ACTIVITY_ANALYZED`, secret embarqué dans
-le payload, délai de 60s de consolidation) : PAS de Cloud Functions séparées. Un webhook est un simple
-`POST` HTTP, déjà servi nativement par les Route Handlers Next.js existants (`/api/intervals/*`) — donc
-`/api/intervals/webhook` (nouvelle route) + un premier usage MINIMAL et SCOPÉ du Firebase Admin SDK
-(pour mapper `athlete_id` → `uid` et écrire Firestore sans contexte utilisateur connecté), plutôt qu'un
-déploiement séparé. Reverse consciemment la règle "Firestore lu/écrit seulement côté client" déjà
-actée ailleurs dans ce fichier (Authentification/Sécurité) — jamais généralisé au reste de l'app,
-scopé à cette seule route + l'envoi de notifications push. Point encore ouvert à la reprise de ce
-chantier : vérifier si le webhook Intervals.icu s'applique aux athlètes en clé API personnelle (le
-modèle de cette app) ou seulement aux athlètes connectés via leur flow OAuth ("athlete_id obtenu via
-OAuth flow" dans leur doc) — à confirmer sur la page "Manage App" avant de coder la route.
 
 ## Refonte inspirée de Frive/Join — chantier en 4 pièces, toutes livrées
 

@@ -23,6 +23,7 @@ import { DataExportCard } from '@/components/settings/data-export-card'
 import { NotificationPrefsCard } from '@/components/settings/notification-prefs-card'
 import { DangerZoneCard } from '@/components/settings/danger-zone-card'
 import { StravaCard } from '@/components/settings/strava-card'
+import { PushNotificationsCard } from '@/components/settings/push-notifications-card'
 import { SyncButton } from '@/components/cycling/sync-button'
 import { useOverdueCounts } from '@/components/layout/use-overdue-counts'
 
@@ -269,6 +270,14 @@ export default function SettingsPage() {
 
         {/* ── Strava ───────────────────────────────────────────────── */}
         <StravaCard />
+
+        {/* ── Notifications push (chantier "repenser planification/séances/
+            feedback") — juste après Strava, même famille "intégrations qui
+            peuvent envoyer quelque chose à l'athlète" ; distincte de
+            NotificationPrefsCard ci-dessous, qui règle des rappels in-app
+            (tâches/plantes en retard), pas de vraies notifications
+            système. */}
+        <PushNotificationsCard />
 
         {/* ── Rappels ──────────────────────────────────────────────── */}
         <NotificationPrefsCard />
