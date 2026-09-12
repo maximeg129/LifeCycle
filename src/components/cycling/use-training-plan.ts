@@ -24,6 +24,7 @@ import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/en
 import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { trainingPlanGeneration } from '@/ai/flows/training-plan-generation-flow'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
+import { adjustSessionLocation } from '@/ai/flows/adjust-session-location-flow'
 import {
   clampWeeklyMinutes,
   clampPlanWeeks,
@@ -175,6 +176,11 @@ export function useTrainingPlan() {
 
   const [isGenerating, setIsGenerating] = useState(false)
   const [sendingSessionKey, setSendingSessionKey] = useState<string | null>(null)
+  // Bascule intérieur/extérieur avec régénération réelle — chantier
+  // Frive/Join. Même patron clé "weekNumber-sessionIndex" que
+  // sendingSessionKey ci-dessus, pour désactiver UNIQUEMENT le bouton de
+  // la séance en cours d'ajustement, pas toute la carte.
+  const [adjustingLocationKey, setAdjustingLocationKey] = useState<string | null>(null)
 
   const generate = useCallback(async (
     goal: CoachGoal & { id: string },
@@ -472,6 +478,70 @@ export function useTrainingPlan() {
   }, [user, db, activePlan])
 
   /**
+   * Bascule intérieur/extérieur AVEC régénération réelle du script —
+   * chantier Frive/Join, retour utilisateur : "la possibilité de modifier
+   * on the fly la séance si on veut la réaliser en intérieur ou en
+   * extérieur (le contenu s'adapte réellement)". Un appel IA dédié
+   * (adjustSessionLocation, réutilise la même adaptation home trainer que
+   * dailyWorkoutRecommendation) plutôt qu'un simple changement de badge —
+   * la durée/l'intensité cible ne changent jamais, seuls sportType et le
+   * script structuré sont réellement adaptés. Cycling uniquement (une
+   * séance muscu n'a pas de notion intérieur/extérieur) — l'appelant
+   * (PlanSessionDetail) ne montre le bouton que pour sessionKind
+   * 'cycling'.
+   */
+  const adjustSessionForLocation = useCallback(async (
+    weekNumber: number,
+    sessionIndex: number,
+    targetLocation: 'indoor' | 'outdoor'
+  ): Promise<boolean> => {
+    if (!user || !db || !activePlan) return false
+    const week = activePlan.weeks.find((w) => w.weekNumber === weekNumber)
+    const session = week?.sampleSessions?.[sessionIndex]
+    if (!week || !session || !session.structuredWorkout) return false
+
+    const key = `${weekNumber}-${sessionIndex}`
+    setAdjustingLocationKey(key)
+    try {
+      const result = await adjustSessionLocation({
+        title: session.title,
+        durationMinutes: session.durationMinutes,
+        intensityLabel: session.intensityLabel,
+        structuredWorkout: session.structuredWorkout,
+        targetLocation,
+      })
+      if (!result.ok) {
+        toast({ variant: 'destructive', title: "L'IA n'a pas pu adapter la séance", description: result.error })
+        return false
+      }
+
+      const weeks = activePlan.weeks.map((w) => {
+        if (w.weekNumber !== weekNumber || !w.sampleSessions) return w
+        return {
+          ...w,
+          sampleSessions: w.sampleSessions.map((s, i) =>
+            i === sessionIndex ? { ...s, sportType: result.data.sportType, structuredWorkout: result.data.structuredWorkout } : s
+          ),
+        }
+      })
+      const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
+      try {
+        await updateDoc(ref, { weeks })
+        toast({ title: targetLocation === 'indoor' ? 'Séance adaptée pour home trainer' : 'Séance adaptée pour l\'extérieur', description: result.data.adaptationNote })
+        return true
+      } catch {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+        return false
+      }
+    } catch (e) {
+      toast({ variant: 'destructive', title: "L'IA n'a pas pu adapter la séance", description: describeActionDispatchError(e) })
+      return false
+    } finally {
+      setAdjustingLocationKey(null)
+    }
+  }, [user, db, activePlan, toast])
+
+  /**
    * Réalisé vs prévu — retour utilisateur : "comment lier les seances
    * realisees aux seance prevues". Réutilise planActivities (déjà fetché
    * pour la recalibration, fenêtre startDate..aujourd'hui) et strengthLogs
@@ -590,6 +660,8 @@ export function useTrainingPlan() {
     generateWeekSessions,
     generatingSessionsForWeek,
     moveSessionDate,
+    adjustSessionForLocation,
+    adjustingLocationKey,
     getSessionCompletion,
     sendSessionToIntervals,
     sendingSessionKey,

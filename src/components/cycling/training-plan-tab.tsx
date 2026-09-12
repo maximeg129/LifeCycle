@@ -51,7 +51,8 @@ function formatDayMinutes(minutes: number): string {
 export function TrainingPlanTab() {
   const {
     activePlan, isLoadingPlan, isGenerating, goals, isLoadingGoals, generate, archivePlan,
-    generateWeekSessions, generatingSessionsForWeek, moveSessionDate, getSessionCompletion, sendSessionToIntervals, sendingSessionKey, canSendToIntervals,
+    generateWeekSessions, generatingSessionsForWeek, moveSessionDate, adjustSessionForLocation, adjustingLocationKey,
+    getSessionCompletion, sendSessionToIntervals, sendingSessionKey, canSendToIntervals,
     recalibrateNow, isRecalibrating, activities, athleteFtp,
   } = useTrainingPlan()
   const today = format(new Date(), 'yyyy-MM-dd')
@@ -480,6 +481,8 @@ export function TrainingPlanTab() {
                   getCompletion={(session, index) => getSessionCompletion(w, session, index)}
                   activities={activities}
                   athleteFtp={athleteFtp}
+                  adjustingLocationKey={adjustingLocationKey}
+                  onAdjustLocation={(index, targetLocation) => adjustSessionForLocation(w.weekNumber, index, targetLocation)}
                 />
               </div>
             )}

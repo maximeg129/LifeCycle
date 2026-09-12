@@ -22,6 +22,7 @@ export type CoachFlowId =
   | 'trainingPlanGeneration'
   | 'trainingPlanRecalibration'
   | 'planWeekSessions'
+  | 'sessionLocationAdjustment'
   | 'coachChat'
   | 'rideAnalysis'
   | 'recoveryInsight'
@@ -41,6 +42,10 @@ const UNIVERSAL_ID_PREFIXES = ['principle-', 'forbidden-', 'red-flag-']
  * métrique). Décision produit/architecture — pas elle-même une
  * affirmation scientifique — sur ce que chaque flow raisonne réellement :
  * - dailyWorkoutRecommendation décide une séance → session-arbitration.
+ * - sessionLocationAdjustment adapte le script d'UNE séance déjà décidée
+ *   pour un changement de lieu intérieur/extérieur (chantier Frive/Join) —
+ *   même famille de décision que dailyWorkoutRecommendation (contenu
+ *   concret d'une séance) → session-arbitration également.
  * - trainingPlanGeneration/trainingPlanRecalibration/planWeekSessions
  *   produisent ou ajustent un plan → plan-validation.
  * - coachChat est conversationnel et peut toucher à n'importe quel sujet
@@ -52,6 +57,7 @@ const UNIVERSAL_ID_PREFIXES = ['principle-', 'forbidden-', 'red-flag-']
  */
 const FLOW_EXTRA_SCOPES: Record<CoachFlowId, CoachRule['scope'][]> = {
   dailyWorkoutRecommendation: ['session-arbitration'],
+  sessionLocationAdjustment: ['session-arbitration'],
   trainingPlanGeneration: ['plan-validation'],
   trainingPlanRecalibration: ['plan-validation'],
   planWeekSessions: ['plan-validation'],

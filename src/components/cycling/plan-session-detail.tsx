@@ -15,7 +15,7 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Loader2, Send, Apple, Dumbbell, PlayCircle, CheckCircle2, XCircle, ShieldAlert, CalendarClock, ExternalLink, Sparkles } from 'lucide-react'
+import { Loader2, Send, Apple, Dumbbell, PlayCircle, CheckCircle2, XCircle, ShieldAlert, CalendarClock, ExternalLink, Sparkles, Home, Bike } from 'lucide-react'
 import { addDays, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
@@ -36,9 +36,12 @@ interface Props {
   canSendToIntervals: boolean
   onSend: (session: PlanWeekSessionWithValidation, index: number, dateId: string) => void
   onMoveDate: (index: number, newDate: string) => void
+  /** Bascule intérieur/extérieur avec régénération réelle du script — chantier Frive/Join, voir use-training-plan.ts (adjustSessionForLocation). */
+  isAdjustingLocation: boolean
+  onAdjustLocation: (targetLocation: 'indoor' | 'outdoor') => void
 }
 
-export function PlanSessionDetail({ session, index, week, completion, today, isSending, canSendToIntervals, onSend, onMoveDate }: Props) {
+export function PlanSessionDetail({ session, index, week, completion, today, isSending, canSendToIntervals, onSend, onMoveDate, isAdjustingLocation, onAdjustLocation }: Props) {
   // Retour utilisateur : "un système de suivi de la seance a la salle, avec
   // chronometre, temps de repos" — vue plein écran gardée en state local
   // plutôt qu'un Dialog. Local à CETTE carte (pas au niveau semaine comme
@@ -132,6 +135,45 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
       </div>
       {(!session.sessionKind || session.sessionKind === 'cycling') && (
         <WorkoutProfileChart structuredWorkout={session.structuredWorkout} height={48} />
+      )}
+      {/* Retour utilisateur (chantier Frive/Join, inspiré de Frive.io) : "la
+          possibilité de modifier on the fly la séance si on veut la
+          réaliser en intérieur ou en extérieur (le contenu s'adapte
+          réellement)" — un appel IA dédié (adjustSessionLocation) régénère
+          réellement sportType + le script, jamais un simple changement de
+          badge. Cycling uniquement, et seulement si un script existe déjà
+          (rien à adapter sinon — même garde que WorkoutProfileChart
+          ci-dessus). Même langage pill-switcher que les boutons de plage
+          sur les pages détail métrique. */}
+      {(!session.sessionKind || session.sessionKind === 'cycling') && session.structuredWorkout && (
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-muted-foreground">Lieu :</span>
+          <div className="flex gap-0.5 rounded-full bg-muted p-0.5">
+            <button
+              type="button"
+              onClick={() => onAdjustLocation('outdoor')}
+              disabled={isAdjustingLocation}
+              className={cn(
+                'flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors disabled:opacity-60',
+                session.sportType !== 'VirtualRide' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Bike className="w-3 h-3" /> Extérieur
+            </button>
+            <button
+              type="button"
+              onClick={() => onAdjustLocation('indoor')}
+              disabled={isAdjustingLocation}
+              className={cn(
+                'flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors disabled:opacity-60',
+                session.sportType === 'VirtualRide' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              <Home className="w-3 h-3" /> Home trainer
+            </button>
+          </div>
+          {isAdjustingLocation && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+        </div>
       )}
       {session.fueling && session.fueling.neededOnBike && (!session.sessionKind || session.sessionKind === 'cycling') && (
         <div className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20 text-xs">
