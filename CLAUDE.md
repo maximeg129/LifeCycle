@@ -2049,6 +2049,47 @@ Tests (`request-origin.test.ts`, nouveau — reconstruction depuis les en-têtes
 `https` si `x-forwarded-proto` absent, repli sur l'origine donnée si `x-forwarded-host` absent,
 schéma non-https respecté) — 858/858 au total, tsc/eslint/build clean.
 
+## Refonte inspirée de Frive/Join — chantier en 4 pièces (nav livrée, 3 restantes)
+
+Retour utilisateur, captures d'écran de Frive (vue semaine avec bascule intérieur/extérieur) et
+Join (marketing "adapts to your availability" + écran de progression) à l'appui : "j'aimerais qu'on
+s'inspire un peu de Frive.io et Join.cc pour remodeler l'app... cachons peut-être en sous-menu les
+éléments non utiles au cœur de l'application. Définir la disponibilité sur la semaine me paraît
+intéressant, la planification/vue du plan de la semaine... avec la possibilité de modifier on the
+fly la séance si on veut la réaliser en intérieur ou en extérieur (le contenu s'adapte réellement),
+les éléments visuels de réalisation/complétion du plan comme sur Join sont intéressants, ainsi que
+le petit bouton plan qui permet de voir le plan à long terme." Décidé par `AskUserQuestion` (deux
+questions) avant tout code : construire les 4 pièces dans la foulée (PRs distinctes) ; sur la nav,
+retirer Garage/Nutrition/Maison de la nav principale (au-delà de ce qui était déjà minimal — voir
+plus bas).
+
+**1. Nav réduite à Cyclisme/Coach** (`sidebar.tsx`) — `navItems` passe de 5 à 2 entrées. Renverse
+consciemment une décision documentée plus haut dans ce fichier ("Garage... doit vivre
+indépendamment du coaching/data, pas comme un sous-onglet noyé dedans", "Extract Garage into its
+own top-level nav page") — mais c'est un choix explicite de l'utilisateur cette fois, inspiré de la
+nav très sobre des apps mono-usage cyclisme (Frive/Join n'ont ni Nutrition ni Maison à afficher).
+Garage/Nutrition/Maison rejoignent la carte "Autres modules" de `/settings` (même patron que Vie &
+Santé/Finances déjà là) — pages entièrement fonctionnelles, juste déplacées hors de la nav
+principale. Le badge overdue tâches/plantes de Maison (`useOverdueCounts`, auparavant sur l'item de
+nav) se déplace avec elle sur sa nouvelle carte plutôt que de disparaître silencieusement. Bottom
+nav mobile réduite à Cyclisme/Coach/Réglages (+ le bouton flottant Stella séparé, inchangé).
+
+**2-4, restantes** (voir tasks #115-117 si le tracking de tâches est encore visible, sinon
+reprendre depuis les captures d'écran/retour utilisateur ci-dessus) :
+- **Disponibilité hebdomadaire par jour** — remplacer le champ unique "volume hebdo" (`training-
+  plan-tab.tsx`, `weeklyMinutes`) par des curseurs Lundi→Dimanche façon Join, et faire dépendre
+  `assignSessionDates` (`training-plan-types.ts`) de cette disponibilité réelle par jour plutôt
+  que d'un étalement mécanique sur les 7 jours.
+- **Bascule intérieur/extérieur avec régénération réelle** — étendre le principe déjà en place
+  pour "Aujourd'hui" (`indoorRequested`, `daily-workout-tab.tsx`) à n'importe quelle séance de la
+  vue Plan (`PlanSessionDetail`) : un appel IA réel ajuste le script structuré (pas qu'un badge
+  "Home trainer" sans effet sur le contenu, comme c'est le cas ailleurs aujourd'hui).
+- **Anneau de progression du plan** — % complété + jours restants, façon Join, calculé depuis
+  `getSessionCompletion()` déjà en place, affiché sur l'onglet Plan.
+
+Tests : la suite de tests passe inchangée pour la pièce 1 (mise en page/nav uniquement, aucune
+logique pure touchée) — 858/858, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

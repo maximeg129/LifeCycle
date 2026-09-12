@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
 import { doc, setDoc } from 'firebase/firestore'
-import { ShieldCheck, ExternalLink, Save, Loader2, Key, User, Sun, Moon, Palette, HeartPulse, Wallet, ChevronRight } from 'lucide-react'
+import { ShieldCheck, ExternalLink, Save, Loader2, Key, User, Sun, Moon, Palette, HeartPulse, Wallet, ChevronRight, Wrench, CookingPot, Home } from 'lucide-react'
 import Link from 'next/link'
 import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
@@ -24,11 +24,19 @@ import { NotificationPrefsCard } from '@/components/settings/notification-prefs-
 import { DangerZoneCard } from '@/components/settings/danger-zone-card'
 import { StravaCard } from '@/components/settings/strava-card'
 import { SyncButton } from '@/components/cycling/sync-button'
+import { useOverdueCounts } from '@/components/layout/use-overdue-counts'
 
 export default function SettingsPage() {
   const { user } = useUser()
   const db = useFirestore()
   const { toast } = useToast()
+  // Retour utilisateur : "retirer Garage/Nutrition/Maison de la nav
+  // principale" — Maison portait un badge overdue tâches/plantes dans la
+  // sidebar (voir sidebar.tsx, désormais retiré avec le reste des items) ;
+  // ce signal ne doit pas disparaître silencieusement, il se déplace ici,
+  // sur son nouveau point d'entrée.
+  const { overdueTasks, overduePlants } = useOverdueCounts()
+  const overdueHome = overdueTasks + overduePlants
   const { isDark, setTheme } = useTheme()
 
   const settingsRef = useMemoFirebase(() => {
@@ -269,13 +277,55 @@ export default function SettingsPage() {
             Vie & Santé et Finances ne sont plus dans la nav principale
             (les métriques les plus utiles de Vie & Santé vivent maintenant
             dans Cyclisme > Vue d'ensemble) — les pages restent complètes
-            et accessibles ici. */}
+            et accessibles ici.
+            ⚠️ Garage/Nutrition/Maison les ont rejoints ici — retour
+            utilisateur (inspiré de Frive/Join) : "retirer Garage/Nutrition/
+            Maison de la nav principale... ne garder que Cyclisme/Coach".
+            Même patron, mêmes pages entièrement fonctionnelles, juste
+            déplacées hors de la nav principale plutôt que retirées. */}
         <Card className="lc-card">
           <CardHeader className="pb-4">
             <CardTitle className="text-base font-semibold">Autres modules</CardTitle>
             <CardDescription className="text-sm">Toujours disponibles, juste hors de la navigation principale.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2">
+            <Link href="/garage" className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group">
+              <div className="w-9 h-9 rounded-[10px] bg-chart-4/10 flex items-center justify-center shrink-0">
+                <Wrench className="w-4 h-4 text-chart-4" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">Garage</p>
+                <p className="text-xs text-muted-foreground">Matériel, chaînes et garde-robe cycliste.</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+            </Link>
+            <Link href="/nutrition" className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group">
+              <div className="w-9 h-9 rounded-[10px] bg-chart-5/10 flex items-center justify-center shrink-0">
+                <CookingPot className="w-4 h-4 text-chart-5" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium">Nutrition</p>
+                <p className="text-xs text-muted-foreground">Plan alimentaire et livre de recettes.</p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
+            </Link>
+            <Link href="/home-management" className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group">
+              <div className="w-9 h-9 rounded-[10px] bg-chart-1/10 flex items-center justify-center shrink-0">
+                <Home className="w-4 h-4 text-chart-1" />
+              </div>
+              <div className="flex-1 flex items-center gap-2">
+                <div>
+                  <p className="text-sm font-medium">Maison</p>
+                  <p className="text-xs text-muted-foreground">Tâches récurrentes et plantes.</p>
+                </div>
+                {overdueHome > 0 && (
+                  <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+                    {overdueHome}
+                  </span>
+                )}
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
+            </Link>
             <Link href="/lifestyle" className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group">
               <div className="w-9 h-9 rounded-[10px] bg-chart-2/10 flex items-center justify-center shrink-0">
                 <HeartPulse className="w-4 h-4 text-chart-2" />
