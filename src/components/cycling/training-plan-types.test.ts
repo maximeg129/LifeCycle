@@ -20,6 +20,9 @@ import {
   planAutoRescheduleMoves,
   assignSessionDatesByAvailability,
   computePlanProgress,
+  rollingWindowDates,
+  weekdayAvailabilityForDate,
+  recalibrateRollingWindow,
   type PlanWeekContent,
   type PlanWeek,
   type PlanWeekAdjustment,
@@ -28,6 +31,7 @@ import {
   type SessionCompletion,
   type SessionCompletionStatus,
   type WeekdayAvailabilityMinutes,
+  type RollingWeekInput,
 } from './training-plan-types'
 
 describe('clampWeeklyMinutes', () => {
@@ -725,5 +729,110 @@ describe('computePlanProgress', () => {
     const withSessions = { ...week, sampleSessions: [minimalSession('A')] }
     const result = computePlanProgress(plan, withSessions, [completion('done')], today)
     expect(result).toEqual({ daysRemaining: 14, weekCompletionPercent: 100, sessionsDone: 1, sessionsTotal: 1 })
+  })
+})
+
+describe('rollingWindowDates', () => {
+  it('returns 7 consecutive calendar dates starting from today (inclusive)', () => {
+    expect(rollingWindowDates('2026-09-16')).toEqual([
+      '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22',
+    ])
+  })
+})
+
+describe('weekdayAvailabilityForDate', () => {
+  // Lundi→Dimanche, même ordre que buildPlanWeekSkeleton.
+  const availability: WeekdayAvailabilityMinutes = [10, 20, 30, 40, 50, 60, 70]
+
+  it('maps a Monday to index 0', () => {
+    expect(weekdayAvailabilityForDate('2026-09-14', availability)).toBe(10) // Lundi
+  })
+
+  it('maps a Sunday to index 6', () => {
+    expect(weekdayAvailabilityForDate('2026-09-20', availability)).toBe(70) // Dimanche
+  })
+
+  it('maps a Wednesday to index 2', () => {
+    expect(weekdayAvailabilityForDate('2026-09-16', availability)).toBe(30) // Mercredi
+  })
+})
+
+describe('recalibrateRollingWindow', () => {
+  const week: PlanWeekSkeleton = { weekNumber: 2, startDate: '2026-09-14', endDate: '2026-09-20' } // Lun 14 -> Dim 20
+  const session = (title: string, durationMinutes: number, date: string) =>
+    ({ title, durationMinutes, date } as unknown as PlanWeekSessionWithValidation)
+
+  it('rebalances upcoming sessions within the rolling window when availability changes, respecting the new per-day capacity', () => {
+    const todayIso = '2026-09-16' // Mercredi
+    // Lun=60, Mar=60, Mer=0, Jeu=120, Ven=30, Sam=90, Dim=45
+    const availability: WeekdayAvailabilityMinutes = [60, 60, 0, 120, 30, 90, 45]
+    const sessions = [
+      session('Mercredi upcoming', 60, '2026-09-16'),
+      session('Vendredi upcoming', 90, '2026-09-18'),
+    ]
+    const input: RollingWeekInput = { week, sessions, completionStatuses: ['upcoming', 'upcoming'] }
+    const { updatedSessionsByWeek, moves, oversizedSessions } = recalibrateRollingWindow([input], availability, todayIso)
+
+    // Le bin-packing traite la plus longue séance (90) en premier — elle
+    // obtient le jour de plus grande capacité (Jeudi, 120) ; la plus courte
+    // (60) obtient ensuite le prochain jour de plus grande capacité restante
+    // (Samedi, 90). `moves` lui-même est produit dans l'ordre des séances
+    // d'origine (index 0 puis 1), pas dans l'ordre de traitement du bin-packing.
+    expect(moves).toEqual([
+      { weekNumber: 2, sessionIndex: 0, title: 'Mercredi upcoming', fromDate: '2026-09-16', toDate: '2026-09-19' },
+      { weekNumber: 2, sessionIndex: 1, title: 'Vendredi upcoming', fromDate: '2026-09-18', toDate: '2026-09-17' },
+    ])
+    expect(updatedSessionsByWeek.get(2)?.map((s) => s.date)).toEqual(['2026-09-19', '2026-09-17'])
+    expect(oversizedSessions).toEqual([])
+  })
+
+  it('never moves a done or missed session — its day still counts as occupied for the sessions that do move', () => {
+    const todayIso = '2026-09-16'
+    // Mer=30 seulement, toutes les autres à 30 aussi.
+    const availability: WeekdayAvailabilityMinutes = [60, 60, 30, 30, 30, 30, 30]
+    const sessions = [
+      session('Déjà faite', 30, '2026-09-16'), // Mercredi, done — sature déjà le jour
+      session('À déplacer', 45, '2026-09-18'), // Vendredi, upcoming
+    ]
+    const input: RollingWeekInput = { week, sessions, completionStatuses: ['done', 'upcoming'] }
+    const { moves, oversizedSessions } = recalibrateRollingWindow([input], availability, todayIso)
+
+    // Mercredi déjà à 0 restant (30-30) — la séance à déplacer va sur le
+    // prochain jour disponible (Jeudi, premier jour à égalité de capacité).
+    expect(moves).toEqual([{ weekNumber: 2, sessionIndex: 1, title: 'À déplacer', fromDate: '2026-09-18', toDate: '2026-09-17' }])
+    // 45 min sur un jour à 30 min de capacité — signalé, jamais résolu automatiquement.
+    expect(oversizedSessions).toEqual([{ weekNumber: 2, sessionIndex: 1, title: 'À déplacer', date: '2026-09-17', durationMinutes: 45, availableMinutes: 30 }])
+  })
+
+  it('leaves a week entirely outside the rolling window untouched — absent from updatedSessionsByWeek', () => {
+    const todayIso = '2026-09-16'
+    const pastWeek: PlanWeekSkeleton = { weekNumber: 1, startDate: '2026-09-07', endDate: '2026-09-13' }
+    const sessions = [session('Semaine passée', 60, '2026-09-09')]
+    const input: RollingWeekInput = { week: pastWeek, sessions, completionStatuses: ['missed'] }
+    const availability: WeekdayAvailabilityMinutes = [60, 60, 60, 60, 60, 60, 60]
+    const { updatedSessionsByWeek, moves, oversizedSessions } = recalibrateRollingWindow([input], availability, todayIso)
+    expect(updatedSessionsByWeek.size).toBe(0)
+    expect(moves).toEqual([])
+    expect(oversizedSessions).toEqual([])
+  })
+
+  it('ignores a session with no assigned date, regardless of its status', () => {
+    const todayIso = '2026-09-16'
+    const sessions = [{ title: 'Sans date', durationMinutes: 60 } as unknown as PlanWeekSessionWithValidation]
+    const input: RollingWeekInput = { week, sessions, completionStatuses: ['upcoming'] }
+    const availability: WeekdayAvailabilityMinutes = [60, 60, 60, 60, 60, 60, 60]
+    const { updatedSessionsByWeek, moves } = recalibrateRollingWindow([input], availability, todayIso)
+    expect(updatedSessionsByWeek.size).toBe(0)
+    expect(moves).toEqual([])
+  })
+
+  it('produces no move when the best available day is already the session\'s current day', () => {
+    const todayIso = '2026-09-20' // Dimanche, dernier jour de la semaine — la fenêtre glissante n'y recoupe qu'un seul jour de cette semaine.
+    const availability: WeekdayAvailabilityMinutes = [60, 60, 60, 60, 60, 60, 60]
+    const sessions = [session('Dimanche', 60, '2026-09-20')]
+    const input: RollingWeekInput = { week, sessions, completionStatuses: ['upcoming'] }
+    const { updatedSessionsByWeek, moves } = recalibrateRollingWindow([input], availability, todayIso)
+    expect(moves).toEqual([])
+    expect(updatedSessionsByWeek.size).toBe(0)
   })
 })
