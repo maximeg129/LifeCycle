@@ -2051,7 +2051,7 @@ Tests (`request-origin.test.ts`, nouveau — reconstruction depuis les en-têtes
 `https` si `x-forwarded-proto` absent, repli sur l'origine donnée si `x-forwarded-host` absent,
 schéma non-https respecté) — 858/858 au total, tsc/eslint/build clean.
 
-## Repenser planification/séances/feedback — chantier en 3 pièces (C/A livrées, B2 restante)
+## Repenser planification/séances/feedback — chantier en 3 pièces, toutes livrées
 
 Retour utilisateur : "on dois repenser je pense l'application un peu plus en profondeur, on focalise
 sur la plannification, les séances, les feedbacks. Inspire toi de ce que fait Join et Frive sur la
@@ -2098,22 +2098,33 @@ tests inchangés (aucune logique pure touchée, uniquement JSX/état local), tsc
 
 **B. Analyse IA automatique et approfondie à la détection de complétion** — cyclisme via webhook
 Intervals.icu `ACTIVITY_ANALYZED`, muscu via déclenchement client à la fin de la séance ; notifications
-push partagées, muscu uniquement pour l'instant. Sous-pièces B1 (infra push) et B3 (flow d'analyse
-muscu) livrées ; B2 (webhook vélo) restante — bloquée sur la vérification utilisateur du fonctionnement
-du webhook Intervals.icu en clé API personnelle (voir ⚠️ ci-dessous).
+push partagées aux deux. Trois sous-pièces, toutes livrées : B1 (infra push), B2 (webhook vélo, ci-
+dessous), B3 (flow d'analyse muscu, plus bas).
 
 ⚠️ Architecture retenue, après une correction de trajectoire en cours de cadrage (l'utilisateur a
 trouvé la doc webhook Intervals.icu — `ACTIVITY_UPLOADED`/`ACTIVITY_ANALYZED`, secret embarqué dans le
 payload, délai de 60s de consolidation) : PAS de Cloud Functions séparées. Un webhook est un simple
 `POST` HTTP, déjà servi nativement par les Route Handlers Next.js existants (`/api/intervals/*`) — donc
-une route serveur (B2, restante) + un premier usage MINIMAL et SCOPÉ du Firebase Admin SDK (pour
-mapper `athlete_id` → `uid` et écrire Firestore sans contexte utilisateur connecté), plutôt qu'un
-déploiement séparé. Reverse consciemment la règle "Firestore lu/écrit seulement côté client" déjà
-actée ailleurs dans ce fichier (Authentification/Sécurité) — jamais généralisé au reste de l'app,
-scopé à cette route future + l'envoi de notifications push. Point encore ouvert à la reprise de la
-pièce B2 : vérifier si le webhook Intervals.icu s'applique aux athlètes en clé API personnelle (le
-modèle de cette app) ou seulement aux athlètes connectés via leur flow OAuth ("athlete_id obtenu via
-OAuth flow" dans leur doc) — à confirmer sur la page "Manage App" avant de coder la route.
+une route serveur + un premier usage MINIMAL et SCOPÉ du Firebase Admin SDK (pour mapper `athlete_id`
+→ `uid` et écrire Firestore sans contexte utilisateur connecté), plutôt qu'un déploiement séparé.
+Reverse consciemment la règle "Firestore lu/écrit seulement côté client" déjà actée ailleurs dans ce
+fichier (Authentification/Sécurité) — jamais généralisé au reste de l'app, scopé à cette route +
+l'envoi de notifications push + le callback OAuth (B2, voir plus bas).
+
+**⚠️ Correction de trajectoire en cours de cadrage B2** : la question ouverte ("le webhook
+Intervals.icu s'applique-t-il aux athlètes en clé API personnelle, ou seulement à ceux connectés via
+OAuth ?") a été tranchée par la documentation OAuth officielle qu'a trouvée l'utilisateur, collée en
+entier dans la conversation — réponse : **seulement OAuth**. Citation clé de leur doc : *"Note that
+you don't need to do all this if you just want access to your own data. Use your API key to do
+that"* — l'OAuth sert exclusivement à ce qu'une application TIERCE accède aux données d'AUTRES
+athlètes, et les webhooks sont configurés sur la page "Manage App" d'une **Application OAuth
+enregistrée**, jamais sur une clé API personnelle (confirmé par le champ `oauth_client_id` porté par
+le payload `CALENDAR_UPDATED`, et par *"revoke the access token... This will stop webhook delivery for
+the athlete"*). Conséquence assumée après validation explicite (`AskUserQuestion`, "Construire l'OAuth
+Intervals.icu complet") : ce chantier est bien plus gros que prévu au départ — un vrai flow OAuth
+(mêmes pièces que l'intégration Strava), PLUS une dépendance externe hors du contrôle de cette app
+(l'utilisateur doit soumettre une demande sur `intervals.icu/oauth/apply`, statut "Pending" en
+attente d'approbation par Intervals.icu avant que quoi que ce soit ne fonctionne réellement en prod).
 
 **B1. Infra notifications push (FCM)** — prérequis partagé par B2 (vélo) et B3 (muscu) : le résultat
 d'une analyse peut arriver après que l'athlète a fermé l'app, la notification est la seule façon de le
@@ -2155,6 +2166,93 @@ savoir sans revenir vérifier.
   d'enregistrement/désinscription) et à `TOP_LEVEL_COLLECTIONS`
   (`account-deletion.ts`/`data-export-types.ts`) — même discipline que l'audit sécurité documenté plus
   haut, pour ne pas répéter l'oubli de collections déjà corrigé une fois dans ce fichier.
+
+**B2. OAuth Intervals.icu + webhook → analyse automatique d'une sortie vélo** — ADDITIONNEL à la clé
+API personnelle déjà utilisée partout ailleurs dans l'app (`settings/intervals`, jamais touchée par
+ce chantier) : cette connexion OAuth ne sert QU'À une chose, autoriser Intervals.icu à prévenir cette
+app dès qu'une sortie est analysée, pour déclencher `rideAnalysis` automatiquement + une notification,
+même app fermée. Prérequis externe incontournable : l'utilisateur crée une "Application" sur son
+propre compte (`intervals.icu/oauth/apply`), attend son approbation, puis renseigne
+`INTERVALS_OAUTH_CLIENT_ID`/`INTERVALS_OAUTH_CLIENT_SECRET`/`INTERVALS_WEBHOOK_SECRET`
+(`apphosting.yaml`, secrets Secret Manager à créer, même mécanisme que `STRAVA_CLIENT_*`) et configure
+l'URL du webhook (`/api/intervals/webhook`) sur la page "Manage App" une fois approuvée.
+
+- **Flow OAuth, mirroir exact de l'intégration Strava** (voir "Publication Strava" plus haut pour le
+  détail complet du raisonnement partagé) : `/api/intervals-oauth/authorize` (redirige vers
+  `intervals.icu/oauth/authorize`, `redirect_uri` reconstruit via `resolvePublicOrigin()` — même
+  correctif déjà confirmé en prod pour Strava, voir plus haut) → `/api/intervals-oauth/callback`
+  (échange le `code` dans les 2 minutes exigées par Intervals.icu, `src/lib/intervals-oauth-api.ts`) →
+  jetons rapatriés côté client via un FRAGMENT d'URL (`#intervals_oauth_tokens=...`, jamais la query
+  string — même raisonnement que Strava). Scope `ACTIVITY:READ` seul : jamais utilisé pour écrire, et
+  même pas vraiment pour lire au quotidien (voir plus bas) — seule sa PRÉSENCE déclenche la livraison
+  des webhooks côté Intervals.icu.
+- **⚠️ Pas de refresh_token** — la doc collée par l'utilisateur ne documente aucun `refresh_token`
+  dans la réponse d'échange (contrairement à Strava) : aucun mécanisme de rafraîchissement construit
+  sur une supposition. Sans conséquence pratique : le jeton OAuth n'est JAMAIS utilisé pour appeler
+  l'API Intervals.icu au jour le jour (la clé API personnelle de l'athlète couvre déjà tous ces
+  appels, y compris depuis le webhook) — son seul rôle est d'établir la correspondance
+  athlete_id↔uid à la connexion et de permettre la révocation à la déconnexion.
+- **`intervalsOAuthAthletes/{athleteId}` (mapping, Admin SDK exclusivement)** — collection top-level
+  HORS `/users/{userId}/...` (un index inverse, pas une donnée d'un utilisateur donné) : `{uid,
+  connectedAt}`, écrite UNIQUEMENT par `/api/intervals-oauth/callback` (l'`athlete_id` vient de la
+  réponse d'échange elle-même, vérifiée directement par Intervals.icu — jamais une valeur que le
+  client pourrait falsifier) et lue UNIQUEMENT par `/api/intervals/webhook` pour retrouver le `uid` à
+  partir du seul `athlete_id` que porte un événement. `firestore.rules` refuse explicitement tout
+  accès client (`allow read, write: if false`) en plus du refus implicite déjà en vigueur pour toute
+  collection non listée — un client qui pourrait y écrire pourrait détourner les webhooks d'un autre
+  athlète vers son propre compte. `/api/intervals-oauth/disconnect` nettoie ce mapping à la
+  déconnexion (best-effort ; un mapping orphelin resterait sans conséquence de sécurité, voir sa
+  propre doc).
+- **`IntervalsOAuthCard`** (`src/components/settings/intervals-oauth-card.tsx`, Réglages, juste après
+  la carte Intervals.icu — clé API, toujours nécessaire) — même patron visuel/mécanique que
+  `StravaCard`.
+- **`/api/intervals/webhook`** — vérifie le `secret` embarqué dans chaque payload (doc Intervals.icu,
+  `INTERVALS_WEBHOOK_SECRET`) avant tout traitement ; pour chaque événement `ACTIVITY_ANALYZED`
+  (jamais `ACTIVITY_UPLOADED` — celui-ci arrive avant la consolidation des données, voir la doc),
+  résout `athlete_id → uid` puis lit la clé API personnelle de l'athlète (`settings/intervals`, Admin
+  SDK) pour appeler `IntervalsService` exactement comme le reste de l'app. Ne régénère jamais une
+  analyse déjà présente (`rideAnalyses/{activityId}` existant → skip) — un webhook redélivré ou une
+  activité déjà régénérée manuellement ne redéclenche jamais un appel IA en double. Chaque événement
+  isolé dans son propre `try/catch` (un événement qui échoue n'empêche jamais les autres d'être
+  traités) ; répond `200` dans tous les cas — un accusé de réception pour Intervals.icu, pas un
+  verdict par événement.
+- **⚠️ Portée volontairement réduite ("version légère", même discipline que le plan glissant 7
+  jours) par rapport à l'analyse déclenchée manuellement depuis le Journal** (`use-ride-analysis.ts`) :
+  - **Pas de flux watts/FC seconde par seconde** (`getActivityStreams`) — donc pas de zones de
+    puissance/FC, pas de pacing, pas de durabilité, pas de découplage cardiaque (persistés `null`).
+    Juste les champs déjà présents sur l'activité elle-même (puissance moyenne/normalisée, charge,
+    RPE, feel...) + CTL/ATL/TSB (`getAthlete()`, un seul appel léger).
+  - **Pas de gouverneur de charge interne ni de budget kJ** — leur calcul exige plusieurs semaines de
+    wellness/activités/feedback déjà assemblées côté client (`use-governor.ts`/`use-kj-budget.ts`), une
+    duplication de logique substantielle et invérifiable depuis ce sandbox (accès réseau à
+    Intervals.icu bloqué) — jugée trop risquée pour un chemin qui écrit directement une donnée
+    affichée à l'athlète sans supervision possible avant le premier essai réel.
+  - **`buildCoachContext()`** (`coach-context.ts`) a donc dû être modifié pour rendre `kjBudget`/
+    `governorStatus` OPTIONNELS (comportement inchangé pour tout appelant existant, qui fournit
+    toujours les deux) — la section "CHARGE D'ENTRAÎNEMENT ACTUELLE" du contexte affiche une ligne
+    honnête ("Non disponible pour cette analyse") plutôt que des zéros inventés quand l'appelant (ce
+    webhook) ne les a pas en main. Reste : blessures/objectifs/style de vie/faits retenus (simples
+    lectures Firestore via Admin SDK, aucune duplication de logique).
+  - **Pas de comparaison à la séance prévue** (`plannedWorkout`/`intervalAdherence`, persistés `null`)
+    — même raison de portée.
+  - Une VRAIE analyse malgré tout, jamais un texte générique : `rideAnalysis` dégrade déjà proprement
+    sur des données partielles (voir son prompt, section RPE bas notamment). L'athlète garde la main
+    pour une analyse plus riche via "Régénérer" dans le Journal, qui passe toujours par le chemin
+    client complet (zones/pacing/durabilité/découplage/comparaison au plan).
+  - Cette réduction pourra être comblée plus tard, une fois le flow OAuth+webhook confirmé fonctionner
+    réellement en prod (network-blocked depuis ce sandbox, comme documenté partout ailleurs dans ce
+    fichier pour Intervals.icu) — crawl-walk-run plutôt qu'une réplication risquée et invérifiable du
+    premier coup.
+  - **⚠️ Forme exacte de `event.activity.id` non vérifiable** — la doc collée par l'utilisateur montre
+    `"activity": {...}` sans détailler ses champs. Assumé `id` (comme partout ailleurs dans l'app,
+    `IntervalsActivity.id`) ; si le champ réel diffère, l'événement est simplement ignoré (guard
+    explicite), jamais une exception qui casserait le traitement des autres événements du batch.
+
+Tests (`coach-context.test.ts`, 1 nouveau pour la dégradation `kjBudget`/`governorStatus` omis) —
+883/883 au total, tsc/eslint/build clean. Pas de test dédié pour la route webhook elle-même (pas de
+logique pure à isoler — une orchestration Admin SDK/IntervalsService/flow IA, invérifiable sans accès
+réseau à Intervals.icu depuis ce sandbox) : à valider par l'utilisateur au premier webhook réel reçu
+en prod, une fois l'application approuvée et configurée.
 
 **B3. Analyse IA automatique d'une séance de musculation** — retour utilisateur : "une fois une seance
 realisé... l'IA donne une analyse complete automatique de la seance, pas seulement de l'observation de
