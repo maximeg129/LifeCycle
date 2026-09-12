@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog'
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from '@/components/ui/accordion'
 import { useStrengthLogs } from './use-strength-logs'
+import { useStrengthSessionAnalysis } from './use-strength-session-analysis'
 import { exerciseHistory, formatTimer, isDraftUsable, isHoldReps, parseDurationInput, summarizeSetsDetail, type LoggedExercise, type LoggedSetDetail, type StrengthSessionLog } from './strength-log-types'
 import { EXERCISE_TECHNIQUE } from './exercise-technique'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
@@ -137,6 +138,10 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
   const { toast } = useToast()
   const { isSaving, submit } = useCrudSubmit()
   const { logs } = useStrengthLogs()
+  // Analyse IA automatique de la séance à sa fin (chantier "repenser
+  // planification/séances/feedback", pièce B3) — voir handleFinish, appelé
+  // en fire-and-forget (jamais attendu) juste avant onClose().
+  const sessionAnalysis = useStrengthSessionAnalysis(null)
 
   const exercises = useMemo(() => session.strengthExercises ?? [], [session.strengthExercises])
   const exerciseNames = useMemo(() => exercises.map((ex) => ex.name), [exercises])
@@ -533,6 +538,13 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
         // pas bloquant — au pire un brouillon orphelin, nettoyé à la prochaine lecture (readStrengthDraft).
       }
       toast({ title: 'Séance terminée', description: `${session.title} — ${formatTimer(elapsedSeconds)}` })
+      // Fire-and-forget — chantier "repenser planification/séances/feedback"
+      // (pièce B3) : jamais attendu, jamais bloquant pour la fermeture de la
+      // vue. Le résultat est persisté par le hook lui-même et signalé par
+      // notification push, pas par un état local ici (ce composant peut être
+      // démonté avant la fin de l'analyse — une promesse JS continue de
+      // s'exécuter indépendamment du cycle de vie React).
+      void sessionAnalysis.generate(ref.id, data)
       onClose()
     }
   }

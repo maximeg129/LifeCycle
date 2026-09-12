@@ -262,6 +262,23 @@ service cloud.firestore {
       }
 
       /**
+       * @description Analyse IA complète d'une séance de musculation
+       * (chantier "repenser planification/séances/feedback", pièce B3) —
+       * générée AUTOMATIQUEMENT à la fin de la séance (LiveStrengthSessionView/
+       * LogStrengthSessionDialog), keyée par l'id du strengthSessionLogs
+       * correspondant. Même patron que rideAnalyses (un doc par séance,
+       * écrasé à la régénération manuelle) — écrit côté client comme le
+       * reste de cette collection, jamais par l'Admin SDK.
+       * @path /users/{userId}/strengthSessionAnalyses/{logId}
+       */
+      match /strengthSessionAnalyses/{logId} {
+        allow get, list: if isOwner(userId);
+        allow create: if isOwner(userId) && hasValidOwnerField(userId);
+        allow update: if isExistingOwner(userId) && isUnchanged('userId');
+        allow delete: if isExistingOwner(userId);
+      }
+
+      /**
        * @description Jetons FCM (notifications push) enregistrés par
        * appareil — chantier "repenser planification/séances/feedback" (voir
        * CLAUDE.md). L'id de document EST le jeton lui-même (dédoublonnage

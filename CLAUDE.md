@@ -2098,8 +2098,9 @@ tests inchangés (aucune logique pure touchée, uniquement JSX/état local), tsc
 
 **B. Analyse IA automatique et approfondie à la détection de complétion** — cyclisme via webhook
 Intervals.icu `ACTIVITY_ANALYZED`, muscu via déclenchement client à la fin de la séance ; notifications
-push partagées, muscu uniquement pour l'instant. Sous-pièce B1 (infra push) livrée ; B2 (webhook vélo)
-et B3 (flow d'analyse muscu) restantes.
+push partagées, muscu uniquement pour l'instant. Sous-pièces B1 (infra push) et B3 (flow d'analyse
+muscu) livrées ; B2 (webhook vélo) restante — bloquée sur la vérification utilisateur du fonctionnement
+du webhook Intervals.icu en clé API personnelle (voir ⚠️ ci-dessous).
 
 ⚠️ Architecture retenue, après une correction de trajectoire en cours de cadrage (l'utilisateur a
 trouvé la doc webhook Intervals.icu — `ACTIVITY_UPLOADED`/`ACTIVITY_ANALYZED`, secret embarqué dans le
@@ -2154,6 +2155,66 @@ savoir sans revenir vérifier.
   d'enregistrement/désinscription) et à `TOP_LEVEL_COLLECTIONS`
   (`account-deletion.ts`/`data-export-types.ts`) — même discipline que l'audit sécurité documenté plus
   haut, pour ne pas répéter l'oubli de collections déjà corrigé une fois dans ce fichier.
+
+**B3. Analyse IA automatique d'une séance de musculation** — retour utilisateur : "une fois une seance
+realisé... l'IA donne une analyse complete automatique de la seance, pas seulement de l'observation de
+donnees mais en profondeur." Pendant musculation de `rideAnalysis` (même contrat de sortie coach,
+même discipline "chiffres réels jamais inventés"), avec deux différences structurelles : pas de
+streams seconde par seconde à réduire (les chiffres réels sont déjà exactement ceux saisis par
+l'athlète — séries/répétitions/charge) ; "toutes les données disponibles Intervals.icu" s'applique ici
+à la forme cycliste actuelle (CTL/ATL/TSB, via `buildCoachContext` + `useAthlete`), pour commenter
+l'interférence/complémentarité entre CETTE séance de force et la charge vélo en cours — jamais pour
+juger la séance de muscu elle-même.
+
+- **`strengthSessionAnalysisFlow.ts`** (nouveau, `src/ai/flows/`) — nouveau `CoachFlowId`
+  `strengthSessionAnalysis`, sans scope additionnel (`FLOW_EXTRA_SCOPES`, `buildSystemPrompt.ts`) : ni
+  `session-arbitration` (il ne décide rien, il relit après coup) ni `ride-analysis` (ce scope couvre des
+  règles spécifiquement cyclistes — durabilité, découplage Pw:HR, zones de puissance — dont aucune ne
+  s'applique à une série de squats) — même statut que `recoveryInsight`. Référence
+  `STRENGTH_TRAINING_GUIDANCE` (déjà utilisée par `planWeekSessions`/`trainingPlanGeneration`) pour
+  juger la qualité des choix d'exercices/charges plutôt qu'une deuxième guidance qualitative inventée
+  pour l'occasion. Snapshot `buildSystemPrompt.test.ts` régénéré (`vitest -u`), purement additif.
+- **`useStrengthSessionAnalysis(logId)`** (`src/components/cycling/`, miroir de `useRideAnalysis`) —
+  `generate(logId, log)` prend directement l'id ET les données de la séance en paramètre (plutôt que de
+  les relire d'un `logId` fixé à l'instanciation du hook) : l'id est généré CÔTÉ CLIENT juste avant
+  l'écriture Firestore (`doc(collection(...))`, même patron que `handleFinish`/`use-ride-analysis.ts`)
+  et les données sont déjà en main à l'appelant — pas besoin d'un aller-retour Firestore pour les
+  relire. `isPersonalRecord`/`previousBest` par exercice calculés via `exerciseHistory()` (déjà
+  existante, `strength-log-types.ts`) — jamais un 1RM estimé, juste la comparaison à la dernière fois
+  réellement loguée. Persisté dans `users/{uid}/strengthSessionAnalyses/{logId}` (nouvelle collection,
+  même patron "un doc par séance, écrasé à la régénération" que `rideAnalyses` — `firestore.rules` +
+  `TOP_LEVEL_COLLECTIONS`).
+- **Déclenchement automatique, fire-and-forget** — `LiveStrengthSessionView.handleFinish()` et
+  `LogStrengthSessionDialog.handleSubmit()` (les deux chemins d'écriture de `strengthSessionLogs`)
+  appellent `void sessionAnalysis.generate(ref.id, data)` juste après le `setDoc` réussi, JAMAIS
+  attendu et JAMAIS bloquant pour `onClose()`/la fermeture du dialogue — une promesse JS continue de
+  s'exécuter indépendamment du démontage du composant qui l'a lancée, donc l'analyse tourne à son
+  rythme même si l'athlète ferme la vue immédiatement après "Terminer la séance".
+- **Notification push à la fin de l'analyse** — `generate()` appelle `POST /api/notifications/send`
+  (nouvelle route, seul pont possible entre un déclenchement CLIENT et l'Admin SDK côté serveur
+  nécessaire pour FCM) une fois le résultat persisté. **Cette route DOIT vérifier l'appelant**,
+  contrairement aux proxies `/api/intervals/*`/`/api/strava/*` (identifiants fournis par l'appelant,
+  jamais vérifiés — voir l'audit sécurité plus haut) : sans vérification, n'importe qui connaissant un
+  uid pourrait pousser une notification arbitraire (titre/corps/URL de clic) dans l'appareil de
+  N'IMPORTE QUEL utilisateur — un vecteur de spam/phishing bien plus direct que le risque déjà accepté
+  pour les routes Intervals.icu. `adminAuth().verifyIdToken()` (nouvel export de `firebase-admin.ts`,
+  troisième et dernier appelant prévu de ce module) vérifie le jeton Firebase Auth du client
+  (`Authorization: Bearer <idToken>`, `user.getIdToken()` côté client) — l'uid destinataire est
+  TOUJOURS celui du jeton vérifié, jamais un uid pris dans le corps de la requête : cette route ne peut
+  donc structurellement jamais envoyer à quelqu'un d'autre que l'appelant lui-même.
+- **`StrengthAnalysisDialog`/`StrengthAnalysisTrigger`** (`strength-analysis-dialog.tsx`, pendant
+  musculation de `RideAnalysisDialog`/`RideAnalysisTrigger`) — icône ✨ à côté des boutons d'export sur
+  chaque entrée muscu du Journal (`rides-journal-tab.tsx`). Sert surtout à CONSULTER l'analyse déjà
+  générée automatiquement (`isLoadingStored` couvre l'attente pendant que la génération en tâche de
+  fond tourne) ; bouton "Analyser"/"Régénérer" en secours pour une séance loguée avant ce chantier
+  (jamais de déclenchement automatique pour elle) ou si l'athlète veut une nouvelle lecture. Pas
+  d'encarts chiffrés type durabilité/découplage (aucun n'a de sens côté muscu) — juste le texte IA
+  (résumé/points forts/à travailler/contexte de récupération/recommandation), même structure que
+  `RideAnalysisDialog` en plus léger.
+
+Tests (`buildSystemPrompt.test.ts`, 2 nouveaux : scope de `strengthSessionAnalysis` + snapshot ;
+`data-export-types.test.ts` mis à jour pour `strengthSessionAnalyses`) — 873/873 au total, tsc/eslint/
+build clean.
 
 **A. Plan glissant sur 7 jours** (restante — reséquencement mécanique instantané de la disponibilité
 sur une fenêtre glissante ancrée sur *aujourd'hui*, sans toucher au stockage hebdomadaire lundi-

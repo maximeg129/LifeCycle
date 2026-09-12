@@ -52,7 +52,7 @@ describe('TOP_LEVEL_COLLECTIONS', () => {
       'rideAnalyses', 'coachChatMessages', 'maintenanceRecords', 'recipes', 'tags',
       'ingredients', 'cyclingClothingItems', 'plants', 'pantryItems', 'shoppingListItems',
       'mealPlans', 'mealLogs', 'hydrationLogs', 'expenseCategories', 'monthlyBudgets',
-      'expenses', 'tasks', 'healthMetrics', 'healthGoals', 'fcmTokens',
+      'expenses', 'tasks', 'healthMetrics', 'healthGoals', 'fcmTokens', 'strengthSessionAnalyses',
     ]
     for (const name of expected) {
       expect(TOP_LEVEL_COLLECTIONS, `missing '${name}'`).toContain(name)
