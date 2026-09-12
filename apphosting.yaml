@@ -28,6 +28,31 @@ env:
     secret: strava-client-secret
     availability:
       - RUNTIME
+  # Analyse automatique de sortie vélo via webhook (chantier "repenser
+  # planification/séances/feedback", pièce B2, voir CLAUDE.md) —
+  # client_id/client_secret d'une "Application" Intervals.icu enregistrée
+  # par l'athlète sur son propre compte (intervals.icu/oauth/apply, statut
+  # "Pending" en attente d'approbation par Intervals.icu). Ni l'un ni
+  # l'autre n'est nécessaire au BUILD (même posture que STRAVA_CLIENT_*
+  # ci-dessus) : lus uniquement au runtime, dans
+  # src/app/api/intervals-oauth/{authorize,callback}/route.ts.
+  - variable: INTERVALS_OAUTH_CLIENT_ID
+    secret: intervals-oauth-client-id
+    availability:
+      - RUNTIME
+  - variable: INTERVALS_OAUTH_CLIENT_SECRET
+    secret: intervals-oauth-client-secret
+    availability:
+      - RUNTIME
+  # Secret embarqué par Intervals.icu dans chaque payload de webhook (voir
+  # leur doc, section "Configure webhooks") — renseigné sur la page "Manage
+  # App" une fois l'application approuvée, PUIS collé ici. Vérifié dans
+  # src/app/api/intervals/webhook/route.ts pour confirmer qu'une requête
+  # vient bien d'Intervals.icu avant de déclencher quoi que ce soit.
+  - variable: INTERVALS_WEBHOOK_SECRET
+    secret: intervals-webhook-secret
+    availability:
+      - RUNTIME
   # Notifications push (chantier "repenser planification/séances/feedback",
   # voir CLAUDE.md) — la clé PUBLIQUE "Web Push certificate" générée dans
   # Firebase Console → Project Settings → Cloud Messaging → Web

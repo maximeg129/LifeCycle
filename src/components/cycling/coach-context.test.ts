@@ -43,13 +43,13 @@ describe('buildCoachContext', () => {
 
   it('includes the kJ/kg trend only when provided', () => {
     expect(buildCoachContext(baseInput)).not.toContain('Tendance kJ/kg')
-    const text = buildCoachContext({ ...baseInput, kjBudget: { ...baseInput.kjBudget, trend: { direction: 'up', pctChange: 12 } } })
+    const text = buildCoachContext({ ...baseInput, kjBudget: { ...baseInput.kjBudget!, trend: { direction: 'up', pctChange: 12 } } })
     expect(text).toContain('Tendance kJ/kg (8 semaines) : en hausse (+12%)')
   })
 
   it('includes the durability ceiling only when a threshold is actually exceeded', () => {
-    expect(buildCoachContext({ ...baseInput, kjBudget: { ...baseInput.kjBudget, exceedsThresholdKJPerKg: null } })).not.toContain('Palier de durabilité')
-    const text = buildCoachContext({ ...baseInput, kjBudget: { ...baseInput.kjBudget, exceedsThresholdKJPerKg: 20 } })
+    expect(buildCoachContext({ ...baseInput, kjBudget: { ...baseInput.kjBudget!, exceedsThresholdKJPerKg: null } })).not.toContain('Palier de durabilité')
+    const text = buildCoachContext({ ...baseInput, kjBudget: { ...baseInput.kjBudget!, exceedsThresholdKJPerKg: 20 } })
     expect(text).toContain('Palier de durabilité dépassé cette semaine : 20 kJ/kg')
     expect(text).toContain('jamais une cible')
   })
@@ -109,6 +109,18 @@ describe('buildCoachContext', () => {
   it('includes the endurance index only when provided', () => {
     expect(buildCoachContext(baseInput)).not.toContain('Indice d\'endurance')
     expect(buildCoachContext({ ...baseInput, enduranceIndex: 0.91 })).toContain("Indice d'endurance (Riegel) : 0.91")
+  })
+
+  // Chantier "repenser planification/séances/feedback" (pièce B2) : un
+  // appelant serveur (webhook Intervals.icu) n'a pas le gouverneur/budget
+  // kJ en main (calcul multi-semaines côté client) — jamais des zéros
+  // inventés à la place, une ligne honnête plutôt.
+  it('reports the training-load section as unavailable when both kjBudget and governorStatus are omitted', () => {
+    const { kjBudget: _kjBudget, governorStatus: _governorStatus, ...withoutLoadModel } = baseInput
+    const text = buildCoachContext(withoutLoadModel)
+    expect(text).toContain('- Non disponible pour cette analyse.')
+    expect(text).not.toContain('Budget kJ/kg')
+    expect(text).not.toContain('Gouverneur de charge interne')
   })
 
   // Le bloc "BASE DE CONNAISSANCES" (coachLibrary Firestore libre) a été

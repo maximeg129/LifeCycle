@@ -23,6 +23,7 @@ import { DataExportCard } from '@/components/settings/data-export-card'
 import { NotificationPrefsCard } from '@/components/settings/notification-prefs-card'
 import { DangerZoneCard } from '@/components/settings/danger-zone-card'
 import { StravaCard } from '@/components/settings/strava-card'
+import { IntervalsOAuthCard } from '@/components/settings/intervals-oauth-card'
 import { PushNotificationsCard } from '@/components/settings/push-notifications-card'
 import { SyncButton } from '@/components/cycling/sync-button'
 import { useOverdueCounts } from '@/components/layout/use-overdue-counts'
@@ -267,6 +268,14 @@ export default function SettingsPage() {
             </Button>
           </CardFooter>
         </Card>
+
+        {/* ── Analyse automatique de sortie (chantier "repenser
+            planification/séances/feedback", pièce B2) — juste après la
+            carte Intervals.icu ci-dessus (clé API, toujours nécessaire
+            pour tout le reste) : une connexion OAuth ADDITIONNELLE, pour
+            recevoir les webhooks Intervals.icu et déclencher l'analyse IA
+            automatique + notification, même app fermée. */}
+        <IntervalsOAuthCard />
 
         {/* ── Strava ───────────────────────────────────────────────── */}
         <StravaCard />

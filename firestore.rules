@@ -573,5 +573,25 @@ service cloud.firestore {
         allow delete: if isExistingOwner(userId);
       }
     }
+
+    /**
+     * @description Mapping intervalsAthleteId → uid (chantier "repenser
+     * planification/séances/feedback", pièce B2 — webhook Intervals.icu).
+     * PAS sous /users/{userId}/ : c'est un index inverse dont le webhook
+     * (aucun contexte utilisateur connecté, voir CLAUDE.md
+     * "Authentification") a besoin pour retrouver le uid à partir du seul
+     * athlete_id que porte le payload — écrit UNIQUEMENT par
+     * /api/intervals-oauth/callback (Admin SDK, athlete_id venant d'un
+     * échange OAuth vérifié côté serveur, jamais d'une valeur fournie par
+     * le client) et lu UNIQUEMENT par /api/intervals/webhook (même SDK).
+     * Refus explicite ici en plus du refus implicite déjà en vigueur pour
+     * toute collection non listée — jamais un accès client, dans un sens
+     * comme dans l'autre : un client qui pourrait écrire ici pourrait
+     * détourner les webhooks d'un autre athlète vers son propre compte.
+     * @path /intervalsOAuthAthletes/{athleteId}
+     */
+    match /intervalsOAuthAthletes/{athleteId} {
+      allow read, write: if false;
+    }
   }
 }
