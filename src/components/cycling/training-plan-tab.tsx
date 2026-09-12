@@ -171,7 +171,11 @@ export function TrainingPlanTab() {
   )
 
   const NewPlanForm = (
-    <Card className="bg-card/40 border-border">
+    // .lc-card neutre — un formulaire de saisie, pas "la séance du jour"
+    // (COACH_UX_AUDIT.md §5) ; l'onglet Plan n'a de toute façon pas de
+    // notion de "chose à faire maintenant" (voir daily-workout-tab.tsx pour
+    // ça), donc aucune carte de cet onglet ne porte l'anneau primaire.
+    <Card className="lc-card">
       <CardHeader>
         <CardTitle className="text-base flex items-center gap-2">
           <Target className="w-4 h-4 text-primary" /> {activePlan ? 'Nouveau plan' : 'Créer un plan'}
@@ -280,7 +284,12 @@ export function TrainingPlanTab() {
       {!canSendToIntervals && (
         <IntervalsOnboardingNotice message="Intervals.icu non connecté — le plan reste consultable, mais les séances ne pourront pas être envoyées sur votre calendrier." />
       )}
-      <Card className="bg-card/60 border-primary/20 border-2">
+      {/* .lc-card neutre — un résumé pour information (nom du plan,
+          objectif, grille des semaines), pas "la séance du jour" : la
+          bordure primaire épaisse reste réservée à Aujourd'hui
+          (daily-workout-tab.tsx), la seule carte qui la justifie
+          (COACH_UX_AUDIT.md §5). */}
+      <Card className="lc-card">
         <CardHeader className="flex flex-row items-start justify-between gap-4 flex-wrap">
           <div>
             <CardTitle className="text-lg">{activePlan.name}</CardTitle>

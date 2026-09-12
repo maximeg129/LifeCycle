@@ -265,6 +265,59 @@ export function nextAvailableWeekDate(
   return null
 }
 
+// ── Auto-reprogrammation des séances manquées — audit Join Cycling ───────
+//
+// Retour utilisateur : "auto-ajustement en cas de séance ratée" — inspiré
+// de Join ("if you miss a workout... Join will automatically adjust its
+// schedule to compensate"). "Reprogrammer" (nextAvailableWeekDate ci-dessus)
+// existait déjà comme geste MANUEL sur une séance déjà marquée 'missed' ;
+// planAutoRescheduleMoves() calcule le même déplacement mais pour TOUTES
+// les séances manquées de la semaine en cours, appelé automatiquement à
+// l'ouverture de l'onglet Plan (voir use-training-plan.ts) — même patron
+// "automatique mais documenté" que la recalibration hebdomadaire (toast
+// explicatif, jamais silencieux comme le sync Intervals.icu).
+
+export interface AutoRescheduleMove {
+  sessionIndex: number
+  title: string
+  fromDate: string
+  toDate: string
+}
+
+/**
+ * Calcule, pour chaque séance de `sessions` dont le statut (déjà résolu par
+ * matchSessionCompletion, un par index — même ordre que `sessions`) est
+ * 'missed', son nouveau jour via nextAvailableWeekDate (jamais avant
+ * demain, jamais hors de la semaine). Traite les séances dans l'ordre pour
+ * qu'un déplacement déjà décidé dans cette même passe compte comme
+ * "occupé" pour la suivante — sans ça, deux séances manquées la même
+ * semaine pourraient se voir proposer le même jour. Une séance sans
+ * créneau libre reste 'missed' (aucun repli inventé, comme le bouton
+ * manuel) — pas de move produit pour elle.
+ */
+export function planAutoRescheduleMoves(
+  week: PlanWeekSkeleton,
+  sessions: PlanWeekSessionWithValidation[],
+  completionStatuses: SessionCompletionStatus[],
+  todayIso: string
+): AutoRescheduleMove[] {
+  const moves: AutoRescheduleMove[] = []
+  const working = sessions.map((s) => ({ ...s }))
+  const tomorrow = format(addDays(new Date(`${todayIso}T00:00:00`), 1), 'yyyy-MM-dd')
+
+  completionStatuses.forEach((status, index) => {
+    if (status !== 'missed') return
+    const fromDate = working[index].date
+    if (!fromDate) return
+    const toDate = nextAvailableWeekDate(week, working, index, tomorrow)
+    if (!toDate || toDate === fromDate) return
+    working[index] = { ...working[index], date: toDate }
+    moves.push({ sessionIndex: index, title: sessions[index].title, fromDate, toDate })
+  })
+
+  return moves
+}
+
 // ── Réalisé vs prévu — retour utilisateur ────────────────────────────────
 //
 // "comment lier les seances realisees aux seance prevues, lien entre plan

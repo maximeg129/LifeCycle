@@ -155,7 +155,25 @@ export function useDailyWorkout() {
   const [isSending, setIsSending] = useState(false)
   const [isSendingPlanSession, setIsSendingPlanSession] = useState(false)
 
-  const generate = useCallback(async (rawMinutes: number, ride?: StoredRide, indoorRequested?: boolean): Promise<DailyWorkoutRecommendationOutput | null> => {
+  const generate = useCallback(async (
+    rawMinutes: number,
+    ride?: StoredRide,
+    indoorRequested?: boolean,
+    options?: {
+      /**
+       * Retour utilisateur (audit Join Cycling) : "Changer de séance" — un
+       * bouton one-tap sur la carte "séance du jour" (showPlanPreview,
+       * daily-workout-tab.tsx) inspiré du "shuffle" de Join sur sa
+       * proposition. Contrairement au formulaire "Proposer une séance
+       * alternative" (qui garde plannedSession attaché, donc l'IA ajuste
+       * TOUJOURS la même séance prévue — voir la règle du flow), ce chemin
+       * omet volontairement plannedSession pour que l'IA compose une
+       * proposition réellement différente plutôt qu'une variante de celle
+       * déjà prévue.
+       */
+      skipPlanAdjustment?: boolean
+    }
+  ): Promise<DailyWorkoutRecommendationOutput | null> => {
     if (!user || !db) return null
     const availableMinutes = clampAvailableMinutes(rawMinutes)
     setIsGenerating(true)
@@ -200,7 +218,7 @@ export function useDailyWorkout() {
         // place (daily-workout-tab.tsx), jamais envoyée ici. Un
         // structuredWorkout manquant (séance mise en cache avant ce champ)
         // dégrade silencieusement vers la génération libre habituelle.
-        plannedSession: (!todaysPlanSessionIsStrength && todaysPlanSession?.session.structuredWorkout) ? {
+        plannedSession: (!options?.skipPlanAdjustment && !todaysPlanSessionIsStrength && todaysPlanSession?.session.structuredWorkout) ? {
           title: todaysPlanSession.session.title,
           sportType: todaysPlanSession.session.sportType,
           durationMinutes: todaysPlanSession.session.durationMinutes,

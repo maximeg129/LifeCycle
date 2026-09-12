@@ -1934,6 +1934,80 @@ Tests (`strava-api.test.ts`, nouveau — `buildStravaActivityBody()`, la constru
 extraite en fonction pure, même discipline que `createManualActivity`/Intervals.icu) — 849/849 au
 total, tsc/eslint/build clean.
 
+## Audit Join Cycling — trois éléments adoptés, un écarté consciemment
+
+Retour utilisateur : "je veux que tu review l'app join cycling et modifie notre app pour refléter
+les meilleurs éléments de join cycling." `COACH_UX_AUDIT.md` avait déjà fait une bonne partie de
+cette recherche (section 2, "Join") lors du chantier "Coach: bandeau RPE manquant + démotion
+Mémoire/Bibliothèque" — la Pending Feedback card, la fusion readiness+séance du jour (couverte
+depuis par `TodaysSessionCard` sur Cyclisme, voir plus haut), le calendrier de plan avec statut
+visible étaient déjà construits suite à cet audit. Ce chantier-ci part d'une recherche web
+actualisée (2025-2026, accès direct à `join.cc` toujours bloqué par le proxy réseau du sandbox —
+même limite documentée partout ailleurs dans ce fichier — extraits indexés uniquement) pour
+identifier ce qui restait pertinent et non construit.
+
+**Écarté consciemment : "JOIN Level"** — un score unique 0-50 qui condense CTL/ATL/FTP/charge en
+un seul chiffre comparable/partageable entre athlètes. Jamais construit : ça contredirait
+directement deux règles déjà écrites dans ce projet (`readiness-composition-explicit-weighting` et
+l'audit "éviter tout indicateur propriétaire hors TSS", voir "Indicateurs Cyclisme — audit
+propriétaire" plus haut) — un score composite opaque est exactement ce que LifeCycle refuse de
+faire ailleurs, prendre le contre-pied de Join sur ce point précis est une décision de principe, pas
+un oubli. Décision proposée à l'utilisateur (`AskUserQuestion`) avant tout code, avec 3 autres
+options constructibles — les 3 ont été retenues.
+
+**1. "Changer de séance" (shuffle)** — retour Join : "a button in the app lets you shuffle Join's
+selection" si l'athlète ne veut pas de la séance proposée. Sur la carte "séance du jour"
+(`showPlanPreview`, `daily-workout-tab.tsx`), un nouveau bouton à côté de "Proposer une séance
+alternative" — mais sans révéler le formulaire temps/lieu/heure, contrairement à ce dernier :
+`handleShuffle()` réutilise directement la durée déjà prévue par le plan et appelle `generate()`
+immédiatement. **Différence clé avec "Proposer une séance alternative" (qui reste un aller-retour
+formulaire)** : `generate()` accepte désormais un 4ᵉ paramètre optionnel `options?.
+skipPlanAdjustment` — quand vrai, `plannedSession` n'est PAS attaché à l'appel `dailyWorkoutRecommendation`.
+Sans ce paramètre, même "Proposer une séance alternative" aurait fait ajuster la MÊME séance
+prévue (le flow reçoit toujours `plannedSession` dès qu'une séance existe aujourd'hui — voir
+"Proposition du jour ajuste le plan au lieu de générer dans le vide" plus haut), avec le risque
+documenté dans son propre prompt de "la renvoyer telle quelle si rien ne justifie un changement" —
+inadapté au geste "je veux explicitement autre chose". `isShuffled` (état local, jamais persisté)
+distingue seulement le texte affiché sur le draft résultant ("vous avez demandé une séance
+différente" plutôt que "aucune séance planifiée aujourd'hui", qui serait faux ici) — le lien
+"← Revenir à la séance prévue par le plan" (déjà existant, voir "Coach Aujourd'hui : revenir à la
+séance du plan après une alternative" plus haut) fonctionne sans changement pour annuler un shuffle.
+
+**2. Auto-reprogrammation des séances manquées** — retour Join : "if you miss a workout... Join
+will automatically adjust its schedule to compensate." "Reprogrammer" (`nextAvailableWeekDate`,
+voir "Plan calendrier v3" plus haut) existait déjà comme geste MANUEL sur une séance déjà marquée
+"Manquée". `planAutoRescheduleMoves()` (`training-plan-types.ts`, pur/testé) calcule le même
+déplacement mais pour TOUTES les séances manquées de la semaine courante en une passe (traitées
+dans l'ordre, chaque déplacement décidé comptant comme "occupé" pour le suivant — jamais deux
+séances manquées proposées le même jour), appelé automatiquement dans `use-training-plan.ts` au
+même moment que la recalibration hebdomadaire (ouverture de l'onglet Plan, seul appelant de ce
+hook) — même discipline "automatique mais documenté" déjà actée pour la recalibration (toast
+explicite listant chaque déplacement `titre (dd/MM → dd/MM)`, jamais silencieux comme le sync
+Intervals.icu). Scopé à la semaine COURANTE uniquement (`currentPlanWeek`) — la seule qui a des
+`sampleSessions` en pratique (les autres restent lazy, voir "vue calendrier v2"). Une séance sans
+créneau libre reste "Manquée" — aucun repli inventé, l'athlète retombe sur le sélecteur de date
+manuel dans `PlanSessionDetail` comme avant.
+
+**3. Migration `.lc-card`** (recommandation déjà écrite dans `COACH_UX_AUDIT.md` §5, jamais
+construite jusqu'ici) — `daily-workout-tab.tsx`/`training-plan-tab.tsx` remplaçaient `.lc-card` par
+deux combinaisons ad hoc (`bg-card/60 border-primary/20 border-2` et `bg-card/40 border-border`)
+répétées sur 3-4 cartes différentes, diluant toute hiérarchie entre "la chose à faire maintenant" et
+"un résumé pour information". Recommandation appliquée telle qu'écrite : la bordure primaire épaisse
+disparaît partout, remplacée par `.lc-card` + `ring-2 ring-primary/50` (même vocabulaire "élément
+actif" que l'exercice courant du suivi en direct muscu, `live-strength-session-view.tsx`) réservé à
+la SEULE carte qui représente vraiment "la séance du jour" à un instant donné — `StrengthSessionCard`,
+la carte `showPlanPreview`, la carte `draft` (mutuellement exclusives dans `daily-workout-tab.tsx`,
+donc jamais plus d'une seule à l'écran en même temps). Le formulaire "Proposition du jour"
+(`daily-workout-tab.tsx`) et les deux cartes de `training-plan-tab.tsx` (formulaire nouveau plan,
+résumé du plan actif) redeviennent des `.lc-card` neutres, sans anneau — un résumé/formulaire n'est
+jamais "la chose à faire maintenant", et l'onglet Plan lui-même n'a pas cette notion (elle vit sur
+Aujourd'hui).
+
+Tests (`training-plan-types.test.ts`, 5 nouveaux pour `planAutoRescheduleMoves` — déplacement
+simple, séance non manquée ignorée, semaine pleine laissée en l'état, deux séances manquées
+résolues sans collision, séance manquée sans date ignorée) — 854/854 au total, tsc/eslint/build
+clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
