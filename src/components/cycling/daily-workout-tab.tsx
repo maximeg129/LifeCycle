@@ -256,6 +256,39 @@ export function DailyWorkoutTab() {
     setWasSent(false)
   }
 
+  // Retour utilisateur (repensée planification/séances/feedback) : "pour la
+  // séance du jour, j'aimerais que l'on puisse voir la séance initiale du
+  // plan, que l'IA nous propose une séance alternative en lisant les
+  // données physiologiques de l'athlète et enfin avoir la possibilité de
+  // choisir" — au lieu du geste séquentiel précédent (voir la séance
+  // prévue → cliquer pour en demander une autre → remplir un formulaire →
+  // obtenir un résultat), la suggestion du coach se génère automatiquement
+  // dès que la séance prévue est connue, pour être comparée directement à
+  // l'originale (façon Join). Un seul appel IA par jour : mis en cache
+  // exactement comme tout le reste (workoutProposals/{yyyy-MM-dd}) — si
+  // `stored` existe déjà pour aujourd'hui (généré via ce même effet un
+  // rechargement plus tôt, ou via Changer de séance/Proposer une
+  // alternative), rien ne se redéclenche. Vérifie `stored` plutôt que
+  // `draft` pour éviter une course avec l'effet de préremplissage
+  // ci-dessus : les deux effets tournent dans la même passe après le
+  // premier flip de isLoadingStored, et `draft` n'aurait pas encore la
+  // valeur que ce premier effet vient juste de lui assigner.
+  const autoSuggestionTriggeredRef = useRef(false)
+  useEffect(() => {
+    if (isLoadingStored || stored || draft || isGenerating) return
+    if (!todaysPlanSession || todaysPlanSessionIsStrength) return
+    if (autoSuggestionTriggeredRef.current) return
+    autoSuggestionTriggeredRef.current = true
+    void (async () => {
+      const proposal = await generate(todaysPlanSession.session.durationMinutes, undefined, false)
+      if (proposal) {
+        setDraft(proposal)
+        setWasSent(false)
+        setIsShuffled(false)
+      }
+    })()
+  }, [isLoadingStored, stored, draft, isGenerating, todaysPlanSession, todaysPlanSessionIsStrength, generate])
+
   // Retour utilisateur : "un petit toggle... si l'athlète ne veut pas ou ne
   // peut pas faire de vélo, mais pour aller à la gym" — la séance muscu de
   // la semaine, quel que soit le jour où le plan l'a datée à l'origine
@@ -329,14 +362,21 @@ export function DailyWorkoutTab() {
     )
   }
 
+  // Retour utilisateur (repensée planification) : la carte "Séance prévue"
+  // reste désormais TOUJOURS visible dès qu'une séance existe — pour
+  // comparaison directe avec la suggestion du coach (voir l'effet
+  // d'auto-génération ci-dessus) — y compris pendant que le formulaire
+  // "Proposer une séance alternative" est ouvert (au-dessus, dans sa
+  // propre carte) : plus de disparition séquentielle comme avant ce
+  // chantier, la comparaison reste possible à tout moment.
+  const showPlanCard = !!todaysPlanSession
   // Le formulaire temps/lieu/heure n'est la vue par défaut QUE quand il n'y
   // a rien à prévisualiser (pas de plan actif, ou le plan n'a pas daté de
   // séance vélo aujourd'hui) — sinon la séance du plan s'affiche d'abord,
   // le formulaire ne redevenant visible qu'après un tap explicite sur
   // "Proposer une séance alternative", ou une fois un draft déjà généré
   // (pour rester ajustable/régénérable, comme avant ce changement).
-  const showPlanPreview = !!todaysPlanSession && !showAlternativeForm && !draft
-  const formVisible = !showPlanPreview
+  const formVisible = !todaysPlanSession || showAlternativeForm || !!draft
 
   return (
     <div className="space-y-6">
@@ -536,20 +576,28 @@ export function DailyWorkoutTab() {
         )
       ) : isLoadingStored && !draft ? (
         <Skeleton className="h-64 w-full rounded-2xl" />
-      ) : showPlanPreview && todaysPlanSession ? (
+      ) : (
+      // Retour utilisateur (repensée planification/séances/feedback) :
+      // "voir la séance initiale du plan, [avoir] une séance alternative
+      // [suggérée par le coach], et enfin avoir la possibilité de choisir"
+      // — les deux cartes vivent désormais côte à côte (grille 2 colonnes
+      // desktop, empilées en mobile) plutôt que l'une remplaçant l'autre
+      // séquentiellement. showPlanCard seul pilote la grille : sans séance
+      // datée par le plan, une seule colonne (comportement identique à
+      // avant ce chantier — EmptyState ou carte draft pleine largeur).
+      <div className={cn(showPlanCard && 'grid gap-4 md:grid-cols-2 items-start')}>
+      {showPlanCard && todaysPlanSession && (
         // Retour utilisateur : "on aurait... la séance du jour proposée
-        // sur le plan, et un bouton... de proposition alternative où
-        // l'utilisateur clique et ça l'emmène [définir] combien de temps
-        // tu as disponible, où tu es, etc." — la séance déjà datée par le
-        // plan s'affiche directement (title/durée/intensité/motif, aucun
-        // appel IA nécessaire juste pour la voir). Retour utilisateur,
-        // capture d'écran à l'appui : profil de séance affiché
-        // graphiquement (WorkoutProfileChart, même composant que le
-        // calendrier du plan) plutôt qu'une description texte seule, et
+        // sur le plan" — la séance déjà datée par le plan s'affiche
+        // directement (title/durée/intensité/motif, aucun appel IA
+        // nécessaire juste pour la voir), profil graphique
+        // (WorkoutProfileChart, même composant que le calendrier du plan).
         // "Envoyer sur Intervals.icu" envoie la séance telle quelle
-        // directement (sendPlanSessionDirectly) — plus d'aller-retour IA
-        // ("Utiliser cette séance" appelait auparavant generate() juste
-        // pour "recopier" une séance déjà entièrement définie).
+        // directement (sendPlanSessionDirectly, sans aller-retour IA) —
+        // seule action ici : "Changer de séance"/"Proposer une séance
+        // alternative" ont déménagé sur la carte "Suggestion du coach"
+        // ci-dessous, qui est leur vraie destination (obtenir une
+        // proposition DIFFÉRENTE de celle-ci).
         <Card className="lc-card ring-2 ring-primary/50">
           <CardHeader className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
@@ -578,21 +626,16 @@ export function DailyWorkoutTab() {
                 {isSendingPlanSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 {planSessionSent ? 'Ré-envoyer sur Intervals.icu' : 'Envoyer sur Intervals.icu'}
               </Button>
-              {/* Retour utilisateur (audit Join Cycling) : "Changer de
-                  séance" — Join permet de "shuffle" la séance proposée en
-                  un tap. Reprend la durée de la séance du plan, saute le
-                  formulaire, et demande une proposition libre (voir
-                  handleShuffle) plutôt qu'un ajustement de CELLE-CI. */}
-              <Button variant="outline" onClick={handleShuffle} disabled={isGenerating} className="gap-2">
-                {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Shuffle className="w-4 h-4" />}
-                Changer de séance
-              </Button>
-              <Button variant="outline" onClick={() => setShowAlternativeForm(true)}>
-                Proposer une séance alternative
-              </Button>
             </div>
           </CardContent>
         </Card>
+      )}
+      {showPlanCard && !draft ? (
+        // La suggestion du coach se génère automatiquement (voir l'effet
+        // plus haut) — ce squelette couvre ce court délai, pas un état
+        // vide : elle arrive toujours dans les secondes qui suivent, sauf
+        // échec IA (auquel cas generate() a déjà toasté l'erreur).
+        <Skeleton className="h-64 w-full rounded-2xl" />
       ) : !draft ? (
         <EmptyState
           icon={Clock}
@@ -602,20 +645,50 @@ export function DailyWorkoutTab() {
       ) : (
         <Card className="lc-card ring-2 ring-primary/50">
           <CardHeader className="space-y-3">
+            {/* Retour utilisateur (repensée planification) : quand une
+                séance du plan est visible juste à côté (showPlanCard), cette
+                carte est explicitement labellisée "Suggestion du coach"
+                pour que le choix entre les deux soit immédiat — pas
+                seulement déductible du texte "Ajustée depuis..." plus bas. */}
+            {showPlanCard && (
+              <p className="text-xs font-semibold text-primary uppercase tracking-wide">Suggestion du coach</p>
+            )}
             {/* Retour utilisateur : "une fois la séance alternative
                 proposée on devrait pouvoir revenir sur la séance
-                initiale" — équivalent du lien du formulaire (plus haut),
-                mais posé ici sur la carte de résultat elle-même : c'est
-                là que l'athlète regarde une fois un draft généré, pas
-                forcément le formulaire qui a pu défiler hors champ. */}
-            {todaysPlanSession && (
+                initiale" — la séance prévue par le plan restant désormais
+                TOUJOURS visible juste à côté (showPlanCard), ce lien sert
+                à revenir à la suggestion STANDARD du coach (celle générée
+                automatiquement) après un "Changer de séance"/une
+                alternative personnalisée — remet `draft` à `null`, ce qui
+                relance l'effet d'auto-génération plus haut. */}
+            {showPlanCard && (isShuffled || showAlternativeForm) && (
               <button
                 type="button"
                 onClick={handleBackToPlan}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors text-left"
               >
-                ← Revenir à la séance prévue par le plan
+                ↺ Revenir à la suggestion standard du coach
               </button>
+            )}
+            {/* Retour utilisateur (audit Join Cycling) : "Changer de séance"/
+                "Proposer une séance alternative" vivent maintenant ici — ce
+                sont deux façons d'obtenir une proposition DIFFÉRENTE de la
+                suggestion standard, donc des actions de CETTE carte, plus
+                de la carte "Séance prévue" (qui n'a qu'un seul geste :
+                l'envoyer). Masqués une fois que l'athlète a déjà demandé
+                l'un des deux (isShuffled/showAlternativeForm) — "Revenir à
+                la suggestion standard" ci-dessus est alors le seul geste
+                pertinent pour changer d'avis. */}
+            {showPlanCard && !isShuffled && !showAlternativeForm && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button variant="outline" size="sm" onClick={handleShuffle} disabled={isGenerating} className="gap-1.5">
+                  {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shuffle className="w-3.5 h-3.5" />}
+                  Changer de séance
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setShowAlternativeForm(true)}>
+                  Proposer une séance alternative
+                </Button>
+              </div>
             )}
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <Input
@@ -844,6 +917,8 @@ export function DailyWorkoutTab() {
             )}
           </CardContent>
         </Card>
+      )}
+      </div>
       )}
     </div>
   )

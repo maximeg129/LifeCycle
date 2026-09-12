@@ -2051,6 +2051,73 @@ Tests (`request-origin.test.ts`, nouveau — reconstruction depuis les en-têtes
 `https` si `x-forwarded-proto` absent, repli sur l'origine donnée si `x-forwarded-host` absent,
 schéma non-https respecté) — 858/858 au total, tsc/eslint/build clean.
 
+## Repenser planification/séances/feedback — chantier en 3 pièces (C livrée, B/A à venir)
+
+Retour utilisateur : "on dois repenser je pense l'application un peu plus en profondeur, on focalise
+sur la plannification, les séances, les feedbacks. Inspire toi de ce que fait Join et Frive sur la
+visualisation de la semaine en cours et le sélecteur de disponibilité de la semaine [...] Pour la
+séance du jour, j'aimerais que l'on puisse voir la séance initiale du plan, que l'IA nous propose une
+séance alternative en lisant les données physiologiques de l'athlète et enfin avoir la possibilité de
+choisir une séance alternative." Trois pièces indépendantes, décidées par une série d'`AskUserQuestion`
+avant tout code (ordre : construire les 3 dans la foulée) :
+
+**C. Aujourd'hui : séance prévue + suggestion du coach côte à côte, choix direct** (`daily-workout-
+tab.tsx`) — avant ce correctif, le geste était séquentiel : voir la séance prévue par le plan → cliquer
+"Proposer une séance alternative" → remplir un formulaire temps/lieu/heure → obtenir un résultat. La
+séance prévue disparaissait dès qu'un draft existait (`showPlanPreview` incluait `!draft`). Retour
+utilisateur explicite : les deux doivent être visibles EN MÊME TEMPS pour un choix direct, façon Join.
+
+- **Génération automatique de la suggestion** — nouvel effet (`autoSuggestionTriggeredRef`) qui
+  appelle `generate(todaysPlanSession.session.durationMinutes, undefined, false)` dès que
+  `todaysPlanSession` est connu, SANS attendre un clic. Réutilise le mécanisme déjà en place
+  (`plannedSession` threadé automatiquement par `use-daily-workout.ts` dès qu'une séance existe
+  aujourd'hui) — l'IA lit déjà récupération/séances récentes/TSB pour décider d'ajuster ou non (voir
+  "Coach — 'Aujourd'hui' affiche la séance du plan directement" plus haut). Un seul appel IA par jour,
+  mis en cache dans `workoutProposals/{yyyy-MM-dd}` exactement comme avant — l'effet vérifie `stored`
+  (pas `draft`) pour éviter une course avec l'effet de préremplissage existant, qui tourne dans la
+  même passe après le premier flip de `isLoadingStored` et n'aurait pas encore répercuté son
+  `setDraft(stored)` dans la valeur de `draft` lue par ce nouvel effet.
+- **`showPlanCard`** (remplace `showPlanPreview`) — la carte "Séance prévue" reste désormais visible
+  dès qu'une séance existe, plus jamais masquée par la présence d'un draft. Trimée à son seul geste :
+  "Envoyer sur Intervals.icu" (direct, sans aller-retour IA, inchangé) — "Changer de séance"
+  (`handleShuffle`) et "Proposer une séance alternative" ont déménagé sur la carte suggestion, leur
+  vraie destination logique (obtenir une proposition DIFFÉRENTE de celle affichée, pas une action sur
+  la séance du plan elle-même).
+- **Layout grille 2 colonnes** (desktop, empilé en mobile) quand `showPlanCard` est vrai — sinon
+  colonne unique (comportement identique à avant pour l'athlète sans plan actif : `EmptyState` ou
+  carte draft pleine largeur, formulaire manuel inchangé).
+- **Carte suggestion** — eyebrow "SUGGESTION DU COACH" ajouté quand `showPlanCard` (pour que le choix
+  entre les deux cartes soit immédiat, pas seulement déductible du texte "Ajustée depuis..." déjà
+  présent) ; lien "↺ Revenir à la suggestion standard du coach" (remplace "← Revenir à la séance
+  prévue par le plan", devenu inutile puisque la séance prévue reste déjà visible à côté) — remet
+  `draft` à `null`, ce qui relance l'effet d'auto-génération pour obtenir à nouveau la suggestion
+  standard après un "Changer de séance"/une alternative personnalisée.
+
+Comportement inchangé pour tout le reste (envoi, édition du script, warnings, météo...) — 871/871
+tests inchangés (aucune logique pure touchée, uniquement JSX/état local), tsc/eslint/build clean.
+
+**B. Analyse IA automatique et approfondie à la détection de complétion** (restante — cyclisme via
+webhook Intervals.icu `ACTIVITY_ANALYZED`, muscu via déclenchement client à la fin de la séance ;
+notifications push partagées, muscu uniquement pour l'instant ; le vélo reste sur webhook plutôt que
+notification tant que le point ci-dessous n'est pas tranché).
+
+**A. Plan glissant sur 7 jours** (restante — reséquencement mécanique instantané de la disponibilité
+sur une fenêtre glissante ancrée sur *aujourd'hui*, sans toucher au stockage hebdomadaire lundi-
+dimanche existant).
+
+⚠️ Architecture retenue pour B, après une correction de trajectoire en cours de cadrage (l'utilisateur
+a trouvé la doc webhook Intervals.icu — `ACTIVITY_UPLOADED`/`ACTIVITY_ANALYZED`, secret embarqué dans
+le payload, délai de 60s de consolidation) : PAS de Cloud Functions séparées. Un webhook est un simple
+`POST` HTTP, déjà servi nativement par les Route Handlers Next.js existants (`/api/intervals/*`) — donc
+`/api/intervals/webhook` (nouvelle route) + un premier usage MINIMAL et SCOPÉ du Firebase Admin SDK
+(pour mapper `athlete_id` → `uid` et écrire Firestore sans contexte utilisateur connecté), plutôt qu'un
+déploiement séparé. Reverse consciemment la règle "Firestore lu/écrit seulement côté client" déjà
+actée ailleurs dans ce fichier (Authentification/Sécurité) — jamais généralisé au reste de l'app,
+scopé à cette seule route + l'envoi de notifications push. Point encore ouvert à la reprise de ce
+chantier : vérifier si le webhook Intervals.icu s'applique aux athlètes en clé API personnelle (le
+modèle de cette app) ou seulement aux athlètes connectés via leur flow OAuth ("athlete_id obtenu via
+OAuth flow" dans leur doc) — à confirmer sur la page "Manage App" avant de coder la route.
+
 ## Refonte inspirée de Frive/Join — chantier en 4 pièces, toutes livrées
 
 Retour utilisateur, captures d'écran de Frive (vue semaine avec bascule intérieur/extérieur) et
