@@ -33,6 +33,7 @@ import { useStrengthLogs } from '@/components/cycling/use-strength-logs'
 import { useStrengthLogExport } from '@/components/cycling/use-strength-log-export'
 import { useStravaLogExport } from '@/components/cycling/use-strava-log-export'
 import { StrengthLogExportButton } from '@/components/cycling/strength-log-export-button'
+import { StrengthAnalysisDialog, StrengthAnalysisTrigger } from '@/components/cycling/strength-analysis-dialog'
 import type { StrengthSessionLogWithId } from '@/components/cycling/strength-log-types'
 
 type RideActivity = ReturnType<typeof useActivities>['data'][number]
@@ -67,6 +68,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
   const { exportLog, sendingLogId, canExport } = useStrengthLogExport()
   const { exportLog: exportLogToStrava, sendingLogId: sendingLogIdToStrava, canExport: canExportToStrava, disabledReasonFor } = useStravaLogExport()
   const [analyzingRide, setAnalyzingRide] = useState<{ id: string; label: string } | null>(null)
+  const [analyzingStrengthLog, setAnalyzingStrengthLog] = useState<StrengthSessionLogWithId | null>(null)
 
   // Map date → charge d'entraînement du jour, pour les activités qui
   // n'ont pas leur propre icu_training_load renseigné.
@@ -195,6 +197,12 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                         disabledReason={canExportToStrava ? disabledReasonFor(entry.log) : undefined}
                       />
                     )}
+                    {/* Analyse IA automatique (chantier "repenser
+                        planification/séances/feedback", pièce B3) — déjà
+                        générée en tâche de fond à la fin de la séance,
+                        cette icône ouvre juste le résultat (voir
+                        strength-analysis-dialog.tsx). */}
+                    <StrengthAnalysisTrigger onClick={() => setAnalyzingStrengthLog(entry.log)} />
                   </div>
                 </div>
               ) : (() => {
@@ -278,6 +286,13 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
           rideLabel={analyzingRide.label}
           open={!!analyzingRide}
           onOpenChange={(open) => { if (!open) setAnalyzingRide(null) }}
+        />
+      )}
+      {analyzingStrengthLog && (
+        <StrengthAnalysisDialog
+          log={analyzingStrengthLog}
+          open={!!analyzingStrengthLog}
+          onOpenChange={(open) => { if (!open) setAnalyzingStrengthLog(null) }}
         />
       )}
     </Card>

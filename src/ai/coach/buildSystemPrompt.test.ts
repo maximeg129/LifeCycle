@@ -11,6 +11,7 @@ const ALL_FLOW_IDS: CoachFlowId[] = [
   'coachChat',
   'rideAnalysis',
   'recoveryInsight',
+  'strengthSessionAnalysis',
 ]
 
 describe('selectRulesForFlow', () => {
@@ -64,6 +65,13 @@ describe('selectRulesForFlow', () => {
 
   it('gives recoveryInsight no extra scope beyond the universal core + interpretation', () => {
     const scopes = new Set(selectRulesForFlow('recoveryInsight').map((r) => r.scope))
+    expect(scopes.has('plan-validation')).toBe(false)
+    expect(scopes.has('session-arbitration')).toBe(false)
+    expect(scopes.has('ride-analysis')).toBe(false)
+  })
+
+  it('gives strengthSessionAnalysis no extra scope beyond the universal core + interpretation — a musculation session has no cycling-specific ride-analysis rules to apply', () => {
+    const scopes = new Set(selectRulesForFlow('strengthSessionAnalysis').map((r) => r.scope))
     expect(scopes.has('plan-validation')).toBe(false)
     expect(scopes.has('session-arbitration')).toBe(false)
     expect(scopes.has('ride-analysis')).toBe(false)

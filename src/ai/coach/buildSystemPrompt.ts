@@ -26,6 +26,7 @@ export type CoachFlowId =
   | 'coachChat'
   | 'rideAnalysis'
   | 'recoveryInsight'
+  | 'strengthSessionAnalysis'
 
 /**
  * Les règles dont l'id commence par un de ces préfixes s'appliquent à
@@ -54,6 +55,12 @@ const UNIVERSAL_ID_PREFIXES = ['principle-', 'forbidden-', 'red-flag-']
  * - rideAnalysis relit une sortie terminée → ride-analysis.
  * - recoveryInsight ne fait qu'interpréter du bien-être/de la forme → rien
  *   d'additionnel, 'interpretation' seul suffit.
+ * - strengthSessionAnalysis relit une séance de musculation terminée — pas
+ *   'ride-analysis' (ce scope couvre des règles spécifiquement cyclistes :
+ *   durabilité, découplage Pw:HR, zones de puissance — aucune ne s'applique
+ *   à une série de squats), pas 'session-arbitration' non plus (elle ne
+ *   décide RIEN, elle relit après coup) → même statut que recoveryInsight,
+ *   rien d'additionnel.
  */
 const FLOW_EXTRA_SCOPES: Record<CoachFlowId, CoachRule['scope'][]> = {
   dailyWorkoutRecommendation: ['session-arbitration'],
@@ -64,6 +71,7 @@ const FLOW_EXTRA_SCOPES: Record<CoachFlowId, CoachRule['scope'][]> = {
   coachChat: ['plan-validation', 'session-arbitration', 'ride-analysis'],
   rideAnalysis: ['ride-analysis'],
   recoveryInsight: [],
+  strengthSessionAnalysis: [],
 }
 
 function isUniversal(rule: CoachRule): boolean {

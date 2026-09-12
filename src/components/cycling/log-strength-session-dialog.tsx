@@ -20,6 +20,7 @@ import { useCrudSubmit } from '@/hooks/use-crud-submit'
 import { useToast } from '@/hooks/use-toast'
 import { useUser, useFirestore } from '@/firebase'
 import { useStrengthLogs } from './use-strength-logs'
+import { useStrengthSessionAnalysis } from './use-strength-session-analysis'
 import { exerciseHistory, type LoggedExercise, type StrengthSessionLog } from './strength-log-types'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 
@@ -36,6 +37,10 @@ export function LogStrengthSessionDialog({ session, weekNumber, sessionIndex }: 
   const { toast } = useToast()
   const { isSaving, submit } = useCrudSubmit()
   const { logs } = useStrengthLogs()
+  // Analyse IA automatique (chantier "repenser planification/séances/
+  // feedback", pièce B3) — même déclenchement que LiveStrengthSessionView,
+  // pour une séance loguée rétroactivement plutôt qu'en direct.
+  const sessionAnalysis = useStrengthSessionAnalysis(null)
   const [open, setOpen] = useState(false)
 
   const exercises = session.strengthExercises ?? []
@@ -78,6 +83,8 @@ export function LogStrengthSessionDialog({ session, weekNumber, sessionIndex }: 
     if (ok) {
       setOpen(false)
       toast({ title: 'Séance loguée', description: title })
+      // Fire-and-forget — voir le même commentaire dans LiveStrengthSessionView.
+      void sessionAnalysis.generate(ref.id, data)
     }
   }
 

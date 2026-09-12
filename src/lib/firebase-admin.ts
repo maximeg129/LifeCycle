@@ -8,11 +8,14 @@
 // ne s'applique juste pas à un webhook entrant (Intervals.icu POSTe vers
 // notre serveur, il n'y a par définition aucun utilisateur Firebase Auth
 // connecté à ce moment-là) ni à l'envoi d'une notification push déclenchée
-// côté serveur. Deux appelants seulement : `/api/intervals/webhook` (voir
-// CLAUDE.md, chantier "repenser planification/séances/feedback") et
-// `push-notifications.ts` — jamais un accès Admin généralisé au reste de
-// l'app, jamais un contournement des règles Firestore pour un chemin qui
-// pourrait passer par le client à la place.
+// côté serveur, ni à la vérification d'un jeton Firebase Auth quand un
+// appel client a besoin d'être authentifié sans passer par Firestore.
+// Trois appelants : `/api/intervals/webhook` (restant, voir CLAUDE.md,
+// chantier "repenser planification/séances/feedback"), `push-notifications.ts`
+// et `/api/notifications/send/route.ts` (adminAuth, voir son commentaire
+// plus bas) — jamais un accès Admin généralisé au reste de l'app, jamais un
+// contournement des règles Firestore pour un chemin qui pourrait passer par
+// le client à la place.
 //
 // Authentification : Application Default Credentials (ADC) — aucune clé de
 // service à générer ni à stocker. Firebase App Hosting exécute le backend
@@ -34,6 +37,7 @@
 import { getApps, initializeApp, cert, type App } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { getMessaging } from 'firebase-admin/messaging'
+import { getAuth } from 'firebase-admin/auth'
 
 /**
  * Réutilise l'app déjà initialisée si ce module est importé plusieurs fois
@@ -64,4 +68,20 @@ export function adminFirestore() {
 
 export function adminMessaging() {
   return getMessaging(getAdminApp())
+}
+
+/**
+ * Troisième et dernier appelant de ce module (voir l'en-tête) :
+ * `/api/notifications/send` (chantier B3, déclenchement client à la fin
+ * d'une séance de musculation) vérifie le jeton Firebase Auth du CLIENT
+ * appelant via `adminAuth().verifyIdToken()` avant d'envoyer quoi que ce
+ * soit — jamais un `uid` de destinataire pris tel quel dans le corps de la
+ * requête (ce serait un relais ouvert permettant à n'importe qui de pousser
+ * une notification arbitraire, y compris une URL de clic, dans l'appareil
+ * d'un autre utilisateur). L'uid vérifié est TOUJOURS celui du destinataire
+ * : cette route ne peut donc jamais envoyer une notification à quelqu'un
+ * d'autre que l'appelant lui-même.
+ */
+export function adminAuth() {
+  return getAuth(getAdminApp())
 }
