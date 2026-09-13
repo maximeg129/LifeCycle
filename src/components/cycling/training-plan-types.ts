@@ -721,39 +721,17 @@ export function weekdayAvailabilityForDate(dateIso: string, weeklyAvailability: 
   return weeklyAvailability[mondayIndexed]
 }
 
-// ── Vue "prochains entraînements" — chantier UX Frive/Join (audit
-// COACH_UX_AUDIT.md + retour utilisateur) ─────────────────────────────────
-//
-// Avant ce correctif, la bande de jours du calendrier du plan
-// (PlanWeekCalendar) était figée sur la semaine calendaire Lundi-Dimanche
-// SÉLECTIONNÉE dans la grille — le mécanisme de fenêtre glissante 7 jours
-// existait déjà côté données pour le reséquencement (rollingWindowDates
-// ci-dessus, chantier A) mais rien côté vue n'ancrait l'affichage sur
-// AUJOURD'HUI de la même façon. `sessionsForRollingWindow` fait ce lien :
-// pour chacune des 7 dates glissantes, retrouve la semaine du plan qui la
-// contient (une fenêtre qui déborde d'une semaine calendaire retombe sur la
-// semaine suivante) et ses séances datées ce jour-là. Jamais une exception
-// si la semaine correspondante n'a pas encore de sampleSessions (semaine
-// suivante pas encore générée, voir "vue calendrier v2") — jour simplement
-// vide, comme un jour de repos.
-
-export interface RollingDaySessions {
-  date: string
-  /** La semaine du plan qui contient cette date, ou `null` si aucune (date hors des bornes du plan). */
-  week: PlanWeek | null
-  sessions: { session: PlanWeekSessionWithValidation; index: number }[]
-}
-
-export function sessionsForRollingWindow(weeks: PlanWeek[], todayIso: string): RollingDaySessions[] {
-  return rollingWindowDates(todayIso).map((date) => {
-    const week = weeks.find((w) => date >= w.startDate && date <= w.endDate) ?? null
-    if (!week?.sampleSessions) return { date, week, sessions: [] }
-    const sessions = week.sampleSessions
-      .map((session, index) => ({ session, index }))
-      .filter(({ session }) => session.date === date)
-    return { date, week, sessions }
-  })
-}
+// ⚠️ `sessionsForRollingWindow`/`RollingDaySessions` (bande "prochains
+// entraînements" ancrée sur aujourd'hui, chevauchant deux semaines
+// calendaires) ont existé ici brièvement puis ont été retirés — retour
+// utilisateur après captures Frive/Join à l'appui : la liste attendue est
+// celle de la semaine COURANTE (Lundi-Dimanche, comme Frive), pas une
+// fenêtre glissante qui chevauche les bornes de semaine. Voir
+// `PlanWeekSessionList` (plan-week-session-list.tsx), qui liste directement
+// `currentPlanWeek(weeks, today).sampleSessions` — plus besoin de cette
+// fonction. `rollingWindowDates` ci-dessus reste utilisée par
+// `recalibrateRollingWindow` (reséquencement mécanique, chantier A),
+// inchangée.
 
 export interface RollingWeekInput {
   week: PlanWeekSkeleton

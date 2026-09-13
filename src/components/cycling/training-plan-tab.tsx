@@ -9,10 +9,12 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Target, Archive, ChevronDown, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion } from 'lucide-react'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
+import { Sparkles, Loader2, Target, Archive, ChevronDown, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion, CalendarClock } from 'lucide-react'
 import { format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
+import { useToast } from '@/hooks/use-toast'
 import { useTrainingPlan } from './use-training-plan'
 import { useTrainingPreferences } from './use-training-preferences'
 import { currentPlanWeek, computePlanProgress, PHASE_LABELS, PHASE_BADGE_CLASS } from './training-plan-types'
@@ -24,12 +26,12 @@ import { SourceCitation } from '@/components/coach/source-citation'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { PlanOverviewGrid } from './plan-overview-grid'
 import { PlanWeekCalendar } from './plan-week-calendar'
-import { PlanRollingCalendar } from './plan-rolling-calendar'
+import { PlanWeekSessionList } from './plan-week-session-list'
 import { PlanAdherenceChart } from './plan-adherence-chart'
 import { buildPlanAttentionItems } from './plan-attention-types'
 import { PlanAttentionBadge } from './plan-attention-badge'
 import { IntervalsOnboardingNotice } from './intervals-onboarding-notice'
-import { WeeklyAvailabilityCard, DEFAULT_WEEKLY_AVAILABILITY, formatDayMinutes } from './weekly-availability-card'
+import { PlanAvailabilityDialog, DEFAULT_WEEKLY_AVAILABILITY, formatDayMinutes } from './plan-availability-dialog'
 
 export function TrainingPlanTab() {
   const {
@@ -57,6 +59,17 @@ export function TrainingPlanTab() {
   const [strengthMinutes, setStrengthMinutes] = useState(60)
   const [showNewPlanForm, setShowNewPlanForm] = useState(false)
   const [showPlanReasoning, setShowPlanReasoning] = useState(false)
+  // Retour utilisateur (captures Join/Frive à l'appui), après la carte
+  // permanente : "nous avons le slider avec la dispo, peut être devrons
+  // nous avoir un bouton modifier pour changer... on pourrait améliorer la
+  // vue encore une fois, avoir le Plan derrière un bouton plan comme sur
+  // join." Deux écrans secondaires (dialog + sheet) plutôt que tout étalé
+  // sur la page principale — voir plan-availability-dialog.tsx pour le
+  // détail de la validation IA.
+  const [availabilityDialogOpen, setAvailabilityDialogOpen] = useState(false)
+  const [isSavingAvailability, setIsSavingAvailability] = useState(false)
+  const [planSheetOpen, setPlanSheetOpen] = useState(false)
+  const { toast } = useToast()
   // Retour utilisateur : "et si on faisait une calendar view?" — la semaine
   // sélectionnée dans la grille du plan entier (PlanOverviewGrid) pilote la
   // vue détaillée (PlanWeekCalendar) juste en dessous. Initialisée à la
@@ -94,13 +107,31 @@ export function TrainingPlanTab() {
     setStrengthMinutes(minutes)
     trainingPrefs.setPreferences({ strengthWeeklyMinutes: minutes })
   }
-  const handleAvailabilityChange = (dayIndex: number, minutes: number) => {
-    const next = weeklyAvailability.map((m, i) => (i === dayIndex ? minutes : m))
-    setWeeklyAvailability(next)
-    trainingPrefs.setPreferences({ weeklyAvailabilityMinutes: next })
-  }
-
   const week = activePlan ? currentPlanWeek(activePlan.weeks, today) : null
+
+  // Retour utilisateur : "lorsque c'est validé l'IA recalibre les
+  // entraînements sur la base du plan de départ." Persiste la préférence
+  // PUIS déclenche une vraie régénération IA de la semaine courante
+  // (generateWeekSessions — le même appel que le bouton "Régénérer" déjà en
+  // place) : le contenu des séances s'adapte réellement au nouveau volume,
+  // pas seulement leurs dates (le reséquencement mécanique glissant,
+  // chantier A, continue de tourner en plus, automatiquement, dès que la
+  // préférence change — sans rapport avec cet appel explicite).
+  const handleValidateAvailability = async (next: number[]) => {
+    setIsSavingAvailability(true)
+    setWeeklyAvailability(next)
+    await trainingPrefs.setPreferences({ weeklyAvailabilityMinutes: next })
+    if (week) {
+      const ok = await generateWeekSessions(week)
+      if (ok) {
+        toast({ title: 'Disponibilité mise à jour', description: 'Les séances de la semaine ont été recalculées avec cette nouvelle disponibilité.' })
+      }
+    } else {
+      toast({ title: 'Disponibilité mise à jour' })
+    }
+    setIsSavingAvailability(false)
+    setAvailabilityDialogOpen(false)
+  }
 
   // Retour utilisateur, capture d'écran de l'écran de progression Join à
   // l'appui : "les éléments visuels de réalisation/complétion du plan
@@ -235,8 +266,9 @@ export function TrainingPlanTab() {
             </div>
             <div className="p-3 rounded-xl bg-muted/50 border border-border/50 flex items-center justify-between gap-3 flex-wrap">
               <p className="text-xs text-muted-foreground">
-                Disponibilité hebdomadaire réglée dans la carte ci-dessus — l&apos;IA distribue les séances type sur
-                les jours où vous avez le plus de temps, plutôt qu&apos;un étalement mécanique.
+                Disponibilité hebdomadaire réglée via le bouton « Disponibilité » de l&apos;onglet Plan — l&apos;IA
+                distribue les séances type sur les jours où vous avez le plus de temps, plutôt qu&apos;un étalement
+                mécanique.
               </p>
               <span className="text-xs font-data font-semibold shrink-0">{formatDayMinutes(weeklyMinutes)}/semaine</span>
             </div>
@@ -282,23 +314,28 @@ export function TrainingPlanTab() {
 
   if (isLoadingPlan) return <Skeleton className="h-64 w-full rounded-2xl" />
 
-  // Retour utilisateur (audit UX Frive/Join) : la disponibilité doit être
-  // aussi accessible que le reste de l'écran, jamais cachée derrière un
-  // bouton qui sonne comme "créer un nouveau plan" — voir
-  // weekly-availability-card.tsx. Rendue en tête, avant même la branche
-  // "aucun plan actif", pour rester utilisable dès la première visite.
-  const availabilityCard = (
-    <WeeklyAvailabilityCard
-      weeklyAvailability={weeklyAvailability}
-      weeklyMinutes={weeklyMinutes}
-      onChange={handleAvailabilityChange}
+  // Retour utilisateur (captures Join/Frive à l'appui) : la disponibilité
+  // reste modifiable à tout moment via ce dialog, y compris avant qu'un
+  // plan existe — rendu en tête, avant même la branche "aucun plan actif".
+  const availabilityDialog = (
+    <PlanAvailabilityDialog
+      open={availabilityDialogOpen}
+      onOpenChange={setAvailabilityDialogOpen}
+      committedAvailability={weeklyAvailability}
+      onValidate={handleValidateAvailability}
+      isSaving={isSavingAvailability}
     />
   )
 
   if (!activePlan || showNewPlanForm) {
     return (
       <div className="space-y-6">
-        {availabilityCard}
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => setAvailabilityDialogOpen(true)} className="gap-2">
+            <CalendarClock className="w-4 h-4" /> Disponibilité
+          </Button>
+        </div>
+        {availabilityDialog}
         {!canSendToIntervals && (
           <IntervalsOnboardingNotice message="Intervals.icu non connecté — le plan peut se générer, mais les séances ne pourront pas être envoyées sur votre calendrier." />
         )}
@@ -316,34 +353,17 @@ export function TrainingPlanTab() {
 
   return (
     <div className="space-y-6">
-      {availabilityCard}
-      {/* Retour utilisateur (audit UX Frive/Join) : "la vue des prochains
-          entraînements (à caler sur Frive)". Distinct de la grille + vue
-          semaine ci-dessous (PlanOverviewGrid/PlanWeekCalendar), qui reste
-          l'écran de gestion pour parcourir/éditer n'importe quelle semaine
-          du plan — celle-ci est le coup d'œil quotidien, toujours ancrée
-          sur aujourd'hui, jamais sur une semaine sélectionnée. */}
-      <PlanRollingCalendar
-        weeks={activePlan.weeks}
-        todayIso={today}
-        sendingSessionKey={sendingSessionKey}
-        canSendToIntervals={canSendToIntervals}
-        onSend={(session, w, index, dateId) => sendSessionToIntervals(session, w.weekNumber, index, dateId)}
-        onMoveDate={(w, index, newDate) => moveSessionDate(w.weekNumber, index, newDate)}
-        getCompletion={(w, session, index) => getSessionCompletion(w, session, index)}
-        activities={activities}
-        athleteFtp={athleteFtp}
-        adjustingLocationKey={adjustingLocationKey}
-        onAdjustLocation={(w, index, targetLocation) => adjustSessionForLocation(w.weekNumber, index, targetLocation)}
-      />
-      {!canSendToIntervals && (
-        <IntervalsOnboardingNotice message="Intervals.icu non connecté — le plan reste consultable, mais les séances ne pourront pas être envoyées sur votre calendrier." />
-      )}
+      {availabilityDialog}
       {/* .lc-card neutre — un résumé pour information (nom du plan,
-          objectif, grille des semaines), pas "la séance du jour" : la
-          bordure primaire épaisse reste réservée à Aujourd'hui
-          (daily-workout-tab.tsx), la seule carte qui la justifie
-          (COACH_UX_AUDIT.md §5). */}
+          objectif, progression), pas "la séance du jour" : la bordure
+          primaire épaisse reste réservée à Aujourd'hui (daily-workout-
+          tab.tsx), la seule carte qui la justifie (COACH_UX_AUDIT.md §5).
+          Retour utilisateur (captures Join à l'appui) : les actions de
+          gestion (recalibrer/nouveau plan/archiver) et la grille du plan
+          entier ont déménagé dans la feuille "Plan" ci-dessous — cette
+          carte ne garde que le coup d'œil de progression + deux boutons
+          "Disponibilité"/"Plan", façon Join ("Adjust availability" /
+          "Your Plan"). */}
       <Card className="lc-card">
         <CardHeader className="flex flex-row items-start justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-3">
@@ -376,44 +396,19 @@ export function TrainingPlanTab() {
             </div>
           </div>
           <div className="flex gap-2">
-            {/* Retour utilisateur : "en gardant l'option peut-être via un
-                bouton, de réajuster le plan basé sur ce qui a été
-                réalistiquement fait" — la recalibration tourne déjà
-                automatiquement à l'ouverture de l'onglet quand une semaine
-                vient de se terminer (voir le Journal du plan plus bas) ;
-                ce bouton la déclenche sur demande plutôt que d'attendre.
-                Ne force rien si rien n'est dû (recalibrateNow le dit via
-                toast) — jamais une deuxième recalibration de la même
-                semaine déjà traitée. */}
-            <Button variant="outline" size="sm" onClick={recalibrateNow} disabled={isRecalibrating} className="gap-2">
-              {isRecalibrating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-              Recalibrer maintenant
+            <Button variant="outline" size="sm" onClick={() => setAvailabilityDialogOpen(true)} className="gap-2">
+              <CalendarClock className="w-4 h-4" /> Disponibilité
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setShowNewPlanForm(true)} className="gap-2">
-              <Sparkles className="w-4 h-4" /> Nouveau plan
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => archivePlan(activePlan.id)} className="gap-2 text-muted-foreground">
-              <Archive className="w-4 h-4" /> Archiver
+            <Button variant="outline" size="sm" onClick={() => setPlanSheetOpen(true)} className="gap-2">
+              <Target className="w-4 h-4" /> Plan
             </Button>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Retour utilisateur : "un paragraphe qui explique les raisons...
-              quelle base il prend pour proposer ce plan... et quelles sont les
-              attentes physiologiques". "summary" est redéfini pour ce flow
-              (training-plan-generation-flow.ts) pour être ce paragraphe plutôt
-              que l'aperçu générique en une phrase du socle. "reasons" cite les
-              règles evidence/rules.ts effectivement appliquées, chacune avec
-              son SourceCitation — absent sur un plan généré avant cet ajout.
-              Replié par défaut (retour utilisateur, capture d'écran à
-              l'appui : "c'est pas très user friendly") — cette carte
-              n'a besoin de s'ouvrir sur le paragraphe complet qu'une fois,
-              pas à chaque visite de l'onglet ; le nom du plan/objectif/
-              tableau des semaines juste en dessous suffit au quotidien. */}
-          {/* "Pourquoi ce plan ?" et le badge de vigilance sont regroupés sur
-              une même ligne — les deux sont le même geste "taper pour en
-              savoir plus", voir PlanAttentionBadge pour le détail du retour
-              utilisateur qui a motivé sa consolidation. */}
+        <CardContent>
+          {/* "Pourquoi ce plan ?" et le badge de vigilance restent visibles
+              ici (pas dans la feuille "Plan") — un point de vigilance
+              bloquant reste un signal de sécurité, jamais caché derrière un
+              tap supplémentaire. */}
           <div className="flex items-start gap-3 flex-wrap">
             {(activePlan.summary || (activePlan.reasons && activePlan.reasons.length > 0)) && (
               <Collapsible open={showPlanReasoning} onOpenChange={setShowPlanReasoning} className="flex-1 min-w-[160px]">
@@ -448,199 +443,262 @@ export function TrainingPlanTab() {
             )}
             <PlanAttentionBadge items={attentionItems} />
           </div>
-
-          {/* Retour utilisateur, capture d'écran (export PDF de l'app) à
-              l'appui : "c'est pas idéal encore des long scroll beaucoup
-              d'info et on peut se perdre, et si on faisait une calendar
-              view? un peu à l'exemple de intervals". Remplace la liste de
-              12 cartes-semaine empilées (chacune développable) par une
-              grille compacte du plan entier — pour l'orientation, taper
-              une semaine la sélectionne, qui déplie sa vue détaillée
-              directement sous sa propre ligne (renderExpanded) — retour
-              utilisateur après premier usage réel : "j'irai mettre chaque
-              séance d'entraînement de la semaine en cours directement sous
-              la semaine en cours" plutôt que dans un bloc séparé sous
-              toute la grille. Chaque jour de la vue détaillée est coloré
-              selon l'intensité de sa séance (réelle une fois faite, cible
-              sinon — voir plan-calendar-types.ts). */}
-          <PlanOverviewGrid
-            weeks={activePlan.weeks}
-            selectedWeekNumber={selectedWeekNumber}
-            onSelectWeek={setSelectedWeekNumber}
-            getCompletion={(w, session, index) => getSessionCompletion(w, session, index)}
-            activities={activities}
-            athleteFtp={athleteFtp}
-            renderExpanded={(w) => (
-              <div className="rounded-xl border border-border bg-card/40 p-3 space-y-3">
-                <div className="flex items-start justify-between gap-3 flex-wrap">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-sm font-medium">S{w.weekNumber}</span>
-                      <span className="text-xs text-muted-foreground whitespace-nowrap">
-                        {format(new Date(`${w.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
-                      </span>
-                      <Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge>
-                      {week?.weekNumber === w.weekNumber && (
-                        <Badge variant="secondary" className="text-[10px]">Semaine actuelle</Badge>
-                      )}
-                      {adjustedWeekNumbers.has(w.weekNumber) && (
-                        <Badge variant="outline" className="text-[9px] gap-0.5 text-primary border-primary/30" title="Recalibrée depuis le plan d'origine — voir le journal ci-dessous">
-                          <RefreshCw className="w-2.5 h-2.5" /> ajustée
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-sm text-muted-foreground mt-0.5">{w.focus}</p>
-                    {w.notes && <p className="text-xs text-muted-foreground/80 mt-0.5">{w.notes}</p>}
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-medium whitespace-nowrap">{Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h</p>
-                    {w.targetStrengthMinutes != null && (
-                      <p className="text-[10px] text-muted-foreground whitespace-nowrap">+ {Math.round(w.targetStrengthMinutes / 60 * 10) / 10}h muscu</p>
-                    )}
-                  </div>
-                </div>
-                <PlanWeekCalendar
-                  week={w}
-                  isGenerating={generatingSessionsForWeek === w.weekNumber}
-                  sendingSessionKey={sendingSessionKey}
-                  canSendToIntervals={canSendToIntervals}
-                  onRegenerate={() => generateWeekSessions(w)}
-                  onSend={(session, index, dateId) => sendSessionToIntervals(session, w.weekNumber, index, dateId)}
-                  onMoveDate={(index, newDate) => moveSessionDate(w.weekNumber, index, newDate)}
-                  getCompletion={(session, index) => getSessionCompletion(w, session, index)}
-                  activities={activities}
-                  athleteFtp={athleteFtp}
-                  adjustingLocationKey={adjustingLocationKey}
-                  onAdjustLocation={(index, targetLocation) => adjustSessionForLocation(w.weekNumber, index, targetLocation)}
-                />
-              </div>
-            )}
-          />
         </CardContent>
       </Card>
 
-      {/* COACH_UX_AUDIT.md §4.C, jamais construit jusqu'ici : "Pas de vue
-          'semaine : prévu vs réalisé' en un graphique... LifeCycle a
-          l'équivalent en DEUX affichages séparés — jamais une vue compacte
-          au même endroit." Résumé barres empilées prévu/réalisé, dernières
-          semaines du plan (voir computeWeeklyAdherence) — la carte
-          elle-même n'apparaît que s'il existe au moins une semaine passée
-          avec des sampleSessions à comparer (sinon rien à montrer, jamais
-          un graphique vide). */}
-      {activePlan.weeks.some((w) => w.startDate <= today && (w.sampleSessions?.length ?? 0) > 0) && (
-        <Card className="lc-card">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Prévu vs réalisé</CardTitle>
-            <CardDescription>Adhérence au plan, semaine par semaine.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <PlanAdherenceChart weeks={activePlan.weeks} getCompletion={(w, s, i) => getSessionCompletion(w, s, i)} todayIso={today} />
-          </CardContent>
-        </Card>
+      {!canSendToIntervals && (
+        <IntervalsOnboardingNotice message="Intervals.icu non connecté — le plan reste consultable, mais les séances ne pourront pas être envoyées sur votre calendrier." />
       )}
 
-      {/* Retour utilisateur : "penser à automatique mais documentée on
-          pourrait expliquer à l'athlète pourquoi le plan a changé". Chaque
-          fois qu'une semaine se termine, use-training-plan.ts recalibre
-          silencieusement les semaines restantes (pas de bouton, pas de
-          confirmation) mais journalise systématiquement le pourquoi —
-          cette carte EST la documentation demandée, pas une option cachée. */}
-      {activePlan.recalibrations && activePlan.recalibrations.length > 0 && (
-        <Card className="lc-card">
-          <CardHeader>
-            <CardTitle className="text-base flex items-center gap-2">
-              <History className="w-4 h-4 text-primary" /> Journal du plan
-            </CardTitle>
-            <CardDescription>
-              Le plan se recalibre automatiquement à la fin de chaque semaine, en comparant le volume réellement
-              réalisé au volume ciblé — chaque ajustement est expliqué ci-dessous. Les semaines déjà passées ne
-              sont jamais retouchées.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-5">
-            {[...activePlan.recalibrations].reverse().map((entry, i) => (
-              <div key={i} className={cn('space-y-3', i > 0 && 'pt-5 border-t border-border')}>
-                <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                    {format(new Date(`${entry.date}T00:00:00`), 'dd MMM yyyy', { locale: fr })} — après la semaine {entry.throughWeekNumber}
-                  </p>
-                  {entry.verdict !== 'ok' && (
-                    <Badge variant="outline" className={cn('text-[10px] gap-1', entry.verdict === 'block' ? 'text-destructive border-destructive/30' : 'text-yellow-600 border-yellow-500/30')}>
-                      <ShieldAlert className="w-2.5 h-2.5" /> {entry.verdict === 'block' ? 'Bloquant' : 'Réserve'}
-                    </Badge>
-                  )}
+      {/* Retour utilisateur, capture d'écran Frive à l'appui : "chaque
+          séance de la semaine en liste comme frive avec le detail et le
+          toggle pour indoor/outdoor." Remplace la bande glissante
+          "Prochains entraînements" — voir plan-week-session-list.tsx. */}
+      {week ? (
+        <div className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h3 className="text-sm font-semibold">Séances de la semaine</h3>
+            <span className="text-xs text-muted-foreground">
+              {format(new Date(`${week.startDate}T00:00:00`), 'dd MMM', { locale: fr })} – {format(new Date(`${week.endDate}T00:00:00`), 'dd MMM', { locale: fr })}
+            </span>
+          </div>
+          <PlanWeekSessionList
+            week={week}
+            today={today}
+            isGenerating={generatingSessionsForWeek === week.weekNumber}
+            sendingSessionKey={sendingSessionKey}
+            canSendToIntervals={canSendToIntervals}
+            onRegenerate={() => generateWeekSessions(week)}
+            onSend={(session, index, dateId) => sendSessionToIntervals(session, week.weekNumber, index, dateId)}
+            onMoveDate={(index, newDate) => moveSessionDate(week.weekNumber, index, newDate)}
+            getCompletion={(session, index) => getSessionCompletion(week, session, index)}
+            adjustingLocationKey={adjustingLocationKey}
+            onAdjustLocation={(index, targetLocation) => adjustSessionForLocation(week.weekNumber, index, targetLocation)}
+          />
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Aucune semaine du plan ne couvre aujourd&apos;hui — consultez le plan complet pour voir les semaines à venir ou déjà passées.
+        </p>
+      )}
+
+      {/* Retour utilisateur (captures Join à l'appui) : "avoir le Plan
+          derrière un bouton plan comme sur join." Regroupe ce qui était
+          jusqu'ici la carte principale de l'onglet : les actions de
+          gestion, la grille du plan entier + vue détaillée d'une semaine
+          sélectionnée, l'adhérence prévu/réalisé et le journal des
+          recalibrations — l'écran de gestion occasionnel plutôt que le
+          coup d'œil quotidien qui reste sur la page principale. */}
+      <Sheet open={planSheetOpen} onOpenChange={setPlanSheetOpen}>
+        <SheetContent side="bottom" className="max-h-[92vh] overflow-y-auto rounded-t-3xl">
+          <SheetHeader className="text-left">
+            <SheetTitle>{activePlan.name}</SheetTitle>
+            <SheetDescription>Plan complet, semaine par semaine.</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-6 pt-4">
+            <div className="flex gap-2 flex-wrap">
+              {/* Retour utilisateur : "en gardant l'option peut-être via un
+                  bouton, de réajuster le plan basé sur ce qui a été
+                  réalistiquement fait" — la recalibration tourne déjà
+                  automatiquement à l'ouverture de l'onglet quand une semaine
+                  vient de se terminer (voir le Journal du plan plus bas) ;
+                  ce bouton la déclenche sur demande plutôt que d'attendre.
+                  Ne force rien si rien n'est dû (recalibrateNow le dit via
+                  toast) — jamais une deuxième recalibration de la même
+                  semaine déjà traitée. */}
+              <Button variant="outline" size="sm" onClick={recalibrateNow} disabled={isRecalibrating} className="gap-2">
+                {isRecalibrating ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                Recalibrer maintenant
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => { setPlanSheetOpen(false); setShowNewPlanForm(true) }} className="gap-2">
+                <Sparkles className="w-4 h-4" /> Nouveau plan
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => archivePlan(activePlan.id)} className="gap-2 text-muted-foreground">
+                <Archive className="w-4 h-4" /> Archiver
+              </Button>
+            </div>
+
+            {/* Retour utilisateur, capture d'écran (export PDF de l'app) à
+                l'appui : "c'est pas idéal encore des long scroll beaucoup
+                d'info et on peut se perdre, et si on faisait une calendar
+                view? un peu à l'exemple de intervals". Remplace la liste de
+                12 cartes-semaine empilées (chacune développable) par une
+                grille compacte du plan entier — pour l'orientation, taper
+                une semaine la sélectionne, qui déplie sa vue détaillée
+                directement sous sa propre ligne (renderExpanded). Chaque
+                jour de la vue détaillée est coloré selon l'intensité de sa
+                séance (réelle une fois faite, cible sinon — voir
+                plan-calendar-types.ts). */}
+            <PlanOverviewGrid
+              weeks={activePlan.weeks}
+              selectedWeekNumber={selectedWeekNumber}
+              onSelectWeek={setSelectedWeekNumber}
+              getCompletion={(w, session, index) => getSessionCompletion(w, session, index)}
+              activities={activities}
+              athleteFtp={athleteFtp}
+              renderExpanded={(w) => (
+                <div className="rounded-xl border border-border bg-card/40 p-3 space-y-3">
+                  <div className="flex items-start justify-between gap-3 flex-wrap">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-medium">S{w.weekNumber}</span>
+                        <span className="text-xs text-muted-foreground whitespace-nowrap">
+                          {format(new Date(`${w.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
+                        </span>
+                        <Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge>
+                        {week?.weekNumber === w.weekNumber && (
+                          <Badge variant="secondary" className="text-[10px]">Semaine actuelle</Badge>
+                        )}
+                        {adjustedWeekNumbers.has(w.weekNumber) && (
+                          <Badge variant="outline" className="text-[9px] gap-0.5 text-primary border-primary/30" title="Recalibrée depuis le plan d'origine — voir le journal ci-dessous">
+                            <RefreshCw className="w-2.5 h-2.5" /> ajustée
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-0.5">{w.focus}</p>
+                      {w.notes && <p className="text-xs text-muted-foreground/80 mt-0.5">{w.notes}</p>}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-medium whitespace-nowrap">{Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h</p>
+                      {w.targetStrengthMinutes != null && (
+                        <p className="text-[10px] text-muted-foreground whitespace-nowrap">+ {Math.round(w.targetStrengthMinutes / 60 * 10) / 10}h muscu</p>
+                      )}
+                    </div>
+                  </div>
+                  <PlanWeekCalendar
+                    week={w}
+                    isGenerating={generatingSessionsForWeek === w.weekNumber}
+                    sendingSessionKey={sendingSessionKey}
+                    canSendToIntervals={canSendToIntervals}
+                    onRegenerate={() => generateWeekSessions(w)}
+                    onSend={(session, index, dateId) => sendSessionToIntervals(session, w.weekNumber, index, dateId)}
+                    onMoveDate={(index, newDate) => moveSessionDate(w.weekNumber, index, newDate)}
+                    getCompletion={(session, index) => getSessionCompletion(w, session, index)}
+                    activities={activities}
+                    athleteFtp={athleteFtp}
+                    adjustingLocationKey={adjustingLocationKey}
+                    onAdjustLocation={(index, targetLocation) => adjustSessionForLocation(w.weekNumber, index, targetLocation)}
+                  />
                 </div>
-                <p className="text-sm text-muted-foreground leading-relaxed">{entry.summary}</p>
+              )}
+            />
 
-                {/* Bilan critique — retour utilisateur : "le coach peut il
-                    émettre une critique sur le plan ou des recommendations
-                    scientifiquement détaillée qui permettraient à
-                    l'athlete d'atteindre ses objectif". strengths/risks
-                    (même idiome que rideAnalysis) jugent la TRAJECTOIRE
-                    ACTUELLE vers l'objectif, pas seulement l'ajustement de
-                    cette semaine — reasons ci-dessous cite les règles qui
-                    motivent chaque risque quand applicable. */}
-                {(entry.strengths.length > 0 || entry.risks.length > 0) && (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {entry.strengths.length > 0 && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-green-600 flex items-center gap-1.5">
-                          <TrendingUp className="w-3.5 h-3.5" /> Points forts
-                        </p>
-                        <ul className="text-xs space-y-1 text-muted-foreground list-disc pl-4">
-                          {entry.strengths.map((s, si) => <li key={si}>{s}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                    {entry.risks.length > 0 && (
-                      <div className="space-y-1.5">
-                        <p className="text-xs font-medium text-orange-600 flex items-center gap-1.5">
-                          <ShieldQuestion className="w-3.5 h-3.5" /> Risques pour l&apos;objectif
-                        </p>
-                        <ul className="text-xs space-y-1 text-muted-foreground list-disc pl-4">
-                          {entry.risks.map((r, ri) => <li key={ri}>{r}</li>)}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                )}
+            {/* COACH_UX_AUDIT.md §4.C : "Pas de vue 'semaine : prévu vs
+                réalisé' en un graphique... jamais une vue compacte au même
+                endroit." Résumé barres empilées prévu/réalisé, dernières
+                semaines du plan (voir computeWeeklyAdherence) — n'apparaît
+                que s'il existe au moins une semaine passée avec des
+                sampleSessions à comparer (sinon rien à montrer). */}
+            {activePlan.weeks.some((w) => w.startDate <= today && (w.sampleSessions?.length ?? 0) > 0) && (
+              <Card className="lc-card">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Prévu vs réalisé</CardTitle>
+                  <CardDescription>Adhérence au plan, semaine par semaine.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <PlanAdherenceChart weeks={activePlan.weeks} getCompletion={(w, s, i) => getSessionCompletion(w, s, i)} todayIso={today} />
+                </CardContent>
+              </Card>
+            )}
 
-                {entry.reasons.length > 0 && (
-                  <ul className="space-y-1.5">
-                    {entry.reasons.map((r, ri) => (
-                      <li key={ri} className="flex items-start gap-1.5 text-sm text-muted-foreground">
-                        <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
-                        <span className="flex-1">{r.detail}</span>
-                        <SourceCitation ruleIds={[r.rule]} label="Voir la règle citée" className="shrink-0 mt-0.5" />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {entry.changes.length === 0 ? (
-                  <p className="text-xs text-muted-foreground italic">Aucun changement — le plan initial restait adapté.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {entry.changes.map((c) => (
-                      <div key={c.weekNumber} className="flex items-center gap-2 flex-wrap text-xs p-2.5 rounded-lg bg-muted/40 border border-border">
-                        <span className="font-medium shrink-0">S{c.weekNumber}</span>
-                        <span className="text-muted-foreground line-through">
-                          {PHASE_LABELS[c.before.phase]} · {c.before.focus} · {Math.round(c.before.targetWeeklyMinutes / 60 * 10) / 10}h
-                          {c.before.targetStrengthMinutes != null && ` + ${Math.round(c.before.targetStrengthMinutes / 60 * 10) / 10}h muscu`}
-                        </span>
-                        <span className="text-muted-foreground">→</span>
-                        <span className="text-foreground font-medium">
-                          {PHASE_LABELS[c.after.phase]} · {c.after.focus} · {Math.round(c.after.targetWeeklyMinutes / 60 * 10) / 10}h
-                          {c.after.targetStrengthMinutes != null && ` + ${Math.round(c.after.targetStrengthMinutes / 60 * 10) / 10}h muscu`}
-                        </span>
+            {/* Retour utilisateur : "penser à automatique mais documentée on
+                pourrait expliquer à l'athlète pourquoi le plan a changé".
+                Chaque fois qu'une semaine se termine, use-training-plan.ts
+                recalibre silencieusement les semaines restantes (pas de
+                bouton, pas de confirmation) mais journalise
+                systématiquement le pourquoi — cette carte EST la
+                documentation demandée, pas une option cachée. */}
+            {activePlan.recalibrations && activePlan.recalibrations.length > 0 && (
+              <Card className="lc-card">
+                <CardHeader>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <History className="w-4 h-4 text-primary" /> Journal du plan
+                  </CardTitle>
+                  <CardDescription>
+                    Le plan se recalibre automatiquement à la fin de chaque semaine, en comparant le volume réellement
+                    réalisé au volume ciblé — chaque ajustement est expliqué ci-dessous. Les semaines déjà passées ne
+                    sont jamais retouchées.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  {[...activePlan.recalibrations].reverse().map((entry, i) => (
+                    <div key={i} className={cn('space-y-3', i > 0 && 'pt-5 border-t border-border')}>
+                      <div className="flex items-center justify-between gap-2 flex-wrap">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                          {format(new Date(`${entry.date}T00:00:00`), 'dd MMM yyyy', { locale: fr })} — après la semaine {entry.throughWeekNumber}
+                        </p>
+                        {entry.verdict !== 'ok' && (
+                          <Badge variant="outline" className={cn('text-[10px] gap-1', entry.verdict === 'block' ? 'text-destructive border-destructive/30' : 'text-yellow-600 border-yellow-500/30')}>
+                            <ShieldAlert className="w-2.5 h-2.5" /> {entry.verdict === 'block' ? 'Bloquant' : 'Réserve'}
+                          </Badge>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
+                      <p className="text-sm text-muted-foreground leading-relaxed">{entry.summary}</p>
+
+                      {(entry.strengths.length > 0 || entry.risks.length > 0) && (
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {entry.strengths.length > 0 && (
+                            <div className="space-y-1.5">
+                              <p className="text-xs font-medium text-green-600 flex items-center gap-1.5">
+                                <TrendingUp className="w-3.5 h-3.5" /> Points forts
+                              </p>
+                              <ul className="text-xs space-y-1 text-muted-foreground list-disc pl-4">
+                                {entry.strengths.map((s, si) => <li key={si}>{s}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                          {entry.risks.length > 0 && (
+                            <div className="space-y-1.5">
+                              <p className="text-xs font-medium text-orange-600 flex items-center gap-1.5">
+                                <ShieldQuestion className="w-3.5 h-3.5" /> Risques pour l&apos;objectif
+                              </p>
+                              <ul className="text-xs space-y-1 text-muted-foreground list-disc pl-4">
+                                {entry.risks.map((r, ri) => <li key={ri}>{r}</li>)}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {entry.reasons.length > 0 && (
+                        <ul className="space-y-1.5">
+                          {entry.reasons.map((r, ri) => (
+                            <li key={ri} className="flex items-start gap-1.5 text-sm text-muted-foreground">
+                              <span className="mt-1.5 w-1 h-1 rounded-full bg-muted-foreground/50 shrink-0" />
+                              <span className="flex-1">{r.detail}</span>
+                              <SourceCitation ruleIds={[r.rule]} label="Voir la règle citée" className="shrink-0 mt-0.5" />
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {entry.changes.length === 0 ? (
+                        <p className="text-xs text-muted-foreground italic">Aucun changement — le plan initial restait adapté.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {entry.changes.map((c) => (
+                            <div key={c.weekNumber} className="flex items-center gap-2 flex-wrap text-xs p-2.5 rounded-lg bg-muted/40 border border-border">
+                              <span className="font-medium shrink-0">S{c.weekNumber}</span>
+                              <span className="text-muted-foreground line-through">
+                                {PHASE_LABELS[c.before.phase]} · {c.before.focus} · {Math.round(c.before.targetWeeklyMinutes / 60 * 10) / 10}h
+                                {c.before.targetStrengthMinutes != null && ` + ${Math.round(c.before.targetStrengthMinutes / 60 * 10) / 10}h muscu`}
+                              </span>
+                              <span className="text-muted-foreground">→</span>
+                              <span className="text-foreground font-medium">
+                                {PHASE_LABELS[c.after.phase]} · {c.after.focus} · {Math.round(c.after.targetWeeklyMinutes / 60 * 10) / 10}h
+                                {c.after.targetStrengthMinutes != null && ` + ${Math.round(c.after.targetStrengthMinutes / 60 * 10) / 10}h muscu`}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
