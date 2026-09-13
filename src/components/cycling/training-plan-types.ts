@@ -619,6 +619,75 @@ export function computePlanProgress(
   return { daysRemaining, weekCompletionPercent, sessionsDone, sessionsTotal }
 }
 
+// ── Adhérence prévu/réalisé — COACH_UX_AUDIT.md §4.C ─────────────────────
+//
+// "Pas de vue 'semaine : prévu vs réalisé' en un graphique. Le Calendrier
+// TrainerRoad épingle prévu/réalisé sur le même graphique. LifeCycle a
+// l'équivalent en DEUX affichages séparés (badges par séance + courbe PMC)
+// — jamais une vue compacte au même endroit." Recommandation jamais
+// construite jusqu'ici (chantier UX Frive/Join qui a suivi l'a fait
+// construire) : un résumé semaine par semaine sur les dernières semaines
+// du plan, prévu (fond) vs réalisé (avant-plan) — plan-adherence-chart.tsx.
+
+export interface WeeklyAdherence {
+  weekNumber: number
+  startDate: string
+  plannedMinutes: number
+  completedMinutes: number
+  sessionsPlanned: number
+  sessionsDone: number
+  sessionsMissed: number
+}
+
+/**
+ * Ne couvre QUE les semaines déjà commencées (startDate <= today) qui ont
+ * des sampleSessions générées — une semaine jamais composée (génération
+ * paresseuse, voir "vue calendrier v2") n'a rien à comparer, jamais un 0%
+ * inventé pour elle (même discipline que computePlanProgress). Bornée aux
+ * `maxWeeks` semaines les plus récentes pour rester un coup d'œil compact,
+ * pas la totalité d'un plan de 12+ semaines.
+ */
+export function computeWeeklyAdherence(
+  weeks: PlanWeek[],
+  getCompletion: (week: PlanWeek, session: PlanWeekSessionWithValidation, index: number) => SessionCompletion,
+  todayIso: string,
+  maxWeeks = 6
+): WeeklyAdherence[] {
+  const eligible = weeks
+    .filter((w) => w.startDate <= todayIso && w.sampleSessions && w.sampleSessions.length > 0)
+    .sort((a, b) => a.weekNumber - b.weekNumber)
+    .slice(-maxWeeks)
+
+  return eligible.map((w) => {
+    const sessions = w.sampleSessions!
+    let completedMinutes = 0
+    let sessionsDone = 0
+    let sessionsMissed = 0
+    sessions.forEach((session, index) => {
+      const completion = getCompletion(w, session, index)
+      if (completion.status === 'done') {
+        sessionsDone += 1
+        // Durée réelle si connue (cycling, via l'activité Intervals.icu
+        // rapprochée) — sinon la durée planifiée de la séance elle-même
+        // (strength, qui ne porte pas de durée réelle comparable, voir
+        // SessionCompletion.actualDurationMinutes).
+        completedMinutes += completion.actualDurationMinutes ?? session.durationMinutes
+      } else if (completion.status === 'missed') {
+        sessionsMissed += 1
+      }
+    })
+    return {
+      weekNumber: w.weekNumber,
+      startDate: w.startDate,
+      plannedMinutes: sessions.reduce((sum, s) => sum + s.durationMinutes, 0),
+      completedMinutes,
+      sessionsPlanned: sessions.length,
+      sessionsDone,
+      sessionsMissed,
+    }
+  })
+}
+
 // ── Plan glissant sur 7 jours — chantier "repenser planification/séances/
 // feedback" (pièce A), version légère ───────────────────────────────────
 //
@@ -650,6 +719,40 @@ export function weekdayAvailabilityForDate(dateIso: string, weeklyAvailability: 
   const jsDay = new Date(`${dateIso}T00:00:00`).getDay() // 0=dimanche..6=samedi (Date.getDay())
   const mondayIndexed = (jsDay + 6) % 7 // 0=lundi..6=dimanche
   return weeklyAvailability[mondayIndexed]
+}
+
+// ── Vue "prochains entraînements" — chantier UX Frive/Join (audit
+// COACH_UX_AUDIT.md + retour utilisateur) ─────────────────────────────────
+//
+// Avant ce correctif, la bande de jours du calendrier du plan
+// (PlanWeekCalendar) était figée sur la semaine calendaire Lundi-Dimanche
+// SÉLECTIONNÉE dans la grille — le mécanisme de fenêtre glissante 7 jours
+// existait déjà côté données pour le reséquencement (rollingWindowDates
+// ci-dessus, chantier A) mais rien côté vue n'ancrait l'affichage sur
+// AUJOURD'HUI de la même façon. `sessionsForRollingWindow` fait ce lien :
+// pour chacune des 7 dates glissantes, retrouve la semaine du plan qui la
+// contient (une fenêtre qui déborde d'une semaine calendaire retombe sur la
+// semaine suivante) et ses séances datées ce jour-là. Jamais une exception
+// si la semaine correspondante n'a pas encore de sampleSessions (semaine
+// suivante pas encore générée, voir "vue calendrier v2") — jour simplement
+// vide, comme un jour de repos.
+
+export interface RollingDaySessions {
+  date: string
+  /** La semaine du plan qui contient cette date, ou `null` si aucune (date hors des bornes du plan). */
+  week: PlanWeek | null
+  sessions: { session: PlanWeekSessionWithValidation; index: number }[]
+}
+
+export function sessionsForRollingWindow(weeks: PlanWeek[], todayIso: string): RollingDaySessions[] {
+  return rollingWindowDates(todayIso).map((date) => {
+    const week = weeks.find((w) => date >= w.startDate && date <= w.endDate) ?? null
+    if (!week?.sampleSessions) return { date, week, sessions: [] }
+    const sessions = week.sampleSessions
+      .map((session, index) => ({ session, index }))
+      .filter(({ session }) => session.date === date)
+    return { date, week, sessions }
+  })
 }
 
 export interface RollingWeekInput {
