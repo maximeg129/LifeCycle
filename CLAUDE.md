@@ -2797,6 +2797,50 @@ logique pure/schéma touché(e) — 902/902 tests inchangés, tsc/eslint/build c
 possible pour la génération elle-même (pas de logique pure à isoler, invérifiable sans appel réel à
 Claude depuis ce sandbox) — à confirmer par l'utilisateur au premier essai réel après déploiement.
 
+## Bug réel corrigé : `feelToScore()` avait le sens inversé — un Feel "Strong" (le meilleur) lu comme négatif
+
+Retour utilisateur, capture d'écran d'une analyse de sortie à l'appui — titre généré : "Sortie de
+décrassage bien exécutée... malgré un feeling négatif du jour", alors que sur Intervals.icu cette
+même sortie porte Feel="Strong" et RPE 3/10 : "tous les signaux sont au vert et positif." Suite
+directe des deux correctifs RPE déjà documentés plus haut (`ride-analysis-flow.ts`) — mais cette
+fois le problème n'est pas le prompt/l'interprétation du modèle, c'est la donnée elle-même qui
+arrivait déjà inversée au moment d'entrer dans le prompt.
+
+**Root cause** — `feelToScore()` (`intervals-api.ts`) convertissait l'échelle 1-5 "Feel"
+d'Intervals.icu en supposant, sans jamais l'avoir vérifié, la convention "plus haut = mieux" (`(feel
+- 3) / 2` — 1 → -1, 5 → +1), la même convention ascendante que `FEELING_SCORE` côté app
+(`bien`/`neutre`/`mauvais` → 1/0/-1). Le correctif précédent ("Data layer vérifiée saine") avait
+noté "`feelToScore`: Feel Good → +1, cohérent avec la capture d'écran" — une vérification
+superficielle (le nom de la fonction semblait cohérent) plutôt qu'une confirmation du sens réel de
+l'échelle numérique sous-jacente d'Intervals.icu.
+
+**Vérification** — accès direct à `forum.intervals.icu` bloqué depuis ce sandbox (même limite
+documentée partout ailleurs dans ce fichier pour intervals.icu) ; contourné cette fois via
+`WebSearch` (qui interroge un index déjà collecté, contrairement à `WebFetch` qui doit atteindre le
+domaine lui-même — bloqué) plutôt que `raw.githubusercontent.com` (pas de spec OpenAPI publique
+couvrant ce champ). Résultat direct : un fil du forum Intervals.icu intitulé **"API returns inverted
+'feel' for activities"**, résolu **"not a bug"** — citation exacte de l'extrait indexé : *"strong
+activities receive a value of 1 (out of 5) and weak activities receive a value of 5 (out of 5)"*.
+Confirmation sans ambiguïté : l'échelle est **descendante** (1 = Strong, le meilleur ; 5 = le pire) —
+l'inverse de ce que ce fichier supposait.
+
+**Correctif** — `feelToScore()` inversé (`(3 - activity.feel) / 2` — 1 → +1, 5 → -1), commentaire
+réécrit citant la source. **Un seul point de correction, propagé à ses 3 consommateurs**
+(`use-ride-analysis.ts`, `use-governor.ts`, `/api/intervals/webhook/route.ts`) sans changement de
+leur propre code — même discipline "un seul helper, tous les appelants héritent du correctif" déjà
+actée pour `bestAverageWatts()` (voir "Fueling vs Workload" plus haut). **Bénéfice additionnel non
+cherché** : `use-governor.ts` fusionne déjà `intervalsFeelSeries` (via `feelToScore`) et
+`localFeelingSeries` (via `feelingScore()`/`FEELING_SCORE`, ascendant) dans le MÊME tableau
+(`feelingSeries`) pour le signal "feelings" du gouverneur de charge interne — avant ce correctif, les
+deux moitiés de ce tableau portaient donc des conventions de signe OPPOSÉES sans que rien ne le
+signale, corrompant silencieusement ce signal pour tout athlète ayant à la fois des sorties notées
+sur Intervals.icu et des feedbacks locaux (`sessionFeedback`) sur des jours différents. Corrigé sans
+changement de code dans `use-governor.ts` — la cohérence de signe entre les deux sources est
+désormais garantie par le seul point de conversion.
+
+Tests (`intervals-api.test.ts`, cas existants inversés : `feel: 1` → `1` au lieu de `-1`, `feel: 5` →
+`-1` au lieu de `1`, `feel: 3` → `0` inchangé) — 902/902 au total, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

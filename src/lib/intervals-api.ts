@@ -339,15 +339,32 @@ export interface FeelFieldLike {
 }
 
 /**
- * Converts Intervals.icu's 1-5 "Feel" rating (1 = terrible, 5 = great — same
- * ascending-is-better convention as every comparable training app) onto the
- * -1..1 scale this app's own bien/neutre/mauvais feeling score already uses
- * (see FEELING_SCORE in session-feedback-types.ts), so the two sources can
- * be trended together. Null if the activity has no feel rating.
+ * Converts Intervals.icu's 1-5 "Feel" rating onto the -1..1 scale this app's
+ * own bien/neutre/mauvais feeling score already uses (see FEELING_SCORE in
+ * session-feedback-types.ts), so the two sources can be trended together
+ * and merged into the same series (see use-governor.ts, intervalsFeelSeries
+ * + localFeelingSeries).
+ *
+ * ⚠️ Bug réel corrigé : ce champ est une échelle DESCENDANTE — 1 = "Strong"
+ * (le meilleur ressenti), 5 = le pire — l'inverse de la convention
+ * "plus haut = mieux" que ce commentaire supposait à tort avant ce
+ * correctif (et qu'utilise `FEELING_SCORE` côté app). Retour utilisateur,
+ * capture d'écran Intervals.icu à l'appui : une sortie avec Feel="Strong"
+ * (positif) et RPE bas était décrite par l'analyse IA comme un "feeling
+ * négatif" — `feelToScore` renvoyait -1 pour ce qui est en réalité le
+ * MEILLEUR ressenti possible. Confirmé via le forum Intervals.icu ("API
+ * returns inverted 'feel' for activities", résolu "not a bug" — c'est le
+ * comportement voulu de leur API, pas une inversion accidentelle) — accès
+ * direct à forum.intervals.icu bloqué depuis ce sandbox (même limite que
+ * documentée partout ailleurs dans ce fichier pour intervals.icu), mais
+ * `WebSearch` (contrairement à `WebFetch` sur le domaine lui-même) a pu
+ * atteindre l'extrait indexé de ce fil, qui confirme explicitement
+ * "strong activities receive a value of 1 (out of 5) and weak activities
+ * receive a value of 5 (out of 5)". Null si l'activité n'a pas de note.
  */
 export function feelToScore(activity: FeelFieldLike): number | null {
   if (activity.feel == null) return null;
-  return (activity.feel - 3) / 2;
+  return (3 - activity.feel) / 2;
 }
 
 /**
