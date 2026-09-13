@@ -36,23 +36,37 @@ env:
   # l'autre n'est nécessaire au BUILD (même posture que STRAVA_CLIENT_*
   # ci-dessus) : lus uniquement au runtime, dans
   # src/app/api/intervals-oauth/{authorize,callback}/route.ts.
-  - variable: INTERVALS_OAUTH_CLIENT_ID
-    secret: intervals-oauth-client-id
-    availability:
-      - RUNTIME
-  - variable: INTERVALS_OAUTH_CLIENT_SECRET
-    secret: intervals-oauth-client-secret
-    availability:
-      - RUNTIME
+  #
+  # ⚠️ Commentées pour l'instant : le déploiement échouait avec "Error
+  # resolving secret version ... intervals-oauth-client-id/versions/latest
+  # ... ensure the secret exists ... and grant your App Hosting backend
+  # access to it" — ces trois secrets Secret Manager n'ont pas encore été
+  # créés/autorisés pour ce backend (l'application OAuth Intervals.icu elle-
+  # même est peut-être encore "Pending"). Toutes les routes qui les lisent
+  # (/api/intervals-oauth/{authorize,callback}, /api/intervals/webhook)
+  # dégradent déjà proprement sur leur absence (une erreur 500 JSON au
+  # moment de l'appel, jamais un crash de build/déploiement) — commenter
+  # ici n'est donc pas cassant, juste ces trois endpoints indisponibles
+  # tant que les secrets ne sont pas réintroduits. À réactiver une fois les
+  # secrets créés (`firebase apphosting:secrets:set intervals-oauth-client-id`
+  # etc.) ET l'accès accordé (`firebase apphosting:secrets:grantaccess ...`).
+  # - variable: INTERVALS_OAUTH_CLIENT_ID
+  #   secret: intervals-oauth-client-id
+  #   availability:
+  #     - RUNTIME
+  # - variable: INTERVALS_OAUTH_CLIENT_SECRET
+  #   secret: intervals-oauth-client-secret
+  #   availability:
+  #     - RUNTIME
   # Secret embarqué par Intervals.icu dans chaque payload de webhook (voir
   # leur doc, section "Configure webhooks") — renseigné sur la page "Manage
   # App" une fois l'application approuvée, PUIS collé ici. Vérifié dans
   # src/app/api/intervals/webhook/route.ts pour confirmer qu'une requête
   # vient bien d'Intervals.icu avant de déclencher quoi que ce soit.
-  - variable: INTERVALS_WEBHOOK_SECRET
-    secret: intervals-webhook-secret
-    availability:
-      - RUNTIME
+  # - variable: INTERVALS_WEBHOOK_SECRET
+  #   secret: intervals-webhook-secret
+  #   availability:
+  #     - RUNTIME
   # Notifications push (chantier "repenser planification/séances/feedback",
   # voir CLAUDE.md) — la clé PUBLIQUE "Web Push certificate" générée dans
   # Firebase Console → Project Settings → Cloud Messaging → Web
