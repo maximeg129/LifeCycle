@@ -2761,6 +2761,42 @@ satisfait bien le vrai type `PlanWeekSessionsOutput` (`satisfies`, aurait échou
 avant ce correctif) et valide sans faire échouer le contrôle matrice S05) — 902/902 au total,
 tsc/eslint/build clean.
 
+## Fix réel : `sessionLocationAdjustment` échouait sur "Expected ... Required" (aucun template JSON dans le prompt)
+
+Retour utilisateur, capture d'écran d'un toast à l'appui : "L'IA n'a pas pu adapter la séance / La
+réponse de l'IA n'a pas le format attendu : Required" — en basculant le pill-switcher Extérieur/Home
+trainer d'une séance du plan (voir "Refonte inspirée de Frive/Join", pièce 3 plus haut). Le message
+Zod "Required" (par opposition à "Expected number, received null" du correctif juste au-dessus) veut
+dire qu'une clé était ABSENTE de la réponse du modèle, pas juste mal typée.
+
+**Root cause** — `adjust-session-location-flow.ts` (le flow `sessionLocationAdjustment`) est le SEUL
+flow de toute l'app utilisant `invokeCoachJson`/`generateJson` à ne JAMAIS inclure de gabarit JSON
+explicite (`"Réponds ... avec UNIQUEMENT un objet JSON ... de cette forme : {...}"`) dans son prompt
+système. Tous les 8 autres flows JSON de l'app (`plan-week-sessions-flow.ts`, `daily-workout-
+recommendation-flow.ts`, `training-plan-generation-flow.ts`, `training-plan-recalibration-flow.ts`,
+`ride-analysis-flow.ts`, `strength-session-analysis-flow.ts`, `recovery-insight-flow.ts` — en
+anglais, "Respond with ONLY a JSON object..." —, `cycling-outfit-recommendation-flow.ts`,
+`identify-plant-flow.ts`) donnent explicitement au modèle le nom exact de CHAQUE clé attendue, y
+compris ses propres champs spécifiques en plus des 5 champs du contrat coach (`describeCoachOutputContract()`
+ne décrit que `verdict`/`summary`/`recommendation`/`reasons`/`uncertainty` — jamais les champs propres
+à un flow donné). `adjust-session-location-flow.ts` se contentait de décrire `sportType`/
+`structuredWorkout`/`adaptationNote` en prose dans les "Règles impératives" (et seulement les deux
+premiers, jamais `adaptationNote` par son nom) — les descriptions Zod (`.describe(...)`) ne sont
+JAMAIS envoyées au modèle, elles ne documentent le schéma que côté code. Le modèle devait donc deviner
+la structure exacte attendue ; `adaptationNote` (`z.string().min(1)`, requis) était la clé la plus
+probable à être omise puisqu'elle n'était mentionnée nulle part dans le texte réellement envoyé à
+Claude.
+
+**Correctif** — ajout du gabarit JSON manquant, même convention que les 8 autres flows (`"Réponds en
+français, avec UNIQUEMENT un objet JSON... de cette forme (plus les champs de contrat obligatoires
+décrits plus haut...)"`), listant explicitement les 3 champs propres au flow avec leur nom exact —
+y compris `sportType` déjà résolu de façon déterministe (`"${isIndoor ? 'VirtualRide' : 'Ride'}"`,
+interpolé dans le gabarit lui-même plutôt que laissé au choix du modèle, cohérent avec la règle déjà
+présente "sportType doit être EXACTEMENT..."). Changement de texte de prompt uniquement, aucune
+logique pure/schéma touché(e) — 902/902 tests inchangés, tsc/eslint/build clean. Pas de test dédié
+possible pour la génération elle-même (pas de logique pure à isoler, invérifiable sans appel réel à
+Claude depuis ce sandbox) — à confirmer par l'utilisateur au premier essai réel après déploiement.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

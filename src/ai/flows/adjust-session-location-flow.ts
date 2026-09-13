@@ -68,6 +68,15 @@ ${isIndoor
 ${STRUCTURED_WORKOUT_SYNTAX}
 - Ne renomme le titre que si le nom actuel référence explicitement l'ancien lieu (ex. "Sortie extérieure" en passant à indoor) — sinon garde-le identique.
 
+Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme
+(plus les champs de contrat obligatoires décrits plus haut — "summary"/"recommendation" résument brièvement
+l'adaptation faite) :
+{
+  "sportType": "${isIndoor ? 'VirtualRide' : 'Ride'}",
+  "structuredWorkout": "script adapté, même syntaxe, même durée totale",
+  "adaptationNote": "1-2 phrases expliquant ce qui a changé dans le script, ou pourquoi rien n'a dû changer"
+}
+
 SÉANCE ACTUELLE À ADAPTER :
 Titre : ${parsedInput.title}
 Script structuré actuel :
