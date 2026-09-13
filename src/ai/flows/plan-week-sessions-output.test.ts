@@ -118,4 +118,42 @@ describe('plan-week-sessions-flow — realistic strength session fixture', () =>
     expect(cyclingSession.strengthPhase).toBeUndefined()
     expect(cyclingSession.strengthExercises).toBeUndefined()
   })
+
+  // ⚠️ Bug réel corrigé : le modèle renvoyait parfois `restSeconds: null`
+  // pour un exercice (ex. un enchaînement en circuit où le repos ne
+  // s'applique pas clairement) — la vraie erreur en prod : "L'IA n'a pas
+  // pu générer les séances de la semaine / La réponse de l'IA n'a pas le
+  // format attendu : Expected number, received null". Le schéma exigeait
+  // `restSeconds: z.number()` (requis, non-nullable) alors que le reste du
+  // pipeline (strengthSessionValidator.ts, live-strength-session-view.tsx)
+  // traitait déjà ce champ comme nullable/optionnel — un désaccord entre le
+  // schéma de sortie et le reste du code, jamais un bug de génération côté
+  // modèle. Ce fixture — `null` sur un exercice — ne satisferait PAS
+  // `PlanWeekSessionsOutput` avant le correctif (tsc échouerait sur le
+  // `satisfies` ci-dessous), donc ce test est la garde de non-régression.
+  it('a strength exercise with restSeconds: null still satisfies the real schema and validates without crashing', () => {
+    const withNullRest: PlanWeekSession = {
+      ...plausibleModelOutput.sessions[1],
+      strengthExercises: (plausibleModelOutput.sessions[1].strengthExercises ?? []).map((e, i) =>
+        i === 0 ? { ...e, restSeconds: null } : e
+      ),
+    } satisfies PlanWeekSession
+    const summary = validateStrengthSession({
+      session: {
+        sessionType: 'principale',
+        strengthPhase: 'force-max',
+        durationMinutes: withNullRest.durationMinutes,
+        exercises: withNullRest.strengthExercises ?? [],
+      },
+      previousSessionsPatterns: [],
+      weeklyCyclingHours: 8,
+      cyclingPhase: 'build',
+      strengthSessionsThisWeek: 1,
+      hoursBeforeNextKeySession: null,
+    })
+    // Le contrôle matrice (strength-check-4) ne vérifie le repos que quand
+    // il est renseigné (ex.restSeconds != null) — un repos null pour un
+    // exercice ne doit jamais, à lui seul, faire échouer la validation.
+    expect(summary.results.find((r) => r.checkId === 'strength-check-4-load-reps-rest-matrix')?.verdict).toBe('ok')
+  })
 })

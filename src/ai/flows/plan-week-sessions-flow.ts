@@ -54,7 +54,7 @@ const StrengthExerciseSchema = z.object({
   pct1RMMin: z.number().nullable().describe('Lower bound of estimated %1RM for THIS exercise, per the S05 matrix for the session\'s strengthPhase — null when not applicable (bodyweight/core work).'),
   pct1RMMax: z.number().nullable().describe('Upper bound of estimated %1RM — null when not applicable.'),
   loadGuidance: z.string().describe('Short qualitative complement, e.g. "charge lourde (RPE 8-9)" — alongside the numeric pct1RM range above, not a replacement for it.'),
-  restSeconds: z.number().describe('Rest between sets, in seconds — per the S05 phase matrix (STRENGTH_SESSION_VALIDATION_GUIDANCE).'),
+  restSeconds: z.number().nullable().describe('Rest between sets, in seconds — per the S05 phase matrix (STRENGTH_SESSION_VALIDATION_GUIDANCE). Null only when a clean rest duration does not apply to this exercise (e.g. paired/circuit exercise sharing rest with the next one) — otherwise always a real value from the matrix, never guessed at random.'),
 });
 
 const PlanWeekSessionSchema = z.object({
@@ -188,7 +188,7 @@ en une phrase, "recommendation" indique quelle séance prioriser si le temps man
       "sessionType": "principale|entretien|top-up",
       "strengthPhase": "base|force-max|transfert-puissance|entretien",
       "strengthExercises": [
-        { "name": "ex. Squat", "pattern": "bilateral-heavy|hip-hinge|unilateral|anti-extension|anti-rotation-lateral|ankle-calf", "sets": nombre, "reps": "ex. 5 ou 8-10 — DOIT correspondre à repsMin/repsMax", "repsMin": nombre, "repsMax": nombre, "pct1RMMin": nombre ou null, "pct1RMMax": nombre ou null, "loadGuidance": "ex. charge lourde (RPE 8-9)", "restSeconds": nombre }
+        { "name": "ex. Squat", "pattern": "bilateral-heavy|hip-hinge|unilateral|anti-extension|anti-rotation-lateral|ankle-calf", "sets": nombre, "reps": "ex. 5 ou 8-10 — DOIT correspondre à repsMin/repsMax", "repsMin": nombre, "repsMax": nombre, "pct1RMMin": nombre ou null, "pct1RMMax": nombre ou null, "loadGuidance": "ex. charge lourde (RPE 8-9)", "restSeconds": nombre ou null }
       ]
     }` : ''}
   ]

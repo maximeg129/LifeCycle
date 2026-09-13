@@ -41,7 +41,7 @@ export interface StrengthExercise {
   sets: number
   reps: string
   loadGuidance: string
-  restSeconds?: number
+  restSeconds?: number | null
 }
 
 /** Formats a strength session's exercises as a plain-text description — same role as structuredWorkout for a cycling session, but musculation has no %FTP workout-builder syntax to speak of. */

@@ -2714,6 +2714,53 @@ statut, jours hors plan groupés à part ; `pastPlanSessions` ×3 — filtre str
 exclut une semaine sans `sampleSessions`, tri du plus récent au plus ancien) — 901/901 au total,
 tsc/eslint/build clean.
 
+## Fix réel : `planWeekSessions` échouait sur "Expected number, received null" (`restSeconds`)
+
+Retour utilisateur, capture d'écran d'un toast d'échec de génération à l'appui : "L'IA n'a pas pu
+générer les séances de la semaine / La réponse de l'IA n'a pas le format attendu : Expected number,
+received null." Diagnostic mené sans accès aux logs serveur (pas de reproduction possible dans ce
+sandbox, pas de `ANTHROPIC_API_KEY`) — par lecture croisée du schéma de sortie du flow contre le
+reste du pipeline qui le consomme, en confirmant d'abord avec l'utilisateur que la musculation était
+activée sur son plan (`AskUserQuestion`), pour cibler `StrengthExerciseSchema` plutôt que
+`PlanWeekSessionSchema`/`fueling`.
+
+**Root cause** — `restSeconds: z.number()` (`plan-week-sessions-flow.ts`, `StrengthExerciseSchema`)
+était requis et non-nullable, alors que TOUT le reste du pipeline anticipait déjà qu'il puisse être
+absent/null : `strengthSessionValidator.ts` (`StrengthExerciseForValidation.restSeconds?: number |
+null`, avec un commentaire explicite — "non renseigné par le coach IA — le contrôle matrice traite
+ce champ comme non vérifiable plutôt que comme une violation") ; `live-strength-session-view.tsx`
+(`ex.restSeconds ?? DEFAULT_REST_SECONDS` à la construction du suivi en direct, avec son propre
+commentaire "Repos par défaut si l'exercice n'en porte pas") ; l'affichage du script muscu
+(`daily-workout-tab.tsx`/`plan-session-detail.tsx`, `ex.restSeconds ? ... : ''`). Le schéma de
+sortie IA était le SEUL maillon de la chaîne à ne pas tolérer cette absence — dès que le modèle
+répond honnêtement par `null` pour un exercice où un repos net ne s'applique pas clairement (ex. un
+enchaînement en circuit qui partage son repos avec l'exercice suivant), la validation Zod de toute
+la réponse échouait, jetant la génération entière de la semaine plutôt que ce seul champ. Pas un bug
+de génération côté modèle — un désaccord entre le schéma de sortie et le reste du code, qui
+anticipait déjà ce cas sans que le schéma ne l'autorise jamais.
+
+**Correctif** — `restSeconds: z.number().nullable()`, description mise à jour pour dire explicitement
+quand `null` est acceptable (repos non applicable) et rappeler que ça reste l'exception, jamais un
+repli par défaut. Exemple JSON du prompt aligné (`"restSeconds": nombre ou null`, même convention
+que `pct1RMMin`/`pct1RMMax`/`carbGramsPerHourMin` déjà nullables dans ce même schéma).
+`StrengthExercise.restSeconds` (`daily-workout-types.ts`, le type partagé `WorkoutLike` du chemin
+d'envoi vers Intervals.icu, commun à `dailyWorkoutRecommendation`/`planWeekSessions`) élargi en
+conséquence (`number | null` plutôt que `number`) — seul point de friction TypeScript en aval, tous
+les autres consommateurs (`?? DEFAULT_REST_SECONDS`, `? ... : ''`, `!= null` côté validateur)
+géraient déjà `null` correctement.
+
+**Portée** — `repsMin`/`repsMax` (mêmes exercices) restés `z.number()` requis, volontairement : la
+fixture de test déjà en place (`plan-week-sessions-output.test.ts`) montre le modèle produire des
+valeurs numériques même pour un exercice tenu (planche : `reps: "30-45s"`, `repsMin: 30, repsMax:
+45` — les secondes tenues, jamais `null`), et `StrengthExerciseForValidation` les type comme requis
+côté validateur — aucun signal, contrairement à `restSeconds`, que ce champ ait jamais été anticipé
+comme absent. Seul `restSeconds` portait cette incohérence documentée entre schéma et consommateurs.
+
+Tests (`plan-week-sessions-output.test.ts`, 1 nouveau — un exercice à `restSeconds: null` qui
+satisfait bien le vrai type `PlanWeekSessionsOutput` (`satisfies`, aurait échoué à la compilation
+avant ce correctif) et valide sans faire échouer le contrôle matrice S05) — 902/902 au total,
+tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
