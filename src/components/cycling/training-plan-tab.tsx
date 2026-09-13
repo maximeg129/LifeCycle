@@ -26,7 +26,7 @@ import { SourceCitation } from '@/components/coach/source-citation'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { PlanOverviewGrid } from './plan-overview-grid'
 import { PlanWeekCalendar } from './plan-week-calendar'
-import { PlanWeekSessionList } from './plan-week-session-list'
+import { PlanNextSessionsList } from './plan-next-sessions-list'
 import { PlanAdherenceChart } from './plan-adherence-chart'
 import { buildPlanAttentionItems } from './plan-attention-types'
 import { PlanAttentionBadge } from './plan-attention-badge'
@@ -450,37 +450,25 @@ export function TrainingPlanTab() {
         <IntervalsOnboardingNotice message="Intervals.icu non connecté — le plan reste consultable, mais les séances ne pourront pas être envoyées sur votre calendrier." />
       )}
 
-      {/* Retour utilisateur, capture d'écran Frive à l'appui : "chaque
-          séance de la semaine en liste comme frive avec le detail et le
-          toggle pour indoor/outdoor." Remplace la bande glissante
-          "Prochains entraînements" — voir plan-week-session-list.tsx. */}
-      {week ? (
-        <div className="space-y-3">
-          <div className="flex items-baseline justify-between">
-            <h3 className="text-sm font-semibold">Séances de la semaine</h3>
-            <span className="text-xs text-muted-foreground">
-              {format(new Date(`${week.startDate}T00:00:00`), 'dd MMM', { locale: fr })} – {format(new Date(`${week.endDate}T00:00:00`), 'dd MMM', { locale: fr })}
-            </span>
-          </div>
-          <PlanWeekSessionList
-            week={week}
-            today={today}
-            isGenerating={generatingSessionsForWeek === week.weekNumber}
-            sendingSessionKey={sendingSessionKey}
-            canSendToIntervals={canSendToIntervals}
-            onRegenerate={() => generateWeekSessions(week)}
-            onSend={(session, index, dateId) => sendSessionToIntervals(session, week.weekNumber, index, dateId)}
-            onMoveDate={(index, newDate) => moveSessionDate(week.weekNumber, index, newDate)}
-            getCompletion={(session, index) => getSessionCompletion(week, session, index)}
-            adjustingLocationKey={adjustingLocationKey}
-            onAdjustLocation={(index, targetLocation) => adjustSessionForLocation(week.weekNumber, index, targetLocation)}
-          />
-        </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          Aucune semaine du plan ne couvre aujourd&apos;hui — consultez le plan complet pour voir les semaines à venir ou déjà passées.
-        </p>
-      )}
+      {/* Retour utilisateur : "j'aimerais que l'on voit la séance du jour et
+          des 7 prochains jours sur cette vue... on ne verrait pas séance de
+          la semaine mais séances des 7 prochains jours" — remplace la liste
+          Lundi-Dimanche par une fenêtre glissante ancrée sur aujourd'hui,
+          les séances déjà passées révélées à part (voir
+          plan-next-sessions-list.tsx). */}
+      <PlanNextSessionsList
+        weeks={activePlan.weeks}
+        today={today}
+        generatingSessionsForWeek={generatingSessionsForWeek}
+        sendingSessionKey={sendingSessionKey}
+        canSendToIntervals={canSendToIntervals}
+        onRegenerate={(w) => generateWeekSessions(w)}
+        onSend={(w, session, index, dateId) => sendSessionToIntervals(session, w.weekNumber, index, dateId)}
+        onMoveDate={(w, index, newDate) => moveSessionDate(w.weekNumber, index, newDate)}
+        getCompletion={(w, session, index) => getSessionCompletion(w, session, index)}
+        adjustingLocationKey={adjustingLocationKey}
+        onAdjustLocation={(w, index, targetLocation) => adjustSessionForLocation(w.weekNumber, index, targetLocation)}
+      />
 
       {/* Retour utilisateur (captures Join à l'appui) : "avoir le Plan
           derrière un bouton plan comme sur join." Regroupe ce qui était

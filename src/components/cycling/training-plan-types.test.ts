@@ -24,6 +24,9 @@ import {
   rollingWindowDates,
   weekdayAvailabilityForDate,
   recalibrateRollingWindow,
+  sessionsForNext7Days,
+  groupRollingDaysByWeek,
+  pastPlanSessions,
   type PlanWeekContent,
   type PlanWeek,
   type PlanWeekAdjustment,
@@ -893,5 +896,138 @@ describe('recalibrateRollingWindow', () => {
     const { updatedSessionsByWeek, moves } = recalibrateRollingWindow([input], availability, todayIso)
     expect(moves).toEqual([])
     expect(updatedSessionsByWeek.size).toBe(0)
+  })
+})
+
+describe('sessionsForNext7Days', () => {
+  // Lun 14 -> Dim 20, puis Lun 21 -> Dim 27 (semaine suivante).
+  const weekA: PlanWeek = { weekNumber: 1, startDate: '2026-09-14', endDate: '2026-09-20', phase: 'base', focus: 'Base', targetWeeklyMinutes: 300 }
+  const weekB: PlanWeek = { weekNumber: 2, startDate: '2026-09-21', endDate: '2026-09-27', phase: 'build', focus: 'Volume', targetWeeklyMinutes: 300 }
+
+  it('returns exactly the 7 rolling calendar days, each tagged with the plan week that covers it', () => {
+    const withSessions: PlanWeek = { ...weekA, sampleSessions: [minimalSession('A')] }
+    const days = sessionsForNext7Days([withSessions, weekB], '2026-09-16') // Mercredi -> Mar 22 (chevauche weekA/weekB)
+    expect(days.map((d) => d.date)).toEqual(['2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22'])
+    expect(days.slice(0, 5).every((d) => d.week?.weekNumber === 1)).toBe(true)
+    expect(days.slice(5).every((d) => d.week?.weekNumber === 2)).toBe(true)
+  })
+
+  it('attaches only the sessions actually dated on each given day, never a neighboring day\'s session', () => {
+    const withSessions: PlanWeek = {
+      ...weekA,
+      sampleSessions: [
+        { ...minimalSession('Mardi'), date: '2026-09-15' },
+        { ...minimalSession('Jeudi'), date: '2026-09-17' },
+      ],
+    }
+    const days = sessionsForNext7Days([withSessions], '2026-09-15')
+    expect(days.find((d) => d.date === '2026-09-15')!.sessions.map((s) => s.session.title)).toEqual(['Mardi'])
+    expect(days.find((d) => d.date === '2026-09-16')!.sessions).toEqual([])
+    expect(days.find((d) => d.date === '2026-09-17')!.sessions.map((s) => s.session.title)).toEqual(['Jeudi'])
+  })
+
+  it('flags only the days of a not-yet-generated week — a generated week\'s day without a session stays un-flagged', () => {
+    const generatedA: PlanWeek = { ...weekA, sampleSessions: [{ ...minimalSession('Samedi'), date: '2026-09-19' }] } // pas de séance le dimanche 20
+    const days = sessionsForNext7Days([generatedA, weekB], '2026-09-20') // Dim -> couvre generatedA (1 jour) puis weekB (6 jours, pas générée)
+    expect(days[0].weekNotGenerated).toBe(false)
+    expect(days[0].sessions).toEqual([])
+    expect(days.slice(1).every((d) => d.weekNotGenerated && d.week?.weekNumber === 2)).toBe(true)
+  })
+
+  it('flags a day as weekNotGenerated for its own week too, when that week has no sampleSessions', () => {
+    const days = sessionsForNext7Days([weekA], '2026-09-20')
+    expect(days[0].weekNotGenerated).toBe(true)
+    expect(days[0].week?.weekNumber).toBe(1)
+  })
+
+  it('leaves week null and weekNotGenerated false for a day outside every plan week', () => {
+    const shortPlan: PlanWeek = { ...weekA, sampleSessions: [minimalSession('A')] }
+    const days = sessionsForNext7Days([shortPlan], '2026-09-19') // Sam 19 -> Ven 25, déborde après la fin du plan (20 sept)
+    const outside = days.find((d) => d.date === '2026-09-22')!
+    expect(outside.week).toBeNull()
+    expect(outside.weekNotGenerated).toBe(false)
+    expect(outside.sessions).toEqual([])
+  })
+})
+
+describe('groupRollingDaysByWeek', () => {
+  const dayOf = (date: string, weekNumber: number | null, weekNotGenerated: boolean) => ({
+    date,
+    week: weekNumber != null ? ({ weekNumber } as unknown as PlanWeek) : null,
+    sessions: [],
+    weekNotGenerated,
+  })
+
+  it('merges every day of the same generated week into a single segment', () => {
+    const days = ['2026-09-14', '2026-09-15', '2026-09-16'].map((d) => dayOf(d, 1, false))
+    const segments = groupRollingDaysByWeek(days)
+    expect(segments).toEqual([{ weekNumber: 1, weekNotGenerated: false, days }])
+  })
+
+  it('splits into a new segment when the week number changes, even with the same weekNotGenerated status', () => {
+    const days = [dayOf('2026-09-20', 1, false), dayOf('2026-09-21', 2, false)]
+    const segments = groupRollingDaysByWeek(days)
+    expect(segments.map((s) => s.weekNumber)).toEqual([1, 2])
+  })
+
+  it('splits into a new segment when weekNotGenerated changes, even within the same week number', () => {
+    // Cas artificiel (n'arrive pas en pratique — une semaine passe de non générée à générée
+    // en cours de route) mais la fonction reste correcte si ça se produisait.
+    const days = [dayOf('2026-09-20', 1, true), dayOf('2026-09-21', 1, false)]
+    const segments = groupRollingDaysByWeek(days)
+    expect(segments).toEqual([
+      { weekNumber: 1, weekNotGenerated: true, days: [days[0]] },
+      { weekNumber: 1, weekNotGenerated: false, days: [days[1]] },
+    ])
+  })
+
+  it('groups consecutive days outside every plan week (week: null) into their own segment', () => {
+    const days = [dayOf('2026-09-14', 1, false), dayOf('2026-09-15', null, false), dayOf('2026-09-16', null, false)]
+    const segments = groupRollingDaysByWeek(days)
+    expect(segments.map((s) => ({ weekNumber: s.weekNumber, count: s.days.length }))).toEqual([
+      { weekNumber: 1, count: 1 },
+      { weekNumber: null, count: 2 },
+    ])
+  })
+})
+
+describe('pastPlanSessions', () => {
+  it('returns only sessions dated strictly before today', () => {
+    const week: PlanWeek = {
+      weekNumber: 1, startDate: '2026-09-14', endDate: '2026-09-20', phase: 'base', focus: 'Base', targetWeeklyMinutes: 300,
+      sampleSessions: [
+        { ...minimalSession('Passée'), date: '2026-09-15' },
+        { ...minimalSession('Aujourd\'hui'), date: '2026-09-16' },
+        { ...minimalSession('Future'), date: '2026-09-17' },
+      ],
+    }
+    const result = pastPlanSessions([week], '2026-09-16')
+    expect(result.map((e) => e.session.title)).toEqual(['Passée'])
+  })
+
+  it('excludes weeks without sampleSessions — nothing generated to look at', () => {
+    const week: PlanWeek = { weekNumber: 1, startDate: '2026-09-01', endDate: '2026-09-07', phase: 'base', focus: 'Base', targetWeeklyMinutes: 300 }
+    expect(pastPlanSessions([week], '2026-09-16')).toEqual([])
+  })
+
+  it('ignores a session with no assigned date', () => {
+    const week: PlanWeek = {
+      weekNumber: 1, startDate: '2026-09-01', endDate: '2026-09-07', phase: 'base', focus: 'Base', targetWeeklyMinutes: 300,
+      sampleSessions: [minimalSession('Sans date')],
+    }
+    expect(pastPlanSessions([week], '2026-09-16')).toEqual([])
+  })
+
+  it('sorts the most recent past session first, across multiple weeks', () => {
+    const weekA: PlanWeek = {
+      weekNumber: 1, startDate: '2026-09-01', endDate: '2026-09-07', phase: 'base', focus: 'Base', targetWeeklyMinutes: 300,
+      sampleSessions: [{ ...minimalSession('S1'), date: '2026-09-02' }],
+    }
+    const weekB: PlanWeek = {
+      weekNumber: 2, startDate: '2026-09-08', endDate: '2026-09-14', phase: 'base', focus: 'Base', targetWeeklyMinutes: 300,
+      sampleSessions: [{ ...minimalSession('S2'), date: '2026-09-10' }],
+    }
+    const result = pastPlanSessions([weekA, weekB], '2026-09-16')
+    expect(result.map((e) => e.session.title)).toEqual(['S2', 'S1'])
   })
 })
