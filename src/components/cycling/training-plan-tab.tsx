@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Slider } from '@/components/ui/slider'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -25,29 +24,12 @@ import { SourceCitation } from '@/components/coach/source-citation'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { PlanOverviewGrid } from './plan-overview-grid'
 import { PlanWeekCalendar } from './plan-week-calendar'
+import { PlanRollingCalendar } from './plan-rolling-calendar'
+import { PlanAdherenceChart } from './plan-adherence-chart'
 import { buildPlanAttentionItems } from './plan-attention-types'
 import { PlanAttentionBadge } from './plan-attention-badge'
 import { IntervalsOnboardingNotice } from './intervals-onboarding-notice'
-
-// Disponibilité hebdomadaire par jour — chantier Frive/Join (retour
-// utilisateur, capture d'écran Join à l'appui : "définir la disponibilité
-// sur la semaine me paraît intéressant"). Remplace le simple volume hebdo
-// total par 7 curseurs jour par jour, Lundi→Dimanche (même ordre que
-// buildPlanWeekSkeleton) — assignSessionDatesByAvailability()
-// (training-plan-types.ts) distribue ensuite les séances type en fonction
-// de cette vraie disponibilité plutôt que d'un étalement mécanique.
-const WEEKDAY_LABELS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'] as const
-// Somme = 360 — un défaut UX plausible (week-end
-// plus disponible qu'un jour de semaine), pas une valeur scientifique.
-const DEFAULT_WEEKLY_AVAILABILITY: number[] = [30, 60, 30, 60, 30, 90, 60]
-
-function formatDayMinutes(minutes: number): string {
-  if (minutes === 0) return 'Repos'
-  const h = Math.floor(minutes / 60)
-  const m = minutes % 60
-  if (h === 0) return `${m}min`
-  return m === 0 ? `${h}h` : `${h}h${String(m).padStart(2, '0')}`
-}
+import { WeeklyAvailabilityCard, DEFAULT_WEEKLY_AVAILABILITY, formatDayMinutes } from './weekly-availability-card'
 
 export function TrainingPlanTab() {
   const {
@@ -251,34 +233,12 @@ export function TrainingPlanTab() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-3">
-              <div className="flex items-baseline justify-between">
-                <Label>Disponibilité hebdomadaire</Label>
-                <span className="text-xs text-muted-foreground font-data">
-                  Total : {formatDayMinutes(weeklyMinutes)}
-                </span>
-              </div>
-              <div className="space-y-2.5">
-                {WEEKDAY_LABELS.map((label, i) => (
-                  <div key={label} className="flex items-center gap-3">
-                    <span className="w-8 shrink-0 text-xs text-muted-foreground">{label}</span>
-                    <Slider
-                      value={[weeklyAvailability[i]]}
-                      onValueChange={([v]) => handleAvailabilityChange(i, v)}
-                      min={0}
-                      max={240}
-                      step={15}
-                      className="flex-1"
-                    />
-                    <span className="w-14 shrink-0 text-right text-xs font-data text-muted-foreground">
-                      {formatDayMinutes(weeklyAvailability[i])}
-                    </span>
-                  </div>
-                ))}
-              </div>
+            <div className="p-3 rounded-xl bg-muted/50 border border-border/50 flex items-center justify-between gap-3 flex-wrap">
               <p className="text-xs text-muted-foreground">
-                L&apos;IA distribue les séances type sur les jours où vous avez le plus de temps, plutôt qu&apos;un étalement mécanique.
+                Disponibilité hebdomadaire réglée dans la carte ci-dessus — l&apos;IA distribue les séances type sur
+                les jours où vous avez le plus de temps, plutôt qu&apos;un étalement mécanique.
               </p>
+              <span className="text-xs font-data font-semibold shrink-0">{formatDayMinutes(weeklyMinutes)}/semaine</span>
             </div>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
@@ -322,9 +282,23 @@ export function TrainingPlanTab() {
 
   if (isLoadingPlan) return <Skeleton className="h-64 w-full rounded-2xl" />
 
+  // Retour utilisateur (audit UX Frive/Join) : la disponibilité doit être
+  // aussi accessible que le reste de l'écran, jamais cachée derrière un
+  // bouton qui sonne comme "créer un nouveau plan" — voir
+  // weekly-availability-card.tsx. Rendue en tête, avant même la branche
+  // "aucun plan actif", pour rester utilisable dès la première visite.
+  const availabilityCard = (
+    <WeeklyAvailabilityCard
+      weeklyAvailability={weeklyAvailability}
+      weeklyMinutes={weeklyMinutes}
+      onChange={handleAvailabilityChange}
+    />
+  )
+
   if (!activePlan || showNewPlanForm) {
     return (
       <div className="space-y-6">
+        {availabilityCard}
         {!canSendToIntervals && (
           <IntervalsOnboardingNotice message="Intervals.icu non connecté — le plan peut se générer, mais les séances ne pourront pas être envoyées sur votre calendrier." />
         )}
@@ -342,6 +316,26 @@ export function TrainingPlanTab() {
 
   return (
     <div className="space-y-6">
+      {availabilityCard}
+      {/* Retour utilisateur (audit UX Frive/Join) : "la vue des prochains
+          entraînements (à caler sur Frive)". Distinct de la grille + vue
+          semaine ci-dessous (PlanOverviewGrid/PlanWeekCalendar), qui reste
+          l'écran de gestion pour parcourir/éditer n'importe quelle semaine
+          du plan — celle-ci est le coup d'œil quotidien, toujours ancrée
+          sur aujourd'hui, jamais sur une semaine sélectionnée. */}
+      <PlanRollingCalendar
+        weeks={activePlan.weeks}
+        todayIso={today}
+        sendingSessionKey={sendingSessionKey}
+        canSendToIntervals={canSendToIntervals}
+        onSend={(session, w, index, dateId) => sendSessionToIntervals(session, w.weekNumber, index, dateId)}
+        onMoveDate={(w, index, newDate) => moveSessionDate(w.weekNumber, index, newDate)}
+        getCompletion={(w, session, index) => getSessionCompletion(w, session, index)}
+        activities={activities}
+        athleteFtp={athleteFtp}
+        adjustingLocationKey={adjustingLocationKey}
+        onAdjustLocation={(w, index, targetLocation) => adjustSessionForLocation(w.weekNumber, index, targetLocation)}
+      />
       {!canSendToIntervals && (
         <IntervalsOnboardingNotice message="Intervals.icu non connecté — le plan reste consultable, mais les séances ne pourront pas être envoyées sur votre calendrier." />
       )}
@@ -524,6 +518,26 @@ export function TrainingPlanTab() {
           />
         </CardContent>
       </Card>
+
+      {/* COACH_UX_AUDIT.md §4.C, jamais construit jusqu'ici : "Pas de vue
+          'semaine : prévu vs réalisé' en un graphique... LifeCycle a
+          l'équivalent en DEUX affichages séparés — jamais une vue compacte
+          au même endroit." Résumé barres empilées prévu/réalisé, dernières
+          semaines du plan (voir computeWeeklyAdherence) — la carte
+          elle-même n'apparaît que s'il existe au moins une semaine passée
+          avec des sampleSessions à comparer (sinon rien à montrer, jamais
+          un graphique vide). */}
+      {activePlan.weeks.some((w) => w.startDate <= today && (w.sampleSessions?.length ?? 0) > 0) && (
+        <Card className="lc-card">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Prévu vs réalisé</CardTitle>
+            <CardDescription>Adhérence au plan, semaine par semaine.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PlanAdherenceChart weeks={activePlan.weeks} getCompletion={(w, s, i) => getSessionCompletion(w, s, i)} todayIso={today} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Retour utilisateur : "penser à automatique mais documentée on
           pourrait expliquer à l'athlète pourquoi le plan a changé". Chaque

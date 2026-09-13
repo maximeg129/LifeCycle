@@ -20,9 +20,11 @@ import {
   planAutoRescheduleMoves,
   assignSessionDatesByAvailability,
   computePlanProgress,
+  computeWeeklyAdherence,
   rollingWindowDates,
   weekdayAvailabilityForDate,
   recalibrateRollingWindow,
+  sessionsForRollingWindow,
   type PlanWeekContent,
   type PlanWeek,
   type PlanWeekAdjustment,
@@ -732,6 +734,64 @@ describe('computePlanProgress', () => {
   })
 })
 
+describe('computeWeeklyAdherence', () => {
+  const today = '2026-10-05'
+  const completionFor = (map: Record<string, SessionCompletion>) =>
+    (week: PlanWeek, session: PlanWeekSessionWithValidation, index: number): SessionCompletion =>
+      map[`${week.weekNumber}-${index}`] ?? { status: 'upcoming' }
+
+  it('excludes weeks without sampleSessions — nothing to compare, never a fabricated 0%', () => {
+    const noSessions: PlanWeek = { weekNumber: 1, startDate: '2026-09-01', endDate: '2026-09-07', phase: 'base', focus: 'Base', targetWeeklyMinutes: 300 }
+    expect(computeWeeklyAdherence([noSessions], completionFor({}), today)).toEqual([])
+  })
+
+  it('excludes weeks that have not started yet, even if they somehow carry sampleSessions', () => {
+    const future: PlanWeek = {
+      weekNumber: 9, startDate: '2026-11-01', endDate: '2026-11-07', phase: 'build', focus: 'Volume', targetWeeklyMinutes: 300,
+      sampleSessions: [minimalSession('A')],
+    }
+    expect(computeWeeklyAdherence([future], completionFor({}), today)).toEqual([])
+  })
+
+  it('sums planned minutes from every sample session, and completed minutes only from done ones', () => {
+    const week: PlanWeek = {
+      weekNumber: 2, startDate: '2026-09-28', endDate: '2026-10-04', phase: 'build', focus: 'Volume', targetWeeklyMinutes: 300,
+      sampleSessions: [minimalSession('A'), minimalSession('B'), minimalSession('C')], // 60min each
+    }
+    const result = computeWeeklyAdherence(
+      [week],
+      completionFor({ '2-0': { status: 'done' }, '2-1': { status: 'missed' } }),
+      today
+    )
+    expect(result).toEqual([{
+      weekNumber: 2, startDate: '2026-09-28', plannedMinutes: 180, completedMinutes: 60,
+      sessionsPlanned: 3, sessionsDone: 1, sessionsMissed: 1,
+    }])
+  })
+
+  it('prefers the real activity duration over the planned one for a done cycling session', () => {
+    const week: PlanWeek = {
+      weekNumber: 2, startDate: '2026-09-28', endDate: '2026-10-04', phase: 'build', focus: 'Volume', targetWeeklyMinutes: 300,
+      sampleSessions: [minimalSession('A')], // planned 60min
+    }
+    const result = computeWeeklyAdherence(
+      [week],
+      completionFor({ '2-0': { status: 'done', actualDurationMinutes: 75 } }),
+      today
+    )
+    expect(result[0].completedMinutes).toBe(75)
+  })
+
+  it('sorts by week number ascending and caps to the most recent maxWeeks', () => {
+    const weeks: PlanWeek[] = [1, 2, 3, 4].map((n) => ({
+      weekNumber: n, startDate: `2026-09-0${n}`, endDate: `2026-09-0${n + 6}`, phase: 'build', focus: 'Volume', targetWeeklyMinutes: 60,
+      sampleSessions: [minimalSession(`W${n}`)],
+    }))
+    const result = computeWeeklyAdherence(weeks, completionFor({}), today, 2)
+    expect(result.map((w) => w.weekNumber)).toEqual([3, 4])
+  })
+})
+
 describe('rollingWindowDates', () => {
   it('returns 7 consecutive calendar dates starting from today (inclusive)', () => {
     expect(rollingWindowDates('2026-09-16')).toEqual([
@@ -754,6 +814,54 @@ describe('weekdayAvailabilityForDate', () => {
 
   it('maps a Wednesday to index 2', () => {
     expect(weekdayAvailabilityForDate('2026-09-16', availability)).toBe(30) // Mercredi
+  })
+})
+
+describe('sessionsForRollingWindow', () => {
+  // Semaine courante : Lundi 2026-09-14 → Dimanche 2026-09-20.
+  const week1: PlanWeek = {
+    weekNumber: 1, startDate: '2026-09-14', endDate: '2026-09-20', phase: 'build', focus: 'Volume', targetWeeklyMinutes: 300,
+    sampleSessions: [
+      { ...minimalSession('Endurance'), date: '2026-09-16' }, // Mercredi
+      { ...minimalSession('Seuil'), date: '2026-09-19' }, // Samedi
+    ],
+  }
+  // Semaine suivante : Lundi 2026-09-21 → Dimanche 2026-09-27.
+  const week2: PlanWeek = {
+    weekNumber: 2, startDate: '2026-09-21', endDate: '2026-09-27', phase: 'build', focus: 'Volume', targetWeeklyMinutes: 300,
+    sampleSessions: [
+      { ...minimalSession('Endurance longue'), date: '2026-09-21' }, // Lundi
+    ],
+  }
+
+  it('resolves each rolling date to its own session list, matched by date', () => {
+    // Aujourd'hui = Mercredi 2026-09-16 → fenêtre 09-16..09-22, chevauche week1 et week2.
+    const result = sessionsForRollingWindow([week1, week2], '2026-09-16')
+    expect(result.map((d) => d.date)).toEqual([
+      '2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20', '2026-09-21', '2026-09-22',
+    ])
+    expect(result[0].week?.weekNumber).toBe(1)
+    expect(result[0].sessions.map((s) => s.session.title)).toEqual(['Endurance'])
+    expect(result[3].sessions.map((s) => s.session.title)).toEqual(['Seuil']) // 09-19
+    expect(result[5].week?.weekNumber).toBe(2) // 09-21, déborde dans week2
+    expect(result[5].sessions.map((s) => s.session.title)).toEqual(['Endurance longue'])
+  })
+
+  it('leaves a day empty (never throws) rather than inventing a session', () => {
+    const result = sessionsForRollingWindow([week1, week2], '2026-09-16')
+    expect(result[1].sessions).toEqual([]) // 09-17, jeudi, rien de planifié
+  })
+
+  it('reports week as null and no sessions for a date outside every known week', () => {
+    const result = sessionsForRollingWindow([week1], '2026-09-25') // après la fin de week1, week2 absente
+    expect(result.every((d) => d.week === null && d.sessions.length === 0)).toBe(true)
+  })
+
+  it('never throws for a week without sampleSessions yet (lazy generation)', () => {
+    const ungenerated: PlanWeek = { weekNumber: 3, startDate: '2026-09-28', endDate: '2026-10-04', phase: 'build', focus: 'Volume', targetWeeklyMinutes: 300 }
+    const result = sessionsForRollingWindow([ungenerated], '2026-09-29')
+    expect(result[0].week?.weekNumber).toBe(3)
+    expect(result[0].sessions).toEqual([])
   })
 })
 

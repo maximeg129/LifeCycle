@@ -2484,6 +2484,82 @@ Pièce 4 : `training-plan-types.test.ts`, 6 nouveaux pour `computePlanProgress` 
 objectif déjà passé, `null` sans sampleSessions, pourcentage exact, arrondi, ne compte que la
 semaine courante) — 871/871 au total, tsc/eslint/build clean.
 
+## Refonte UX — disponibilité permanente, prochains entraînements glissants, prévu vs réalisé
+
+Retour utilisateur, après la livraison complète du chantier "repenser planification/séances/
+feedback" (C/A/B1/B2/B3, voir plus haut) : "Je pense qu'il nous faut retravailler le UX/UI repenser
+mieux l'interface pour intégrer les nouveaux changements, se rapprocher comme demander sur certains
+points soit de frive ou de join." Demande volontairement large, sans écran précis nommé — même
+patron que tous les chantiers Frive/Join précédents de ce fichier : audit d'abord (relecture de
+`COACH_UX_AUDIT.md`/`AUDIT.md` + inspection du code réel de `/settings`, `coach/page.tsx`,
+`training-plan-tab.tsx`), présentation de constats concrets, puis `AskUserQuestion` pour trancher la
+priorité avant tout code. Constat de l'audit : plusieurs recommandations déjà écrites dans
+`COACH_UX_AUDIT.md` étaient déjà construites (migration `.lc-card`, bandeau "à traiter", démotion
+Mémoire/Bibliothèque, anneau de progression) ou déjà tranchées deux fois dans un sens (fusion
+Aujourd'hui/Plan tentée puis défaite) — pas la peine d'y revenir. `AUDIT.md` est resté hors scope,
+entièrement obsolète (Botanica, page `/pricing`, thème sombre par défaut — plus rien de ça n'existe).
+
+Réponse de l'utilisateur à l'`AskUserQuestion` de scoping : trois points précis, hors de la liste
+proposée — "La sélection du temps disponible de la semaine, la vue des prochains entraînements (à
+caller sur frive), la vue entraînement effectué vs plan." Chaque point reconfirmé par sa propre
+`AskUserQuestion` avant de coder (option recommandée retenue à chaque fois) :
+
+**1. Disponibilité hebdomadaire — carte permanente** (`weekly-availability-card.tsx`, nouveau
+composant extrait de `training-plan-tab.tsx`) — diagnostic : les 7 curseurs Lundi→Dimanche
+(`assignSessionDatesByAvailability`, voir "Refonte inspirée de Frive/Join" plus haut) vivaient
+UNIQUEMENT dans le formulaire "Créer un plan"/"Nouveau plan", alors que bouger un curseur écrit déjà
+en direct dans `settings/trainingPreferences` (`handleAvailabilityChange`) et déclenche déjà le
+reséquencement glissant (chantier A) — SANS jamais avoir besoin de cliquer "Générer le plan". Cacher
+un réglage à effet immédiat derrière un bouton qui sonne comme "créer un nouveau plan" était le vrai
+problème, pas la mécanique elle-même (déjà correcte). Extraite en carte `.lc-card` permanente,
+rendue en tête de l'onglet Plan (avant même la branche "aucun plan actif", pour rester utilisable dès
+la première visite) — le formulaire "Nouveau plan" ne garde qu'une ligne de rappel du total déjà
+réglé ci-dessus, plus de doublon de curseurs.
+
+**2. "Prochains entraînements" — bande glissante Aujourd'hui + 6 jours** (`plan-rolling-calendar.tsx`,
+`sessionsForRollingWindow()` dans `training-plan-types.ts`, pur/testé) — diagnostic : la bande de 7
+jours du calendrier du plan (`PlanWeekCalendar`) restait figée sur la semaine calendaire
+Lundi-Dimanche SÉLECTIONNÉE dans `PlanOverviewGrid` ; le mécanisme de fenêtre glissante 7 jours
+existait déjà côté DONNÉES pour le reséquencement (`rollingWindowDates`, chantier A) mais rien côté
+VUE n'ancrait l'affichage sur aujourd'hui de la même façon. Décision consciente de ne PAS remplacer
+`PlanWeekCalendar`/`PlanOverviewGrid` (qui restent l'écran de gestion pour parcourir/éditer n'importe
+quelle semaine du plan — sélectionner une semaine future et y voir SES propres jours Lundi-Dimanche a
+du sens pour ça) mais d'AJOUTER un nouveau composant séparé, toujours visible en tête de l'onglet,
+qui répond au coup d'œil quotidien "qu'est-ce qui m'attend" — jamais lié à une sélection.
+`sessionsForRollingWindow(weeks, todayIso)` associe chacune des 7 dates glissantes à la semaine du
+plan qui la contient (`date >= week.startDate && date <= week.endDate`) et à ses séances datées ce
+jour-là — une fenêtre qui déborde d'une semaine calendaire (ex. aujourd'hui = mercredi d'une semaine
+qui finit dimanche) retombe simplement sur la semaine suivante ; si celle-ci n'a pas encore de
+`sampleSessions` (génération paresseuse, voir "vue calendrier v2"), le jour affiche "Plan pas encore
+composé" plutôt qu'une exception ou un jour inventé. Étiquettes "Aujourd'hui"/"Demain" pour les deux
+premiers jours (convention Frive/Join), jour de semaine classique ensuite. Réutilise telles quelles
+les briques déjà en place (`sessionZone`, `WorkoutProfileChart`, `PlanSessionDetail` dans une feuille
+de détail au tap) — même geste, juste ancré différemment.
+
+**3. "Entraînement effectué vs plan" — graphique compact plusieurs semaines**
+(`plan-adherence-chart.tsx`, `computeWeeklyAdherence()` dans `training-plan-types.ts`, pur/testé) —
+`COACH_UX_AUDIT.md` §4.C, une recommandation jamais construite jusqu'ici : "Pas de vue 'semaine :
+prévu vs réalisé' en un graphique. Le Calendrier TrainerRoad épingle prévu/réalisé sur le même
+graphique. LifeCycle a l'équivalent en DEUX affichages séparés (badges par séance + courbe PMC) —
+jamais une vue compacte au même endroit." `computeWeeklyAdherence()` ne couvre QUE les semaines déjà
+commencées (`startDate <= today`) qui ont des `sampleSessions` générées — une semaine jamais composée
+n'a rien à comparer, jamais un 0% inventé pour elle (même discipline que `computePlanProgress`),
+bornée aux 6 semaines les plus récentes pour rester un coup d'œil. Minutes réalisées : durée réelle de
+l'activité rapprochée quand connue (cycling), sinon la durée planifiée de la séance elle-même
+(strength, qui ne porte pas de durée réelle comparable — voir `SessionCompletion.actualDurationMinutes`).
+Rendu en barres empilées à la main (CSS, pas Recharts) — même convention que `WorkoutProfileChart`/
+`RingGauge` pour un widget compact : fond = minutes prévues, avant-plan = minutes réalisées (jamais
+un dépassement visuel au-delà de 100% de la barre de fond, le chiffre exact reste dans le texte). La
+carte elle-même (dans l'onglet Plan, entre la grille du plan et le journal des recalibrations)
+n'apparaît que s'il existe au moins une semaine passée avec des `sampleSessions` à comparer — jamais
+un graphique vide affiché par défaut sur un plan tout juste créé.
+
+Tests (`training-plan-types.test.ts`, 9 nouveaux : `sessionsForRollingWindow` ×4 — chevauchement de
+deux semaines calendaires, jour vide sans exception, date hors des bornes du plan, semaine pas encore
+générée ; `computeWeeklyAdherence` ×5 — semaine sans sampleSessions exclue, semaine future exclue même
+si elle en portait, somme prévu/réalisé correcte, durée réelle préférée à la durée planifiée pour une
+séance faite, tri + plafond `maxWeeks`) — 892/892 au total, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
