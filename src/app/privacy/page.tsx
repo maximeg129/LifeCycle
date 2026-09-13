@@ -124,7 +124,10 @@ export default function PrivacyPolicyPage() {
           <h2 className="text-xl font-semibold">8. Contact</h2>
           <p className="text-muted-foreground leading-relaxed">
             Questions about this policy or your data can be sent to{' '}
-            <span className="text-foreground font-medium">[contact email to fill in]</span>.
+            <a href="mailto:info@pelotonadvisor.com" className="text-foreground font-medium hover:underline">
+              info@pelotonadvisor.com
+            </a>
+            .
           </p>
         </section>
       </main>

@@ -723,15 +723,120 @@ export function weekdayAvailabilityForDate(dateIso: string, weeklyAvailability: 
 
 // ⚠️ `sessionsForRollingWindow`/`RollingDaySessions` (bande "prochains
 // entraînements" ancrée sur aujourd'hui, chevauchant deux semaines
-// calendaires) ont existé ici brièvement puis ont été retirés — retour
-// utilisateur après captures Frive/Join à l'appui : la liste attendue est
-// celle de la semaine COURANTE (Lundi-Dimanche, comme Frive), pas une
-// fenêtre glissante qui chevauche les bornes de semaine. Voir
-// `PlanWeekSessionList` (plan-week-session-list.tsx), qui liste directement
-// `currentPlanWeek(weeks, today).sampleSessions` — plus besoin de cette
-// fonction. `rollingWindowDates` ci-dessus reste utilisée par
-// `recalibrateRollingWindow` (reséquencement mécanique, chantier A),
-// inchangée.
+// calendaires) ont existé ici brièvement, ont été retirés au profit d'une
+// liste Lundi-Dimanche façon Frive (voir CLAUDE.md "Refonte UX v2"), puis
+// RÉINTRODUITS ci-dessous sous un nom différent — retour utilisateur :
+// "j'aimerais que l'on voit la seance du jour et des 7 prochains jours...
+// donc on ne verrait pas séance de la semaine mais séances des 7 prochains
+// jours." Le motif Frive (liste Lundi-Dimanche) s'est avéré moins utile au
+// quotidien qu'un simple horizon glissant ancré sur aujourd'hui — décision
+// de l'utilisateur, pas un oubli du chantier précédent. `sessionsForNext7Days`
+// ci-dessous n'est pas un retour à l'identique de l'ancienne fonction :
+// elle porte en plus `week`/`weekNotGenerated` par jour (pour distinguer
+// "aucune séance ce jour-là" de "la semaine qui couvre ce jour n'est pas
+// encore composée", jamais confondus dans l'UI). Les séances déjà passées
+// ne sont plus dans cette fenêtre de 7 jours — voir `pastPlanSessions`
+// juste en dessous, révélées séparément sur demande plutôt que noyées ici.
+
+export interface RollingDaySessionEntry {
+  week: PlanWeek
+  session: PlanWeekSessionWithValidation
+  index: number
+}
+
+export interface RollingDay {
+  /** yyyy-MM-dd */
+  date: string
+  /** La semaine du plan qui couvre cette date — null si aucune semaine du plan ne la couvre (avant le début du plan, ou après sa fin). */
+  week: PlanWeek | null
+  /** Les séances de `week` datées ce jour précis — jamais plus d'une semaine mélangée pour un même jour. */
+  sessions: RollingDaySessionEntry[]
+  /** True quand `week` existe mais n'a pas encore de `sampleSessions` (génération paresseuse, voir "vue calendrier v2") — l'UI doit alors afficher "semaine pas encore composée", jamais "aucune séance" (ce ne serait pas vrai, on ne sait juste pas encore). */
+  weekNotGenerated: boolean
+}
+
+/**
+ * Les 7 dates calendaires à partir d'aujourd'hui (inclus), chacune associée
+ * à la semaine du plan qui la couvre et à ses séances datées ce jour-là —
+ * jamais un appel IA ici, pure lecture de ce qui est déjà en mémoire
+ * (`weeks[].sampleSessions`, potentiellement absent pour une semaine
+ * lazy — voir `weekNotGenerated`).
+ */
+export function sessionsForNext7Days(weeks: PlanWeek[], todayIso: string): RollingDay[] {
+  return rollingWindowDates(todayIso).map((date) => {
+    const week = weeks.find((w) => date >= w.startDate && date <= w.endDate) ?? null
+    if (!week) return { date, week: null, sessions: [], weekNotGenerated: false }
+    if (!week.sampleSessions) return { date, week, sessions: [], weekNotGenerated: true }
+    const sessions = week.sampleSessions
+      .map((session, index) => ({ week, session, index }))
+      .filter((entry) => entry.session.date === date)
+    return { date, week, sessions, weekNotGenerated: false }
+  })
+}
+
+export interface RollingDaySegment {
+  /** null pour un groupe de jours hors des bornes du plan (pas de semaine à générer/afficher pour eux). */
+  weekNumber: number | null
+  weekNotGenerated: boolean
+  days: RollingDay[]
+}
+
+/**
+ * Regroupe les jours consécutifs qui partagent la même semaine ET le même
+ * statut `weekNotGenerated`, pour que l'UI n'affiche qu'UN SEUL bouton
+ * "Proposer les séances" par semaine pas encore composée plutôt qu'un par
+ * jour qu'elle couvre (jusqu'à 6 jours de la fenêtre glissante peuvent
+ * appartenir à la même semaine suivante non générée). Une fenêtre de 7
+ * jours ne peut chevaucher que 2 semaines au plus, donc au plus 2 segments
+ * "réels" en pratique — mais la fonction reste générique plutôt que de
+ * supposer ce nombre.
+ */
+export function groupRollingDaysByWeek(days: RollingDay[]): RollingDaySegment[] {
+  const segments: RollingDaySegment[] = []
+  for (const day of days) {
+    const weekNumber = day.week?.weekNumber ?? null
+    const last = segments.at(-1)
+    if (last && last.weekNumber === weekNumber && last.weekNotGenerated === day.weekNotGenerated) {
+      last.days.push(day)
+    } else {
+      segments.push({ weekNumber, weekNotGenerated: day.weekNotGenerated, days: [day] })
+    }
+  }
+  return segments
+}
+
+// ── Séances passées — révélées sur demande ───────────────────────────────
+//
+// Retour utilisateur, même message que sessionsForNext7Days ci-dessus : "les
+// séances passées devraient être accessibles en pull vers le bas qui ferait
+// apparaître les séances passées." Pas un vrai geste tactile (décision
+// utilisateur, AskUserQuestion) — un bouton qui déplie une liste, même
+// mécanique que "Sorties depuis le montage" (Chaînes, Garage).
+
+export interface PastSessionEntry {
+  week: PlanWeek
+  session: PlanWeekSessionWithValidation
+  index: number
+}
+
+/**
+ * Toutes les séances déjà datées avant aujourd'hui, dont la semaine a des
+ * `sampleSessions` générées — en pratique presque toujours seulement la
+ * semaine courante (les autres restent lazy), mais ne suppose pas cette
+ * contrainte pour rester correct si une semaine passée a été générée puis
+ * n'a jamais été vidée. Triées la plus récente d'abord — la plus
+ * pertinente à relire en premier.
+ */
+export function pastPlanSessions(weeks: PlanWeek[], todayIso: string): PastSessionEntry[] {
+  const entries: PastSessionEntry[] = []
+  for (const week of weeks) {
+    if (!week.sampleSessions) continue
+    week.sampleSessions.forEach((session, index) => {
+      if (session.date && session.date < todayIso) entries.push({ week, session, index })
+    })
+  }
+  return entries.sort((a, b) => (b.session.date ?? '').localeCompare(a.session.date ?? ''))
+}
 
 export interface RollingWeekInput {
   week: PlanWeekSkeleton

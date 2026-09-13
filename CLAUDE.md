@@ -2633,9 +2633,11 @@ politique générique copiée-collée — huit sections : données collectées, 
 stockage/sécurité, droits de l'utilisateur (export/suppression déjà réels), mineurs, mises à jour de
 la politique, contact.
 
-**⚠️ Champ contact laissé en placeholder** (`[contact email to fill in]`) — délibérément : publier
-une adresse email personnelle sur une page publique est une décision qui revient à l'utilisateur, pas
-une valeur à deviner ou à insérer sans lui demander.
+**Champ contact** — laissé en placeholder (`[contact email to fill in]`) le temps que l'utilisateur
+tranche : publier une adresse email personnelle sur une page publique est une décision qui revient à
+l'utilisateur, pas une valeur à deviner ou à insérer sans lui demander. Résolu ensuite : l'utilisateur
+a fourni `info@pelotonadvisor.com` (une adresse dédiée, pas son adresse personnelle) — remplace le
+placeholder par un simple lien `mailto:`.
 
 **Champs du formulaire OAuth Intervals.icu, valeurs recommandées** (discussion avec l'utilisateur,
 pas encore committées nulle part car externes à ce repo) : Redirect URL =
@@ -2650,6 +2652,67 @@ actuellement ce secret dans le corps JSON du payload (`payload.secret`), pas dan
 si Intervals.icu l'envoie réellement comme en-tête `Authorization` plutôt que dans le body, la route
 devra être ajustée pour le lire depuis `request.headers` à la place (non vérifiable depuis ce sandbox,
 accès réseau à intervals.icu bloqué, même limite documentée partout ailleurs dans ce fichier).
+
+## Plan : séance du jour + 7 prochains jours (remplace la liste Lundi-Dimanche), séances passées en pull
+
+Retour utilisateur, juste après "Plan v2" ci-dessus : "j'aimerais que l'on voit la séance du jour et
+des 7 prochains jours sur cette vue, les séances passées devraient être accessibles en pull vers le
+bas qui ferait apparaître les séances passées, donc on ne verrait pas séance de la semaine mais
+séances des 7 prochains jours." Renverse consciemment le choix "vue calendrier v1" (voir plus haut,
+"⚠️ `sessionsForRollingWindow`/`RollingDaySessions`... retirés — retour utilisateur après captures
+Frive/Join à l'appui : la liste attendue est celle de la semaine COURANTE") — pas un oubli de ce
+chantier-là, l'utilisateur est simplement revenu sur ce choix après usage réel de la liste
+Lundi-Dimanche. `AskUserQuestion` posée avant de coder sur le seul point réellement ambigu du
+message ("en pull vers le bas") : geste tactile réel vs bouton qui déplie — l'utilisateur a choisi le
+bouton (option recommandée), cohérent avec la décision déjà actée ailleurs dans ce fichier pour le
+déplacement de séance ("tap-friendly plutôt qu'un vrai glisser-déposer tactile... plus fiable sur
+mobile, aucune nouvelle dépendance").
+
+**`sessionsForNext7Days()`/`groupRollingDaysByWeek()`/`pastPlanSessions()`** (`training-plan-
+types.ts`, purs/testés) — remplacent l'ancien `PlanWeekSessionList` (semaine calendaire Lundi-
+Dimanche, `plan-week-session-list.tsx`, supprimé) par `PlanNextSessionsList`
+(`plan-next-sessions-list.tsx`) :
+- `sessionsForNext7Days(weeks, today)` associe chacune des 7 dates glissantes (`rollingWindowDates`,
+  déjà en place depuis le chantier A — reséquencement mécanique) à la semaine du plan qui la couvre et
+  à ses séances datées ce jour-là. Peut chevaucher DEUX semaines du plan (ex. aujourd'hui = jeudi →
+  la fenêtre déborde sur la semaine suivante) — la semaine suivante restant lazy (voir "vue
+  calendrier v2", décision utilisateur explicite contre la génération anticipée de tout le plan),
+  chaque jour porte un flag `weekNotGenerated` distinct de "aucune séance ce jour-là" : on ne sait
+  simplement pas encore ce que contient cette semaine, jamais confondu avec un vrai jour de repos.
+  `week: null` (jamais un flag inventé) pour un jour hors des bornes du plan entier (avant son début
+  ou après sa fin).
+- `groupRollingDaysByWeek()` consolide les jours consécutifs de même semaine/statut en un seul
+  segment — pour qu'un seul bouton "Proposer les séances" apparaisse pour toute une semaine suivante
+  pas encore composée (jusqu'à 6 des 7 jours de la fenêtre), plutôt qu'un bouton répété par jour.
+- `pastPlanSessions()` — toutes les séances déjà datées avant aujourd'hui dont la semaine a des
+  `sampleSessions` générées, triées la plus récente en premier. Révélées par un bouton "Voir les
+  séances passées (N)" (`Collapsible`, fermé par défaut) au-dessus de la liste des 7 prochains
+  jours — même mécanique que "Sorties depuis le montage" (Chaînes, Garage).
+
+**`PlanNextSessionsList`** — réutilise `PlanSessionDetail` tel quel pour chaque séance (statut,
+alimentation, exercices muscu, toggle intérieur/extérieur, sélecteur de date, bouton d'envoi), comme
+l'ancienne liste. Chaque jour affiche un libellé "Aujourd'hui"/"Demain" (les deux premiers jours,
+convention Frive/Join déjà actée pour l'ancienne bande glissante avant sa suppression) puis le jour de
+semaine classique ; un jour sans séance affiche "Aucune séance prévue" plutôt qu'une case vide sans
+explication. Callbacks (`onSend`/`onMoveDate`/`getCompletion`/`onAdjustLocation`) généralisés pour
+prendre la semaine EN PARAMÈTRE (`(week, session, index, ...) => ...`) plutôt qu'une semaine fixée par
+le composant parent — nécessaire puisque la fenêtre glissante peut mélanger des séances de deux
+semaines différentes, contrairement à l'ancienne liste qui n'en connaissait qu'une seule.
+
+**`training-plan-tab.tsx`** — la section "Séances de la semaine" (bornée à `currentPlanWeek`) est
+remplacée par `<PlanNextSessionsList weeks={activePlan.weeks} .../>`, qui reçoit maintenant TOUTES les
+semaines du plan (elle calcule elle-même sa propre fenêtre de 7 jours en interne) plutôt qu'une seule
+semaine déjà résolue par l'appelant — plus besoin non plus du message de repli "Aucune semaine du plan
+ne couvre aujourd'hui" : `sessionsForNext7Days` dégrade déjà proprement jour par jour (`week: null`)
+si aucune semaine ne couvre une date donnée.
+
+Tests (`training-plan-types.test.ts`, 12 nouveaux : `sessionsForNext7Days` ×5 — jours tagués par
+semaine, séances correctement attachées jour par jour, `weekNotGenerated` posé seulement pour la
+semaine non composée, `week: null` hors des bornes du plan ; `groupRollingDaysByWeek` ×4 — fusion
+d'une même semaine générée, séparation sur changement de semaine, séparation sur changement de
+statut, jours hors plan groupés à part ; `pastPlanSessions` ×3 — filtre strictement avant aujourd'hui,
+exclut une semaine sans `sampleSessions`, tri du plus récent au plus ancien) — 901/901 au total,
+tsc/eslint/build clean.
 
 ## Modèle de Données Firestore
 
