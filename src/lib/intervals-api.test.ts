@@ -154,10 +154,13 @@ describe('bestRpe', () => {
 })
 
 describe('feelToScore', () => {
-  it('maps the 1-5 Intervals.icu feel rating onto -1..1, ascending is better', () => {
-    expect(feelToScore({ feel: 1 })).toBe(-1)
+  // Échelle DESCENDANTE côté Intervals.icu : 1 = "Strong" (meilleur), 5 = pire
+  // — confirmé via le forum Intervals.icu ("API returns inverted 'feel' for
+  // activities", résolu "not a bug"), voir le commentaire de la fonction.
+  it('maps the 1-5 Intervals.icu feel rating onto -1..1, descending is better (1=Strong, 5=worst)', () => {
+    expect(feelToScore({ feel: 1 })).toBe(1)
     expect(feelToScore({ feel: 3 })).toBe(0)
-    expect(feelToScore({ feel: 5 })).toBe(1)
+    expect(feelToScore({ feel: 5 })).toBe(-1)
   })
   it('is null when there is no feel rating', () => {
     expect(feelToScore({})).toBeNull()
