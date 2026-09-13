@@ -2560,6 +2560,61 @@ générée ; `computeWeeklyAdherence` ×5 — semaine sans sampleSessions exclue
 si elle en portait, somme prévu/réalisé correcte, durée réelle préférée à la durée planifiée pour une
 séance faite, tri + plafond `maxWeeks`) — 892/892 au total, tsc/eslint/build clean.
 
+## Refonte UX v2 — disponibilité en dialog validé par l'IA, liste Frive, Plan derrière un bouton
+
+Retour utilisateur, captures d'écran Join/Frive à l'appui, après la refonte UX ci-dessus : "nous
+avons le slider avec la dispo, peut être devrons nous avoir un bouton modifier pour changer et
+ensuite rebloque l'agenda des 7 prochains jours, lorsque c'est validé l'IA recalibre les
+entraînements sur la base du plan de départ. On pourrait améliorer la vue encore une fois, avoir le
+Plan derrière un bouton plan comme sur join, et chaque séance de la semaine en liste comme frive avec
+le detail et le toggle pour indoor/outdoor." Deux `AskUserQuestion` avant de coder : (1) que doit
+faire "Valider" après un changement de disponibilité — réponse retenue : **une vraie régénération
+IA** (pas seulement le reséquencement mécanique déjà en place) ; (2) où doit vivre le plan détaillé
+par semaine — réponse : **derrière un bouton "Plan"**, la page principale ne gardant que la
+progression et les séances de la semaine.
+
+**1. Disponibilité — dialog avec validation explicite** (`plan-availability-dialog.tsx`, remplace
+`weekly-availability-card.tsx` supprimé) — la carte permanente de la refonte précédente écrivait déjà
+chaque glissement de curseur en direct dans Firestore ; ce correctif change le GESTE (bouton
+"Disponibilité" → dialog → "Valider" explicite) ET l'EFFET de la validation. État `staged` local au
+dialog (jamais écrit tant que "Valider" n'est pas cliqué, resynchronisé depuis `committedAvailability`
+à chaque ouverture) — annuler ne laisse aucune trace. **"Valider" appelle `generateWeekSessions(week)`**
+(le même appel que le bouton "Régénérer" déjà en place) juste après avoir persisté la préférence :
+le CONTENU des séances de la semaine courante se recompose réellement pour coller au nouveau volume/
+répartition, pas seulement leurs dates. Le reséquencement mécanique glissant (chantier A,
+`recalibrateRollingWindow`) continue de tourner en plus, automatiquement, dès que la préférence
+change en Firestore — sans rapport avec cet appel explicite, mais rendu largement redondant une fois
+que `assignSessionDatesByAvailability` (appelée à l'intérieur de la régénération) a déjà replacé les
+séances sur les meilleurs jours avec la nouvelle disponibilité.
+
+**2. "Séances de la semaine" — liste verticale façon Frive** (`plan-week-session-list.tsx`, remplace
+`plan-rolling-calendar.tsx` supprimé, et avec lui `sessionsForRollingWindow()`/`RollingDaySessions`
+dans `training-plan-types.ts`, devenus du code mort) — retour utilisateur : "chaque séance de la
+semaine en liste comme frive avec le detail et le toggle pour indoor/outdoor." Diagnostic : Frive ne
+montre pas un coup d'œil compact ancré sur aujourd'hui (ce que faisait la bande glissante du chantier
+précédent) mais la liste COMPLÈTE des séances de la semaine COURANTE (Lundi-Dimanche), chacune avec
+son détail. Plutôt que reconstruire une carte de séance depuis zéro, `PlanWeekSessionList` réutilise
+`PlanSessionDetail` tel quel pour chaque ligne (déjà : statut réalisée/manquée, alimentation,
+exercices muscu, toggle intérieur/extérieur, sélecteur de date, bouton d'envoi) — triées par date
+(`assignSessionDatesByAvailability` ne garantit pas l'ordre chronologique du tableau, bin-packing par
+durée décroissante).
+
+**3. Plan complet derrière un bouton "Plan"** (`Sheet`, `training-plan-tab.tsx`) — retour utilisateur :
+"avoir le Plan derrière un bouton plan comme sur join... on laisserait alors sur la page coach la vue
+de progression dans le plan et les séances de la semaine. Donc un bouton modifier disponibilité et un
+pour plan." La carte principale de l'onglet Plan (façon Join, "Adjust availability"/"Your Plan") ne
+garde que : l'anneau de progression + nom/dates du plan, "Pourquoi ce plan ?"/le badge de vigilance
+(restent visibles ici — un point de vigilance bloquant reste un signal de sécurité, jamais caché
+derrière un tap de plus), et les deux boutons "Disponibilité"/"Plan". Tout le reste — actions de
+gestion (Recalibrer maintenant/Nouveau plan/Archiver), `PlanOverviewGrid`+`PlanWeekCalendar` (grille du
+plan entier + vue détaillée d'une semaine sélectionnée), `PlanAdherenceChart` (prévu vs réalisé) et le
+Journal des recalibrations — vit désormais dans un `Sheet` ouvert par le bouton "Plan", l'écran de
+gestion occasionnel plutôt que le coup d'œil quotidien.
+
+Tests (888/888 après retrait des 4 tests `sessionsForRollingWindow` devenus obsolètes — aucune
+nouvelle logique pure introduite par ce correctif, uniquement de la restructuration JSX/état local et
+un appel supplémentaire à `generateWeekSessions` déjà testé/en place), tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
