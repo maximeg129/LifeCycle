@@ -2615,6 +2615,42 @@ Tests (888/888 après retrait des 4 tests `sessionsForRollingWindow` devenus obs
 nouvelle logique pure introduite par ce correctif, uniquement de la restructuration JSX/état local et
 un appel supplémentaire à `generateWeekSessions` déjà testé/en place), tsc/eslint/build clean.
 
+## Page `/privacy` — soumission de l'application OAuth Intervals.icu
+
+Retour utilisateur : soumission du formulaire `intervals.icu/oauth/apply` (voir CLAUDE.md, chantier
+B2 — l'application OAuth Intervals.icu, jusqu'ici "Pending", nécessaire pour recevoir les webhooks
+`ACTIVITY_ANALYZED`) exigeait un lien "Privacy Policy" — champ obligatoire, absent de l'app jusqu'ici
+(aucune page `/privacy`).
+
+**`src/app/privacy/page.tsx`** — nouvelle page publique (pas de `AuthGuard`, même statut que `/`/
+`/login`/`/register`), Server Component pur (pas de `"use client"` : contenu statique, `export const
+metadata` pour le `<title>`). Rédigée en anglais — délibérément, contrairement au reste de l'UI de
+l'app (français) : c'est un document de conformité soumis à un examinateur externe (Intervals.icu)
+au sein d'un formulaire lui-même entièrement en anglais, pas une page consultée au quotidien par
+l'athlète. Contenu fidèle à l'architecture réelle déjà documentée dans ce fichier (audit sécurité,
+export/suppression de compte, intégrations Strava/Intervals.icu/Anthropic/Firebase) plutôt qu'une
+politique générique copiée-collée — huit sections : données collectées, usage, services tiers,
+stockage/sécurité, droits de l'utilisateur (export/suppression déjà réels), mineurs, mises à jour de
+la politique, contact.
+
+**⚠️ Champ contact laissé en placeholder** (`[contact email to fill in]`) — délibérément : publier
+une adresse email personnelle sur une page publique est une décision qui revient à l'utilisateur, pas
+une valeur à deviner ou à insérer sans lui demander.
+
+**Champs du formulaire OAuth Intervals.icu, valeurs recommandées** (discussion avec l'utilisateur,
+pas encore committées nulle part car externes à ce repo) : Redirect URL =
+`https://studio--studio-3385001327-4400b.us-central1.hosted.app/api/intervals-oauth/callback` ;
+Webhook URL = `.../api/intervals/webhook` ; un seul type de webhook coché — `ACTIVITY_ANALYZED`
+(scope `ACTIVITY`), jamais `ACTIVITY_UPLOADED` (le webhook route ne traite que le premier, voir
+chantier B2) — cohérent avec le principe déjà en place "jamais plus de scope que nécessaire" (`ACTIVITY:READ`
+seul pour l'OAuth lui-même). Webhook Authorization Header = un secret fort généré côté utilisateur, à
+recopier tel quel comme secret Secret Manager `intervals-webhook-secret` une fois l'app approuvée.
+**Point à vérifier au premier webhook réel reçu** : `/api/intervals/webhook/route.ts` lit
+actuellement ce secret dans le corps JSON du payload (`payload.secret`), pas dans un en-tête HTTP —
+si Intervals.icu l'envoie réellement comme en-tête `Authorization` plutôt que dans le body, la route
+devra être ajustée pour le lire depuis `request.headers` à la place (non vérifiable depuis ce sandbox,
+accès réseau à intervals.icu bloqué, même limite documentée partout ailleurs dans ce fichier).
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
@@ -3248,7 +3284,8 @@ Charts via Recharts : `BarChart`, `LineChart`, etc. avec wrapper `ChartContainer
   confirmation volontairement identique que l'adresse existe ou non (comme le message d'erreur
   générique "Email ou mot de passe incorrect" déjà en place sur l'échec de connexion) — ce formulaire
   ne doit jamais confirmer à un visiteur qu'une adresse donnée a un compte sur l'app.
-- Pages publiques : `/`, `/login`, `/register`
+- Pages publiques : `/`, `/login`, `/register`, `/privacy` (politique de confidentialité, voir plus
+  bas "Page /privacy")
 - Pages protégées : toutes les autres, wrappées dans `AuthGuard`
   (`src/components/layout/auth-guard.tsx`) — chaque `src/app/<route>/page.tsx` protégé enveloppe
   son `return` dans `<AuthGuard>...</AuthGuard>` (voir le Patron de Page ci-dessus). Affiche un
