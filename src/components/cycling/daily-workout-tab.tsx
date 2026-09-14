@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, CheckCircle2, Clock, Wind, MapPin, Thermometer, CloudSun, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle } from 'lucide-react'
+import { Sparkles, Loader2, Send, CheckCircle2, Clock, MapPin, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -287,38 +287,17 @@ export function DailyWorkoutTab() {
     setWasSent(false)
   }
 
-  // Retour utilisateur (repensée planification/séances/feedback) : "pour la
-  // séance du jour, j'aimerais que l'on puisse voir la séance initiale du
-  // plan, que l'IA nous propose une séance alternative en lisant les
-  // données physiologiques de l'athlète et enfin avoir la possibilité de
-  // choisir" — au lieu du geste séquentiel précédent (voir la séance
-  // prévue → cliquer pour en demander une autre → remplir un formulaire →
-  // obtenir un résultat), la suggestion du coach se génère automatiquement
-  // dès que la séance prévue est connue, pour être comparée directement à
-  // l'originale (façon Join). Un seul appel IA par jour : mis en cache
-  // exactement comme tout le reste (workoutProposals/{yyyy-MM-dd}) — si
-  // `stored` existe déjà pour aujourd'hui (généré via ce même effet un
-  // rechargement plus tôt, ou via Changer de séance/Proposer une
-  // alternative), rien ne se redéclenche. Vérifie `stored` plutôt que
-  // `draft` pour éviter une course avec l'effet de préremplissage
-  // ci-dessus : les deux effets tournent dans la même passe après le
-  // premier flip de isLoadingStored, et `draft` n'aurait pas encore la
-  // valeur que ce premier effet vient juste de lui assigner.
-  const autoSuggestionTriggeredRef = useRef(false)
-  useEffect(() => {
-    if (isLoadingStored || stored || draft || isGenerating) return
-    if (!todaysPlanSession || todaysPlanSessionIsStrength) return
-    if (autoSuggestionTriggeredRef.current) return
-    autoSuggestionTriggeredRef.current = true
-    void (async () => {
-      const proposal = await generate(todaysPlanSession.session.durationMinutes, undefined, false)
-      if (proposal) {
-        setDraft(proposal)
-        setWasSent(false)
-        setIsShuffled(false)
-      }
-    })()
-  }, [isLoadingStored, stored, draft, isGenerating, todaysPlanSession, todaysPlanSessionIsStrength, generate])
+  // Retour utilisateur, après usage réel de la fusion "séance prévue" +
+  // "suggestion du coach" côte à côte (chantier ci-dessus) : "avoir côte à
+  // côte la séance du plan et la proposition du coach du jour est
+  // redondant... la proposition du jour est un peu redondante de proposer
+  // une séance alternative qui pourrait en fait nous emmener à rentrer les
+  // détails de proposition du jour." Retour à un flux séquentiel — la
+  // suggestion du coach ne se génère donc plus automatiquement : elle
+  // n'existe (draft) qu'une fois que l'athlète a explicitement demandé
+  // "Changer de séance" ou "Proposer une séance alternative" (voir le
+  // rendu plus bas, un seul état affiché à la fois). L'auto-génération au
+  // chargement de l'onglet a disparu avec elle.
 
   // Retour utilisateur : "un petit toggle... si l'athlète ne veut pas ou ne
   // peut pas faire de vélo, mais pour aller à la gym" — la séance muscu de
@@ -393,21 +372,16 @@ export function DailyWorkoutTab() {
     )
   }
 
-  // Retour utilisateur (repensée planification) : la carte "Séance prévue"
-  // reste désormais TOUJOURS visible dès qu'une séance existe — pour
-  // comparaison directe avec la suggestion du coach (voir l'effet
-  // d'auto-génération ci-dessus) — y compris pendant que le formulaire
-  // "Proposer une séance alternative" est ouvert (au-dessus, dans sa
-  // propre carte) : plus de disparition séquentielle comme avant ce
-  // chantier, la comparaison reste possible à tout moment.
+  // Retour utilisateur, après usage réel du chantier "séance prévue +
+  // suggestion côte à côte" ci-dessus : "avoir côte à côte la séance du
+  // plan et la proposition du coach du jour est redondant... la
+  // proposition du jour est un peu redondante de proposer une séance
+  // alternative." Un seul état affiché à la fois plutôt que plusieurs blocs
+  // simultanés (carte "Proposition du jour" toujours visible + carte
+  // "séance prévue" + carte "suggestion") — voir le rendu plus bas.
+  // showPlanCard : une séance du plan existe pour aujourd'hui, c'est la vue
+  // par défaut tant qu'aucune alternative n'a été demandée.
   const showPlanCard = !!todaysPlanSession
-  // Le formulaire temps/lieu/heure n'est la vue par défaut QUE quand il n'y
-  // a rien à prévisualiser (pas de plan actif, ou le plan n'a pas daté de
-  // séance vélo aujourd'hui) — sinon la séance du plan s'affiche d'abord,
-  // le formulaire ne redevenant visible qu'après un tap explicite sur
-  // "Proposer une séance alternative", ou une fois un draft déjà généré
-  // (pour rester ajustable/régénérable, comme avant ce changement).
-  const formVisible = !todaysPlanSession || showAlternativeForm || !!draft
 
   return (
     <div className="space-y-6">
@@ -450,172 +424,51 @@ export function DailyWorkoutTab() {
       {!canSendToIntervals && (
         <IntervalsOnboardingNotice message="Intervals.icu non connecté — vous pouvez générer une proposition, mais pas l'envoyer sur votre calendrier." />
       )}
-      {/* .lc-card neutre — c'est un formulaire de saisie, pas "la chose à
-          faire maintenant" (COACH_UX_AUDIT.md §5) ; la bordure primaire
-          épaisse reste réservée à la carte séance ci-dessous. */}
-      <Card className="lc-card">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-primary" /> Proposition du jour
-          </CardTitle>
-          {formVisible && (
-            <CardDescription>
-              Indiquez le temps dont vous disposez aujourd&apos;hui — l&apos;IA propose une séance adaptée à votre forme actuelle
-              (charge interne, TSB, blessures, objectifs), que vous pouvez ajuster avant de l&apos;envoyer sur Intervals.icu.
-            </CardDescription>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {planWeek && (
-              <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
-                Semaine {planWeek.weekNumber} du plan · {planWeek.focus}
-              </Badge>
+
+      {/* Contexte toujours visible (semaine du plan/récupération) + toggle
+          Vélo/Salle — sorti de la carte "Proposition du jour" (qui
+          n'existe plus comme bloc permanent, voir plus bas) pour rester
+          accessible quel que soit l'état affiché en dessous. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {planWeek && (
+          <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
+            Semaine {planWeek.weekNumber} du plan · {planWeek.focus}
+          </Badge>
+        )}
+        {recovery && (recovery.sleepHours != null || recovery.hrv != null || recovery.restingHR != null || recovery.readiness != null) && (
+          <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
+            Récup {recovery.sleepHours != null ? `${recovery.sleepHours}h` : ''}
+            {recovery.hrv != null ? ` · HRV ${recovery.hrv}ms` : ''}
+            {recovery.restingHR != null ? ` · FC repos ${recovery.restingHR}bpm` : ''}
+            {recovery.readiness != null ? ` · Readiness ${recovery.readiness}/100` : ''}
+          </Badge>
+        )}
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs text-muted-foreground">Aujourd&apos;hui</Label>
+        <div className="flex gap-0.5 rounded-full bg-muted p-0.5 w-fit">
+          <button
+            type="button"
+            onClick={() => setWantsGym(false)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
+              !wantsGym ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
             )}
-            {recovery && (recovery.sleepHours != null || recovery.hrv != null || recovery.restingHR != null || recovery.readiness != null) && (
-              <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
-                Récup {recovery.sleepHours != null ? `${recovery.sleepHours}h` : ''}
-                {recovery.hrv != null ? ` · HRV ${recovery.hrv}ms` : ''}
-                {recovery.restingHR != null ? ` · FC repos ${recovery.restingHR}bpm` : ''}
-                {recovery.readiness != null ? ` · Readiness ${recovery.readiness}/100` : ''}
-              </Badge>
+          >
+            <Bike className="w-3.5 h-3.5" /> Vélo
+          </button>
+          <button
+            type="button"
+            onClick={() => setWantsGym(true)}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
+              wantsGym ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
             )}
-          </div>
-          {/* Retour utilisateur : "un petit toggle pour faire la
-              proposition du jour si l'athlète ne veut pas ou ne peut pas
-              faire de vélo, mais pour aller à la gym" — même langage
-              visuel que le toggle Intérieur/Extérieur juste en dessous. */}
-          <div className="space-y-1.5 pt-1">
-            <Label className="text-xs text-muted-foreground">Aujourd&apos;hui</Label>
-            <div className="flex gap-0.5 rounded-full bg-muted p-0.5 w-fit">
-              <button
-                type="button"
-                onClick={() => setWantsGym(false)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
-                  !wantsGym ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <Bike className="w-3.5 h-3.5" /> Vélo
-              </button>
-              <button
-                type="button"
-                onClick={() => setWantsGym(true)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
-                  wantsGym ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <Dumbbell className="w-3.5 h-3.5" /> Salle
-              </button>
-            </div>
-          </div>
-        </CardHeader>
-        {!wantsGym && formVisible && (<>
-        <CardContent className="flex flex-wrap items-end gap-4">
-          {/* Retour d'ici vers l'aperçu de la séance du plan — n'a de sens
-              que si on est venu de là (showAlternativeForm) et qu'aucun
-              draft n'a encore été généré ; une fois un draft présent, le
-              lien équivalent vit directement sur la carte de résultat plus
-              bas (handleBackToPlan), plus proche de ce que l'athlète est
-              en train de regarder à ce moment-là. */}
-          {showAlternativeForm && todaysPlanSession && !draft && (
-            <button
-              type="button"
-              onClick={handleBackToPlan}
-              className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-left -mb-2"
-            >
-              ← Revenir à la séance prévue par le plan
-            </button>
-          )}
-          <div className="space-y-2">
-            <Label htmlFor="available-minutes">Temps disponible (min)</Label>
-            <Input
-              id="available-minutes"
-              type="number"
-              min={15}
-              max={360}
-              step={5}
-              value={minutes}
-              onChange={(e) => setMinutes(Number(e.target.value))}
-              className="w-32"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Intérieur ou extérieur</Label>
-            <div className="flex gap-0.5 rounded-full bg-muted p-0.5 w-fit">
-              <button
-                type="button"
-                onClick={() => setIndoorRequested(false)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
-                  !indoorRequested ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <TreePine className="w-3.5 h-3.5" /> Extérieur
-              </button>
-              <button
-                type="button"
-                onClick={() => setIndoorRequested(true)}
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
-                  indoorRequested ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
-                )}
-              >
-                <Home className="w-3.5 h-3.5" /> Intérieur
-              </button>
-            </div>
-          </div>
-          {/* Lieu/heure de départ n'ont de sens que pour une sortie extérieure
-              (météo réelle, conseil de vent) — masqués en intérieur plutôt que
-              désactivés, pour ne pas laisser croire qu'ils comptent encore. */}
-          {!indoorRequested && (
-            <>
-              <div className="space-y-2">
-                <Label htmlFor="ride-location" className="flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Lieu de départ (optionnel)
-                </Label>
-                <Input
-                  id="ride-location"
-                  placeholder="ex: Mont Ventoux"
-                  value={rideLocation}
-                  onChange={(e) => setRideLocation(e.target.value)}
-                  className="w-48"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="ride-time">Heure de départ</Label>
-                <Input
-                  id="ride-time"
-                  type="time"
-                  value={rideTime}
-                  onChange={(e) => setRideTime(e.target.value)}
-                  disabled={!rideLocation.trim()}
-                  className="w-28"
-                />
-              </div>
-            </>
-          )}
-          <Button onClick={handleGenerate} disabled={isGenerating} className="gap-2">
-            {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
-            {draft ? 'Régénérer' : 'Proposer une séance'}
-          </Button>
-        </CardContent>
-        {!indoorRequested && rideLocation.trim() && (
-          <CardContent className="pt-0">
-            <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-              <Wind className="w-3 h-3" /> Avec un lieu et une heure de départ, l&apos;IA récupère la météo réelle et conseille une direction pour avoir le vent dans le dos au retour.
-            </p>
-          </CardContent>
-        )}
-        {indoorRequested && (
-          <CardContent className="pt-0">
-            <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-              <Home className="w-3 h-3" /> Séance adaptée pour home trainer (pas une copie de la séance extérieure — voir rationale une fois générée).
-            </p>
-          </CardContent>
-        )}
-        </>
-        )}
-      </Card>
+          >
+            <Dumbbell className="w-3.5 h-3.5" /> Salle
+          </button>
+        </div>
+      </div>
 
       {wantsGym ? (
         weekStrengthSession ? (
@@ -643,119 +496,22 @@ export function DailyWorkoutTab() {
         )
       ) : isLoadingStored && !draft ? (
         <Skeleton className="h-64 w-full rounded-2xl" />
-      ) : (
-      // Retour utilisateur (repensée planification/séances/feedback) :
-      // "voir la séance initiale du plan, [avoir] une séance alternative
-      // [suggérée par le coach], et enfin avoir la possibilité de choisir"
-      // — les deux cartes vivent désormais côte à côte (grille 2 colonnes
-      // desktop, empilées en mobile) plutôt que l'une remplaçant l'autre
-      // séquentiellement. showPlanCard seul pilote la grille : sans séance
-      // datée par le plan, une seule colonne (comportement identique à
-      // avant ce chantier — EmptyState ou carte draft pleine largeur).
-      <div className={cn(showPlanCard && 'grid gap-4 md:grid-cols-2 items-start')}>
-      {showPlanCard && todaysPlanSession && (
-        // Retour utilisateur : "on aurait... la séance du jour proposée
-        // sur le plan" — la séance déjà datée par le plan s'affiche
-        // directement (title/durée/intensité/motif, aucun appel IA
-        // nécessaire juste pour la voir), profil graphique
-        // (WorkoutProfileChart, même composant que le calendrier du plan).
-        // "Envoyer sur Intervals.icu" envoie la séance telle quelle
-        // directement (sendPlanSessionDirectly, sans aller-retour IA) —
-        // seule action ici : "Changer de séance"/"Proposer une séance
-        // alternative" ont déménagé sur la carte "Suggestion du coach"
-        // ci-dessous, qui est leur vraie destination (obtenir une
-        // proposition DIFFÉRENTE de celle-ci).
-        <Card className="lc-card ring-2 ring-primary/50">
-          <CardHeader className="space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant="outline" className="gap-1.5 font-normal text-xs">
-                <Target className="w-3 h-3" /> Semaine {todaysPlanSession.weekNumber} du plan
-              </Badge>
-              <Badge variant="secondary">{todaysPlanSession.session.intensityLabel}</Badge>
-            </div>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Bike className="w-4 h-4 text-primary" /> {todaysPlanSession.session.title}
-            </CardTitle>
-            <CardDescription>{todaysPlanSession.session.rationale}</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <WorkoutProfileChart structuredWorkout={todaysPlanSession.session.structuredWorkout} height={48} />
-            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5" /> {todaysPlanSession.session.durationMinutes} min
-            </p>
-            <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
-              <Button
-                onClick={handleSendPlanSession}
-                disabled={isSendingPlanSession || !canSendToIntervals}
-                className="gap-2"
-                title={canSendToIntervals ? undefined : 'Renseignez vos identifiants Intervals.icu dans Réglages'}
-              >
-                {isSendingPlanSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                {planSessionSent ? 'Ré-envoyer sur Intervals.icu' : 'Envoyer sur Intervals.icu'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-      {showPlanCard && !draft ? (
-        // La suggestion du coach se génère automatiquement (voir l'effet
-        // plus haut) — ce squelette couvre ce court délai, pas un état
-        // vide : elle arrive toujours dans les secondes qui suivent, sauf
-        // échec IA (auquel cas generate() a déjà toasté l'erreur).
-        <Skeleton className="h-64 w-full rounded-2xl" />
-      ) : !draft ? (
-        <EmptyState
-          icon={Clock}
-          title="Aucune proposition pour aujourd'hui"
-          description="Indiquez votre temps disponible et générez une séance adaptée à votre forme du jour."
-        />
-      ) : (
+      ) : draft ? (
+        // Retour utilisateur : le résultat (suggestion générée, "Changer de
+        // séance" ou "Proposer une séance alternative") remplace désormais
+        // la vue plutôt que de s'ajouter à côté de la séance du plan — un
+        // seul lien de retour ("← Revenir à la séance prévue par le plan")
+        // couvre les deux chemins qui y mènent (shuffle ou formulaire).
         <Card className="lc-card ring-2 ring-primary/50">
           <CardHeader className="space-y-3">
-            {/* Retour utilisateur (repensée planification) : quand une
-                séance du plan est visible juste à côté (showPlanCard), cette
-                carte est explicitement labellisée "Suggestion du coach"
-                pour que le choix entre les deux soit immédiat — pas
-                seulement déductible du texte "Ajustée depuis..." plus bas. */}
             {showPlanCard && (
-              <p className="text-xs font-semibold text-primary uppercase tracking-wide">Suggestion du coach</p>
-            )}
-            {/* Retour utilisateur : "une fois la séance alternative
-                proposée on devrait pouvoir revenir sur la séance
-                initiale" — la séance prévue par le plan restant désormais
-                TOUJOURS visible juste à côté (showPlanCard), ce lien sert
-                à revenir à la suggestion STANDARD du coach (celle générée
-                automatiquement) après un "Changer de séance"/une
-                alternative personnalisée — remet `draft` à `null`, ce qui
-                relance l'effet d'auto-génération plus haut. */}
-            {showPlanCard && (isShuffled || showAlternativeForm) && (
               <button
                 type="button"
                 onClick={handleBackToPlan}
-                className="text-xs text-muted-foreground hover:text-foreground transition-colors text-left"
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors text-left w-fit"
               >
-                ↺ Revenir à la suggestion standard du coach
+                ← Revenir à la séance prévue par le plan
               </button>
-            )}
-            {/* Retour utilisateur (audit Join Cycling) : "Changer de séance"/
-                "Proposer une séance alternative" vivent maintenant ici — ce
-                sont deux façons d'obtenir une proposition DIFFÉRENTE de la
-                suggestion standard, donc des actions de CETTE carte, plus
-                de la carte "Séance prévue" (qui n'a qu'un seul geste :
-                l'envoyer). Masqués une fois que l'athlète a déjà demandé
-                l'un des deux (isShuffled/showAlternativeForm) — "Revenir à
-                la suggestion standard" ci-dessus est alors le seul geste
-                pertinent pour changer d'avis. */}
-            {showPlanCard && !isShuffled && !showAlternativeForm && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" size="sm" onClick={handleShuffle} disabled={isGenerating} className="gap-1.5">
-                  {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shuffle className="w-3.5 h-3.5" />}
-                  Changer de séance
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setShowAlternativeForm(true)}>
-                  Proposer une séance alternative
-                </Button>
-              </div>
             )}
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <Input
@@ -840,25 +596,16 @@ export function DailyWorkoutTab() {
               </CollapsibleContent>
             </Collapsible>
 
-            {/* Bulletin météo réel — même chiffres/même principe (pré-fetch
-                déterministe, jamais inventé) que Météo & Tenue, affichés ici
-                sous forme compacte plutôt que les 4 grandes cartes de cet
-                onglet-là (retour utilisateur : "s'assurer que la météo
-                fonctionne de la même façon que dans météo et tenue"). */}
-            {draft.predictedWeather && (
-              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 p-3 rounded-xl bg-muted/50 border border-border text-sm">
-                <span className="flex items-center gap-1.5"><Thermometer className="w-3.5 h-3.5 text-muted-foreground" /> {draft.predictedWeather.temperatureCelsius}°C</span>
-                <span className="flex items-center gap-1.5"><Wind className="w-3.5 h-3.5 text-muted-foreground" /> {draft.predictedWeather.windSpeedKmh} km/h · {draft.predictedWeather.windDirectionCompass}</span>
-                <span className="flex items-center gap-1.5"><CloudSun className="w-3.5 h-3.5 text-muted-foreground" /> {draft.predictedWeather.conditions}</span>
-              </div>
-            )}
-
-            {/* Météo trop dégradée (vent fort, pluie/neige forte, orage) — la
-                séance ci-dessus a déjà été adaptée en home trainer par le flow
-                (retour utilisateur : "si le temps est vraiment dégradée...
-                l'IA pourrait proposer une alternative adaptée pour home
-                trainer"), ce bandeau explique pourquoi. Couleur destructive
-                pour le distinguer des warnings jaunes génériques ci-dessous. */}
+            {/* Retour utilisateur : "j'enlèverais le côté météo que
+                j'aimerais simplement garder ad hoc" — le bulletin météo
+                (température/vent/conditions) et le conseil de direction
+                (windAdvice) ne s'affichent plus comme un bloc structuré ;
+                lieu/heure de départ (formulaire "Proposer une séance
+                alternative" plus bas) restent des champs ad hoc simples,
+                sans mise en avant dédiée. weatherAlert reste affiché : ce
+                n'est pas une donnée météo à consulter mais un avertissement
+                de sécurité (séance déjà adaptée en home trainer par le
+                flow si le temps est trop dégradé). */}
             {draft.weatherAlert && (
               <div className="flex items-start gap-2 p-3 rounded-xl bg-destructive/5 border border-destructive/20 text-sm">
                 <CloudRain className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
@@ -870,13 +617,6 @@ export function DailyWorkoutTab() {
                 vigilance du header (attentionItems/PlanAttentionBadge) au
                 lieu d'un bloc par warning ici — voir le commentaire sur
                 attentionItems plus haut. */}
-
-            {draft.windAdvice && (
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-primary/5 border border-primary/20 text-sm">
-                <Wind className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-                <span>{draft.windAdvice}</span>
-              </div>
-            )}
 
             {/* Alimentation à avoir sur le vélo — retour utilisateur :
                 "il est important de baser cette alimentation sur des
@@ -984,8 +724,162 @@ export function DailyWorkoutTab() {
             )}
           </CardContent>
         </Card>
-      )}
-      </div>
+      ) : showPlanCard && todaysPlanSession && !showAlternativeForm ? (
+        // Retour utilisateur : "on aurait... la séance du jour proposée
+        // sur le plan" — la séance déjà datée par le plan s'affiche
+        // directement (title/durée/intensité/motif, aucun appel IA
+        // nécessaire juste pour la voir), profil graphique
+        // (WorkoutProfileChart, même composant que le calendrier du plan).
+        // "Envoyer sur Intervals.icu" envoie la séance telle quelle
+        // directement (sendPlanSessionDirectly, sans aller-retour IA).
+        // "Changer de séance"/"Proposer une séance alternative" vivent ici
+        // (plus sur une carte "suggestion" séparée, supprimée — retour
+        // utilisateur : "avoir côte à côte la séance du plan et la
+        // proposition du coach du jour est redondant").
+        <Card className="lc-card ring-2 ring-primary/50">
+          <CardHeader className="space-y-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant="outline" className="gap-1.5 font-normal text-xs">
+                <Target className="w-3 h-3" /> Semaine {todaysPlanSession.weekNumber} du plan
+              </Badge>
+              <Badge variant="secondary">{todaysPlanSession.session.intensityLabel}</Badge>
+            </div>
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Bike className="w-4 h-4 text-primary" /> {todaysPlanSession.session.title}
+            </CardTitle>
+            <CardDescription>{todaysPlanSession.session.rationale}</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <WorkoutProfileChart structuredWorkout={todaysPlanSession.session.structuredWorkout} height={48} />
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5" /> {todaysPlanSession.session.durationMinutes} min
+            </p>
+            <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
+              <Button
+                onClick={handleSendPlanSession}
+                disabled={isSendingPlanSession || !canSendToIntervals}
+                className="gap-2"
+                title={canSendToIntervals ? undefined : 'Renseignez vos identifiants Intervals.icu dans Réglages'}
+              >
+                {isSendingPlanSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {planSessionSent ? 'Ré-envoyer sur Intervals.icu' : 'Envoyer sur Intervals.icu'}
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleShuffle} disabled={isGenerating} className="gap-1.5">
+                {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shuffle className="w-3.5 h-3.5" />}
+                Changer de séance
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowAlternativeForm(true)}>
+                Proposer une séance alternative
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        // Retour utilisateur : "la proposition du jour est un peu
+        // redondante de proposer une séance alternative qui pourrait en
+        // fait nous emmener à rentrer les détails de proposition du jour"
+        // — ce formulaire (anciennement une carte "Proposition du jour"
+        // toujours visible à côté du résultat) n'apparaît plus QUE dans
+        // deux cas : aucune séance de plan aujourd'hui (vue par défaut,
+        // comme avant), ou après un tap explicite sur "Proposer une séance
+        // alternative" — jamais les deux vues en même temps.
+        <Card className="lc-card">
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" /> {showPlanCard ? 'Proposer une séance alternative' : 'Proposition du jour'}
+            </CardTitle>
+            <CardDescription>
+              Indiquez le temps dont vous disposez — l&apos;IA propose une séance adaptée à votre forme actuelle
+              (charge interne, TSB, blessures, objectifs), que vous pouvez ajuster avant de l&apos;envoyer sur Intervals.icu.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap items-end gap-4">
+            {showPlanCard && (
+              <button
+                type="button"
+                onClick={handleBackToPlan}
+                className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors text-left -mb-2"
+              >
+                ← Revenir à la séance prévue par le plan
+              </button>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="available-minutes">Temps disponible (min)</Label>
+              <Input
+                id="available-minutes"
+                type="number"
+                min={15}
+                max={360}
+                step={5}
+                value={minutes}
+                onChange={(e) => setMinutes(Number(e.target.value))}
+                className="w-32"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Intérieur ou extérieur</Label>
+              <div className="flex gap-0.5 rounded-full bg-muted p-0.5 w-fit">
+                <button
+                  type="button"
+                  onClick={() => setIndoorRequested(false)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
+                    !indoorRequested ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <TreePine className="w-3.5 h-3.5" /> Extérieur
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIndoorRequested(true)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
+                    indoorRequested ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+                  )}
+                >
+                  <Home className="w-3.5 h-3.5" /> Intérieur
+                </button>
+              </div>
+            </div>
+            {/* Retour utilisateur : "j'enlèverais le côté météo... que
+                j'aimerais simplement garder ad hoc" — lieu/heure restent de
+                simples champs optionnels (l'IA continue de récupérer la
+                météo réelle en interne quand ils sont renseignés, pour le
+                conseil de direction et l'adaptation home trainer si besoin),
+                mais sans plus expliquer/mettre en avant ce mécanisme ici. */}
+            {!indoorRequested && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="ride-location" className="flex items-center gap-1.5">
+                    <MapPin className="w-3.5 h-3.5 text-muted-foreground" /> Lieu de départ (optionnel)
+                  </Label>
+                  <Input
+                    id="ride-location"
+                    placeholder="ex: Mont Ventoux"
+                    value={rideLocation}
+                    onChange={(e) => setRideLocation(e.target.value)}
+                    className="w-48"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="ride-time">Heure de départ</Label>
+                  <Input
+                    id="ride-time"
+                    type="time"
+                    value={rideTime}
+                    onChange={(e) => setRideTime(e.target.value)}
+                    disabled={!rideLocation.trim()}
+                    className="w-28"
+                  />
+                </div>
+              </>
+            )}
+            <Button onClick={handleGenerate} disabled={isGenerating} className="gap-2">
+              {isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Proposer une séance
+            </Button>
+          </CardContent>
+        </Card>
       )}
     </div>
   )
