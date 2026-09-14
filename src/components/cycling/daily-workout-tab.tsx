@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, CheckCircle2, Clock, MapPin, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle, Wand2 } from 'lucide-react'
+import { Sparkles, Loader2, Send, CheckCircle2, Clock, MapPin, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -176,15 +176,6 @@ export function DailyWorkoutTab() {
   // sans danger (même externalId, upsert côté Intervals.icu, jamais un
   // doublon).
   const [planSessionSent, setPlanSessionSent] = useState(false)
-  // Retour utilisateur (audit Join Cycling) : "Changer de séance" — un
-  // bouton one-tap sur la carte "séance du jour" pour obtenir une
-  // proposition réellement différente sans passer par le formulaire
-  // temps/lieu/heure (voir handleShuffle plus bas). Uniquement pour
-  // distinguer le texte affiché sur le draft résultant ("vous avez
-  // demandé une séance différente" plutôt que "aucune séance planifiée
-  // aujourd'hui", qui serait faux ici) — jamais persisté, remis à zéro
-  // par tout autre chemin de génération (handleGenerate/handleBackToPlan).
-  const [isShuffled, setIsShuffled] = useState(false)
   // Retour utilisateur : "avec le webhook on devrait pouvoir pousser les
   // activités réalisée sur la carte du jour et donc le déclenchement de
   // l'IA lorsque l'on rentre sur le jour pour avoir l'analyse IA de la
@@ -240,44 +231,6 @@ export function DailyWorkoutTab() {
     if (proposal) {
       setDraft(proposal)
       setWasSent(false)
-      setIsShuffled(false)
-    }
-  }
-
-  // Retour utilisateur (audit Join Cycling) : "Changer de séance" — reprend
-  // la durée de la séance déjà prévue par le plan (aucun formulaire à
-  // remplir, contrairement à "Proposer une séance alternative") et demande
-  // à l'IA une proposition libre (skipPlanAdjustment, voir use-daily-
-  // workout.ts) plutôt qu'un ajustement de CETTE séance — sinon l'IA la
-  // renverrait souvent inchangée ("la renvoyer telle quelle si rien ne
-  // justifie un changement", voir le prompt du flow), ce qui ne
-  // correspondrait pas au geste "je veux autre chose".
-  const handleShuffle = async () => {
-    if (!todaysPlanSession) return
-    const proposal = await generate(todaysPlanSession.session.durationMinutes, undefined, false, { skipPlanAdjustment: true })
-    if (proposal) {
-      setDraft(proposal)
-      setWasSent(false)
-      setIsShuffled(true)
-    }
-  }
-
-  // Retour utilisateur : "reintegrer la possibilité de demander au coach
-  // d'ajuster la seance" — reprend le mécanisme retiré au moment du
-  // passage à l'envoi direct (sendPlanSessionDirectly, voir "Coach
-  // Aujourd'hui : graphique de profil + envoi direct" dans CLAUDE.md) :
-  // un appel IA qui relit la séance du plan face aux conditions du jour
-  // (récupération, météo) et l'ajuste si besoin (durée/intensité/home
-  // trainer) — contrairement à handleShuffle (skipPlanAdjustment: true,
-  // ignore la séance prévue), ici plannedSession reste attaché (comportement
-  // par défaut de generate()) pour que l'IA parte bien de CETTE séance.
-  const handleAdjust = async () => {
-    if (!todaysPlanSession) return
-    const proposal = await generate(todaysPlanSession.session.durationMinutes, undefined, false)
-    if (proposal) {
-      setDraft(proposal)
-      setWasSent(false)
-      setIsShuffled(false)
     }
   }
 
@@ -309,7 +262,6 @@ export function DailyWorkoutTab() {
   const handleBackToPlan = () => {
     setDraft(null)
     setShowAlternativeForm(false)
-    setIsShuffled(false)
     setStrengthDraft(null)
   }
 
@@ -625,13 +577,6 @@ export function DailyWorkoutTab() {
                   {draft.planAdjustmentNote ? ` ${draft.planAdjustmentNote}` : ''}
                 </span>
               </div>
-            ) : isShuffled ? (
-              // Retour utilisateur (audit Join Cycling) : distinct du cas
-              // "aucune séance planifiée" ci-dessous — ici une séance ÉTAIT
-              // prévue, l'athlète a explicitement demandé autre chose
-              // (Changer de séance), jamais laisser croire à une absence de
-              // plan.
-              <p className="text-xs text-muted-foreground">Générée librement — vous avez demandé une séance différente de celle prévue par le plan.</p>
             ) : (
               <p className="text-xs text-muted-foreground">Générée librement — aucune séance planifiée aujourd&apos;hui.</p>
             )}
@@ -813,11 +758,17 @@ export function DailyWorkoutTab() {
         // "Changer de séance"/"Proposer une séance alternative" vivent ici
         // (plus sur une carte "suggestion" séparée, supprimée — retour
         // utilisateur : "avoir côte à côte la séance du plan et la
-        // proposition du coach du jour est redondant"). "Ajuster la
-        // séance"/"Proposer une séance de muscu" réintégrés ici (retour
-        // utilisateur : "reintegrer la possibilité de demander au coach
-        // d'ajuster la seance, d'avoir un seance alternative ou de
-        // proposer une seance de muscu").
+        // proposition du coach du jour est redondant"). "Proposer une
+        // séance de muscu" réintégré ici (retour utilisateur :
+        // "reintegrer la possibilité de... proposer une seance de
+        // muscu"). "Ajuster la séance"/"Changer de séance" — deux
+        // boutons distincts brièvement réintroduits puis retirés (retour
+        // utilisateur : "un peu redondants... laisse seulement proposer
+        // une séance alternative, avec le petit logo de changer de
+        // séance") : le formulaire "Proposer une séance alternative"
+        // couvrait déjà les deux usages (generate() attache plannedSession
+        // par défaut — soumettre le formulaire sans rien changer EST
+        // "ajuster la séance") — un seul bouton, portant l'icône Shuffle.
         <Card className="lc-card ring-2 ring-primary/50">
           <CardHeader className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
@@ -846,15 +797,8 @@ export function DailyWorkoutTab() {
                 {isSendingPlanSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 {planSessionSent ? 'Ré-envoyer sur Intervals.icu' : 'Envoyer sur Intervals.icu'}
               </Button>
-              <Button variant="outline" size="sm" onClick={handleAdjust} disabled={isGenerating} className="gap-1.5">
-                {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-                Ajuster la séance
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleShuffle} disabled={isGenerating} className="gap-1.5">
-                {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shuffle className="w-3.5 h-3.5" />}
-                Changer de séance
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowAlternativeForm(true)}>
+              <Button variant="outline" size="sm" onClick={() => setShowAlternativeForm(true)} className="gap-1.5">
+                <Shuffle className="w-3.5 h-3.5" />
                 Proposer une séance alternative
               </Button>
               <Button variant="outline" size="sm" onClick={handleProposeStrength} disabled={isGeneratingStrength} className="gap-1.5">

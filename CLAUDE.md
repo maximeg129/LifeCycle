@@ -3129,6 +3129,40 @@ plus "Proposer une séance de muscu" (`Dumbbell`) en quatrième action.
 Tests (`buildSystemPrompt.test.ts`, 1 nouveau test de scope + 1 nouveau snapshot) — 904/904 au total,
 tsc/eslint/build clean.
 
+## Coach Aujourd'hui : fusion "Ajuster la séance"/"Changer de séance" en un seul bouton
+
+Retour utilisateur, capture d'écran (mobile) de la carte "séance du jour" avec ses quatre boutons à
+l'appui, juste après le chantier précédent : "Les boutons ajuster la séance changer de séance, sont
+un peu redondants. Je pense qu'on peut les enlever. Laisse seulement proposer une séance alternative,
+avec le petit logo de changer de séance."
+
+**Root cause de la redondance, structurelle pas seulement visuelle** — `handleGenerate()` (le
+formulaire "Proposer une séance alternative") appelle `generate()` sans jamais passer
+`skipPlanAdjustment` ; or `generate()` attache `plannedSession` PAR DÉFAUT dès qu'une séance existe
+aujourd'hui (voir `use-daily-workout.ts`). Autrement dit, soumettre le formulaire alternatif SANS
+changer la durée/le lieu proposés par défaut produisait déjà exactement le comportement d'"Ajuster
+la séance" (l'IA relit la séance du plan et l'ajuste si besoin) — le bouton dédié n'apportait donc
+aucun chemin réellement distinct, juste un raccourci sans le détour par le formulaire. "Changer de
+séance" restait la seule action VRAIMENT différente (`skipPlanAdjustment: true`, ignore la séance
+prévue) — mais l'utilisateur juge le tout redondant et préfère un seul point d'entrée.
+
+**Un seul bouton restant** — "Proposer une séance alternative" (`setShowAlternativeForm(true)`,
+inchangé dans son mécanisme) porte désormais l'icône `Shuffle` ("le petit logo de changer de
+séance") demandée explicitement. `handleAdjust`/`handleShuffle` (les deux handlers dédiés) sont
+supprimés — plus de duplication avec le chemin formulaire existant. `isShuffled` (état local qui ne
+servait qu'à distinguer le texte affiché après un "Changer de séance") est retiré avec son seul
+producteur ; le texte "vous avez demandé une séance différente" disparaît avec lui — plus qu'un seul
+message "Générée librement — aucune séance planifiée aujourd'hui" pour toute proposition sans
+`adjustedFromPlan`.
+
+**Nettoyage en cascade côté hook** — `generate()` (`use-daily-workout.ts`) perd son 4ᵉ paramètre
+`options?.skipPlanAdjustment`, devenu mort (plus aucun appelant ne le passe) : la condition
+d'attachement de `plannedSession` redevient simplement `!todaysPlanSessionIsStrength &&
+todaysPlanSession?.session.structuredWorkout`, sans branche conditionnelle inutile.
+
+Changement de JSX/état local + simplification d'une signature de hook, aucune logique pure
+touchée — 904/904 tests inchangés, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
