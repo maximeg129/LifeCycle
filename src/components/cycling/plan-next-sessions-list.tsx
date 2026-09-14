@@ -47,6 +47,8 @@ import {
 interface Props {
   weeks: PlanWeek[]
   today: string
+  /** Masque le jour "Aujourd'hui" de la fenêtre glissante — quand la séance du jour vit déjà ailleurs à l'écran (voir training-plan-tab.tsx : DailyWorkoutTab), jamais montrée deux fois. */
+  hideToday?: boolean
   generatingSessionsForWeek: number | null
   sendingSessionKey: string | null
   canSendToIntervals: boolean
@@ -66,13 +68,14 @@ function dayLabel(dateIso: string, todayIso: string): string {
 }
 
 export function PlanNextSessionsList({
-  weeks, today, generatingSessionsForWeek, sendingSessionKey, canSendToIntervals,
+  weeks, today, hideToday, generatingSessionsForWeek, sendingSessionKey, canSendToIntervals,
   onRegenerate, onSend, onMoveDate, getCompletion, adjustingLocationKey, onAdjustLocation,
 }: Props) {
   const [showPast, setShowPast] = useState(false)
 
   const days = useMemo(() => sessionsForNext7Days(weeks, today), [weeks, today])
-  const segments = useMemo(() => groupRollingDaysByWeek(days), [days])
+  const visibleDays = useMemo(() => (hideToday ? days.filter((d) => d.date !== today) : days), [days, hideToday, today])
+  const segments = useMemo(() => groupRollingDaysByWeek(visibleDays), [visibleDays])
   const past = useMemo(() => pastPlanSessions(weeks, today), [weeks, today])
 
   const renderDetail = (week: PlanWeek, session: PlanWeekSessionWithValidation, index: number) => (
@@ -110,10 +113,12 @@ export function PlanNextSessionsList({
 
       <div className="space-y-3">
         <div className="flex items-baseline justify-between">
-          <h3 className="text-sm font-semibold">Prochains jours</h3>
-          <span className="text-xs text-muted-foreground">
-            {format(new Date(`${days[0].date}T00:00:00`), 'dd MMM', { locale: fr })} – {format(new Date(`${days.at(-1)!.date}T00:00:00`), 'dd MMM', { locale: fr })}
-          </span>
+          <h3 className="text-sm font-semibold">{hideToday ? 'Cette semaine' : 'Prochains jours'}</h3>
+          {visibleDays.length > 0 && (
+            <span className="text-xs text-muted-foreground">
+              {format(new Date(`${visibleDays[0].date}T00:00:00`), 'dd MMM', { locale: fr })} – {format(new Date(`${visibleDays.at(-1)!.date}T00:00:00`), 'dd MMM', { locale: fr })}
+            </span>
+          )}
         </div>
 
         {segments.map((segment) => {
