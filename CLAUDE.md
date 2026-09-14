@@ -2998,6 +2998,67 @@ lettres vu les deux nouveaux outils qui pourraient laisser croire le contraire).
 Tests : aucun nouveau (extraction de hooks + nouveaux tool cases, pas de logique pure isolée) — 902/902
 inchangés, tsc/eslint/build clean.
 
+## Coach Aujourd'hui : retour au flux séquentiel — fin de la génération automatique et du côte-à-côte
+
+Retour utilisateur, trois captures d'écran à l'appui (carte "Proposition du jour" toujours visible,
+carte "suggestion du coach" juste en dessous, les deux affichées ensemble à côté de la carte "séance
+du plan") : "je pense que la proposition du jour est un peu redondante de proposer une séance
+alternative qui pourrait en fait nous emmener à rentrer les détails de proposition du jour.
+J'enlèverais d'ailleurs le côté météo que j'aimerais simplement garder ad hoc ; enfin avoir côte à
+côte la séance du plan et la proposition du coach du jour est redondant également." Revient
+consciemment sur le chantier "Chantier C" (voir "Repenser planification/séances/feedback" plus haut)
+qui avait justement introduit la génération automatique + le layout grille 2 colonnes — pas un oubli,
+l'utilisateur est revenu sur ce choix après usage réel.
+
+**Root cause de la redondance** — l'effet `autoSuggestionTriggeredRef` générait un `draft` dès que
+`todaysPlanSession` existait, sans attendre de clic. `showPlanPreview`/`showPlanCard` restait
+`!!todaysPlanSession` (toujours vrai), donc les DEUX cartes (séance du plan ET suggestion)
+s'affichaient côte à côte quasi immédiatement à l'ouverture de l'onglet — exactement la redondance
+décrite. Supprimé entièrement, sans remplacement : la suggestion du coach (`draft`) n'existe
+désormais QUE si l'athlète la demande explicitement, via "Changer de séance" (`handleShuffle`) ou
+"Proposer une séance alternative" (`showAlternativeForm`).
+
+**Flux séquentiel à un seul état affiché** — la grille 2 colonnes disparaît ; une seule chaîne
+ternaire mutuellement exclusive (Vélo/Salle → skeleton de chargement → `draft` → séance du plan →
+formulaire) rend exactement UNE carte à la fois :
+1. `draft` (une suggestion a été générée, par shuffle ou par le formulaire) — pleine largeur, un seul
+   lien "← Revenir à la séance prévue par le plan" (remplace les deux liens précédents, un sur le
+   formulaire et un en tête de carte résultat) ; "Changer de séance"/"Proposer une séance
+   alternative" retirés d'ici (n'ont plus de sens une fois qu'une suggestion est déjà affichée).
+2. Sans `draft`, séance du plan datée aujourd'hui (`showPlanCard`) et pas de formulaire alternatif
+   ouvert — la carte "séance du jour" (titre/durée/graphique/"Envoyer sur Intervals.icu"), qui
+   accueille maintenant directement les boutons "Changer de séance" et "Proposer une séance
+   alternative" (déménagés depuis l'ancienne carte "suggestion" séparée, qui n'existe plus comme
+   bloc permanent).
+3. Sinon (aucune séance de plan aujourd'hui, OU "Proposer une séance alternative" a été cliqué) — le
+   formulaire temps/lieu/heure, anciennement une carte "Proposition du jour" toujours visible à côté
+   du résultat, devient l'action explicite qui MÈNE au résultat plutôt qu'un bloc permanent en
+   parallèle — exactement la reformulation du retour utilisateur ("proposer une séance alternative...
+   nous emmène à rentrer les détails de proposition du jour"). Titre dynamique ("Proposer une séance
+   alternative" vs "Proposition du jour" selon `showPlanCard`), bouton simplifié en un seul libellé
+   ("Proposer une séance" — le `draft ? 'Régénérer' : ...` conditionnel disparaît, cette carte ne
+   s'affiche jamais tant qu'un `draft` existe dans ce nouveau flux).
+
+Le contexte badges (semaine du plan/récupération) et le toggle Vélo/Salle, auparavant nichés dans le
+header de la carte "Proposition du jour" permanente, sont extraits en blocs toujours visibles
+au-dessus de la chaîne ternaire — pour rester accessibles quel que soit l'état affiché en dessous.
+
+**Météo "ad hoc"** — retiré comme fonctionnalité mise en avant : le bulletin météo structuré
+(`draft.predictedWeather`, température/vent/conditions) et le conseil de direction
+(`draft.windAdvice`) ne s'affichent plus comme blocs dédiés dans la carte suggestion ; les champs
+lieu/heure de départ du formulaire perdent leurs paragraphes explicatifs ("l'IA récupère la météo
+réelle...", "séance adaptée pour home trainer...") — ils redeviennent de simples champs optionnels
+sans mise en avant. **Décision consciente, à confirmer par l'utilisateur si mal interprétée** :
+`draft.weatherAlert` (le bandeau de sécurité en cas de météo sévère, qui force déjà une bascule home
+trainer côté flow) reste affiché — jugé comme un avertissement de sécurité distinct de "la
+fonctionnalité météo" que l'utilisateur voulait alléger, pas comme une donnée météo à consulter au
+même titre que le bulletin/le conseil de vent retirés. Aucun changement côté flow IA
+(`dailyWorkoutRecommendation` continue de fetcher la météo réelle en interne quand lieu/heure sont
+renseignés, pour l'adaptation home trainer et `weatherAlert` lui-même) — uniquement l'affichage.
+
+Changement de JSX/état local uniquement, aucune logique pure touchée — 902/902 tests inchangés,
+tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
