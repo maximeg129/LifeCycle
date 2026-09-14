@@ -3059,6 +3059,76 @@ renseignés, pour l'adaptation home trainer et `weatherAlert` lui-même) — uni
 Changement de JSX/état local uniquement, aucune logique pure touchée — 902/902 tests inchangés,
 tsc/eslint/build clean.
 
+## Coach Aujourd'hui : réintègre ajuster/alternative/muscu sur la carte "séance du jour"
+
+Retour utilisateur, capture d'écran d'une ancienne version de la carte "SUGGESTION DU COACH" à
+l'appui : "je pense qu'il faut reintegrer la possibilité de demander au coach d'ajuster la seance,
+d'avoir un seance alternative ou de proposer une seance de muscu (bien sur qui viendrais s'imbriquer
+dans le plan)." Deux `AskUserQuestion` avant de coder, sur les deux points réellement ambigus du
+message : (1) "Ajuster la séance" doit-il rappeler l'IA pour relire la séance du plan face aux
+conditions du jour (recommandé, retenu) ou autre chose ? (2) "Proposer une séance de muscu" doit-elle
+juste basculer sur la séance muscu déjà prévue par la semaine (toggle Vélo/Salle existant) ou générer
+une VRAIE nouvelle séance muscu pour aujourd'hui via l'IA (retenu) ?
+
+**"Ajuster la séance"** — reprend le mécanisme retiré au moment du passage à l'envoi direct (voir
+"Coach Aujourd'hui : graphique de profil + envoi direct" plus haut) : `handleAdjust`
+(`daily-workout-tab.tsx`) appelle `generate()` avec la durée de la séance du plan, SANS
+`skipPlanAdjustment` — `plannedSession` reste donc attaché (comportement par défaut de `generate()`,
+voir `use-daily-workout.ts`), l'IA relit la séance déjà prévue face à la récupération/météo du jour et
+l'ajuste si besoin, exactement le mécanisme de l'ancien "Utiliser cette séance". Contraste avec
+"Changer de séance" (`handleShuffle`, `skipPlanAdjustment: true` — ignore la séance prévue, compose
+quelque chose de différent).
+
+**"Proposer une séance de muscu"** — nouveau flow **`dailyStrengthRecommendation`**
+(`daily-strength-recommendation-flow.ts`), distinct de `planWeekSessions` (qui compose 1-3 séances
+muscu pour TOUTE une semaine, à la génération de la semaine) : celui-ci compose UNE séance pour
+AUJOURD'HUI précisément, en lisant la récupération de la nuit passée (même contexte que
+`dailyWorkoutRecommendation` côté vélo — sommeil/HRV/FC repos/readiness, avec instruction explicite de
+préférer un `sessionType` "entretien"/"top-up" si la récupération est dégradée) et la phase du plan
+cycliste en cours (jamais une séance très lourde en phase affûtage, par exemple).
+
+- **Schémas partagés extraits en fichiers plain** — `MovementPatternEnum`/`StrengthExerciseSchema`
+  (`strength-exercise-schema.ts`) et `PHASE_GUIDANCE` (`phase-guidance.ts`) vivaient jusqu'ici
+  seuls, non exportés, dans `plan-week-sessions-flow.ts` (un fichier `'use server'`) — impossible de
+  les réutiliser tels quels dans le nouveau flow (voir "Un fichier 'use server' ne peut exporter QUE
+  des fonctions async" plus bas dans ce fichier). Extraits en fichiers plain (même patron que
+  `structured-workout-syntax.ts`), `plan-week-sessions-flow.ts` les important désormais au lieu de
+  les redéfinir — un seul schéma/une seule guidance par phase dans toute l'app, jamais deux copies
+  qui pourraient diverger.
+- **`generateStrengthSession()`** (`use-daily-workout.ts`) — reprend la même durée indicative que la
+  séance muscu déjà prévue cette semaine par le plan si une existe (`findWeekStrengthSession`, même
+  helper que le toggle Vélo/Salle), sinon laisse l'IA choisir une durée raisonnable (30-60 min) ;
+  `recentStrengthSessionPatterns(activePlan.weeks, planWeek.weekNumber + 1)` (le `+1` inclut les
+  séances déjà générées CETTE semaine, contrairement à `use-generate-week-sessions.ts` qui génère la
+  semaine elle-même et ne peut donc pas encore se voir soi-même) pour la règle hip-hinge S05. La
+  validation déterministe (`validateStrengthSession`, S05) est calculée côté client exactement comme
+  pour `planWeekSessions` — jamais une auto-évaluation du modèle.
+- **"S'imbriquer dans le plan"** — la séance générée est immédiatement APPENDED à
+  `sampleSessions` de la semaine du plan en cours (`date: todayId`), persistée via `updateDoc` sur
+  `trainingPlans/{planId}` — jamais une séance flottante hors du plan. Ajoutée (pas insérée en tête)
+  pour ne jamais perturber `todaysPlanSession` (qui `findIndex` sur `date === todayId` : la séance
+  vélo déjà présente reste la première trouvée à cette date). Le modèle de données du plan supporte
+  déjà plusieurs séances le même jour — `sessionsForNext7Days` (`training-plan-types.ts`) `.filter()`
+  par date plutôt que `.find()` — donc cette deuxième entrée du jour apparaît correctement partout où
+  le plan est consulté (Plan tab, `PlanNextSessionsList`), sans changement de logique là-bas.
+- **Affichage** — nouvel état local `strengthDraft` (`daily-workout-tab.tsx`), rendu via
+  `StrengthSessionCard` (même composant que la séance muscu de la semaine/le court-circuit
+  automatique — suivi en direct/saisie rétroactive gratuits) avec un lien "← Revenir à la séance
+  prévue par le plan" et un bouton "Régénérer" qui RÉUTILISE l'index déjà attribué (remplace
+  l'entrée plutôt que d'en empiler une deuxième). Revenir en arrière (`handleBackToPlan`) n'efface
+  RIEN côté Firestore — la séance déjà proposée reste dans le plan, juste plus affichée ici.
+- **Nouveau `CoachFlowId` : `dailyStrengthRecommendation`**, scopes `session-arbitration` (même
+  famille de décision que `dailyWorkoutRecommendation` — un arbitrage du jour) ET `plan-validation`
+  (S05, mêmes règles que `planWeekSessions` — aucune raison qu'une séance ad hoc y échappe). Nouveau
+  snapshot committé (`buildSystemPrompt.test.ts`), purement additif.
+
+**Trois boutons désormais sur la carte "séance du jour"** (`showPlanCard`) : "Ajuster la séance"
+(`Wand2`), "Changer de séance" (`Shuffle`, inchangé), "Proposer une séance alternative" (inchangé) —
+plus "Proposer une séance de muscu" (`Dumbbell`) en quatrième action.
+
+Tests (`buildSystemPrompt.test.ts`, 1 nouveau test de scope + 1 nouveau snapshot) — 904/904 au total,
+tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
@@ -3485,6 +3555,21 @@ inventés) et choisir la tenue.
   la date d'une séance déplace l'événement calendrier au lieu de le dupliquer) et le même
   `STRUCTURED_WORKOUT_SYNTAX` (constante partagée exportée par `structured-workout-syntax.ts`, pour ne
   jamais laisser dériver la syntaxe du "workout builder" Intervals.icu entre les deux flows).
+
+### Flow existant : `dailyStrengthRecommendation`
+- Input : `{ date, weekNumber, phase, focus, suggestedDurationMinutes?, recentStrengthPatterns?,
+  training?, recovery?, coachContext? }` — voir "Coach Aujourd'hui : réintègre ajuster/alternative/
+  muscu" plus haut.
+- Output : `{ session: { title, durationMinutes, intensityLabel, rationale, sessionType,
+  strengthPhase, strengthExercises } }` — UNE séance muscu (jamais un tableau), contrairement à
+  `planWeekSessions`.
+- Usage : bouton "Proposer une séance de muscu" (`daily-workout-tab.tsx`, carte "séance du jour"),
+  `generateStrengthSession()` dans `use-daily-workout.ts`.
+- Distinct de `planWeekSessions` : ce n'est PAS la répartition idéale d'une semaine entière — c'est
+  UNE séance pour AUJOURD'HUI précisément, tenant compte de la récupération de la nuit passée (même
+  principe que `dailyWorkoutRecommendation` côté vélo). Le résultat est embarqué directement dans
+  `sampleSessions` de la semaine du plan en cours par l'appelant — jamais une séance flottante hors
+  du plan (voir la section CLAUDE.md ci-dessus pour le détail).
 
 ### Flow existant : `rideAnalysis`
 - Input : `{ activity (nom/type/date/distance/durée/watts moyens+normalisés/VI/FC/cadence/dénivelé/

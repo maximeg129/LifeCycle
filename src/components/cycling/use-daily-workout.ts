@@ -28,8 +28,11 @@ import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/en
 import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { buildCoachContext } from './coach-context'
 import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
+import { dailyStrengthRecommendation } from '@/ai/flows/daily-strength-recommendation-flow'
 import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload, signalToTrendLabel } from './daily-workout-types'
-import { currentPlanWeek, planSessionExternalId, matchSessionCompletion, type PlanWeek, type SessionCompletion } from './training-plan-types'
+import { currentPlanWeek, planSessionExternalId, matchSessionCompletion, findWeekStrengthSession, type PlanWeek, type SessionCompletion, type PlanWeekSessionWithValidation } from './training-plan-types'
+import { recentStrengthSessionPatterns } from './strength-session-plan-types'
+import { validateStrengthSession } from '@/domain/cycling/validation/strengthSessionValidator'
 import { useGenerateWeekSessions } from './use-generate-week-sessions'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { describeActionDispatchError } from '@/lib/utils'
@@ -173,6 +176,7 @@ export function useDailyWorkout() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [isSending, setIsSending] = useState(false)
   const [isSendingPlanSession, setIsSendingPlanSession] = useState(false)
+  const [isGeneratingStrength, setIsGeneratingStrength] = useState(false)
 
   const generate = useCallback(async (
     rawMinutes: number,
@@ -393,6 +397,139 @@ export function useDailyWorkout() {
     }
   }, [todaysPlanSession, creds, todayId, toast])
 
+  // Retour utilisateur : "reintegrer la possibilité de... proposer une
+  // seance de muscu (bien sur qui viendrais s'imbriquer dans le plan)" —
+  // génère UNE séance de musculation pour aujourd'hui (dailyStrengthRecommendation,
+  // distinct de planWeekSessions qui compose 1-3 séances pour toute une
+  // semaine) et l'embarque directement dans sampleSessions de la semaine du
+  // plan en cours — jamais une séance flottante en dehors du plan. Ajoutée
+  // (pas insérée en tête) pour ne jamais perturber todaysPlanSession
+  // ci-dessus (findIndex sur date === todayId) : la séance vélo déjà
+  // présente reste la première trouvée à cette date, cette nouvelle séance
+  // muscu devient une deuxième entrée du même jour — le modèle de données
+  // du plan le permet déjà (voir sessionsForNext7Days, training-plan-
+  // types.ts, qui .filter() par date plutôt que .find()).
+  //
+  // `existingIndex` (optionnel) : régénérer une séance déjà ajoutée cette
+  // session (le "Régénérer" de daily-workout-tab.tsx) REMPLACE l'entrée à
+  // cet index plutôt que d'en ajouter une deuxième.
+  const generateStrengthSession = useCallback(async (
+    existingIndex?: number
+  ): Promise<{ session: PlanWeekSessionWithValidation; weekNumber: number; index: number } | null> => {
+    if (!user || !db || !activePlan || !planWeek) return null
+    setIsGeneratingStrength(true)
+    try {
+      const coachContext = buildCoachContext({
+        today: todayId,
+        injuries: memory.injuries,
+        lifestyle: memory.lifestyle,
+        goals: memory.goals,
+        rememberedFacts: memory.rememberedFacts,
+        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline, trend: budget.trend, exceedsThresholdKJPerKg: budget.exceedsThresholdKJPerKg },
+        governorStatus: governor.status,
+        trainingLoad: governor.trainingLoad,
+        enduranceIndex,
+        criticalPower: criticalPowerModel ? { cpWatts: criticalPowerModel.cpWatts, wPrimeKJ: criticalPowerModel.wPrimeJoules / 1000 } : null,
+      })
+
+      // Volume indicatif : reprend la séance muscu déjà prévue cette
+      // semaine par le plan si une existe (findWeekStrengthSession, même
+      // helper que le toggle Vélo/Salle) — sinon le modèle choisit une
+      // durée raisonnable lui-même (voir le flow).
+      const existingWeekStrength = findWeekStrengthSession(planWeek)
+      // +1 pour inclure les séances déjà générées CETTE semaine (celle
+      // qu'on ajoute vient s'ajouter à leur suite) — recentStrengthSessionPatterns
+      // filtre strictement < beforeWeekNumber.
+      const previousStrengthPatterns = recentStrengthSessionPatterns(activePlan.weeks, planWeek.weekNumber + 1)
+
+      const result = await dailyStrengthRecommendation({
+        date: todayId,
+        weekNumber: planWeek.weekNumber,
+        phase: planWeek.phase,
+        focus: planWeek.focus,
+        suggestedDurationMinutes: existingWeekStrength?.session.durationMinutes,
+        recentStrengthPatterns: previousStrengthPatterns,
+        training: athlete.isConfigured && athlete.data ? {
+          ctl: athlete.data.ctl,
+          atl: athlete.data.atl,
+          tsb: athlete.data.tsb,
+          ftp: athlete.data.ftp,
+          weightKg: athlete.data.weight,
+        } : undefined,
+        recovery: lifestyle.latest ? {
+          sleepHours: lifestyle.latest.sleepHours,
+          sleepQuality: lifestyle.latest.sleepQuality,
+          hrv: lifestyle.latest.hrv,
+          hrvTrend: signalToTrendLabel(governor.signals.hrvTrend),
+          restingHR: lifestyle.latest.restingHR,
+          restingHRTrend: signalToTrendLabel(governor.signals.restingHR),
+          readiness: lifestyle.readiness ?? undefined,
+        } : undefined,
+        coachContext,
+      })
+      if (!result.ok) {
+        toast({ variant: 'destructive', title: "L'IA n'a pas pu proposer de séance de musculation", description: result.error })
+        return null
+      }
+      const output = result.data.session
+
+      const existingSessions = planWeek.sampleSessions ?? []
+      // Séances muscu déjà présentes cette semaine, celle qu'on régénère
+      // (existingIndex) exclue de son propre décompte pour ne pas se
+      // compter deux fois.
+      const strengthSessionsThisWeek = existingSessions.filter((s, i) => s.sessionKind === 'strength' && i !== existingIndex).length + 1
+      const strengthValidation = validateStrengthSession({
+        session: {
+          sessionType: output.sessionType,
+          strengthPhase: output.strengthPhase,
+          durationMinutes: output.durationMinutes,
+          exercises: output.strengthExercises,
+        },
+        previousSessionsPatterns: previousStrengthPatterns,
+        weeklyCyclingHours: planWeek.targetWeeklyMinutes / 60,
+        cyclingPhase: planWeek.phase,
+        strengthSessionsThisWeek,
+        hoursBeforeNextKeySession: null,
+      })
+
+      const newSession: PlanWeekSessionWithValidation = {
+        sessionKind: 'strength',
+        sportType: 'WeightTraining',
+        title: output.title,
+        durationMinutes: output.durationMinutes,
+        intensityLabel: output.intensityLabel,
+        rationale: output.rationale,
+        sessionType: output.sessionType,
+        strengthPhase: output.strengthPhase,
+        strengthExercises: output.strengthExercises,
+        strengthValidation,
+        date: todayId,
+      }
+
+      const targetIndex = existingIndex ?? existingSessions.length
+      const updatedSessions = existingIndex != null
+        ? existingSessions.map((s, i) => (i === targetIndex ? newSession : s))
+        : [...existingSessions, newSession]
+
+      const weeks = activePlan.weeks.map((w) =>
+        w.weekNumber === planWeek.weekNumber ? { ...w, sampleSessions: updatedSessions } : w
+      )
+      const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
+      try {
+        await updateDoc(ref, { weeks })
+      } catch {
+        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+        return null
+      }
+      return { session: newSession, weekNumber: planWeek.weekNumber, index: targetIndex }
+    } catch (e) {
+      toast({ variant: 'destructive', title: "L'IA n'a pas pu proposer de séance de musculation", description: describeActionDispatchError(e) })
+      return null
+    } finally {
+      setIsGeneratingStrength(false)
+    }
+  }, [user, db, activePlan, planWeek, todayId, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, governor.signals.hrvTrend, governor.signals.restingHR, enduranceIndex, criticalPowerModel, athlete.isConfigured, athlete.data, lifestyle.latest, lifestyle.readiness, toast])
+
   return {
     stored: stored?.proposal ?? null,
     storedAvailableMinutes: stored?.availableMinutes ?? null,
@@ -418,6 +555,8 @@ export function useDailyWorkout() {
     generate,
     sendToIntervals,
     sendPlanSessionDirectly,
+    generateStrengthSession,
+    isGeneratingStrength,
     generateWeekSessions,
     generatingSessionsForWeek,
   }

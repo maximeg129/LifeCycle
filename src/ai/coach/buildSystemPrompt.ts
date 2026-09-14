@@ -19,6 +19,7 @@ import { computePromptVersion } from './promptVersion'
 
 export type CoachFlowId =
   | 'dailyWorkoutRecommendation'
+  | 'dailyStrengthRecommendation'
   | 'trainingPlanGeneration'
   | 'trainingPlanRecalibration'
   | 'planWeekSessions'
@@ -61,9 +62,16 @@ const UNIVERSAL_ID_PREFIXES = ['principle-', 'forbidden-', 'red-flag-']
  *   à une série de squats), pas 'session-arbitration' non plus (elle ne
  *   décide RIEN, elle relit après coup) → même statut que recoveryInsight,
  *   rien d'additionnel.
+ * - dailyStrengthRecommendation décide le contenu concret d'UNE séance de
+ *   musculation pour aujourd'hui, à partir de la récupération du moment →
+ *   session-arbitration (même famille de décision que
+ *   dailyWorkoutRecommendation) ET plan-validation (S05, les règles de
+ *   validation musculation — mêmes que planWeekSessions, aucune raison
+ *   qu'une séance ad hoc y échappe).
  */
 const FLOW_EXTRA_SCOPES: Record<CoachFlowId, CoachRule['scope'][]> = {
   dailyWorkoutRecommendation: ['session-arbitration'],
+  dailyStrengthRecommendation: ['session-arbitration', 'plan-validation'],
   sessionLocationAdjustment: ['session-arbitration'],
   trainingPlanGeneration: ['plan-validation'],
   trainingPlanRecalibration: ['plan-validation'],
