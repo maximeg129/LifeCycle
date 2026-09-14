@@ -177,7 +177,44 @@ const setStrengthTrainingPreferenceTool: Anthropic.Tool = {
   },
 };
 
-const COACH_TOOLS: Anthropic.Tool[] = [updateGoalTool, addGoalTool, addRememberedFactTool, updateInjuryStatusTool, setStrengthTrainingPreferenceTool];
+const setWeeklyAvailabilityTool: Anthropic.Tool = {
+  name: 'set_weekly_availability',
+  description:
+    "Change la disponibilité hebdomadaire (minutes par jour, Lundi à Dimanche) utilisée pour répartir les " +
+    "séances du plan. Même patron que set_strength_training_preference : écrit UNIQUEMENT la préférence, " +
+    "jamais un plan directement (tu ne régénères aucune semaine toi-même) — l'athlète doit ensuite régénérer " +
+    "la semaine en cours depuis l'onglet Aujourd'hui (bouton \"Disponibilité\" → \"Valider\", ou \"Régénérer\") " +
+    "pour que le contenu déjà proposé en tienne compte. Précise-le dans ta réponse.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      monday: { type: 'number', description: 'Minutes disponibles lundi (0-240).' },
+      tuesday: { type: 'number', description: 'Minutes disponibles mardi (0-240).' },
+      wednesday: { type: 'number', description: 'Minutes disponibles mercredi (0-240).' },
+      thursday: { type: 'number', description: 'Minutes disponibles jeudi (0-240).' },
+      friday: { type: 'number', description: 'Minutes disponibles vendredi (0-240).' },
+      saturday: { type: 'number', description: 'Minutes disponibles samedi (0-240).' },
+      sunday: { type: 'number', description: 'Minutes disponibles dimanche (0-240).' },
+    },
+    required: ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'],
+  },
+};
+
+const recalibratePlanTool: Anthropic.Tool = {
+  name: 'recalibrate_plan',
+  description:
+    "Déclenche un bilan de la dernière semaine TERMINÉE du plan actif (volume réellement réalisé vs ciblé, via " +
+    "les vraies activités Intervals.icu) et ajuste les semaines restantes si nécessaire — exactement le même " +
+    "chemin que le bouton \"Recalibrer maintenant\" du plan. N'invente rien : si aucune semaine terminée " +
+    "n'attend encore ce bilan (déjà recalibrée, ou le plan vient de démarrer), l'outil ne fait rien et te le " +
+    "dit — réponds-le honnêtement à l'athlète plutôt que de prétendre avoir changé quelque chose.",
+  input_schema: { type: 'object', properties: {} },
+};
+
+const COACH_TOOLS: Anthropic.Tool[] = [
+  updateGoalTool, addGoalTool, addRememberedFactTool, updateInjuryStatusTool,
+  setStrengthTrainingPreferenceTool, setWeeklyAvailabilityTool, recalibratePlanTool,
+];
 
 export async function coachChat(input: CoachChatInput): Promise<FlowResult<CoachChatOutput>> {
   try {
@@ -235,12 +272,25 @@ Actions que tu peux réellement effectuer (via les outils fournis) :
 - Activer/désactiver la musculation en complément du plan (ex: "j'aimerais des séances de musculation
   dans mon plan", "enlève la musculation") — utilise set_strength_training_preference. Précise bien dans
   ta réponse que ça s'applique au PROCHAIN plan généré/régénéré, pas au plan actuel s'il y en a déjà un
-  actif (renvoie vers l'onglet Plan pour régénérer).
+  actif (renvoie vers l'onglet Aujourd'hui pour régénérer).
+- Changer la disponibilité hebdomadaire (ex: "je n'ai plus de temps le mercredi", "je peux rouler 2h le
+  samedi maintenant") — utilise set_weekly_availability avec les 7 jours. Même limite que la musculation
+  ci-dessus : ça règle la préférence pour la PROCHAINE régénération, ça ne recompose pas la semaine
+  actuelle toi-même — dis à l'athlète de régénérer depuis l'onglet Aujourd'hui pour que ça s'applique.
+  Si l'athlète ne donne que certains jours ("le mercredi je n'ai plus de temps"), demande-lui les autres
+  plutôt que de deviner des valeurs pour les jours non mentionnés — l'outil exige les 7.
+- Recalibrer le plan actif (ex: "ajuste mon plan à ce que j'ai vraiment fait", "est-ce que le plan doit
+  changer ?") — utilise recalibrate_plan. Aucun paramètre : l'outil regarde lui-même la dernière semaine
+  terminée et ajuste ou non les semaines restantes ; rapporte honnêtement le résultat (rien à recalibrer,
+  ou ce qui a changé et pourquoi) plutôt que d'affirmer un changement s'il n'y en a pas eu.
 - Si la demande est ambiguë (plusieurs objectifs possibles, information manquante), pose une question de
   clarification au lieu de deviner ou d'appeler un outil avec un id incertain.
 - Après un appel d'outil réussi, confirme brièvement ce qui a été changé dans ta réponse suivante.
 - Tu ne peux PAS supprimer un objectif ou une blessure depuis la conversation — oriente vers l'onglet
   "Mémoire coach" pour une suppression.
+- Tu ne peux PAS créer un nouveau plan d'entraînement depuis zéro ni composer/régénérer toi-même le
+  contenu d'une semaine — ce sont des actions de l'onglet Aujourd'hui (formulaire "Nouveau plan",
+  bouton "Régénérer"), pas des outils que tu as ici.
 
 Limites importantes :
 - Tu peux discuter d'une séance, donner un avis, expliquer un choix — mais tu ne génères PAS toi-même de
