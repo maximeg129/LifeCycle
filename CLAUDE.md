@@ -2871,6 +2871,85 @@ route.ts` lit le secret dans le corps JSON du payload (`payload.secret`), jamais
 HTTP — à confirmer (ou corriger) au premier vrai événement `ACTIVITY_ANALYZED` reçu en prod,
 maintenant testable pour la première fois puisque l'application est approuvée et les secrets actifs.
 
+## Coach : un seul onglet "Aujourd'hui" — fusion finale, séance réalisée auto-détectée, Stella en overlay
+
+Retour utilisateur, captures Frive (liste des séances de la semaine, icônes/toggle intérieur-
+extérieur) et Join (écran de progression : anneau, jours restants, "Adjust availability") à
+l'appui : "Maintenant je pense qu'il faut revoir l'onglet coach... j'aimerais avoir un seul tab,
+fais moi une proposition pour remodeler tout ca que ce soit le plus efficient." Puis, après
+inspection du code existant côté agent (le "Plan" actuel s'est avéré déjà très proche des deux
+captures — en-tête façon Join + `PlanNextSessionsList` façon Frive, voir "Plan v2" plus haut) :
+"je ne pense pas qu'il soit utile d'avoir plan mais avec le webhook on devrait pouvoir pousser les
+activities réalisée sur la carte du jour et donc le déclenchement de l'IA lorsque l'on rentre sur
+le jour pour avoir l'analyse IA de la séance réalisée versus plan... je garderais Stella en bouton
+flottant... retravaille toute l'architecture comme nécessaire."
+
+**Renverse, cette fois pour de bon, le va-et-vient documenté plus haut dans ce fichier** ("Page
+Coach restructurée : 7 → 6 sous-onglets" → "Aujourd'hui et Plan redéfusionnés") : les deux onglets
+« Aujourd'hui » et « Plan » refusionnent en un seul écran continu — mais contrairement à la
+première fusion (qui empilait deux blocs quasi indépendants dans le même `TabsContent`), celle-ci
+tire parti du fait que `TrainingPlanTab` (en-tête + `PlanNextSessionsList`) et `DailyWorkoutTab`
+(séance du jour + suggestion IA) étaient déjà construits pour coexister sans se marcher dessus :
+`training-plan-tab.tsx` (nom de fichier/fonction conservés pour ne pas re-churner tous les imports,
+malgré le nouveau rôle) insère désormais `PendingFeedbackBanner` + `DailyWorkoutTab` inchangés
+directement sous l'en-tête de progression, puis `PlanNextSessionsList` avec un nouveau prop
+`hideToday` (filtre le jour déjà couvert par `DailyWorkoutTab` juste au-dessus — jamais montré deux
+fois). `coach/page.tsx` : `VALID_TABS` passe de 7 à 5 entrées (`today`/`rides`/`weather`/`memory`/
+`library` — `plan` et `stella` retirés), la `TabsContent value="today"` ne rend plus que
+`<TrainingPlanTab />`. La gestion occasionnelle du plan (grille 12 semaines, prévu/réalisé, journal
+des recalibrations, nouveau plan/archiver/recalibrer) **n'est PAS supprimée** — elle reste
+exactement où "Plan v2" l'avait déjà mise, derrière le bouton "Plan" du header (`Sheet`), qui
+persiste tel quel dans l'en-tête fusionné.
+
+**Séance réalisée auto-détectée sur la carte du jour** — `todaysCompletion`
+(`use-daily-workout.ts`) rapproche la séance vélo du plan datée aujourd'hui à une vraie activité
+Intervals.icu du même jour via `matchSessionCompletion()` (déjà utilisée par l'onglet Plan pour
+exactement ce rapprochement — même heuristique par date, pas une deuxième logique), à partir des
+activités déjà fetchées pour `summarizeRecentSessions` : **aucune lecture Firestore/Intervals.icu
+supplémentaire**. `null` pour une séance musculation (chemin de complétion différent,
+`strengthSessionLogs`, sans équivalent ici).
+
+**Déclenchement de l'analyse IA riche à l'ouverture, pas au clic** — le webhook Intervals.icu
+(chantier B2, voir plus haut) génère déjà une analyse "légère" automatiquement dès qu'une sortie
+est analysée (sans comparaison au script prévu, portée volontairement réduite — voir sa propre
+doc). `daily-workout-tab.tsx` appelle maintenant `useRideAnalysis(todaysActivityId)` en plus de
+l'usage existant dans `RideAnalysisDialog`, indépendamment de l'ouverture du dialogue : un effet
+déclenche silencieusement `generate()` (le chemin CLIENT complet, avec `plannedWorkout`/
+`intervalAdherence`) dès que l'athlète a "Aujourd'hui" à l'écran, une vraie activité est rapprochée,
+et l'analyse stockée n'a pas encore cette comparaison — jamais un deuxième appel une fois la version
+riche déjà là (`autoAnalysisTriggeredRef` + vérification du contenu de `analysis`). Les deux appels
+à `useRideAnalysis` (celui-ci + celui de `RideAnalysisDialog`, gated par son propre `open`) lisent/
+écrivent le MÊME document Firestore réactif (`rideAnalyses/{activityId}`) — jamais une deuxième
+logique de génération, juste deux points d'entrée vers la même donnée. Une carte compacte "Séance
+réalisée" (icône ✓, durée réelle) s'affiche au-dessus de tout le reste de "Aujourd'hui" dès qu'une
+activité est rapprochée, avec un bouton "Analyse IA — prévu vs réalisé" qui ouvre `RideAnalysisDialog`
+(déjà quasi-certainement générée au clic, vu l'auto-déclenchement ci-dessus).
+
+**Stella : d'onglet à overlay flottant** — retour utilisateur explicite : "je garderais Stella en
+bouton flottant." Avant ce correctif, le bouton flottant circulaire (mobile uniquement,
+`sidebar.tsx`, inspiré du bouton coach Whoop) n'était qu'un raccourci de NAVIGATION vers l'onglet
+Stella de Coach (`href="/coach?tab=stella"`) — desktop n'avait, lui, que l'onglet lui-même. Ce
+onglet n'existant plus, le bouton devient le SEUL point d'entrée, sur les deux formats : un
+`onClick` ouvre un `Sheet` (bas d'écran) contenant `StellaChatTab` tel quel (déjà une carte
+autonome `h-[600px]`, aucune adaptation nécessaire) — chargé en `next/dynamic` puisque ce bouton est
+monté sur CHAQUE page authentifiée (`AppNavigation`), jamais question d'alourdir le bundle initial
+pour un chat qui ne s'ouvre qu'au clic. Un second bouton, visuellement identique mais positionné
+`fixed bottom-6 right-6` (`hidden md:flex`), couvre le desktop, qui n'avait jusqu'ici aucun bouton
+flottant équivalent (Stella y vivait entièrement dans la TabsList).
+
+**Reste hors scope de ce chantier, explicitement noté par l'agent avant de coder** — "l'utilisateur
+devrait pouvoir mettre à jour la mémoire et ajuster son plan simplement avec les discussions de
+Stella" : la mémoire (objectifs/faits retenus/blessures) est déjà pilotable par Stella depuis
+longtemps (`update_goal`/`add_goal`/`add_remembered_fact`/`update_injury_status`, voir la section
+Flows IA plus bas) — inchangé. **Ajuster le plan par la conversation (recalibrer/changer la
+disponibilité/régénérer la semaine) n'est PAS construit ici** : nécessiterait de nouveaux outils
+Stella qui déclenchent d'autres chemins IA (pas seulement des écritures Firestore directes comme
+les 4 outils existants) — une extension méritant son propre chantier, pas glissée dans cette
+refonte de mise en page pour rester dans un scope validable en une session.
+
+Changement de mise en page/état local uniquement, aucune logique pure touchée — 902/902 tests
+inchangés, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

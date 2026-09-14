@@ -32,7 +32,26 @@ import { buildPlanAttentionItems } from './plan-attention-types'
 import { PlanAttentionBadge } from './plan-attention-badge'
 import { IntervalsOnboardingNotice } from './intervals-onboarding-notice'
 import { PlanAvailabilityDialog, DEFAULT_WEEKLY_AVAILABILITY, formatDayMinutes } from './plan-availability-dialog'
+import { DailyWorkoutTab } from './daily-workout-tab'
+import { PendingFeedbackBanner } from '@/components/coach/pending-feedback-banner'
 
+// ── Onglet unique "Aujourd'hui" (malgré le nom du fichier/de la fonction,
+// conservés pour ne pas re-churner tous les imports) ────────────────────
+//
+// Retour utilisateur, captures Frive (liste des séances) et Join (écran de
+// progression) à l'appui : "je ne pense pas qu'il soit utile d'avoir plan
+// [comme destination séparée]... retravaille toute l'architecture comme
+// nécessaire." Fusionne ce qui était jusqu'ici deux onglets Coach
+// (Aujourd'hui + Plan) en un seul écran continu — l'en-tête façon Join
+// (anneau de progression, jours restants, badge de vigilance) reste en
+// tête, suivi directement de la séance du jour (PendingFeedbackBanner +
+// DailyWorkoutTab, réutilisés tels quels — aucune logique dupliquée) puis
+// des 6 prochains jours (PlanNextSessionsList, hideToday puisque
+// DailyWorkoutTab couvre déjà aujourd'hui avec sa propre carte + la
+// suggestion IA). La gestion occasionnelle (grille du plan entier,
+// prévu/réalisé, journal des recalibrations, nouveau plan/archiver) reste
+// derrière le bouton "Plan" existant (Sheet, inchangé) — pas supprimée,
+// juste jamais dans le flux quotidien.
 export function TrainingPlanTab() {
   const {
     activePlan, isLoadingPlan, isGenerating, goals, isLoadingGoals, generate, archivePlan,
@@ -446,19 +465,28 @@ export function TrainingPlanTab() {
         </CardContent>
       </Card>
 
-      {!canSendToIntervals && (
-        <IntervalsOnboardingNotice message="Intervals.icu non connecté — le plan reste consultable, mais les séances ne pourront pas être envoyées sur votre calendrier." />
-      )}
+      {/* Retour utilisateur : "je ne pense pas qu'il soit utile d'avoir
+          plan... j'aimerais avoir dans la version haute le header genre
+          join et ensuite sur la même page en liste les sorties de la
+          semaine avec un indicateur pour la sortie du jour." La séance du
+          jour vit ici, directement sous l'en-tête — PendingFeedbackBanner +
+          DailyWorkoutTab réutilisés tels quels (bandeau RPE manquant,
+          carte "séance prévue" + suggestion IA, gère elle-même son propre
+          bandeau Intervals.icu non connecté). */}
+      <PendingFeedbackBanner />
+      <DailyWorkoutTab />
 
       {/* Retour utilisateur : "j'aimerais que l'on voit la séance du jour et
           des 7 prochains jours sur cette vue... on ne verrait pas séance de
           la semaine mais séances des 7 prochains jours" — remplace la liste
           Lundi-Dimanche par une fenêtre glissante ancrée sur aujourd'hui,
           les séances déjà passées révélées à part (voir
-          plan-next-sessions-list.tsx). */}
+          plan-next-sessions-list.tsx). `hideToday` : aujourd'hui vit déjà
+          au-dessus (DailyWorkoutTab), jamais montré deux fois. */}
       <PlanNextSessionsList
         weeks={activePlan.weeks}
         today={today}
+        hideToday
         generatingSessionsForWeek={generatingSessionsForWeek}
         sendingSessionKey={sendingSessionKey}
         canSendToIntervals={canSendToIntervals}

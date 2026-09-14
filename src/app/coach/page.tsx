@@ -35,30 +35,20 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { Activity, CloudSun, Sun, Target, MessageCircle, BrainCircuit, Library, MoreHorizontal } from 'lucide-react'
+import { Activity, CloudSun, Sun, BrainCircuit, Library, MoreHorizontal } from 'lucide-react'
 import { useAthlete } from '@/hooks/use-intervals'
 import { useGovernor } from '@/components/cycling/use-governor'
-import { DailyWorkoutTab } from '@/components/cycling/daily-workout-tab'
-import { PendingFeedbackBanner } from '@/components/coach/pending-feedback-banner'
 
-// Code-split: seule DailyWorkoutTab (le contenu de l'onglet "Aujourd'hui",
-// l'onglet par défaut — le geste le plus fréquent) ship dans le bundle
-// principal — les autres se chargent à la demande, y compris
-// TrainingPlanTab, qui charge réellement à la demande maintenant que
-// "Plan" est redevenu son propre onglet séparé (voir le commentaire en
-// tête de fichier — ça ne l'était plus tant qu'il partageait le même
-// TabsContent qu'Aujourd'hui). Même logique que Cyclisme avant sa propre
-// refonte (PLAN.md 2.4).
+// Code-split : seule TrainingPlanTab (le contenu de l'unique onglet
+// "Aujourd'hui" — voir le commentaire en tête de ce fichier) ship dans le
+// bundle principal, les autres se chargent à la demande.
+const TrainingPlanTab = dynamic(() => import('@/components/cycling/training-plan-tab').then(m => m.TrainingPlanTab), {
+  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
+})
 const RidesJournalTab = dynamic(() => import('@/components/coach/rides-journal-tab').then(m => m.RidesJournalTab), {
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 const WeatherOutfitTab = dynamic(() => import('@/components/coach/weather-outfit-tab').then(m => m.WeatherOutfitTab), {
-  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
-})
-const TrainingPlanTab = dynamic(() => import('@/components/cycling/training-plan-tab').then(m => m.TrainingPlanTab), {
-  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
-})
-const StellaChatTab = dynamic(() => import('@/components/cycling/stella-chat-tab').then(m => m.StellaChatTab), {
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 const CoachMemoryTab = dynamic(() => import('@/components/cycling/coach-memory-tab').then(m => m.CoachMemoryTab), {
@@ -68,7 +58,16 @@ const CoachLibraryTab = dynamic(() => import('@/components/cycling/coach-library
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 
-const VALID_TABS = ['today', 'plan', 'rides', 'weather', 'stella', 'memory', 'library'] as const
+// Retour utilisateur, captures Frive/Join à l'appui : "je pense qu'il faut
+// revoir l'onglet coach... j'aimerais avoir un seul tab." "Aujourd'hui" et
+// "Plan" (deux onglets depuis "Aujourd'hui et Plan redéfusionnés", voir
+// CLAUDE.md) refusionnent en un seul écran continu — voir training-plan-
+// tab.tsx pour le détail (en-tête façon Join + séance du jour + 6 prochains
+// jours, la gestion occasionnelle du plan restant derrière son propre
+// bouton "Plan", pas supprimée). Stella sort aussi de la TabsList — "je
+// garderais Stella en bouton flottant" — remplacée par l'overlay flottant
+// de sidebar.tsx (StellaChatTab n'est donc plus importé ici du tout).
+const VALID_TABS = ['today', 'rides', 'weather', 'memory', 'library'] as const
 type CoachTab = (typeof VALID_TABS)[number]
 
 // Lit ?tab=... (bouton flottant Stella de la nav mobile — sidebar.tsx —
@@ -103,17 +102,11 @@ function CoachTabs() {
           <TabsTrigger value="today" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
             <Sun className="w-3.5 h-3.5 mr-1.5" /> Aujourd&apos;hui
           </TabsTrigger>
-          <TabsTrigger value="plan" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-            <Target className="w-3.5 h-3.5 mr-1.5" /> Plan
-          </TabsTrigger>
           <TabsTrigger value="rides" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
             <Activity className="w-3.5 h-3.5 mr-1.5" /> Journal
           </TabsTrigger>
           <TabsTrigger value="weather" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
             <CloudSun className="w-3.5 h-3.5 mr-1.5" /> Météo &amp; Tenue
-          </TabsTrigger>
-          <TabsTrigger value="stella" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-            <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> Stella
           </TabsTrigger>
         </TabsList>
         <DropdownMenu>
@@ -143,27 +136,14 @@ function CoachTabs() {
       <TabsContent value="weather" className="space-y-8">
         <WeatherOutfitTab />
       </TabsContent>
-      {/* Retour utilisateur, après usage réel de la fusion Aujourd'hui+Plan
-          (voir CLAUDE.md "Page Coach restructurée") : "je reste vraiment
-          pas sûre d'avoir le côté plan et séances du jour sur le même
-          onglet." Le plan périodisé est devenu un vrai écran de gestion
-          (calendrier, badge de vigilance, journal des recalibrations) —
-          plus léger de coup d'œil quotidien comme au moment de la fusion.
-          "Aujourd'hui" (coup d'œil quotidien) et "Plan" (consultation
-          occasionnelle) redeviennent deux onglets séparés. */}
+      {/* Retour utilisateur, captures Frive/Join à l'appui, après le
+          va-et-vient documenté plus haut dans CLAUDE.md entre fusionné et
+          séparé : "je pense qu'il faut revoir l'onglet coach... j'aimerais
+          avoir un seul tab." TrainingPlanTab porte maintenant tout le
+          contenu de ce qui était "Aujourd'hui" ET "Plan" — voir son propre
+          commentaire de fichier pour le détail. */}
       <TabsContent value="today" className="space-y-8">
-        {/* Retour utilisateur, en validant COACH_UX_AUDIT.md §4.B (inspiré
-            de Join, "Pending Feedback" card) : les sorties récentes sans
-            RPE sont désormais surfacées ici plutôt que de compter sur
-            l'athlète pour remarquer une icône non remplie dans le Journal. */}
-        <PendingFeedbackBanner />
-        <DailyWorkoutTab />
-      </TabsContent>
-      <TabsContent value="plan" className="space-y-8">
         <TrainingPlanTab />
-      </TabsContent>
-      <TabsContent value="stella" className="space-y-8">
-        <StellaChatTab />
       </TabsContent>
       <TabsContent value="memory" className="space-y-8">
         <CoachMemoryTab governorStatus={governor.status} />

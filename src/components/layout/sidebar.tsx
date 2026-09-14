@@ -1,7 +1,8 @@
 "use client"
 
-import React from 'react'
+import React, { useState } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
@@ -15,8 +16,20 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet'
 import { useAuth } from '@/firebase'
+
+// Retour utilisateur : "je garderais Stella en bouton flottant" — Stella
+// n'est plus un onglet de la page Coach (voir coach/page.tsx, fusion en un
+// seul onglet "Aujourd'hui") mais un overlay flottant accessible partout
+// dans l'app authentifiée, mobile ET desktop (avant ce correctif, seul le
+// mobile avait ce bouton — juste un raccourci vers l'onglet Stella côté
+// desktop, qui n'existe plus). Chargé à la demande (dynamic) : ce composant
+// est monté sur CHAQUE page authentifiée, jamais question d'alourdir le
+// bundle initial pour un chat qui ne s'ouvre qu'au clic.
+const StellaChatTab = dynamic(() => import('@/components/cycling/stella-chat-tab').then(m => m.StellaChatTab), {
+  loading: () => <div className="p-8 flex justify-center"><Sparkles className="w-5 h-5 animate-pulse text-primary" /></div>,
+})
 import { signOut } from 'firebase/auth'
 import { useRouter } from 'next/navigation'
 import { CommandPalette } from '@/components/search/command-palette'
@@ -59,6 +72,7 @@ export function AppNavigation() {
   const auth = useAuth()
   const router = useRouter()
   const t = useTranslations('Nav')
+  const [stellaOpen, setStellaOpen] = useState(false)
 
   const handleSignOut = async () => {
     await signOut(auth)
@@ -257,18 +271,42 @@ export function AppNavigation() {
             })}
           </nav>
 
-          <Link
-            href="/coach?tab=stella"
+          <button
+            type="button"
+            onClick={() => setStellaOpen(true)}
             aria-label="Stella"
-            className={cn(
-              "pointer-events-auto shrink-0 w-16 h-16 rounded-full flex items-center justify-center shadow-lg shadow-primary/30 transition-transform active:scale-95",
-              pathname === '/coach' ? "bg-primary text-primary-foreground" : "bg-foreground text-primary"
-            )}
+            className="pointer-events-auto shrink-0 w-16 h-16 rounded-full flex items-center justify-center shadow-lg shadow-primary/30 transition-transform active:scale-95 bg-foreground text-primary"
           >
             <Sparkles className="w-6 h-6" />
-          </Link>
+          </button>
         </div>
       </div>
+
+      {/* Desktop — même bouton flottant, en bas à droite du contenu (la
+          sidebar fixe occupe déjà la colonne de gauche). Absent avant ce
+          correctif : Stella n'était joignable sur desktop que via l'onglet
+          Coach dédié, qui n'existe plus (voir plus haut). */}
+      <button
+        type="button"
+        onClick={() => setStellaOpen(true)}
+        aria-label="Stella"
+        className="hidden md:flex fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full items-center justify-center shadow-lg shadow-primary/30 transition-transform hover:scale-105 active:scale-95 bg-foreground text-primary"
+      >
+        <Sparkles className="w-6 h-6" />
+      </button>
+
+      <Sheet open={stellaOpen} onOpenChange={setStellaOpen}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-3xl sm:max-w-lg sm:mx-auto">
+          <SheetHeader className="text-left">
+            <SheetTitle className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-primary" /> Stella
+            </SheetTitle>
+          </SheetHeader>
+          <div className="pt-3">
+            <StellaChatTab />
+          </div>
+        </SheetContent>
+      </Sheet>
 
       <CommandPalette />
     </>

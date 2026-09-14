@@ -14,6 +14,8 @@ import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SourceCitation } from '@/components/coach/source-citation'
+import { RideAnalysisDialog } from '@/components/coach/ride-analysis-dialog'
+import { useRideAnalysis } from '@/components/coach/use-ride-analysis'
 import { LiveStrengthSessionView } from './live-strength-session-view'
 import { LogStrengthSessionDialog } from './log-strength-session-dialog'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -117,6 +119,7 @@ export function DailyWorkoutTab() {
     todaysPlanSessionIsStrength,
     generateWeekSessions,
     generatingSessionsForWeek,
+    todaysCompletion,
   } = useDailyWorkout()
 
   const [minutes, setMinutes] = useState(DEFAULT_MINUTES)
@@ -170,6 +173,34 @@ export function DailyWorkoutTab() {
   // aujourd'hui", qui serait faux ici) — jamais persisté, remis à zéro
   // par tout autre chemin de génération (handleGenerate/handleBackToPlan).
   const [isShuffled, setIsShuffled] = useState(false)
+  // Retour utilisateur : "avec le webhook on devrait pouvoir pousser les
+  // activités réalisée sur la carte du jour et donc le déclenchement de
+  // l'IA lorsque l'on rentre sur le jour pour avoir l'analyse IA de la
+  // séance réalisée versus plan." Le webhook Intervals.icu (chantier B2)
+  // génère déjà une analyse "légère" à l'automatique (sans comparaison au
+  // script prévu, voir CLAUDE.md) — cet effet déclenche silencieusement la
+  // version RICHE (chemin client complet, avec plannedWorkout/
+  // intervalAdherence) dès que l'athlète ouvre "Aujourd'hui" et qu'une
+  // vraie activité a été rapprochée à la séance du jour, sans exiger un
+  // clic "Analyser". `useRideAnalysis` est appelé ici indépendamment de
+  // RideAnalysisDialog (qui l'appelle aussi, gated par son propre `open`)
+  // — les deux liront/écriront le même document Firestore réactif, jamais
+  // un doublon de logique.
+  const [analysisOpen, setAnalysisOpen] = useState(false)
+  const todaysActivityId = todaysCompletion?.status === 'done' ? todaysCompletion.activityId : undefined
+  const autoAnalysis = useRideAnalysis(todaysActivityId ?? null)
+  const autoAnalysisTriggeredRef = useRef(false)
+  useEffect(() => {
+    if (!todaysActivityId || !autoAnalysis.canAnalyze) return
+    if (autoAnalysis.isLoadingStored || autoAnalysis.isGenerating) return
+    // Déjà une analyse riche (comparaison prévu/réalisé déjà calculée) —
+    // rien à refaire, jamais un deuxième appel IA pour le même résultat.
+    if (autoAnalysis.analysis && (autoAnalysis.plannedWorkout || autoAnalysis.intervalAdherence)) return
+    if (autoAnalysisTriggeredRef.current) return
+    autoAnalysisTriggeredRef.current = true
+    void autoAnalysis.generate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [todaysActivityId, autoAnalysis.canAnalyze, autoAnalysis.isLoadingStored, autoAnalysis.isGenerating, autoAnalysis.analysis, autoAnalysis.plannedWorkout, autoAnalysis.intervalAdherence])
 
   // Prefill from today's already-generated proposal (Firestore singleton),
   // so reopening the tab doesn't lose it or force a regeneration.
@@ -380,6 +411,42 @@ export function DailyWorkoutTab() {
 
   return (
     <div className="space-y-6">
+      {/* Retour utilisateur : "avec le webhook on devrait pouvoir pousser
+          les activités réalisée sur la carte du jour." Séance vélo
+          rapprochée à une vraie activité Intervals.icu du même jour
+          (todaysCompletion, use-daily-workout.ts) — l'analyse riche se
+          génère déjà en tâche de fond (voir l'effet ci-dessus), ce bouton
+          sert surtout à la CONSULTER (comme StrengthAnalysisTrigger côté
+          muscu). */}
+      {todaysActivityId && (
+        <Card className="lc-card ring-2 ring-primary/50">
+          <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-2.5">
+              <CheckCircle2 className="w-5 h-5 text-primary shrink-0" />
+              <div>
+                <p className="text-sm font-medium">Séance réalisée</p>
+                <p className="text-xs text-muted-foreground">
+                  {todaysCompletion?.actualDurationMinutes != null
+                    ? `${Math.round(todaysCompletion.actualDurationMinutes)} min sur Intervals.icu`
+                    : 'Activité synchronisée depuis Intervals.icu'}
+                </p>
+              </div>
+            </div>
+            <Button size="sm" onClick={() => setAnalysisOpen(true)} className="gap-2">
+              {autoAnalysis.isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              Analyse IA — prévu vs réalisé
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+      {todaysActivityId && (
+        <RideAnalysisDialog
+          activityId={todaysActivityId}
+          rideLabel={todaysPlanSession?.session.title ?? draft?.title ?? 'Séance du jour'}
+          open={analysisOpen}
+          onOpenChange={setAnalysisOpen}
+        />
+      )}
       {!canSendToIntervals && (
         <IntervalsOnboardingNotice message="Intervals.icu non connecté — vous pouvez générer une proposition, mais pas l'envoyer sur votre calendrier." />
       )}

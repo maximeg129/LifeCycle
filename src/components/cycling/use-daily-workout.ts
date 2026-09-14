@@ -29,7 +29,7 @@ import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { buildCoachContext } from './coach-context'
 import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload, signalToTrendLabel } from './daily-workout-types'
-import { currentPlanWeek, planSessionExternalId, type PlanWeek } from './training-plan-types'
+import { currentPlanWeek, planSessionExternalId, matchSessionCompletion, type PlanWeek, type SessionCompletion } from './training-plan-types'
 import { useGenerateWeekSessions } from './use-generate-week-sessions'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { describeActionDispatchError } from '@/lib/utils'
@@ -126,6 +126,25 @@ export function useDailyWorkout() {
     return { session: planWeek.sampleSessions[index], index, weekNumber: planWeek.weekNumber, planId: activePlan?.id }
   }, [planWeek, todayId, activePlan?.id])
   const todaysPlanSessionIsStrength = todaysPlanSession?.session.sessionKind === 'strength'
+
+  // Retour utilisateur : "avec le webhook on devrait pouvoir pousser les
+  // activités réalisées sur la carte du jour" — rapproche la séance vélo
+  // du plan datée aujourd'hui à une vraie activité Intervals.icu du même
+  // jour (matchSessionCompletion, déjà utilisée par l'onglet Plan — même
+  // heuristique par date, pas de logique dupliquée), à partir des
+  // activités déjà fetchées ci-dessus pour summarizeRecentSessions (aucune
+  // lecture supplémentaire). `null` (jamais deviné) sans séance vélo
+  // prévue aujourd'hui — la musculation a son propre chemin de complétion
+  // (strengthSessionLogs), sans équivalent ici.
+  const todaysCompletion: SessionCompletion | null = useMemo(() => {
+    if (!todaysPlanSession || todaysPlanSessionIsStrength) return null
+    const cyclingActivities = recentActivities.data.map((a) => ({
+      id: a.id,
+      startDate: (a.start_date_local ?? '').slice(0, 10),
+      durationMinutes: a.moving_time != null ? a.moving_time / 60 : 0,
+    }))
+    return matchSessionCompletion(todaysPlanSession.session, todaysPlanSession.weekNumber, todaysPlanSession.index, todayId, cyclingActivities, [])
+  }, [todaysPlanSession, todaysPlanSessionIsStrength, recentActivities.data, todayId])
 
   // Retour utilisateur, indirect : découvert en construisant l'aperçu de
   // séance prévue de la page Cyclisme (performance-bento.tsx) — depuis la
@@ -389,6 +408,7 @@ export function useDailyWorkout() {
     // forcer cette séance à travers un flow pensé pour le vélo.
     todaysPlanSession,
     todaysPlanSessionIsStrength,
+    todaysCompletion,
     recovery: lifestyle.latest ? { ...lifestyle.latest, readiness: lifestyle.readiness } : null,
     isLoadingStored: loadingStored,
     isGenerating,
