@@ -27,7 +27,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebas
 import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
-import { useAthlete } from '@/hooks/use-intervals'
+import { useAthlete, useActivities } from '@/hooks/use-intervals'
 import { useCoachMemory } from './use-coach-memory'
 import { useGovernor } from './use-governor'
 import { useKJBudget } from './use-kj-budget'
@@ -40,6 +40,18 @@ import { describeActionDispatchError } from '@/lib/utils'
 import { trimChatHistoryForPrompt, isSendableChatMessage } from './coach-chat-types'
 import { currentPlanWeek, type PlanWeek } from './training-plan-types'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
+import { useRecalibratePlan, type PlanRecalibrationEntry } from './use-recalibrate-plan'
+
+/** Sous-ensemble du plan actif lu ici — voir CLAUDE.md "Stella ajuste le plan" : set_weekly_availability n'écrit jamais dans un plan directement (même restraint que set_strength_training_preference), mais recalibrate_plan a besoin de la forme complète attendue par useRecalibratePlan. */
+interface ActivePlanForChat {
+  weeks: PlanWeek[]
+  /** yyyy-MM-dd — borne de départ pour fetch les activités réelles du plan (voir planActivities ci-dessous), même usage que use-training-plan.ts. */
+  startDate: string
+  eventName: string
+  eventDate: string
+  targetOutcome?: string
+  recalibrations?: PlanRecalibrationEntry[]
+}
 
 interface StoredChatMessage extends CoachChatMessage {
   userId: string
@@ -60,13 +72,23 @@ function describeToolCall(call: CoachChatToolCall): string {
     case 'add_remembered_fact': return 'Fait ajouté à la mémoire'
     case 'update_injury_status': return 'Statut de blessure mis à jour'
     case 'set_strength_training_preference': return 'Préférence musculation mise à jour'
+    case 'set_weekly_availability': return 'Disponibilité mise à jour'
+    // Volontairement générique — "recalibré" affirmerait un changement même
+    // quand recalibrateNow() n'avait rien à faire (voir son propre contenu
+    // de résultat, qui reste lui honnête sur ce point auprès de Stella).
+    case 'recalibrate_plan': return 'Recalibration vérifiée'
     default: return call.name
   }
 }
 
 const MAX_TOOL_ROUNDS = 4
 
-async function executeToolCall(db: Firestore, uid: string, call: CoachChatToolCall): Promise<ToolResult> {
+interface ToolContext {
+  /** Voir use-recalibrate-plan.ts — retourne { recalibrated, throughWeekNumber } plutôt que de lever, pour que le tool_result reste honnête même quand rien n'était dû. */
+  recalibrateNow: () => Promise<{ recalibrated: boolean; throughWeekNumber?: number }>
+}
+
+async function executeToolCall(db: Firestore, uid: string, call: CoachChatToolCall, ctx: ToolContext): Promise<ToolResult> {
   try {
     switch (call.name) {
       case 'update_goal': {
@@ -111,6 +133,34 @@ async function executeToolCall(db: Firestore, uid: string, call: CoachChatToolCa
         await setDoc(ref, patch, { merge: true })
         return { toolUseId: call.id, content: 'Préférence musculation mise à jour avec succès — sera appliquée à la prochaine génération de plan.' }
       }
+      case 'set_weekly_availability': {
+        // Même patron/même restraint que set_strength_training_preference
+        // juste au-dessus (voir aussi son propre commentaire de fichier,
+        // use-training-preferences.ts) : écrit UNIQUEMENT la préférence,
+        // jamais un plan directement — Stella ne régénère aucune semaine
+        // elle-même.
+        const input = call.input as Record<'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday', number | undefined>
+        const order = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const
+        if (order.some((k) => typeof input[k] !== 'number')) throw new Error('Les 7 jours (monday à sunday) sont requis')
+        const weeklyAvailabilityMinutes = order.map((k) => input[k] as number)
+        const ref = doc(db, `users/${uid}/settings/trainingPreferences`)
+        await setDoc(ref, { weeklyAvailabilityMinutes, updatedAt: serverTimestamp() }, { merge: true })
+        return { toolUseId: call.id, content: 'Disponibilité hebdomadaire mise à jour avec succès — sera appliquée à la prochaine génération/régénération de la semaine.' }
+      }
+      case 'recalibrate_plan': {
+        // Contrairement aux autres outils, une vraie action IA (pas une
+        // simple écriture Firestore) — voir use-recalibrate-plan.ts,
+        // réutilisé tel quel (même chemin que le bouton "Recalibrer
+        // maintenant" de l'onglet Aujourd'hui), jamais une deuxième
+        // logique de recalibration dupliquée ici.
+        const { recalibrated, throughWeekNumber } = await ctx.recalibrateNow()
+        return {
+          toolUseId: call.id,
+          content: recalibrated
+            ? `Plan recalibré avec succès, suite au bilan de la semaine ${throughWeekNumber}.`
+            : 'Rien à recalibrer pour le moment : soit aucun plan actif, soit le plan est déjà à jour par rapport aux semaines terminées.',
+        }
+      }
       default:
         return { toolUseId: call.id, content: `Outil inconnu : ${call.name}`, isError: true }
     }
@@ -145,12 +195,27 @@ export function useCoachChat() {
     if (!user || !db) return null
     return query(collection(db, `users/${user.uid}/trainingPlans`), where('status', '==', 'active'))
   }, [db, user])
-  const { data: activePlans } = useCollection<{ weeks: PlanWeek[] }>(activePlanQuery)
+  const { data: activePlans, isLoading: isLoadingPlan } = useCollection<ActivePlanForChat>(activePlanQuery)
+  const activePlan = activePlans?.[0] ?? null
   const todayId = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
-  const planWeek = useMemo(() => {
-    const plan = activePlans?.[0]
-    return plan ? currentPlanWeek(plan.weeks, todayId) : null
-  }, [activePlans, todayId])
+  const planWeek = useMemo(() => (activePlan ? currentPlanWeek(activePlan.weeks, todayId) : null), [activePlan, todayId])
+
+  // Retour utilisateur : "l'utilisateur devrait pouvoir... ajuster son plan
+  // simplement avec les discussions de Stella" — recalibrate_plan (voir
+  // coach-chat-flow.ts) a besoin du même chemin que le bouton "Recalibrer
+  // maintenant" (use-recalibrate-plan.ts, extrait de use-training-plan.ts
+  // pour ce partage). planActivities : activités réelles sur toute la
+  // durée du plan, seulement pour le volume réellement réalisé par semaine
+  // — même fetch que l'onglet Aujourd'hui, pas dupliqué en logique.
+  const planActivities = useActivities(activePlan?.startDate ?? todayId, todayId)
+  const { recalibrateNow } = useRecalibratePlan({
+    user, db, activePlan, isLoadingPlan, planActivities, todayId, memory, budget, governor, enduranceIndex, criticalPowerModel, athlete,
+    // Jamais automatique ici, contrairement à l'onglet Aujourd'hui (son
+    // autre appelant) : Stella ne doit recalibrer QUE sur demande
+    // explicite de l'athlète dans la conversation, jamais silencieusement
+    // à la simple ouverture du chat.
+    autoTrigger: false,
+  })
 
   const [isSending, setIsSending] = useState(false)
 
@@ -222,7 +287,7 @@ export function useCoachChat() {
           finalText = result.data.text
           break
         }
-        const toolResults = await Promise.all(result.data.calls.map((call) => executeToolCall(db, user.uid, call)))
+        const toolResults = await Promise.all(result.data.calls.map((call) => executeToolCall(db, user.uid, call, { recalibrateNow })))
         for (let i = 0; i < result.data.calls.length; i++) {
           if (!toolResults[i].isError) executedActions.push(describeToolCall(result.data.calls[i]))
         }
@@ -252,7 +317,7 @@ export function useCoachChat() {
     } finally {
       setIsSending(false)
     }
-  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, todayId, athlete.isConfigured, athlete.data, planWeek, lifestyle.latest, lifestyle.readiness, messages, toast])
+  }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, todayId, athlete.isConfigured, athlete.data, planWeek, lifestyle.latest, lifestyle.readiness, messages, toast, recalibrateNow])
 
   const clearHistory = useCallback(async () => {
     if (!user || !db) return

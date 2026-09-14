@@ -2950,6 +2950,54 @@ refonte de mise en page pour rester dans un scope validable en une session.
 Changement de mise en page/état local uniquement, aucune logique pure touchée — 902/902 tests
 inchangés, tsc/eslint/build clean.
 
+## Stella ajuste le plan — disponibilité hebdomadaire + recalibration, deux nouveaux outils
+
+Retour utilisateur, suite directe de "Coach : un seul onglet" ci-dessus : "on attaque le chantier
+Stella pour ajuster le plan." Deux nouveaux outils, en plus des 5 déjà en place
+(`update_goal`/`add_goal`/`add_remembered_fact`/`update_injury_status`/
+`set_strength_training_preference`) :
+
+**`set_weekly_availability`** — même restraint que `set_strength_training_preference` (déjà annoncée
+dans le commentaire de fichier de `use-training-preferences.ts` : "le futur outil Stella... écrira
+dans ce même doc plutôt que de modifier un plan directement... elle ne fait qu'ajuster la préférence
+que la PROCHAINE génération/régénération de plan appliquera"). Écrit les 7 minutes Lundi→Dimanche
+dans `settings/trainingPreferences` — jamais de régénération immédiate de la semaine depuis la
+conversation, le prompt système instruit explicitement Stella de le dire à l'athlète (renvoyer vers
+le bouton "Disponibilité"/"Régénérer" de l'onglet Aujourd'hui). Si l'athlète ne donne qu'un sous-
+ensemble de jours ("le mercredi je n'ai plus de temps"), le prompt lui demande les 6 autres plutôt
+que de deviner — l'outil exige les 7, jamais un défaut inventé pour les jours non mentionnés.
+
+**`recalibrate_plan`** — contrairement au premier, une vraie action IA (pas une simple écriture),
+donc pas la même restraint : réutilise EXACTEMENT le même chemin que le bouton "Recalibrer
+maintenant" de l'onglet Aujourd'hui. **`use-recalibrate-plan.ts`** (nouveau) — extrait de
+`use-training-plan.ts` (`runRecalibration`/`recalibrateNow`/l'effet `weekNeedsRecalibration`), même
+raison de partage que l'extraction précédente `use-generate-week-sessions.ts` : les deux hooks
+consommateurs (`use-training-plan.ts`, `use-coach-chat.ts`) ont déjà toutes les données nécessaires
+(mémoire/budget/gouverneur/indices de puissance/athlète) pour leur propre appel IA, donc brancher un
+second appelant n'introduit aucune lecture supplémentaire — seul `planActivities` (activités réelles
+sur la durée du plan, pour le volume réellement réalisé) est une lecture réellement nouvelle pour
+`use-coach-chat.ts`, bornée au moment où Stella est ouverte (son overlay, voir plus haut, ne monte
+`useCoachChat()` que pendant que le Sheet est affiché — pas un coût permanent sur chaque page). Nouveau
+paramètre `autoTrigger` (`true` par défaut, comportement identique à avant l'extraction pour l'onglet
+Aujourd'hui) : `false` côté Stella — la recalibration n'y tourne QUE sur demande explicite dans la
+conversation, jamais silencieusement à l'ouverture du chat (contrairement à l'onglet Aujourd'hui, où
+le déclenchement automatique reste la règle établie). `recalibrateNow()` renvoie désormais
+`{recalibrated, throughWeekNumber?}` (au lieu de `void`) pour que le `tool_result` renvoyé à Claude
+reste honnête quand rien n'était dû — jamais "Plan recalibré" affirmé à tort ; le bouton UI ignore
+simplement ce retour, comportement inchangé pour lui.
+
+**`PlanRecalibrationEntry`** déménage dans `use-recalibrate-plan.ts` (`use-training-plan.ts` la
+réimporte en type) — aucun autre fichier n'importait ce type directement (vérifié par grep), donc
+aucune dépendance circulaire à gérer entre les deux hooks.
+
+Prompt système (`coach-chat-flow.ts`) mis à jour : nouvelle règle pour chaque outil + rappel
+explicite que Stella ne peut toujours PAS créer un nouveau plan ni composer/régénérer elle-même le
+contenu d'une semaine (ces deux limites existaient déjà en substance, désormais dites en toutes
+lettres vu les deux nouveaux outils qui pourraient laisser croire le contraire).
+
+Tests : aucun nouveau (extraction de hooks + nouveaux tool cases, pas de logique pure isolée) — 902/902
+inchangés, tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

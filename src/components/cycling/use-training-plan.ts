@@ -34,16 +34,11 @@ import {
   mergePlanWeeks,
   currentPlanWeek,
   planSessionExternalId,
-  weekNeedsRecalibration,
-  computeActualWeeklyMinutes,
-  diffPlanWeeks,
-  applyRecalibration,
   clampDateToWeek,
   matchSessionCompletion,
   planAutoRescheduleMoves,
   recalibrateRollingWindow,
   type PlanWeek,
-  type PlanWeekChange,
   type PlanWeekSessionWithValidation,
   type SessionCompletion,
   type RollingWeekInput,
@@ -52,11 +47,11 @@ import {
 import { buildWorkoutEventPayload } from './daily-workout-types'
 import type { CoachGoal } from './coach-memory-types'
 import type { CoachReason } from '@/ai/coach/outputContract'
-import { trainingPlanRecalibration } from '@/ai/flows/training-plan-recalibration-flow'
 import { useActivities } from '@/hooks/use-intervals'
 import { describeActionDispatchError } from '@/lib/utils'
 import { useStrengthLogs } from './use-strength-logs'
 import { useGenerateWeekSessions } from './use-generate-week-sessions'
+import { useRecalibratePlan, type PlanRecalibrationEntry } from './use-recalibrate-plan'
 
 interface IntervalsCredentialsDoc {
   intervalsAthleteId?: string
@@ -105,30 +100,11 @@ export interface TrainingPlanDoc {
   recalibrations?: PlanRecalibrationEntry[]
 }
 
-export interface PlanRecalibrationEntry {
-  /** yyyy-MM-dd — quand cette recalibration a tourné. */
-  date: string
-  /** La semaine dont la fin a déclenché cette recalibration — jamais retouchée elle-même. */
-  throughWeekNumber: number
-  /** Explication (champ "summary" du contrat de sortie coach) — "pourquoi le plan a changé". */
-  summary: string
-  /** "Une action concrète et immédiate" (champ du contrat de sortie coach) — distinct de summary, utilisé pour le texte de la bannière verdict plutôt que de dupliquer le paragraphe d'explication. */
-  recommendation: string
-  reasons: CoachReason[]
-  /** Uniquement les semaines dont le contenu a réellement changé — vide si la recalibration a confirmé le plan existant. */
-  changes: PlanWeekChange[]
-  /** Verdict du contrat de sortie coach à CETTE recalibration — la lecture la plus à jour de l'état du plan. */
-  verdict: 'ok' | 'warn' | 'block'
-  /**
-   * Bilan critique de la trajectoire actuelle vers l'objectif — retour
-   * utilisateur : "le coach peut il émettre une critique sur le plan ou des
-   * recommendations scientifiquement détaillée". Automatique, au même
-   * déclenchement que la recalibration elle-même (décision utilisateur du
-   * 31 août 2026) plutôt qu'un flow séparé à la demande.
-   */
-  strengths: string[]
-  risks: string[]
-}
+// PlanRecalibrationEntry est maintenant défini dans use-recalibrate-plan.ts
+// (extrait de ce fichier — voir son commentaire d'en-tête) et réimporté
+// ci-dessus, pour que use-coach-chat.ts partage exactement le même type
+// sans devoir importer quoi que ce soit de CE fichier (aucune dépendance
+// circulaire entre les deux hooks).
 
 type StoredPlan = TrainingPlanDoc & { id: string }
 
@@ -284,155 +260,15 @@ export function useTrainingPlan() {
     }
   }, [user, db, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, athlete.isConfigured, athlete.data, toast])
 
-  // ── Recalibration automatique — retour utilisateur du 31 août 2026 ──────
-  //
-  // Déclenchement "automatique" tel que ce projet peut le faire : pas de
-  // cron serveur (Server Actions uniquement, voir CLAUDE.md) — donc dès que
-  // l'athlète ouvre l'onglet Plan (ce hook n'a qu'un seul appelant,
-  // training-plan-tab.tsx) et qu'une semaine vient de se terminer sans
-  // avoir encore été prise en compte (weekNeedsRecalibration), la
-  // recalibration tourne silencieusement — pas de bouton, pas de
-  // confirmation, mais le résultat est documenté (recalibrations[]) pour
-  // que l'athlète comprenne après coup pourquoi le plan a changé.
-  const recalibratingRef = useRef(false)
-  // Reflète recalibratingRef pour l'UI (le ref seul ne déclenche pas de
-  // re-render) — retour utilisateur : "en gardant l'option peut-être via un
-  // bouton, de réajuster le plan" ; voir recalibrateNow plus bas, le seul
-  // appelant qui a besoin d'un retour visuel (l'automatique reste
-  // silencieux).
-  const [isRecalibrating, setIsRecalibrating] = useState(false)
-
-  const runRecalibration = useCallback(async (plan: StoredPlan, throughWeekNumber: number) => {
-    if (!user || !db || recalibratingRef.current) return
-    const completedWeek = plan.weeks.find((w) => w.weekNumber === throughWeekNumber)
-    const remainingWeeks = plan.weeks.filter((w) => w.weekNumber > throughWeekNumber)
-    if (!completedWeek || remainingWeeks.length === 0) return
-
-    recalibratingRef.current = true
-    setIsRecalibrating(true)
-    try {
-      const actualMinutes = computeActualWeeklyMinutes(
-        planActivities.data
-          .filter((a) => a.start_date_local)
-          .map((a) => ({ startDate: (a.start_date_local as string).slice(0, 10), durationMinutes: (a.moving_time ?? 0) / 60 })),
-        completedWeek
-      )
-
-      const coachContext = buildCoachContext({
-        today: todayId,
-        injuries: memory.injuries,
-        lifestyle: memory.lifestyle,
-        goals: memory.goals,
-        rememberedFacts: memory.rememberedFacts,
-        kjBudget: { realized: budget.realized, target: budget.target, baseline: budget.baseline, trend: budget.trend, exceedsThresholdKJPerKg: budget.exceedsThresholdKJPerKg },
-        governorStatus: governor.status,
-        trainingLoad: governor.trainingLoad,
-        enduranceIndex,
-        criticalPower: criticalPowerModel ? { cpWatts: criticalPowerModel.cpWatts, wPrimeKJ: criticalPowerModel.wPrimeJoules / 1000 } : null,
-      })
-
-      const result = await trainingPlanRecalibration({
-        today: todayId,
-        eventName: plan.eventName,
-        eventDate: plan.eventDate,
-        targetOutcome: plan.targetOutcome,
-        throughWeekNumber,
-        completedWeek: {
-          phase: completedWeek.phase,
-          focus: completedWeek.focus,
-          targetWeeklyMinutes: completedWeek.targetWeeklyMinutes,
-          actualMinutes: Math.round(actualMinutes),
-        },
-        remainingWeeks: remainingWeeks.map((w) => ({
-          weekNumber: w.weekNumber,
-          phase: w.phase,
-          focus: w.focus,
-          targetWeeklyMinutes: w.targetWeeklyMinutes,
-          notes: w.notes,
-        })),
-        training: athlete.isConfigured && athlete.data ? {
-          ctl: athlete.data.ctl,
-          atl: athlete.data.atl,
-          tsb: athlete.data.tsb,
-          ftp: athlete.data.ftp,
-          weightKg: athlete.data.weight,
-        } : undefined,
-        coachContext,
-      })
-      // Échec silencieux — pas de toast : ce n'est pas une action que
-      // l'athlète a demandée, un échec ne doit pas interrompre sa visite de
-      // l'onglet. La recalibration sera retentée à la prochaine ouverture
-      // (recalibratedThroughWeek n'a pas avancé).
-      if (!result.ok) {
-        console.error('[useTrainingPlan] recalibration failed:', result.error)
-        return
-      }
-      const output = result.data
-
-      const changes = diffPlanWeeks(plan.weeks, output.adjustedWeeks)
-      const updatedWeeks = applyRecalibration(plan.weeks, output.adjustedWeeks)
-      const entry: PlanRecalibrationEntry = {
-        date: todayId,
-        throughWeekNumber,
-        summary: output.summary,
-        recommendation: output.recommendation,
-        reasons: output.reasons,
-        changes,
-        verdict: output.verdict,
-        strengths: output.strengths,
-        risks: output.risks,
-      }
-
-      const ref = doc(db, `users/${user.uid}/trainingPlans/${plan.id}`)
-      const data = {
-        weeks: updatedWeeks,
-        recalibrations: [...(plan.recalibrations ?? []), entry],
-      }
-      try {
-        await updateDoc(ref, data)
-      } catch {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: data }))
-      }
-    } finally {
-      recalibratingRef.current = false
-      setIsRecalibrating(false)
-    }
-  }, [user, db, planActivities.data, todayId, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, enduranceIndex, criticalPowerModel, athlete.isConfigured, athlete.data])
-
-  useEffect(() => {
-    if (!activePlan || isLoadingPlan || planActivities.isLoading) return
-    const dueThroughWeek = weekNeedsRecalibration(activePlan.weeks, activePlan.recalibrations?.at(-1)?.throughWeekNumber, todayId)
-    if (dueThroughWeek == null) return
-    runRecalibration(activePlan, dueThroughWeek)
-    // activePlan/planActivities change identity on every Firestore snapshot
-    // (even a no-op one) — depending on the full objects would re-fire this
-    // effect constantly. recalibratingRef + the recalibrations[] write
-    // itself (which moves the due week forward) are the real guards against
-    // duplicate/repeated runs, not this dependency array.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activePlan?.id, activePlan?.weeks.length, todayId, isLoadingPlan, planActivities.isLoading])
-
-  /**
-   * Déclenche immédiatement la vérification de recalibration plutôt que
-   * d'attendre la prochaine ouverture de l'onglet (le déclenchement
-   * automatique ci-dessus ne tourne qu'au chargement) — retour utilisateur :
-   * "en gardant l'option peut-être via un bouton, de réajuster le plan basé
-   * sur ce qui a été réalistiquement fait". Même chemin que le
-   * déclenchement automatique (weekNeedsRecalibration + runRecalibration),
-   * donc les mêmes garde-fous : si rien n'est dû (aucune semaine terminée
-   * pas encore prise en compte), ne force RIEN et le dit honnêtement plutôt
-   * que de re-recalibrer une semaine déjà traitée.
-   */
-  const recalibrateNow = useCallback(async () => {
-    if (!activePlan) return
-    const dueThroughWeek = weekNeedsRecalibration(activePlan.weeks, activePlan.recalibrations?.at(-1)?.throughWeekNumber, todayId)
-    if (dueThroughWeek == null) {
-      toast({ title: 'Rien à recalibrer', description: 'Le plan est déjà à jour par rapport aux semaines terminées.' })
-      return
-    }
-    await runRecalibration(activePlan, dueThroughWeek)
-    toast({ title: 'Plan recalibré', description: `Semaines ajustées suite au bilan de la semaine ${dueThroughWeek}.` })
-  }, [activePlan, todayId, runRecalibration, toast])
+  // Recalibration automatique — extrait dans use-recalibrate-plan.ts pour
+  // être réutilisable par use-coach-chat.ts aussi (voir son commentaire de
+  // fichier pour le pourquoi — même besoin que generateWeekSessions
+  // ci-dessous). autoTrigger reste à sa valeur par défaut (true) ici : ce
+  // hook garde le déclenchement automatique et silencieux à l'ouverture de
+  // l'onglet Plan, comportement identique à avant cette extraction.
+  const { recalibrateNow, isRecalibrating } = useRecalibratePlan({
+    user, db, activePlan, isLoadingPlan, planActivities, todayId, memory, budget, governor, enduranceIndex, criticalPowerModel, athlete,
+  })
 
   const archivePlan = useCallback(async (planId: string) => {
     if (!user || !db) return
