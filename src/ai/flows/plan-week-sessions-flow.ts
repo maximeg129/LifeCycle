@@ -18,10 +18,10 @@ import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
 import { ON_BIKE_FUELING_GUIDANCE } from './on-bike-fueling-guidance';
 import { STRENGTH_TRAINING_GUIDANCE } from './strength-training-guidance';
 import { STRENGTH_SESSION_VALIDATION_GUIDANCE } from './strength-session-validation-guidance';
+import { MovementPatternEnum, StrengthExerciseSchema } from './strength-exercise-schema';
+import { PHASE_GUIDANCE } from './phase-guidance';
 import { invokeCoachJson } from '@/ai/coach/invokeCoach';
 import { withCoachOutputContract } from '@/ai/coach/outputContract';
-
-const MovementPatternEnum = z.enum(['bilateral-heavy', 'hip-hinge', 'unilateral', 'anti-extension', 'anti-rotation-lateral', 'ankle-calf']);
 
 const PlanWeekSessionsInputSchema = z.object({
   weekNumber: z.number(),
@@ -43,19 +43,6 @@ const PlanWeekSessionsInputSchema = z.object({
 }).describe('Input for the plan week sample sessions flow.');
 
 export type PlanWeekSessionsInput = z.infer<typeof PlanWeekSessionsInputSchema>;
-
-const StrengthExerciseSchema = z.object({
-  name: z.string().describe('e.g. "Squat", "Presse à cuisses", "Fentes bulgares".'),
-  pattern: MovementPatternEnum.describe('The ONE movement pattern this exercise primarily trains — see STRENGTH_SESSION_VALIDATION_GUIDANCE (S05) for the 6 patterns and which is mandatory.'),
-  sets: z.number(),
-  reps: z.string().describe('Human-readable display, e.g. "5" or "8-10" — MUST match repsMin/repsMax below exactly (e.g. "3-6" for repsMin=3/repsMax=6, or "5" if repsMin=repsMax=5).'),
-  repsMin: z.number().describe('Lower bound of the rep count (equal to repsMax for a fixed number) — used for mechanical validation against the S05 phase matrix.'),
-  repsMax: z.number().describe('Upper bound of the rep count.'),
-  pct1RMMin: z.number().nullable().describe('Lower bound of estimated %1RM for THIS exercise, per the S05 matrix for the session\'s strengthPhase — null when not applicable (bodyweight/core work).'),
-  pct1RMMax: z.number().nullable().describe('Upper bound of estimated %1RM — null when not applicable.'),
-  loadGuidance: z.string().describe('Short qualitative complement, e.g. "charge lourde (RPE 8-9)" — alongside the numeric pct1RM range above, not a replacement for it.'),
-  restSeconds: z.number().nullable().describe('Rest between sets, in seconds — per the S05 phase matrix (STRENGTH_SESSION_VALIDATION_GUIDANCE). Null only when a clean rest duration does not apply to this exercise (e.g. paired/circuit exercise sharing rest with the next one) — otherwise always a real value from the matrix, never guessed at random.'),
-});
 
 const PlanWeekSessionSchema = z.object({
   sessionKind: z.enum(['cycling', 'strength']).describe('"cycling" for a bike session (structuredWorkout/fueling apply), "strength" for a musculation session (strengthExercises applies instead) — see targetStrengthMinutes in the input.'),
@@ -83,14 +70,6 @@ const PlanWeekSessionsOutputSchema = withCoachOutputContract({
 
 export type PlanWeekSessionsOutput = z.infer<typeof PlanWeekSessionsOutputSchema>;
 export type PlanWeekSession = z.infer<typeof PlanWeekSessionSchema>;
-
-const PHASE_GUIDANCE: Record<PlanWeekSessionsInput['phase'], string> = {
-  base: 'Phase base : volume et endurance, intensité majoritairement basse (55-75% FTP). Peu ou pas de haute intensité.',
-  build: 'Phase développement : intensité croissante et spécificité — introduit du seuil/sweet spot, garde une part d\'endurance.',
-  peak: 'Phase pic : les séances les plus spécifiques et intenses du plan (seuil, VO2max, ou spécificité de l\'objectif) — le volume peut être plus bas qu\'en base/build mais l\'intensité est élevée.',
-  taper: 'Phase affûtage : volume nettement réduit, mais garde un peu d\'intensité courte pour rester affûté — pas juste des sorties molles.',
-  recovery: 'Phase récupération : volume et intensité réduits (~50-60% de la normale), quasi exclusivement en endurance légère.',
-};
 
 export async function planWeekSessions(input: PlanWeekSessionsInput): Promise<FlowResult<PlanWeekSessionsOutput>> {
   try {

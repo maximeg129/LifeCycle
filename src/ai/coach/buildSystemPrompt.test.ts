@@ -4,6 +4,7 @@ import { RULES } from '@/domain/cycling/evidence/rules'
 
 const ALL_FLOW_IDS: CoachFlowId[] = [
   'dailyWorkoutRecommendation',
+  'dailyStrengthRecommendation',
   'trainingPlanGeneration',
   'trainingPlanRecalibration',
   'planWeekSessions',
@@ -40,6 +41,12 @@ describe('selectRulesForFlow', () => {
     const scopes = new Set(selectRulesForFlow('sessionLocationAdjustment').map((r) => r.scope))
     expect(scopes.has('session-arbitration')).toBe(true)
     expect(scopes.has('plan-validation')).toBe(false)
+  })
+
+  it('gives dailyStrengthRecommendation both session-arbitration AND plan-validation rules — a same-day decision (like dailyWorkoutRecommendation) that must also respect S05 strength validation (like planWeekSessions)', () => {
+    const scopes = new Set(selectRulesForFlow('dailyStrengthRecommendation').map((r) => r.scope))
+    expect(scopes.has('session-arbitration')).toBe(true)
+    expect(scopes.has('plan-validation')).toBe(true)
   })
 
   it('gives trainingPlanGeneration, trainingPlanRecalibration and planWeekSessions plan-validation rules but not session-arbitration ones', () => {

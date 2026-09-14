@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, CheckCircle2, Clock, MapPin, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle } from 'lucide-react'
+import { Sparkles, Loader2, Send, CheckCircle2, Clock, MapPin, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle, Wand2 } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -115,6 +115,8 @@ export function DailyWorkoutTab() {
     generate,
     sendToIntervals,
     sendPlanSessionDirectly,
+    generateStrengthSession,
+    isGeneratingStrength,
     todaysPlanSession,
     todaysPlanSessionIsStrength,
     generateWeekSessions,
@@ -147,6 +149,16 @@ export function DailyWorkoutTab() {
   // indoorRequested) : ce n'est pas un paramètre de génération IA, juste
   // "qu'est-ce qu'on affiche aujourd'hui", à re-décider à chaque ouverture.
   const [wantsGym, setWantsGym] = useState(false)
+  // Retour utilisateur : "reintegrer la possibilité de... proposer une
+  // seance de muscu (bien sur qui viendrais s'imbriquer dans le plan)" —
+  // séance générée par dailyStrengthRecommendation (use-daily-workout.ts),
+  // déjà embarquée dans le plan au moment où l'appel réussit (voir
+  // generateStrengthSession) ; cet état local ne pilote que ce qui
+  // s'affiche ICI, pas la persistance (déjà faite côté hook, comme
+  // planWeekSessions pour une séance de semaine). `index` permet de
+  // régénérer en remplaçant la même entrée plutôt qu'en empilant des
+  // doublons — voir handleProposeStrength.
+  const [strengthDraft, setStrengthDraft] = useState<{ session: PlanWeekSessionWithValidation; weekNumber: number; index: number } | null>(null)
   // Retour utilisateur : "je me demande s'il ne serait pas intéressant
   // d'avoir... la séance du jour proposée sur le plan, et un bouton...
   // de proposition alternative où l'utilisateur clique et ça l'emmène sur
@@ -250,6 +262,37 @@ export function DailyWorkoutTab() {
     }
   }
 
+  // Retour utilisateur : "reintegrer la possibilité de demander au coach
+  // d'ajuster la seance" — reprend le mécanisme retiré au moment du
+  // passage à l'envoi direct (sendPlanSessionDirectly, voir "Coach
+  // Aujourd'hui : graphique de profil + envoi direct" dans CLAUDE.md) :
+  // un appel IA qui relit la séance du plan face aux conditions du jour
+  // (récupération, météo) et l'ajuste si besoin (durée/intensité/home
+  // trainer) — contrairement à handleShuffle (skipPlanAdjustment: true,
+  // ignore la séance prévue), ici plannedSession reste attaché (comportement
+  // par défaut de generate()) pour que l'IA parte bien de CETTE séance.
+  const handleAdjust = async () => {
+    if (!todaysPlanSession) return
+    const proposal = await generate(todaysPlanSession.session.durationMinutes, undefined, false)
+    if (proposal) {
+      setDraft(proposal)
+      setWasSent(false)
+      setIsShuffled(false)
+    }
+  }
+
+  // Retour utilisateur : "reintegrer la possibilité de... proposer une
+  // seance de muscu (bien sur qui viendrais s'imbriquer dans le plan)" —
+  // dailyStrengthRecommendation (use-daily-workout.ts) compose UNE séance
+  // muscu pour aujourd'hui et l'embarque directement dans la semaine du
+  // plan en cours (persistée côté hook, pas seulement affichée ici).
+  // strengthDraft.index (déjà défini) fait que ré-appeler cette fonction
+  // RÉGÉNÈRE la même entrée plutôt que d'en empiler une deuxième.
+  const handleProposeStrength = async () => {
+    const result = await generateStrengthSession(strengthDraft?.index)
+    if (result) setStrengthDraft(result)
+  }
+
   // Retour utilisateur : "une fois la séance alternative proposée on
   // devrait pouvoir revenir sur la séance initiale" — avant ce correctif,
   // le lien "← Revenir à la séance prévue par le plan" disparaissait dès
@@ -258,11 +301,16 @@ export function DailyWorkoutTab() {
   // de plus à montrer" — faux : la séance du plan reste consultable/
   // envoyable même après avoir généré une alternative. N'efface rien côté
   // Firestore (workoutProposals/{date} reste tel quel) — juste une remise
-  // à zéro de l'affichage local, régénérable à tout moment.
+  // à zéro de l'affichage local, régénérable à tout moment. Efface aussi
+  // strengthDraft par cohérence (même si les deux cartes sont mutuellement
+  // exclusives dans le rendu, pour ne jamais laisser un état local périmé) —
+  // ne supprime RIEN côté Firestore : une séance muscu déjà proposée reste
+  // dans le plan (Plan tab, PlanNextSessionsList), juste plus affichée ici.
   const handleBackToPlan = () => {
     setDraft(null)
     setShowAlternativeForm(false)
     setIsShuffled(false)
+    setStrengthDraft(null)
   }
 
   const handleSend = async () => {
@@ -496,6 +544,36 @@ export function DailyWorkoutTab() {
         )
       ) : isLoadingStored && !draft ? (
         <Skeleton className="h-64 w-full rounded-2xl" />
+      ) : strengthDraft ? (
+        // Retour utilisateur : "proposer une seance de muscu (bien sur qui
+        // viendrais s'imbriquer dans le plan)" — la séance est déjà
+        // persistée dans le plan au moment où ce state se pose (voir
+        // handleProposeStrength) ; StrengthSessionCard (même composant que
+        // pour la séance muscu de la semaine/le court-circuit automatique)
+        // gère elle-même le suivi en direct/la saisie rétroactive.
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={handleBackToPlan}
+            className="text-xs text-muted-foreground hover:text-foreground transition-colors text-left w-fit"
+          >
+            ← Revenir à la séance prévue par le plan
+          </button>
+          <StrengthSessionCard
+            session={strengthDraft.session}
+            weekNumber={strengthDraft.weekNumber}
+            sessionIndex={strengthDraft.index}
+            badge={
+              <Badge variant="outline" className="gap-1.5 font-normal text-xs">
+                <Sparkles className="w-3 h-3" /> Séance muscu proposée par le coach
+              </Badge>
+            }
+          />
+          <Button variant="outline" size="sm" onClick={handleProposeStrength} disabled={isGeneratingStrength} className="gap-1.5">
+            {isGeneratingStrength ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shuffle className="w-3.5 h-3.5" />}
+            Régénérer
+          </Button>
+        </div>
       ) : draft ? (
         // Retour utilisateur : le résultat (suggestion générée, "Changer de
         // séance" ou "Proposer une séance alternative") remplace désormais
@@ -735,7 +813,11 @@ export function DailyWorkoutTab() {
         // "Changer de séance"/"Proposer une séance alternative" vivent ici
         // (plus sur une carte "suggestion" séparée, supprimée — retour
         // utilisateur : "avoir côte à côte la séance du plan et la
-        // proposition du coach du jour est redondant").
+        // proposition du coach du jour est redondant"). "Ajuster la
+        // séance"/"Proposer une séance de muscu" réintégrés ici (retour
+        // utilisateur : "reintegrer la possibilité de demander au coach
+        // d'ajuster la seance, d'avoir un seance alternative ou de
+        // proposer une seance de muscu").
         <Card className="lc-card ring-2 ring-primary/50">
           <CardHeader className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
@@ -764,12 +846,20 @@ export function DailyWorkoutTab() {
                 {isSendingPlanSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 {planSessionSent ? 'Ré-envoyer sur Intervals.icu' : 'Envoyer sur Intervals.icu'}
               </Button>
+              <Button variant="outline" size="sm" onClick={handleAdjust} disabled={isGenerating} className="gap-1.5">
+                {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                Ajuster la séance
+              </Button>
               <Button variant="outline" size="sm" onClick={handleShuffle} disabled={isGenerating} className="gap-1.5">
                 {isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shuffle className="w-3.5 h-3.5" />}
                 Changer de séance
               </Button>
               <Button variant="outline" size="sm" onClick={() => setShowAlternativeForm(true)}>
                 Proposer une séance alternative
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleProposeStrength} disabled={isGeneratingStrength} className="gap-1.5">
+                {isGeneratingStrength ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Dumbbell className="w-3.5 h-3.5" />}
+                Proposer une séance de muscu
               </Button>
             </div>
           </CardContent>
