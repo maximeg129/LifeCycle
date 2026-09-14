@@ -2841,6 +2841,36 @@ désormais garantie par le seul point de conversion.
 Tests (`intervals-api.test.ts`, cas existants inversés : `feel: 1` → `1` au lieu de `-1`, `feel: 5` →
 `-1` au lieu de `1`, `feel: 3` → `0` inchangé) — 902/902 au total, tsc/eslint/build clean.
 
+## Chantier B2 débloqué : application OAuth Intervals.icu approuvée, secrets activés
+
+Retour utilisateur : "l'app intervals a ete approuvé" — l'application OAuth Intervals.icu
+(`intervals.icu/oauth/apply`, statut "Pending" documenté partout ailleurs dans ce fichier pour le
+chantier B2) est maintenant approuvée. Trois étapes externes à ce repo, faites par l'utilisateur
+avec la CLI `firebase` (absente de ce sandbox) :
+1. Récupéré `client_id`/`client_secret` sur la page "Manage App" d'Intervals.icu une fois approuvée,
+   configuré Redirect URL (`.../api/intervals-oauth/callback`), Webhook URL (`.../api/intervals/
+   webhook`), coché uniquement l'événement `ACTIVITY_ANALYZED`, et généré un secret fort pour le
+   Webhook Authorization Header.
+2. `firebase apphosting:secrets:set intervals-oauth-client-id` / `intervals-oauth-client-secret` /
+   `intervals-webhook-secret --project studio-3385001327-4400b` (la CLI Firebase exige `--project`
+   ou `firebase use --add` en l'absence de projet actif dans l'environnement de l'utilisateur —
+   aucun rapport avec l'app elle-même, juste une CLI non configurée localement).
+3. `firebase apphosting:secrets:grantaccess <secret> --backend studio --project
+   studio-3385001327-4400b` pour les trois secrets — `studio` confirmé comme le seul backend réel via
+   `firebase apphosting:backends:list`.
+
+**`apphosting.yaml`** — les trois entrées `INTERVALS_OAUTH_CLIENT_ID`/`INTERVALS_OAUTH_CLIENT_SECRET`/
+`INTERVALS_WEBHOOK_SECRET` (commentées depuis leur ajout initial, voir plus haut section B2 — le
+déploiement échouait tant que les secrets Secret Manager n'existaient pas) sont réactivées ; le
+commentaire explicatif "⚠️ Commentées pour l'instant..." devenu obsolète est retiré. Changement de
+configuration pur, aucun code applicatif touché — tsc/eslint clean (pas de test/build dédié : ni
+logique pure ni JSX ne changent).
+
+**⚠️ Point encore à vérifier, déjà documenté plus haut (section B2)** : `/api/intervals/webhook/
+route.ts` lit le secret dans le corps JSON du payload (`payload.secret`), jamais dans un en-tête
+HTTP — à confirmer (ou corriger) au premier vrai événement `ACTIVITY_ANALYZED` reçu en prod,
+maintenant testable pour la première fois puisque l'application est approuvée et les secrets actifs.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
