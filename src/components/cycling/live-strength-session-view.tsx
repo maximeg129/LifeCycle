@@ -36,6 +36,8 @@ import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
 
 /** Repos par défaut si l'exercice n'en porte pas (séance mise en cache avant l'introduction de restSeconds dans le schéma). */
 const DEFAULT_REST_SECONDS = 90
+/** Répétitions par défaut si ni l'historique ni repsMin ne donnent de valeur (exercice AMRAP/jusqu'à l'échec, voir strength-exercise-schema.ts) — jamais affiché comme une cible, juste un point de départ éditable pour le champ. */
+const DEFAULT_REPS_FALLBACK = 10
 
 interface SetProgress {
   reps: number
@@ -169,7 +171,7 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
       name: ex.name,
       restSeconds: ex.restSeconds ?? DEFAULT_REST_SECONDS,
       sets: Array.from({ length: ex.sets }, () => ({
-        reps: Number.isFinite(fallbackReps) ? fallbackReps : ex.repsMin,
+        reps: Number.isFinite(fallbackReps) ? fallbackReps : (ex.repsMin ?? DEFAULT_REPS_FALLBACK),
         loadKg: lastKnown?.loadKg ?? null,
         done: false,
       })),

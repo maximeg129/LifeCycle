@@ -3163,6 +3163,56 @@ todaysPlanSession?.session.structuredWorkout`, sans branche conditionnelle inuti
 Changement de JSX/état local + simplification d'une signature de hook, aucune logique pure
 touchée — 904/904 tests inchangés, tsc/eslint/build clean.
 
+## Fix réel : récidive de "Expected number, received null" — cette fois sur `repsMin`/`repsMax`
+
+Retour utilisateur, capture d'écran d'un toast d'échec identique à celui déjà corrigé une fois pour
+`restSeconds` (voir "Fix réel : `planWeekSessions` échouait sur 'Expected number, received null'"
+plus haut) : "L'IA n'a pas pu générer les séances de la semaine / La réponse de l'IA n'a pas le
+format attendu : Expected number, received null." Même message générique Zod, donc même famille de
+bug — mais le correctif `restSeconds` était déjà en place et déployé (PR mergée, section précédente
+dans ce fichier), donc forcément un AUTRE champ non-nullable de la même chaîne de schémas.
+
+**Diagnostic** — relecture systématique de `StrengthExerciseSchema` (`strength-exercise-schema.ts`,
+partagée par `planWeekSessions` et `dailyStrengthRecommendation`) champ par champ : `pct1RMMin`/
+`pct1RMMax`/`hydrationNote`/`carbGramsPerHour*`/`restSeconds` sont déjà `.nullable()` ; `sets`/
+`durationMinutes` restent non-nullable mais n'ont jamais de raison structurelle d'être ambigus (un
+exercice a toujours un nombre de séries, une séance a toujours une durée). **`repsMin`/`repsMax`**
+restaient `z.number()` requis — et le correctif précédent l'avait déjà noté comme risque sans le
+corriger : "aucun signal, contrairement à `restSeconds`, que ce champ ait jamais été anticipé comme
+absent" (voir CLAUDE.md, section précédente, paragraphe "Portée"). Ce risque documenté vient de se
+matérialiser : un exercice AMRAP/"jusqu'à l'échec" n'a pas de plage de répétitions nette, exactement
+le même genre d'ambiguïté qu'un exercice en circuit partageant son repos avec le suivant
+(`restSeconds`) — le modèle répond honnêtement par `null`, le schéma le refuse.
+
+**Correctif, même mécanique que `restSeconds`** :
+- **`strength-exercise-schema.ts`** — `repsMin`/`repsMax` passent à `z.number().nullable()`, avec
+  une description précisant explicitement quand `null` est acceptable (AMRAP/jusqu'à l'échec — reste
+  l'exception, jamais un repli par défaut) et rappelant qu'un exercice TENU (isométrique) continue de
+  porter ses secondes dans `repsMin`/`repsMax` (`reps: "30-45s"` → `repsMin: 30, repsMax: 45`),
+  jamais `null` pour ce cas — convention déjà en place, non touchée.
+- **`plan-week-sessions-flow.ts`/`daily-strength-recommendation-flow.ts`** — gabarit JSON du prompt
+  aligné (`"repsMin": nombre ou null, "repsMax": nombre ou null`), même convention que les autres
+  champs nullables du même exemple.
+- **`strengthSessionValidator.ts`** — `StrengthExerciseForValidation.repsMin`/`repsMax` deviennent
+  `number | null` (optionnels), même commentaire de garde que `restSeconds` ("non renseigné... le
+  contrôle matrice traite ce champ comme non vérifiable plutôt que comme une violation").
+  `checkLoadRepsRestConsistency` ne compare la plage à la matrice S05 que si LES DEUX bornes sont
+  renseignées (`ex.repsMin != null && ex.repsMax != null`) — un exercice sans plage nette ne peut
+  structurellement pas être jugé hors matrice, jamais une violation inventée depuis une absence de
+  donnée.
+- **`live-strength-session-view.tsx`** — le seul consommateur UI qui lisait `ex.repsMin` comme
+  repli numérique direct (préremplissage du champ reps d'une série, en l'absence d'historique) :
+  nouvelle constante `DEFAULT_REPS_FALLBACK = 10` (même statut que `DEFAULT_REST_SECONDS` juste
+  au-dessus, un point de départ éditable par l'athlète — jamais affiché comme une cible) utilisée
+  seulement quand NI l'historique NI `repsMin` ne donnent de valeur.
+
+Tests (`plan-week-sessions-output.test.ts` + `strengthSessionValidator.test.ts`, 2 nouveaux — même
+patron `satisfies`-le-vrai-schéma + garde de non-régression que pour `restSeconds:null`) — 906/906
+au total, tsc/eslint/build clean. Comme pour le correctif `sessionLocationAdjustment`/le premier
+correctif `restSeconds`, aucune reproduction réelle possible dans ce sandbox (pas
+d'`ANTHROPIC_API_KEY`) — à confirmer par l'utilisateur au prochain essai réel de génération d'une
+semaine avec musculation activée.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
