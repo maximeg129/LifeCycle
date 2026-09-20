@@ -167,7 +167,7 @@ en une phrase, "recommendation" indique quelle séance prioriser si le temps man
       "sessionType": "principale|entretien|top-up",
       "strengthPhase": "base|force-max|transfert-puissance|entretien",
       "strengthExercises": [
-        { "name": "ex. Squat", "pattern": "bilateral-heavy|hip-hinge|unilateral|anti-extension|anti-rotation-lateral|ankle-calf", "sets": nombre, "reps": "ex. 5 ou 8-10 — DOIT correspondre à repsMin/repsMax", "repsMin": nombre, "repsMax": nombre, "pct1RMMin": nombre ou null, "pct1RMMax": nombre ou null, "loadGuidance": "ex. charge lourde (RPE 8-9)", "restSeconds": nombre ou null }
+        { "name": "ex. Squat", "pattern": "bilateral-heavy|hip-hinge|unilateral|anti-extension|anti-rotation-lateral|ankle-calf", "sets": nombre, "reps": "ex. 5 ou 8-10 — DOIT correspondre à repsMin/repsMax", "repsMin": nombre ou null, "repsMax": nombre ou null, "pct1RMMin": nombre ou null, "pct1RMMax": nombre ou null, "loadGuidance": "ex. charge lourde (RPE 8-9)", "restSeconds": nombre ou null }
       ]
     }` : ''}
   ]

@@ -140,6 +140,13 @@ describe('checkLoadRepsRestConsistency', () => {
     expect(result.verdict).toBe('ok')
   })
 
+  // ⚠️ Récidive du bug restSeconds:null sur repsMin/repsMax (voir
+  // plan-week-sessions-output.test.ts) — même garde-fou.
+  it('never flags reps when the exercise has none recorded (AMRAP/to-failure)', () => {
+    const result = checkLoadRepsRestConsistency('base', [ex({ repsMin: null, repsMax: null })])
+    expect(result.verdict).toBe('ok')
+  })
+
   it('tolerates a range that merely overlaps the phase bounds rather than requiring an exact match', () => {
     // repsMin-repsMax = 10-14 overlaps base's 8-12 bound.
     const result = checkLoadRepsRestConsistency('base', [ex({ repsMin: 10, repsMax: 14 })])

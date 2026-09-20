@@ -42,8 +42,9 @@ export type CyclingPhaseForFrequency = 'base' | 'build' | 'peak' | 'taper' | 're
 export interface StrengthExerciseForValidation {
   pattern: MovementPattern
   sets: number
-  repsMin: number
-  repsMax: number
+  /** null/absent = non renseigné par le coach IA (ex. AMRAP/jusqu'à l'échec, pas de plage nette) — le contrôle matrice traite ce champ comme non vérifiable pour cet exercice plutôt que comme une violation, même discipline que restSeconds ci-dessous. */
+  repsMin?: number | null
+  repsMax?: number | null
   /** null/absent = %1RM non applicable à cet exercice (poids du corps, gainage...). */
   pct1RMMin?: number | null
   pct1RMMax?: number | null
@@ -167,7 +168,7 @@ export function checkLoadRepsRestConsistency(strengthPhase: StrengthPhase, exerc
     if (ex.sets < bounds.setsMin || ex.sets > bounds.setsMax) {
       violations.push(`${ex.pattern} : ${ex.sets} séries hors ${bounds.setsMin}-${bounds.setsMax}`)
     }
-    if (ex.repsMax < bounds.repsMin || ex.repsMin > bounds.repsMax) {
+    if (ex.repsMin != null && ex.repsMax != null && (ex.repsMax < bounds.repsMin || ex.repsMin > bounds.repsMax)) {
       violations.push(`${ex.pattern} : ${ex.repsMin}-${ex.repsMax} répétitions hors ${bounds.repsMin}-${bounds.repsMax}`)
     }
     if (ex.pct1RMMin != null && ex.pct1RMMax != null && (ex.pct1RMMax < bounds.pct1RMMin || ex.pct1RMMin > bounds.pct1RMMax)) {

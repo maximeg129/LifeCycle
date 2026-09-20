@@ -156,4 +156,36 @@ describe('plan-week-sessions-flow — realistic strength session fixture', () =>
     // exercice ne doit jamais, à lui seul, faire échouer la validation.
     expect(summary.results.find((r) => r.checkId === 'strength-check-4-load-reps-rest-matrix')?.verdict).toBe('ok')
   })
+
+  // ⚠️ Récidive du même bug, sur repsMin/repsMax cette fois : "L'IA n'a pas
+  // pu générer les séances de la semaine / ... Expected number, received
+  // null" à nouveau en prod, alors que le correctif restSeconds ci-dessus
+  // était déjà en place. `repsMin`/`repsMax` (StrengthExerciseSchema)
+  // étaient restés `z.number()` requis — le seul autre champ de l'exercice
+  // que le pipeline n'anticipait pas encore comme pouvant être `null` (un
+  // exercice AMRAP/jusqu'à l'échec sans plage nette). Même correctif :
+  // schéma rendu nullable, `checkLoadRepsRestConsistency` ne compare la
+  // plage que si les deux bornes sont renseignées.
+  it('a strength exercise with repsMin/repsMax: null still satisfies the real schema and validates without crashing', () => {
+    const withNullReps: PlanWeekSession = {
+      ...plausibleModelOutput.sessions[1],
+      strengthExercises: (plausibleModelOutput.sessions[1].strengthExercises ?? []).map((e, i) =>
+        i === 0 ? { ...e, repsMin: null, repsMax: null } : e
+      ),
+    } satisfies PlanWeekSession
+    const summary = validateStrengthSession({
+      session: {
+        sessionType: 'principale',
+        strengthPhase: 'force-max',
+        durationMinutes: withNullReps.durationMinutes,
+        exercises: withNullReps.strengthExercises ?? [],
+      },
+      previousSessionsPatterns: [],
+      weeklyCyclingHours: 8,
+      cyclingPhase: 'build',
+      strengthSessionsThisWeek: 1,
+      hoursBeforeNextKeySession: null,
+    })
+    expect(summary.results.find((r) => r.checkId === 'strength-check-4-load-reps-rest-matrix')?.verdict).toBe('ok')
+  })
 })
