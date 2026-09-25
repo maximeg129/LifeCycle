@@ -3213,6 +3213,46 @@ correctif `restSeconds`, aucune reproduction réelle possible dans ce sandbox (p
 d'`ANTHROPIC_API_KEY`) — à confirmer par l'utilisateur au prochain essai réel de génération d'une
 semaine avec musculation activée.
 
+## Musculation : séance toujours complète + un exercice précis par ligne, jamais un choix
+
+Retour utilisateur : "Ajuste pour faire en sorte que lorsqu'une séance de muscu est proposé tu
+t'assure que la séance est complète et tu indique pour chaque exercise un exercice clair et pas un
+choix." Deux exigences distinctes sur la génération IA d'une séance de musculation
+(`planWeekSessions`/`dailyStrengthRecommendation` — les deux seuls flows qui produisent des
+`strengthExercises`) :
+
+**Complétude** — la règle 1 de `STRENGTH_SESSION_VALIDATION_GUIDANCE`
+(`strength-session-validation-guidance.ts`, partagée par les deux flows, voir "Un fichier 'use
+server' ne peut exporter QUE des fonctions async" plus bas pour pourquoi elle vit dans un fichier
+plain séparé) imposait déjà la couverture de patterns (≥4/6 dont bilatéral lourd) pour une séance
+"principale", vérifiée après coup côté client (`checkPatternCoverage`,
+`strengthSessionValidator.ts`) — mais rien n'empêchait explicitement le modèle de sacrifier cette
+couverture pour respecter exactement le volume horaire visé (ex. retirer un exercice pour tenir dans
+45min). Règle 1 complétée : la couverture de patterns prime toujours sur la durée exacte — jamais
+retirer un exercice ou un pattern obligatoire pour coller au volume cible, quitte à dépasser
+légèrement la durée ou raccourcir chaque exercice plutôt que d'en supprimer un. Le garde-fou
+déterministe existant (`checkPatternCoverage`, badge "Séance incomplète" dans
+`plan-session-detail.tsx`) reste inchangé — cette règle renforce la génération elle-même pour que ce
+badge se déclenche moins souvent, pas un nouveau mécanisme de blocage côté client.
+
+**Un exercice précis, jamais un choix** — nouvelle règle 9 : chaque `name` d'exercice doit désigner
+UN SEUL mouvement exécutable tel quel, jamais une alternative ("Squat ou Fentes", "Presse à cuisses /
+Squat", "Squat (ou Soulevé de terre)", une énumération séparée par virgule). Si plusieurs variantes
+semblent équivalentes au modèle, il doit trancher lui-même plutôt que de reporter le choix sur
+l'athlète. **Purement une règle de prompt** — `name` est un `z.string()` en texte libre
+(`strength-exercise-schema.ts`), aucune validation déterministe possible sur son contenu (contrairement
+aux champs numériques de la grille S05) ; contrairement au piège documenté ailleurs dans ce fichier
+("Un fichier 'use server' ne peut exporter QUE des fonctions async"), les descriptions `.describe()`
+Zod ne sont JAMAIS envoyées au modèle — la règle devait donc être ajoutée au texte réellement
+interpolé dans le system prompt (`STRENGTH_SESSION_VALIDATION_GUIDANCE`), pas au schéma.
+
+Un seul fichier modifié (`strength-session-validation-guidance.ts`), interpolé tel quel par les deux
+flows — aucune duplication. Changement de texte de prompt uniquement, aucune logique pure/schéma
+touché(e) — 906/906 tests inchangés, tsc/eslint/build clean. Comme pour les correctifs de prompt
+précédents (`sessionLocationAdjustment`, RPE bas...), aucune reproduction réelle possible dans ce
+sandbox (pas d'`ANTHROPIC_API_KEY`) — à confirmer par l'utilisateur à la prochaine génération d'une
+séance de musculation.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
