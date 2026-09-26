@@ -24,6 +24,7 @@ import { WorkoutProfileChart } from './workout-profile-chart'
 import { sessionZone, type ZoneInfo } from './plan-calendar-types'
 import type { PlanWeek, PlanWeekSessionWithValidation, SessionCompletion } from './training-plan-types'
 import type { IntervalsActivity } from '@/lib/intervals-api'
+import type { StrengthExercise } from '@/ai/flows/strength-exercise-schema'
 
 interface Props {
   week: PlanWeek
@@ -40,6 +41,9 @@ interface Props {
   /** Bascule intérieur/extérieur avec régénération réelle — chantier Frive/Join, voir plan-session-detail.tsx. */
   adjustingLocationKey: string | null
   onAdjustLocation: (index: number, targetLocation: 'indoor' | 'outdoor') => void
+  /** Retour utilisateur : "rajouter des exercices, et des tour pour chaque exercice dans la musculation" — avant de démarrer, voir plan-session-detail.tsx. */
+  onAddExercise: (index: number, exercise: StrengthExercise) => void
+  onAddExerciseSet: (index: number, exerciseIndex: number) => void
 }
 
 interface DaySession {
@@ -49,7 +53,7 @@ interface DaySession {
   zone: ZoneInfo | null
 }
 
-export function PlanWeekCalendar({ week, isGenerating, sendingSessionKey, canSendToIntervals, onRegenerate, onSend, onMoveDate, getCompletion, activities, athleteFtp, adjustingLocationKey, onAdjustLocation }: Props) {
+export function PlanWeekCalendar({ week, isGenerating, sendingSessionKey, canSendToIntervals, onRegenerate, onSend, onMoveDate, getCompletion, activities, athleteFtp, adjustingLocationKey, onAdjustLocation, onAddExercise, onAddExerciseSet }: Props) {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const todayIso = format(new Date(), 'yyyy-MM-dd')
 
@@ -180,6 +184,8 @@ export function PlanWeekCalendar({ week, isGenerating, sendingSessionKey, canSen
                 onMoveDate={onMoveDate}
                 isAdjustingLocation={adjustingLocationKey === `${week.weekNumber}-${index}`}
                 onAdjustLocation={(targetLocation) => onAdjustLocation(index, targetLocation)}
+                onAddExercise={(exercise) => onAddExercise(index, exercise)}
+                onAddExerciseSet={(exerciseIndex) => onAddExerciseSet(index, exerciseIndex)}
               />
             ))}
           </div>

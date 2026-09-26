@@ -43,6 +43,7 @@ import {
   type PlanWeekSessionWithValidation,
   type SessionCompletion,
 } from './training-plan-types'
+import type { StrengthExercise } from '@/ai/flows/strength-exercise-schema'
 
 interface Props {
   weeks: PlanWeek[]
@@ -58,6 +59,9 @@ interface Props {
   getCompletion: (week: PlanWeek, session: PlanWeekSessionWithValidation, index: number) => SessionCompletion
   adjustingLocationKey: string | null
   onAdjustLocation: (week: PlanWeek, index: number, targetLocation: 'indoor' | 'outdoor') => void
+  /** Retour utilisateur : "rajouter des exercices, et des tour pour chaque exercice dans la musculation" — avant de démarrer, voir plan-session-detail.tsx. */
+  onAddExercise: (week: PlanWeek, index: number, exercise: StrengthExercise) => void
+  onAddExerciseSet: (week: PlanWeek, index: number, exerciseIndex: number) => void
 }
 
 function dayLabel(dateIso: string, todayIso: string): string {
@@ -70,6 +74,7 @@ function dayLabel(dateIso: string, todayIso: string): string {
 export function PlanNextSessionsList({
   weeks, today, hideToday, generatingSessionsForWeek, sendingSessionKey, canSendToIntervals,
   onRegenerate, onSend, onMoveDate, getCompletion, adjustingLocationKey, onAdjustLocation,
+  onAddExercise, onAddExerciseSet,
 }: Props) {
   const [showPast, setShowPast] = useState(false)
 
@@ -92,6 +97,8 @@ export function PlanNextSessionsList({
       onMoveDate={(i, newDate) => onMoveDate(week, i, newDate)}
       isAdjustingLocation={adjustingLocationKey === `${week.weekNumber}-${index}`}
       onAdjustLocation={(targetLocation) => onAdjustLocation(week, index, targetLocation)}
+      onAddExercise={(exercise) => onAddExercise(week, index, exercise)}
+      onAddExerciseSet={(exerciseIndex) => onAddExerciseSet(week, index, exerciseIndex)}
     />
   )
 

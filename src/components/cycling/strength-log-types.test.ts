@@ -143,16 +143,30 @@ describe('isDraftUsable', () => {
     expect(isDraftUsable(now - STRENGTH_DRAFT_MAX_AGE_MS, names, names, now)).toBe(true)
   })
 
-  it('rejects a draft whose exercise list has a different length (session regenerated)', () => {
-    expect(isDraftUsable(now - 1000, names, ['Squat'], now)).toBe(false)
+  it('rejects a draft with FEWER exercises than the current base (session regenerated with more)', () => {
+    expect(isDraftUsable(now - 1000, ['Squat'], names, now)).toBe(false)
   })
 
   it('rejects a draft whose exercise list differs by name (session regenerated)', () => {
-    expect(isDraftUsable(now - 1000, names, ['Squat', 'Développé couché'], now)).toBe(false)
+    expect(isDraftUsable(now - 1000, ['Squat', 'Développé couché'], names, now)).toBe(false)
   })
 
   it('rejects a draft whose exercises are in a different order', () => {
-    expect(isDraftUsable(now - 1000, names, ['Fentes bulgares', 'Squat'], now)).toBe(false)
+    expect(isDraftUsable(now - 1000, ['Fentes bulgares', 'Squat'], names, now)).toBe(false)
+  })
+
+  // ⚠️ Retour utilisateur : "il faudrait pouvoir rajouter des exercices...
+  // dans la musculation" (live-strength-session-view.tsx) — un brouillon
+  // peut désormais porter PLUS d'exercices que la base actuelle de la
+  // séance (les exercices ajoutés manuellement en direct, dont le nombre
+  // n'est pas encore connu au moment de lire le brouillon) : accepté tant
+  // que le PRÉFIXE correspond exactement à la base actuelle.
+  it('accepts a draft with MORE exercises than the current base, sharing the same prefix (manual exercise added live)', () => {
+    expect(isDraftUsable(now - 1000, [...names, 'Curl biceps'], names, now)).toBe(true)
+  })
+
+  it('rejects a draft with more exercises whose prefix does not match the current base', () => {
+    expect(isDraftUsable(now - 1000, ['Squat', 'Développé couché', 'Curl biceps'], names, now)).toBe(false)
   })
 })
 

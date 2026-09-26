@@ -32,7 +32,9 @@ import { useStrengthLogs } from './use-strength-logs'
 import { useStrengthSessionAnalysis } from './use-strength-session-analysis'
 import { exerciseHistory, formatTimer, isDraftUsable, isHoldReps, parseDurationInput, summarizeSetsDetail, type LoggedExercise, type LoggedSetDetail, type StrengthSessionLog } from './strength-log-types'
 import { EXERCISE_TECHNIQUE } from './exercise-technique'
+import { AddStrengthExerciseDialog } from './add-strength-exercise-dialog'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
+import type { StrengthExercise } from '@/ai/flows/strength-exercise-schema'
 
 /** Repos par défaut si l'exercice n'en porte pas (séance mise en cache avant l'introduction de restSeconds dans le schéma). */
 const DEFAULT_REST_SECONDS = 90
@@ -90,6 +92,15 @@ interface StrengthSessionDraft {
   totalPausedMs: number
   exerciseNames: string[]
   progress: ExerciseProgress[]
+  /**
+   * Exercices ajoutés manuellement en direct (retour utilisateur : "il
+   * faudrait pouvoir rajouter des exercices... dans la musculation") — en
+   * plus de `session.strengthExercises`, jamais à sa place. Persisté ici
+   * pour qu'une fermeture accidentelle de l'onglet ne perde pas un exercice
+   * ajouté à la volée ; voir isDraftUsable (strength-log-types.ts) pour la
+   * façon dont un brouillon plus long que la base actuelle reste valide.
+   */
+  manualExercises: StrengthExercise[]
 }
 
 function draftStorageKey(sessionKey: string): string {
@@ -145,24 +156,42 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
   // en fire-and-forget (jamais attendu) juste avant onClose().
   const sessionAnalysis = useStrengthSessionAnalysis(null)
 
-  const exercises = useMemo(() => session.strengthExercises ?? [], [session.strengthExercises])
-  const exerciseNames = useMemo(() => exercises.map((ex) => ex.name), [exercises])
+  // Séance TELLE QUE PRÉVUE par le plan/l'IA — jamais mutée ici. Les
+  // exercices ajoutés manuellement en direct (voir plus bas) s'ajoutent
+  // PAR-DESSUS, sans jamais toucher cette base.
+  const baseExercises = useMemo(() => session.strengthExercises ?? [], [session.strengthExercises])
+  const baseExerciseNames = useMemo(() => baseExercises.map((ex) => ex.name), [baseExercises])
 
   // Brouillon localStorage éventuel, chargé une seule fois à l'ouverture —
   // calculé une fois via ce ref-sentinelle (idiome de "lazy init" partagé
   // entre plusieurs useState/useRef ci-dessous) plutôt que rechargé à
-  // chaque render.
+  // chaque render. Comparé à baseExerciseNames (jamais aux exercices
+  // manuels, dont le nombre n'est pas encore connu à ce stade) — voir
+  // isDraftUsable (strength-log-types.ts) pour la tolérance "brouillon plus
+  // long que la base actuelle" que ça permet.
   const draftRef = useRef<StrengthSessionDraft | null | undefined>(undefined)
   if (draftRef.current === undefined) {
-    draftRef.current = readStrengthDraft(sessionKey, exerciseNames)
+    draftRef.current = readStrengthDraft(sessionKey, baseExerciseNames)
   }
   const draft = draftRef.current
+
+  // Retour utilisateur : "il faudrait pouvoir rajouter des exercices... dans
+  // la musculation" — exercices ajoutés à la volée pendant CETTE séance,
+  // jamais réécrits dans le plan (le pendant AVANT de démarrer, qui édite
+  // bien le plan lui-même, vit dans plan-session-detail.tsx/daily-workout-
+  // tab.tsx via addStrengthExercise). Initialisé depuis le brouillon s'il en
+  // portait déjà (fermeture accidentelle de l'onglet après un ajout).
+  const [manualExercises, setManualExercises] = useState<StrengthExercise[]>(() => draft?.manualExercises ?? [])
+  const exercises = useMemo(() => [...baseExercises, ...manualExercises], [baseExercises, manualExercises])
+  const exerciseNames = useMemo(() => exercises.map((ex) => ex.name), [exercises])
 
   /**
    * Progression vierge — extrait en fonction réutilisable pour servir à la
    * fois d'état initial (première ouverture, pas de brouillon) et à
    * "Recommencer" (retour utilisateur : "recommencer le training") plutôt
    * que de dupliquer cette logique de préremplissage à deux endroits.
+   * Construite depuis `exercises` (base + manuels) — "Recommencer" remet la
+   * progression à zéro mais ne retire jamais un exercice ajouté à la volée.
    */
   const buildFreshProgress = (): ExerciseProgress[] => exercises.map((ex) => {
     const lastKnown = exerciseHistory(logs, ex.name).at(-1)
@@ -179,6 +208,41 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
   })
 
   const [progress, setProgress] = useState<ExerciseProgress[]>(() => (draft ? draft.progress : buildFreshProgress()))
+
+  /**
+   * Ajoute un exercice improvisé à la séance EN COURS — retour utilisateur :
+   * "rajouter des exercices... dans la musculation". Jamais réécrit dans le
+   * plan (state local à cette vue) ; toujours ajouté en fin de liste, jamais
+   * inséré ailleurs, pour que son index reste stable une fois créé (les
+   * indices exIndex utilisés partout dans cette vue ne bougent jamais après
+   * coup).
+   */
+  const addManualExercise = (exercise: StrengthExercise) => {
+    setManualExercises((prev) => [...prev, exercise])
+    setProgress((prev) => [...prev, {
+      name: exercise.name,
+      restSeconds: exercise.restSeconds ?? DEFAULT_REST_SECONDS,
+      sets: Array.from({ length: exercise.sets }, () => ({
+        reps: exercise.repsMin ?? DEFAULT_REPS_FALLBACK,
+        loadKg: null,
+        done: false,
+      })),
+    }])
+  }
+
+  /**
+   * Ajoute une série à un exercice déjà en cours (base OU manuel) — même
+   * retour utilisateur, "des tour pour chaque exercice". Préremplie depuis
+   * la dernière série de CET exercice (reps/charge), jamais vide — cohérent
+   * avec buildFreshProgress ci-dessus qui préremplit déjà depuis l'historique.
+   */
+  const addSetToExercise = (exIndex: number) => {
+    setProgress((prev) => prev.map((ex, i) => {
+      if (i !== exIndex) return ex
+      const last = ex.sets.at(-1)
+      return { ...ex, sets: [...ex.sets, { reps: last?.reps ?? DEFAULT_REPS_FALLBACK, loadKg: last?.loadKg ?? null, done: false }] }
+    }))
+  }
 
   useEffect(() => {
     if (draft) {
@@ -232,13 +296,14 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
         totalPausedMs: totalPausedMsRef.current,
         exerciseNames,
         progress,
+        manualExercises,
       }
       localStorage.setItem(draftStorageKey(sessionKey), JSON.stringify(data))
     } catch {
       // localStorage indisponible/plein — pas bloquant pour la séance.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [progress, isPaused, sessionKey])
+  }, [progress, isPaused, sessionKey, manualExercises])
 
   // Écran toujours allumé pendant le suivi — retour utilisateur : "l'écran
   // de l'iPhone ne s'éteint pas parce que c'est vraiment pénible de faire
@@ -780,6 +845,19 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
                     </div>
                     )
                   })}
+                  {/* Retour utilisateur : "des tour pour chaque exercice
+                      dans la musculation" — une série de plus sur CET
+                      exercice, préremplie depuis la dernière (voir
+                      addSetToExercise plus haut). */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-full gap-1.5 text-xs text-muted-foreground"
+                    onClick={() => addSetToExercise(exIndex)}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Ajouter une série
+                  </Button>
                 </div>
                 {/* Retour utilisateur : "un lien aussi descriptif, condensé en
                     accordéon... la bonne technique à avoir" — contenu
@@ -808,6 +886,13 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
           </div>
           )
         })}
+
+        {/* Retour utilisateur : "il faudrait pouvoir rajouter des
+            exercices... dans la musculation" — un exercice improvisé,
+            jamais réécrit dans le plan (voir addManualExercise plus haut) —
+            distinct du pendant "avant de démarrer" qui édite le plan
+            lui-même (plan-session-detail.tsx/daily-workout-tab.tsx). */}
+        <AddStrengthExerciseDialog onAdd={addManualExercise} triggerLabel="Ajouter un exercice" />
 
         <div className="lc-card p-4 space-y-2">
           <p className="text-sm font-medium">RPE de séance (optionnel)</p>

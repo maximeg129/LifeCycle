@@ -11,6 +11,7 @@
 import { addDays, differenceInCalendarDays, format } from 'date-fns'
 import { mondayOf } from './load-types'
 import type { PlanWeekSession } from '@/ai/flows/plan-week-sessions-flow'
+import type { StrengthExercise } from '@/ai/flows/strength-exercise-schema'
 import type { StrengthSessionValidationSummary } from '@/domain/cycling/validation/strengthSessionValidator'
 
 export type PlanPhase = 'base' | 'build' | 'peak' | 'taper' | 'recovery'
@@ -193,6 +194,72 @@ export function findWeekStrengthSession(week: PlanWeek | null): { session: PlanW
   const index = week.sampleSessions.findIndex((s) => s.sessionKind === 'strength')
   if (index < 0) return null
   return { session: week.sampleSessions[index], index, weekNumber: week.weekNumber }
+}
+
+// ── Ajouter un exercice/une série AVANT de démarrer la séance ───────────
+//
+// Retour utilisateur : "il faudrait pouvoir rajouter des exercices, et des
+// tour pour chaque exercice dans la musculation". Deux gestes distincts,
+// décidés par AskUserQuestion : possible AVANT de démarrer (ici — édite la
+// séance déjà persistée dans week.sampleSessions) ET pendant le suivi en
+// direct (voir live-strength-session-view.tsx, qui édite un état local
+// jamais réécrit dans le plan lui-même — les deux mécanismes sont
+// volontairement indépendants). Explicitement PAS construit dans le
+// formulaire de saisie rétroactive (LogStrengthSessionDialog), hors scope
+// de cette demande.
+
+/**
+ * Ajoute un exercice (saisi manuellement par l'athlète) à UNE séance
+ * strength déjà présente dans week.sampleSessions. Même patron
+ * map-over-weeks que moveSessionDate/adjustSessionForLocation
+ * (use-training-plan.ts) — jamais une deuxième structure de mutation pour
+ * éditer une séance du plan.
+ */
+export function withExerciseAdded(
+  weeks: PlanWeek[],
+  weekNumber: number,
+  sessionIndex: number,
+  exercise: StrengthExercise
+): PlanWeek[] {
+  return weeks.map((w) => {
+    if (w.weekNumber !== weekNumber || !w.sampleSessions) return w
+    return {
+      ...w,
+      sampleSessions: w.sampleSessions.map((s, i) =>
+        i === sessionIndex ? { ...s, strengthExercises: [...(s.strengthExercises ?? []), exercise] } : s
+      ),
+    }
+  })
+}
+
+/**
+ * Ajuste le nombre de séries prévues (`sets`) d'UN exercice déjà présent —
+ * jamais sous 1 série (clamp). Retirer complètement un exercice reste un
+ * geste distinct, non construit ici (pas demandé — l'athlète veut ajouter,
+ * pas retirer).
+ */
+export function withExerciseSetsAdjusted(
+  weeks: PlanWeek[],
+  weekNumber: number,
+  sessionIndex: number,
+  exerciseIndex: number,
+  delta: number
+): PlanWeek[] {
+  return weeks.map((w) => {
+    if (w.weekNumber !== weekNumber || !w.sampleSessions) return w
+    return {
+      ...w,
+      sampleSessions: w.sampleSessions.map((s, i) => {
+        if (i !== sessionIndex || !s.strengthExercises) return s
+        return {
+          ...s,
+          strengthExercises: s.strengthExercises.map((ex, j) =>
+            j === exerciseIndex ? { ...ex, sets: Math.max(1, ex.sets + delta) } : ex
+          ),
+        }
+      }),
+    }
+  })
 }
 
 // ── Séances figées par jour — retour utilisateur ────────────────────────

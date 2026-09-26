@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, CheckCircle2, Clock, MapPin, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle } from 'lucide-react'
+import { Sparkles, Loader2, Send, CheckCircle2, Clock, MapPin, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle, Plus } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -18,6 +18,8 @@ import { RideAnalysisDialog } from '@/components/coach/ride-analysis-dialog'
 import { useRideAnalysis } from '@/components/coach/use-ride-analysis'
 import { LiveStrengthSessionView } from './live-strength-session-view'
 import { LogStrengthSessionDialog } from './log-strength-session-dialog'
+import { AddStrengthExerciseDialog } from './add-strength-exercise-dialog'
+import type { StrengthExercise } from '@/ai/flows/strength-exercise-schema'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { findWeekStrengthSession, type PlanWeekSessionWithValidation } from './training-plan-types'
 import { IntervalsOnboardingNotice } from './intervals-onboarding-notice'
@@ -40,12 +42,15 @@ const DEFAULT_RIDE_TIME = '09:00'
  * l'onglet Plan (suivi en direct / saisie rétroactive) — gère son propre
  * état d'ouverture du suivi en direct, self-contained.
  */
-function StrengthSessionCard({ session, weekNumber, sessionIndex, badge, description }: {
+function StrengthSessionCard({ session, weekNumber, sessionIndex, badge, description, onAddExercise, onAddExerciseSet }: {
   session: PlanWeekSessionWithValidation
   weekNumber: number
   sessionIndex: number
   badge: React.ReactNode
   description?: string
+  /** Retour utilisateur : "il faudrait pouvoir rajouter des exercices, et des tour pour chaque exercice dans la musculation" — AVANT de démarrer le suivi en direct (le pendant EN DIRECT vit dans live-strength-session-view.tsx). */
+  onAddExercise: (weekNumber: number, sessionIndex: number, exercise: StrengthExercise) => void
+  onAddExerciseSet: (weekNumber: number, sessionIndex: number, exerciseIndex: number) => void
 }) {
   const [liveOpen, setLiveOpen] = useState(false)
   const exercises = session.strengthExercises ?? []
@@ -70,13 +75,26 @@ function StrengthSessionCard({ session, weekNumber, sessionIndex, badge, descrip
           {exercises.length > 0 && (
             <ul className="space-y-1.5 text-sm">
               {exercises.map((ex, i) => (
-                <li key={i} className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20">
-                  <span className="font-medium">{ex.name}</span>
-                  <span className="text-muted-foreground">— {ex.sets}x{ex.reps} — {ex.loadGuidance}{ex.restSeconds ? ` (repos ${ex.restSeconds}s)` : ''}</span>
+                <li key={i} className="flex items-center gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20">
+                  <span className="flex-1 min-w-0">
+                    <span className="font-medium">{ex.name}</span>{' '}
+                    <span className="text-muted-foreground">— {ex.sets}x{ex.reps} — {ex.loadGuidance}{ex.restSeconds ? ` (repos ${ex.restSeconds}s)` : ''}</span>
+                  </span>
+                  {/* Retour utilisateur : "des tour pour chaque exercice" — +1 série AVANT de démarrer, même geste qu'en direct (live-strength-session-view.tsx) mais persisté dans le plan. */}
+                  <button
+                    type="button"
+                    onClick={() => onAddExerciseSet(weekNumber, sessionIndex, i)}
+                    className="shrink-0 w-5 h-5 rounded-full border border-primary/30 text-primary flex items-center justify-center hover:bg-primary/10 transition-colors"
+                    aria-label={`Ajouter une série à ${ex.name}`}
+                    title="Ajouter une série"
+                  >
+                    <Plus className="w-3 h-3" />
+                  </button>
                 </li>
               ))}
             </ul>
           )}
+          <AddStrengthExerciseDialog onAdd={(exercise) => onAddExercise(weekNumber, sessionIndex, exercise)} triggerLabel="Ajouter un exercice" />
           <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
             <Button onClick={() => setLiveOpen(true)} className="gap-2">
               <PlayCircle className="w-4 h-4" /> Démarrer la séance
@@ -117,6 +135,8 @@ export function DailyWorkoutTab() {
     sendPlanSessionDirectly,
     generateStrengthSession,
     isGeneratingStrength,
+    addStrengthExercise,
+    addStrengthExerciseSet,
     todaysPlanSession,
     todaysPlanSessionIsStrength,
     generateWeekSessions,
@@ -367,6 +387,8 @@ export function DailyWorkoutTab() {
               <Target className="w-3 h-3" /> Semaine {todaysPlanSession.weekNumber} du plan
             </Badge>
           }
+          onAddExercise={addStrengthExercise}
+          onAddExerciseSet={addStrengthExerciseSet}
         />
       </div>
     )
@@ -482,6 +504,8 @@ export function DailyWorkoutTab() {
               </Badge>
             }
             description="Basculée depuis le vélo — la séance muscu déjà prévue cette semaine par le plan, peu importe le jour où elle était datée à l'origine."
+            onAddExercise={addStrengthExercise}
+            onAddExerciseSet={addStrengthExerciseSet}
           />
         ) : (
           <EmptyState
@@ -520,6 +544,8 @@ export function DailyWorkoutTab() {
                 <Sparkles className="w-3 h-3" /> Séance muscu proposée par le coach
               </Badge>
             }
+            onAddExercise={addStrengthExercise}
+            onAddExerciseSet={addStrengthExerciseSet}
           />
           <Button variant="outline" size="sm" onClick={handleProposeStrength} disabled={isGeneratingStrength} className="gap-1.5">
             {isGeneratingStrength ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shuffle className="w-3.5 h-3.5" />}
