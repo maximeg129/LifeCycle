@@ -276,6 +276,46 @@ export interface StrengthSessionValidationSummary {
 /** ≥2 WARN (ou tout BLOCK) → "à revoir"/"bloqué" — même principe que validatePlan, seuil ajusté au nombre de contrôles (7, contre 9 pour le plan). */
 const WARN_THRESHOLD_FOR_REVIEW = 2
 
+// ── Retry côté code — le simple renforcement du texte de prompt s'est
+// avéré insuffisant ────────────────────────────────────────────────────
+//
+// Retour utilisateur, verbatim, après le renforcement de
+// STRENGTH_SESSION_VALIDATION_GUIDANCE (règle 1 : la couverture de
+// patterns prime toujours sur la durée exacte) : "Toutes les séances
+// proposées doivent respecter les principes" — accompagné d'une capture
+// montrant qu'une séance "principale" à 1/6 patterns couverts (donc
+// `overallVerdict: 'blocked'`) avait malgré tout été proposée telle
+// quelle. La preuve directe que l'instruction seule (le modèle peut
+// toujours l'ignorer) ne suffit pas — il fallait un vrai mécanisme côté
+// code, pas seulement une préférence documentée dans le prompt.
+//
+// MAX_STRENGTH_GENERATION_ATTEMPTS/describeBlockedStrengthChecks
+// alimentent une boucle de retry dans use-daily-workout.ts/
+// use-generate-week-sessions.ts : si `overallVerdict === 'blocked'`
+// (donc au moins un contrôle "block" — aujourd'hui uniquement
+// strength-check-1-pattern-coverage/strength-check-7, jamais un simple
+// "warn"), le flow est rappelé avec le détail exact de la violation en
+// feedback, jusqu'à MAX_STRENGTH_GENERATION_ATTEMPTS tentatives au total.
+// Un plafond bas (3) plutôt qu'illimité — un modèle qui échoue 3 fois de
+// suite sur la même contrainte structurelle a peu de chances de réussir à
+// la 10e, et chaque tentative supplémentaire a un coût réel (latence,
+// appel API) : mieux vaut présenter honnêtement l'échec après un nombre
+// borné d'essais (voir le badge "Séance incomplète" déjà existant côté UI)
+// que de faire attendre l'athlète indéfiniment.
+export const MAX_STRENGTH_GENERATION_ATTEMPTS = 3
+
+/**
+ * Réduit un résumé de validation aux seules violations BLOQUANTES
+ * (`verdict: 'block'`) en une instruction corrective compacte, réutilisable
+ * telle quelle comme `retryFeedback` de la tentative suivante. Les `detail`
+ * des contrôles sont déjà rédigés comme des explications actionnables (voir
+ * checkPatternCoverage/checkTimingBeforeKeySession ci-dessus) — jamais une
+ * deuxième formulation de la même règle qui pourrait diverger.
+ */
+export function describeBlockedStrengthChecks(summary: StrengthSessionValidationSummary): string {
+  return summary.results.filter((r) => r.verdict === 'block').map((r) => r.detail).join(' ')
+}
+
 export function validateStrengthSession(input: StrengthSessionValidationInput): StrengthSessionValidationSummary {
   const patterns = input.session.exercises.map((e) => e.pattern)
   const results: PlanCheckResult[] = [

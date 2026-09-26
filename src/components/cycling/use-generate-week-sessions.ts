@@ -34,7 +34,7 @@ import { buildCoachContext } from './coach-context'
 import { planWeekSessions } from '@/ai/flows/plan-week-sessions-flow'
 import { assignSessionDates, assignSessionDatesByAvailability, type PlanWeek, type WeekdayAvailabilityMinutes } from './training-plan-types'
 import { recentStrengthSessionPatterns } from './strength-session-plan-types'
-import { validateStrengthSession } from '@/domain/cycling/validation/strengthSessionValidator'
+import { validateStrengthSession, describeBlockedStrengthChecks, MAX_STRENGTH_GENERATION_ATTEMPTS } from '@/domain/cycling/validation/strengthSessionValidator'
 import { describeActionDispatchError } from '@/lib/utils'
 import { useTrainingPreferences } from './use-training-preferences'
 import type { useCoachMemory } from './use-coach-memory'
@@ -88,88 +88,127 @@ export function useGenerateWeekSessions(deps: GenerateWeekSessionsDeps) {
       // et pour la validation déterministe post-génération ci-dessous.
       const previousStrengthPatterns = recentStrengthSessionPatterns(activePlan.weeks, week.weekNumber)
 
-      const result = await planWeekSessions({
-        weekNumber: week.weekNumber,
-        phase: week.phase,
-        focus: week.focus,
-        targetWeeklyMinutes: week.targetWeeklyMinutes,
-        targetStrengthMinutes: week.targetStrengthMinutes,
-        recentStrengthPatterns: previousStrengthPatterns,
-        notes: week.notes,
-        training: athlete.isConfigured && athlete.data ? {
-          ctl: athlete.data.ctl,
-          atl: athlete.data.atl,
-          tsb: athlete.data.tsb,
-          ftp: athlete.data.ftp,
-          weightKg: athlete.data.weight,
-        } : undefined,
-        coachContext,
-      })
-      if (!result.ok) {
-        toast({ variant: 'destructive', title: "L'IA n'a pas pu générer les séances de la semaine", description: result.error })
-        return false
-      }
-
-      // Retour utilisateur : "une séance qui ne les respecte pas ne doit
-      // jamais être proposée comme séance 'complète'" — vérification
-      // déterministe (S05, strengthSessionValidator.ts) attachée à chaque
-      // séance de musculation générée, jamais une auto-évaluation du
-      // modèle. hoursBeforeNextKeySession reste `null` : les séances de
-      // CETTE semaine n'ont pas encore de date à ce stade (assignSessionDates
-      // tourne juste après, voir plus bas) et croiser le timing avec une
-      // séance clé d'une AUTRE semaine du plan n'est pas câblé — voir
-      // checkTimingBeforeKeySession.
-      const strengthSessionsThisWeek = result.data.sessions.filter((s) => s.sessionKind === 'strength').length
-      const sessionsWithValidation = result.data.sessions.map((session) => {
-        if (session.sessionKind !== 'strength' || !session.strengthPhase) return session
-        const strengthValidation = validateStrengthSession({
-          session: {
-            sessionType: session.sessionType ?? 'principale',
-            strengthPhase: session.strengthPhase,
-            durationMinutes: session.durationMinutes,
-            exercises: session.strengthExercises ?? [],
-          },
-          previousSessionsPatterns: previousStrengthPatterns,
-          weeklyCyclingHours: week.targetWeeklyMinutes / 60,
-          cyclingPhase: week.phase,
-          strengthSessionsThisWeek,
-          hoursBeforeNextKeySession: null,
+      // Retour utilisateur, verbatim, capture d'écran à l'appui : "Toutes
+      // les séances proposées doivent respecter les principes" — après
+      // qu'une séance "principale" à 1/6 patterns couverts (donc
+      // `overallVerdict: 'blocked'`) a malgré tout été proposée telle
+      // quelle, malgré le renforcement du prompt (STRENGTH_SESSION_
+      // VALIDATION_GUIDANCE règle 1, voir CLAUDE.md). Une instruction de
+      // prompt seule reste une préférence que le modèle peut ignorer —
+      // jamais une garantie. Boucle de retry côté code, bornée à
+      // MAX_STRENGTH_GENERATION_ATTEMPTS : tant que la vérification
+      // déterministe S05 (validateStrengthSession, jamais une
+      // auto-évaluation du modèle) BLOQUE la séance de musculation
+      // générée, on rappelle le flow (semaine entière, cycling inclus —
+      // pas de génération partielle possible) avec le détail exact de la
+      // violation en feedback. Si la dernière tentative reste bloquée
+      // malgré tout, on le dit honnêtement (toast) plutôt que de
+      // présenter silencieusement une séance non conforme comme si de
+      // rien n'était — le badge "Séance incomplète" existant
+      // (plan-session-detail.tsx) reste visible sur le résultat final.
+      let retryFeedback: string | undefined
+      for (let attempt = 1; attempt <= MAX_STRENGTH_GENERATION_ATTEMPTS; attempt++) {
+        const result = await planWeekSessions({
+          weekNumber: week.weekNumber,
+          phase: week.phase,
+          focus: week.focus,
+          targetWeeklyMinutes: week.targetWeeklyMinutes,
+          targetStrengthMinutes: week.targetStrengthMinutes,
+          recentStrengthPatterns: previousStrengthPatterns,
+          notes: week.notes,
+          training: athlete.isConfigured && athlete.data ? {
+            ctl: athlete.data.ctl,
+            atl: athlete.data.atl,
+            tsb: athlete.data.tsb,
+            ftp: athlete.data.ftp,
+            weightKg: athlete.data.weight,
+          } : undefined,
+          coachContext,
+          retryFeedback,
         })
-        return { ...session, strengthValidation }
-      })
+        if (!result.ok) {
+          toast({ variant: 'destructive', title: "L'IA n'a pas pu générer les séances de la semaine", description: result.error })
+          return false
+        }
 
-      // Retour utilisateur : "le plan d'entrainement ne devrais t il pas
-      // etre figé avec les seances par jour ?" — chaque séance type obtient
-      // une date déterministe (jamais confiée à l'IA, voir
-      // distributeWeekdayOffsets) dès sa génération, plutôt qu'un
-      // sélecteur de date libre non persisté au moment de l'envoi.
-      //
-      // Retour utilisateur (chantier Frive/Join) : "définir la
-      // disponibilité sur la semaine me paraît intéressant" — quand
-      // l'athlète a configuré au moins un jour de disponibilité non-nul,
-      // les séances sont distribuées selon cette vraie disponibilité
-      // (assignSessionDatesByAvailability) plutôt que l'étalement
-      // mécanique. Jamais l'inverse : un athlète qui n'a pas encore touché
-      // les curseurs (tous à 0, ou champ absent) garde le comportement
-      // existant à l'identique — pas de changement de comportement pour
-      // qui n'a pas opté dans cette préférence.
-      const weeklyAvailability = trainingPrefs.data?.weeklyAvailabilityMinutes
-      const hasConfiguredAvailability = !!weeklyAvailability && weeklyAvailability.length === 7 && weeklyAvailability.some((m) => m > 0)
-      const datedSessions = hasConfiguredAvailability
-        ? assignSessionDatesByAvailability(week, sessionsWithValidation, weeklyAvailability as WeekdayAvailabilityMinutes)
-        : assignSessionDates(week, sessionsWithValidation)
+        // Retour utilisateur : "une séance qui ne les respecte pas ne doit
+        // jamais être proposée comme séance 'complète'" — vérification
+        // déterministe (S05, strengthSessionValidator.ts) attachée à chaque
+        // séance de musculation générée, jamais une auto-évaluation du
+        // modèle. hoursBeforeNextKeySession reste `null` : les séances de
+        // CETTE semaine n'ont pas encore de date à ce stade (assignSessionDates
+        // tourne juste après, voir plus bas) et croiser le timing avec une
+        // séance clé d'une AUTRE semaine du plan n'est pas câblé — voir
+        // checkTimingBeforeKeySession.
+        const strengthSessionsThisWeek = result.data.sessions.filter((s) => s.sessionKind === 'strength').length
+        // Capturé pendant le .map() plutôt que retrouvé après coup via
+        // .find() : les séances "cycling" ne portent PAS du tout la clé
+        // strengthValidation (jamais même `undefined` — Firestore
+        // updateDoc rejette les valeurs undefined explicites), donc le
+        // tableau résultant a un type union que .find() ne peut pas
+        // sonder proprement pour cette clé.
+        let blockedFeedback: string | undefined
+        const sessionsWithValidation = result.data.sessions.map((session) => {
+          if (session.sessionKind !== 'strength' || !session.strengthPhase) return session
+          const strengthValidation = validateStrengthSession({
+            session: {
+              sessionType: session.sessionType ?? 'principale',
+              strengthPhase: session.strengthPhase,
+              durationMinutes: session.durationMinutes,
+              exercises: session.strengthExercises ?? [],
+            },
+            previousSessionsPatterns: previousStrengthPatterns,
+            weeklyCyclingHours: week.targetWeeklyMinutes / 60,
+            cyclingPhase: week.phase,
+            strengthSessionsThisWeek,
+            hoursBeforeNextKeySession: null,
+          })
+          if (strengthValidation.overallVerdict === 'blocked') {
+            blockedFeedback = describeBlockedStrengthChecks(strengthValidation)
+          }
+          return { ...session, strengthValidation }
+        })
 
-      const weeks = activePlan.weeks.map((w) =>
-        w.weekNumber === week.weekNumber ? { ...w, sampleSessions: datedSessions } : w
-      )
-      const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
-      try {
-        await updateDoc(ref, { weeks })
-      } catch {
-        errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
-        return false
+        if (blockedFeedback) {
+          retryFeedback = blockedFeedback
+          if (attempt < MAX_STRENGTH_GENERATION_ATTEMPTS) continue
+          toast({ variant: 'destructive', title: 'Séances de la semaine générées mais musculation incomplète', description: `Après ${MAX_STRENGTH_GENERATION_ATTEMPTS} tentatives, le coach IA n'a pas réussi à respecter entièrement la grille S05 pour la séance de musculation (${retryFeedback}) — vérifiez le point de vigilance avant de l'utiliser.` })
+        }
+
+        // Retour utilisateur : "le plan d'entrainement ne devrais t il pas
+        // etre figé avec les seances par jour ?" — chaque séance type obtient
+        // une date déterministe (jamais confiée à l'IA, voir
+        // distributeWeekdayOffsets) dès sa génération, plutôt qu'un
+        // sélecteur de date libre non persisté au moment de l'envoi.
+        //
+        // Retour utilisateur (chantier Frive/Join) : "définir la
+        // disponibilité sur la semaine me paraît intéressant" — quand
+        // l'athlète a configuré au moins un jour de disponibilité non-nul,
+        // les séances sont distribuées selon cette vraie disponibilité
+        // (assignSessionDatesByAvailability) plutôt que l'étalement
+        // mécanique. Jamais l'inverse : un athlète qui n'a pas encore touché
+        // les curseurs (tous à 0, ou champ absent) garde le comportement
+        // existant à l'identique — pas de changement de comportement pour
+        // qui n'a pas opté dans cette préférence.
+        const weeklyAvailability = trainingPrefs.data?.weeklyAvailabilityMinutes
+        const hasConfiguredAvailability = !!weeklyAvailability && weeklyAvailability.length === 7 && weeklyAvailability.some((m) => m > 0)
+        const datedSessions = hasConfiguredAvailability
+          ? assignSessionDatesByAvailability(week, sessionsWithValidation, weeklyAvailability as WeekdayAvailabilityMinutes)
+          : assignSessionDates(week, sessionsWithValidation)
+
+        const weeks = activePlan.weeks.map((w) =>
+          w.weekNumber === week.weekNumber ? { ...w, sampleSessions: datedSessions } : w
+        )
+        const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
+        try {
+          await updateDoc(ref, { weeks })
+        } catch {
+          errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+          return false
+        }
+        return true
       }
-      return true
+      return false
     } catch (e) {
       toast({ variant: 'destructive', title: "L'IA n'a pas pu générer les séances de la semaine", description: describeActionDispatchError(e) })
       return false

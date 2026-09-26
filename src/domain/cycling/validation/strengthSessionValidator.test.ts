@@ -8,6 +8,7 @@ import {
   checkWeeklyStrengthFrequency,
   checkTimingBeforeKeySession,
   validateStrengthSession,
+  describeBlockedStrengthChecks,
   type MovementPattern,
   type StrengthExerciseForValidation,
   type StrengthSessionValidationInput,
@@ -288,5 +289,55 @@ describe('validateStrengthSession', () => {
       },
     })
     expect(summary.overallVerdict).toBe('to-review')
+  })
+})
+
+// ── describeBlockedStrengthChecks — retour utilisateur, verbatim, capture
+// d'écran à l'appui : "Toutes les séances proposées doivent respecter les
+// principes" — après qu'une séance "principale" à 1/6 patterns couverts
+// ait malgré tout été proposée telle quelle, malgré le renforcement du
+// prompt seul (voir CLAUDE.md). Cette fonction alimente la boucle de
+// retry côté code (use-daily-workout.ts/use-generate-week-sessions.ts) —
+// vérifie qu'elle réduit bien un résumé à SEULEMENT ses violations
+// bloquantes, jamais les warn/insufficient_data qui n'ont pas besoin
+// d'un retry.
+describe('describeBlockedStrengthChecks', () => {
+  const baseInput: StrengthSessionValidationInput = {
+    session: {
+      sessionType: 'principale',
+      strengthPhase: 'base',
+      durationMinutes: 45,
+      exercises: [ex({ pattern: 'hip-hinge' }), ex({ pattern: 'unilateral' })],
+    },
+    previousSessionsPatterns: [],
+    weeklyCyclingHours: 8,
+    cyclingPhase: 'build',
+    strengthSessionsThisWeek: 1,
+    hoursBeforeNextKeySession: null,
+  }
+
+  it('returns only the "block" verdicts\' detail text, joined', () => {
+    const summary = validateStrengthSession(baseInput)
+    expect(summary.overallVerdict).toBe('blocked')
+    const feedback = describeBlockedStrengthChecks(summary)
+    expect(feedback).toContain('Bilatéral lourd absent')
+    expect(feedback).not.toContain('hip-hinge')
+  })
+
+  it('returns an empty string for a fully compliant session (nothing to retry)', () => {
+    const summary = validateStrengthSession({
+      ...baseInput,
+      session: {
+        ...baseInput.session,
+        exercises: [
+          ex({ pattern: 'bilateral-heavy' }),
+          ex({ pattern: 'hip-hinge' }),
+          ex({ pattern: 'unilateral' }),
+          ex({ pattern: 'anti-extension' }),
+        ],
+      },
+    })
+    expect(summary.overallVerdict).toBe('ok')
+    expect(describeBlockedStrengthChecks(summary)).toBe('')
   })
 })

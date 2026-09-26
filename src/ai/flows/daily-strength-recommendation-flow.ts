@@ -50,6 +50,7 @@ const DailyStrengthRecommendationInputSchema = z.object({
     readiness: z.number().optional().describe('0-100, formule transparente sleep/stress/mood/HRV/FC repos déjà calculée côté app.'),
   }).optional().describe('Récupération de la nuit passée — une mauvaise récupération doit réduire le volume/l\'intensité de CETTE séance (favoriser sessionType "entretien" plutôt que "principale"), même principe que dailyWorkoutRecommendation côté vélo.'),
   coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, lifestyle, goals, remembered facts, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
+  retryFeedback: z.string().optional().describe('Présent uniquement lors d\'un nouvel appel après qu\'une tentative précédente a été rejetée par la vérification déterministe S05 (voir strengthSessionValidator.ts) — décrit EXACTEMENT la violation bloquante à corriger cette fois (ex. couverture de patterns insuffisante). Absent au premier appel.'),
 }).describe('Input for the daily strength recommendation flow.');
 
 export type DailyStrengthRecommendationInput = z.infer<typeof DailyStrengthRecommendationInputSchema>;
@@ -80,6 +81,15 @@ export async function dailyStrengthRecommendation(input: DailyStrengthRecommenda
       ? `DURÉE INDICATIVE : ${parsedInput.suggestedDurationMinutes} minutes (volume typique de la séance muscu déjà prévue cette semaine — s'en approcher, ±20%, sauf si la récupération du jour justifie clairement de réduire).`
       : 'DURÉE INDICATIVE : aucune — choisis une durée raisonnable (30-60 minutes) selon la phase et la récupération.',
   ];
+  // Retour utilisateur : "Toutes les séances proposées doivent respecter
+  // les principes" — renforcer le texte de STRENGTH_SESSION_VALIDATION_GUIDANCE
+  // seul s'est avéré insuffisant (une séance à 1/6 patterns couverts a
+  // quand même été proposée). Ce bloc n'apparaît que sur un retry côté
+  // code (voir use-daily-workout.ts, MAX_STRENGTH_GENERATION_ATTEMPTS) —
+  // placé en tête du message pour rester la toute première chose lue.
+  if (parsedInput.retryFeedback) {
+    sections.unshift(`⚠️ TA PROPOSITION PRÉCÉDENTE A ÉTÉ REJETÉE PAR LA VÉRIFICATION AUTOMATIQUE S05 : ${parsedInput.retryFeedback} — corrige IMPÉRATIVEMENT ce point précis dans cette nouvelle proposition (quitte à changer plusieurs exercices), le reste peut rester similaire.`);
+  }
 
   const recentPatterns = parsedInput.recentStrengthPatterns ?? [];
   sections.push(

@@ -40,6 +40,7 @@ const PlanWeekSessionsInputSchema = z.object({
     weightKg: z.number().optional().describe('Athlete weight (kg), from Intervals.icu.'),
   }).optional().describe('Current Intervals.icu training load and physiological reference values, if connected — general context, not a same-day snapshot.'),
   coachContext: z.string().optional().describe('Structured Coach Memory context block (injuries, lifestyle, goals, remembered facts, kJ budget, internal load governor) — prefixed to the system prompt when present.'),
+  retryFeedback: z.string().optional().describe('Présent uniquement lors d\'un nouvel appel après qu\'une séance de musculation de la tentative précédente a été rejetée par la vérification déterministe S05 (voir strengthSessionValidator.ts) — décrit EXACTEMENT la violation bloquante à corriger cette fois. Absent au premier appel ; sans rapport avec les séances cycling, qui ne sont jamais concernées par ce mécanisme.'),
 }).describe('Input for the plan week sample sessions flow.');
 
 export type PlanWeekSessionsInput = z.infer<typeof PlanWeekSessionsInputSchema>;
@@ -82,6 +83,14 @@ export async function planWeekSessions(input: PlanWeekSessionsInput): Promise<Fl
     `VOLUME CIBLE DE LA SEMAINE : ${parsedInput.targetWeeklyMinutes} minutes`,
     `SPORT PRÉFÉRÉ : ${parsedInput.sportType || 'Ride'}`,
   ];
+  // Retour utilisateur : "Toutes les séances proposées doivent respecter
+  // les principes" — renforcer le texte de STRENGTH_SESSION_VALIDATION_GUIDANCE
+  // seul s'est avéré insuffisant. Ce bloc n'apparaît que sur un retry côté
+  // code (voir use-generate-week-sessions.ts, MAX_STRENGTH_GENERATION_ATTEMPTS)
+  // — placé en tête du message pour rester la toute première chose lue.
+  if (parsedInput.retryFeedback) {
+    sections.unshift(`⚠️ LA SÉANCE DE MUSCULATION DE TA PROPOSITION PRÉCÉDENTE A ÉTÉ REJETÉE PAR LA VÉRIFICATION AUTOMATIQUE S05 : ${parsedInput.retryFeedback} — corrige IMPÉRATIVEMENT ce point précis dans la nouvelle séance de musculation (quitte à changer plusieurs exercices) ; garde les séances cycling similaires, elles ne sont pas concernées.`);
+  }
   if (parsedInput.notes) sections.push(`NOTE SPÉCIFIQUE À CETTE SEMAINE : ${parsedInput.notes}`);
   if (parsedInput.targetStrengthMinutes != null) {
     sections.push(`MUSCULATION DEMANDÉE POUR CE PLAN : INCLURE_MUSCULATION=true — volume cible cette semaine : ${parsedInput.targetStrengthMinutes} minutes, séparé du volume vélo ci-dessus.`);

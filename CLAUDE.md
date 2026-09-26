@@ -3253,6 +3253,81 @@ précédents (`sessionLocationAdjustment`, RPE bas...), aucune reproduction rée
 sandbox (pas d'`ANTHROPIC_API_KEY`) — à confirmer par l'utilisateur à la prochaine génération d'une
 séance de musculation.
 
+## Musculation : retry côté code quand la grille S05 est bloquée — le prompt seul ne suffisait pas
+
+Retour utilisateur, capture d'écran à l'appui, confirmant que le correctif précédent n'a PAS
+fonctionné : "Toutes les séances proposées doivent respecter les principes, ici le message que ça
+me donne quand je demande une séance de muscu : Séance incomplète — ne respecte pas la grille S05 /
+1/6 patterns couverts — minimum 4 requis pour une séance 'principale' (S05 §1)." Une séance
+"principale" a donc bien été proposée avec un seul pattern de mouvement couvert, malgré le
+renforcement de `STRENGTH_SESSION_VALIDATION_GUIDANCE` (règle 1, voir section juste au-dessus) —
+preuve directe en conditions réelles que renforcer le TEXTE du prompt reste une préférence que le
+modèle peut ignorer, jamais une garantie.
+
+**Diagnostic** — le "double garde-fou" déjà en place (modèle instruit + `validateStrengthSession()`
+qui vérifie après coup, voir le commentaire de tête de `strengthSessionValidator.ts`) s'arrêtait à
+mi-chemin : `strengthValidation`/`overallVerdict` étaient bien calculés après chaque génération,
+mais UNIQUEMENT consommés par `plan-session-detail.tsx` comme un badge d'avertissement passif
+("Séance incomplète — ne respecte pas la grille S05", exactement le texte du screenshot) — jamais
+utilisés pour redemander une génération, jamais de retry. Une fois la séance générée, elle était
+persistée et affichée telle quelle, `overallVerdict: 'blocked'` ou non ; les boutons "Envoyer sur
+Intervals.icu"/"Démarrer la séance" restaient d'ailleurs eux aussi totalement indifférents au
+verdict (vérifié dans `plan-session-detail.tsx` : ni l'un ni l'autre n'a de `disabled` conditionné
+par `overallVerdict`). Le garde-fou "vérifie" existait bien, mais rien n'agissait sur son résultat.
+
+**Correctif — une vraie boucle de retry côté code, avec feedback correctif ciblé** :
+- **`MAX_STRENGTH_GENERATION_ATTEMPTS = 3`**/**`describeBlockedStrengthChecks()`**
+  (`strengthSessionValidator.ts`) — un plafond bas (1 tentative initiale + 2 retries) plutôt
+  qu'illimité : un modèle qui échoue 3 fois de suite sur la même contrainte structurelle (couverture
+  de patterns, délai avant une séance clé — les deux SEULS contrôles S05 qui produisent un verdict
+  `'block'` aujourd'hui) a peu de chances de réussir à la 10e tentative, et chaque appel
+  supplémentaire a un coût réel (latence, appel API). `describeBlockedStrengthChecks()` réduit un
+  `StrengthSessionValidationSummary` aux seuls `results` de verdict `'block'` (jamais les simples
+  `'warn'`, qui restent un point de vigilance affiché mais pas un motif de retry) — réutilise les
+  `detail` déjà rédigés comme des explications actionnables par `checkPatternCoverage`/
+  `checkTimingBeforeKeySession`, jamais une deuxième formulation qui pourrait diverger.
+- **`retryFeedback` — nouveau champ optionnel** sur l'input de `dailyStrengthRecommendation` ET
+  `planWeekSessions` (`daily-strength-recommendation-flow.ts`/`plan-week-sessions-flow.ts`) — placé
+  en TOUTE PREMIÈRE section du message utilisateur (`sections.unshift(...)`, jamais juste ajouté à
+  la suite) sur un retry, avec le détail exact de la violation bloquante et une instruction
+  impérative de la corriger "quitte à changer plusieurs exercices". Absent au premier appel — le
+  prompt de base (guidance qualitative) reste inchangé, ce champ n'ajoute qu'une correction ciblée
+  quand la vérification déterministe a déjà échoué une fois.
+- **Boucle appelante** (`use-daily-workout.ts`'s `generateStrengthSession()` — le chemin EXACT
+  derrière le bouton "Proposer une séance de muscu", donc très probablement celui du screenshot de
+  l'utilisateur — et `use-generate-week-sessions.ts`'s `generateWeekSessions()`, la génération d'une
+  semaine complète) : appelle le flow, calcule `strengthValidation` comme avant, et si
+  `overallVerdict === 'blocked'`, rappelle le flow avec `retryFeedback` = la description de la
+  violation, jusqu'à épuisement du plafond. Pour `generateWeekSessions` (qui produit vélo + muscu
+  dans le MÊME appel, pas de génération partielle possible), toute la semaine est régénérée à chaque
+  retry — un coût accepté, borné par le même plafond de 3, plutôt qu'une architecture à deux appels
+  séparés qui aurait dupliqué la logique de composition de la semaine.
+- **Échec honnête après épuisement du plafond** — si la DERNIÈRE tentative reste `'blocked'`, un
+  toast destructif le dit explicitement ("Après 3 tentatives, le coach IA n'a pas réussi à respecter
+  entièrement la grille S05 (<détail de la violation>) — vérifiez le point de vigilance avant de
+  l'utiliser.") plutôt que de laisser l'athlète découvrir seul le badge d'avertissement déjà existant
+  sans explication de ce qui a été tenté. La séance est malgré tout persistée/affichée (jamais un
+  échec bloquant total qui empêcherait l'athlète d'avoir NE SERAIT-CE QU'une proposition, même
+  imparfaite, à ajuster lui-même) — le badge "Séance incomplète" existant reste le signal permanent
+  une fois affichée.
+- **Volontairement PAS de retry sur un échec de flow (`result.ok === false`)** — un échec réseau/de
+  parsing JSON est un problème différent (voir `generateJson`/`FlowResult`) qui remonte
+  immédiatement à l'utilisateur comme avant ce correctif ; retenter automatiquement une erreur
+  d'API aurait pu masquer un vrai problème (clé API invalide, service indisponible) derrière un
+  délai supplémentaire, pour un scénario que ce chantier ne visait pas.
+- **Pas de retry sur `'to-review'`** (≥2 `'warn'`, jamais un `'block'`) — seul `overallVerdict ===
+  'blocked'` déclenche un retry, cohérent avec le texte du badge lui-même qui distingue "Séance
+  incomplète" (bloqué) de "À vérifier" (à revoir) : un simple point de vigilance à examiner reste
+  acceptable en une seule tentative, comme avant ce correctif.
+
+Tests (`strengthSessionValidator.test.ts`, 2 nouveaux pour `describeBlockedStrengthChecks` — réduit
+bien aux seules violations bloquantes, chaîne vide pour une séance conforme) — 908/908 au total,
+tsc/eslint/build clean. Comme documenté dans la section précédente, ce correctif ne peut toujours
+pas être exercé en direct dans ce sandbox (pas d'`ANTHROPIC_API_KEY`) — mais contrairement au simple
+renforcement de texte de prompt (déjà prouvé insuffisant une fois), ce mécanisme ne dépend plus
+seulement de l'obéissance du modèle : soit une tentative parmi 3 finit par produire une séance
+conforme, soit l'échec est signalé honnêtement plutôt que silencieusement toléré.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
