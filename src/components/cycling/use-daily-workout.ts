@@ -28,11 +28,11 @@ import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/en
 import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { buildCoachContext } from './coach-context'
 import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
-import { dailyStrengthRecommendation } from '@/ai/flows/daily-strength-recommendation-flow'
+import { dailyStrengthRecommendation, type DailyStrengthRecommendationOutput } from '@/ai/flows/daily-strength-recommendation-flow'
 import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload, signalToTrendLabel } from './daily-workout-types'
 import { currentPlanWeek, planSessionExternalId, matchSessionCompletion, findWeekStrengthSession, type PlanWeek, type SessionCompletion, type PlanWeekSessionWithValidation } from './training-plan-types'
 import { recentStrengthSessionPatterns } from './strength-session-plan-types'
-import { validateStrengthSession } from '@/domain/cycling/validation/strengthSessionValidator'
+import { validateStrengthSession, describeBlockedStrengthChecks, MAX_STRENGTH_GENERATION_ATTEMPTS } from '@/domain/cycling/validation/strengthSessionValidator'
 import { useGenerateWeekSessions } from './use-generate-week-sessions'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { describeActionDispatchError } from '@/lib/utils'
@@ -428,55 +428,82 @@ export function useDailyWorkout() {
       // filtre strictement < beforeWeekNumber.
       const previousStrengthPatterns = recentStrengthSessionPatterns(activePlan.weeks, planWeek.weekNumber + 1)
 
-      const result = await dailyStrengthRecommendation({
-        date: todayId,
-        weekNumber: planWeek.weekNumber,
-        phase: planWeek.phase,
-        focus: planWeek.focus,
-        suggestedDurationMinutes: existingWeekStrength?.session.durationMinutes,
-        recentStrengthPatterns: previousStrengthPatterns,
-        training: athlete.isConfigured && athlete.data ? {
-          ctl: athlete.data.ctl,
-          atl: athlete.data.atl,
-          tsb: athlete.data.tsb,
-          ftp: athlete.data.ftp,
-          weightKg: athlete.data.weight,
-        } : undefined,
-        recovery: lifestyle.latest ? {
-          sleepHours: lifestyle.latest.sleepHours,
-          sleepQuality: lifestyle.latest.sleepQuality,
-          hrv: lifestyle.latest.hrv,
-          hrvTrend: signalToTrendLabel(governor.signals.hrvTrend),
-          restingHR: lifestyle.latest.restingHR,
-          restingHRTrend: signalToTrendLabel(governor.signals.restingHR),
-          readiness: lifestyle.readiness ?? undefined,
-        } : undefined,
-        coachContext,
-      })
-      if (!result.ok) {
-        toast({ variant: 'destructive', title: "L'IA n'a pas pu proposer de séance de musculation", description: result.error })
-        return null
-      }
-      const output = result.data.session
-
       const existingSessions = planWeek.sampleSessions ?? []
       // Séances muscu déjà présentes cette semaine, celle qu'on régénère
       // (existingIndex) exclue de son propre décompte pour ne pas se
       // compter deux fois.
       const strengthSessionsThisWeek = existingSessions.filter((s, i) => s.sessionKind === 'strength' && i !== existingIndex).length + 1
-      const strengthValidation = validateStrengthSession({
-        session: {
-          sessionType: output.sessionType,
-          strengthPhase: output.strengthPhase,
-          durationMinutes: output.durationMinutes,
-          exercises: output.strengthExercises,
-        },
-        previousSessionsPatterns: previousStrengthPatterns,
-        weeklyCyclingHours: planWeek.targetWeeklyMinutes / 60,
-        cyclingPhase: planWeek.phase,
-        strengthSessionsThisWeek,
-        hoursBeforeNextKeySession: null,
-      })
+
+      // Retour utilisateur, verbatim, capture d'écran à l'appui : "Toutes
+      // les séances proposées doivent respecter les principes" — après une
+      // séance "principale" générée à seulement 1/6 patterns couverts
+      // malgré le renforcement du prompt (STRENGTH_SESSION_VALIDATION_GUIDANCE
+      // règle 1, voir CLAUDE.md). Une instruction de prompt seule reste une
+      // préférence que le modèle peut ignorer — jamais une garantie. Boucle
+      // de retry côté code : tant que la vérification déterministe S05
+      // (validateStrengthSession, jamais une auto-évaluation du modèle)
+      // BLOQUE la séance, on rappelle le flow avec le détail exact de la
+      // violation en feedback, jusqu'à MAX_STRENGTH_GENERATION_ATTEMPTS
+      // tentatives. Si la dernière tentative reste bloquée malgré tout, on
+      // le dit honnêtement (toast) plutôt que de présenter silencieusement
+      // une séance non conforme comme si de rien n'était — le badge
+      // "Séance incomplète" existant (plan-session-detail.tsx) reste visible
+      // sur le résultat final.
+      let output: DailyStrengthRecommendationOutput['session'] | null = null
+      let strengthValidation: ReturnType<typeof validateStrengthSession> | null = null
+      let retryFeedback: string | undefined
+      for (let attempt = 1; attempt <= MAX_STRENGTH_GENERATION_ATTEMPTS; attempt++) {
+        const result = await dailyStrengthRecommendation({
+          date: todayId,
+          weekNumber: planWeek.weekNumber,
+          phase: planWeek.phase,
+          focus: planWeek.focus,
+          suggestedDurationMinutes: existingWeekStrength?.session.durationMinutes,
+          recentStrengthPatterns: previousStrengthPatterns,
+          training: athlete.isConfigured && athlete.data ? {
+            ctl: athlete.data.ctl,
+            atl: athlete.data.atl,
+            tsb: athlete.data.tsb,
+            ftp: athlete.data.ftp,
+            weightKg: athlete.data.weight,
+          } : undefined,
+          recovery: lifestyle.latest ? {
+            sleepHours: lifestyle.latest.sleepHours,
+            sleepQuality: lifestyle.latest.sleepQuality,
+            hrv: lifestyle.latest.hrv,
+            hrvTrend: signalToTrendLabel(governor.signals.hrvTrend),
+            restingHR: lifestyle.latest.restingHR,
+            restingHRTrend: signalToTrendLabel(governor.signals.restingHR),
+            readiness: lifestyle.readiness ?? undefined,
+          } : undefined,
+          coachContext,
+          retryFeedback,
+        })
+        if (!result.ok) {
+          toast({ variant: 'destructive', title: "L'IA n'a pas pu proposer de séance de musculation", description: result.error })
+          return null
+        }
+        output = result.data.session
+        strengthValidation = validateStrengthSession({
+          session: {
+            sessionType: output.sessionType,
+            strengthPhase: output.strengthPhase,
+            durationMinutes: output.durationMinutes,
+            exercises: output.strengthExercises,
+          },
+          previousSessionsPatterns: previousStrengthPatterns,
+          weeklyCyclingHours: planWeek.targetWeeklyMinutes / 60,
+          cyclingPhase: planWeek.phase,
+          strengthSessionsThisWeek,
+          hoursBeforeNextKeySession: null,
+        })
+        if (strengthValidation.overallVerdict !== 'blocked') break
+        retryFeedback = describeBlockedStrengthChecks(strengthValidation)
+        if (attempt === MAX_STRENGTH_GENERATION_ATTEMPTS) {
+          toast({ variant: 'destructive', title: 'Séance de musculation générée mais incomplète', description: `Après ${MAX_STRENGTH_GENERATION_ATTEMPTS} tentatives, le coach IA n'a pas réussi à respecter entièrement la grille S05 (${retryFeedback}) — vérifiez le point de vigilance avant de l'utiliser.` })
+        }
+      }
+      if (!output || !strengthValidation) return null
 
       const newSession: PlanWeekSessionWithValidation = {
         sessionKind: 'strength',
