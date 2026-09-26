@@ -30,7 +30,8 @@ import { buildCoachContext } from './coach-context'
 import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { dailyStrengthRecommendation, type DailyStrengthRecommendationOutput } from '@/ai/flows/daily-strength-recommendation-flow'
 import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload, signalToTrendLabel } from './daily-workout-types'
-import { currentPlanWeek, planSessionExternalId, matchSessionCompletion, findWeekStrengthSession, type PlanWeek, type SessionCompletion, type PlanWeekSessionWithValidation } from './training-plan-types'
+import { currentPlanWeek, planSessionExternalId, matchSessionCompletion, findWeekStrengthSession, withExerciseAdded, withExerciseSetsAdjusted, type PlanWeek, type SessionCompletion, type PlanWeekSessionWithValidation } from './training-plan-types'
+import type { StrengthExercise } from '@/ai/flows/strength-exercise-schema'
 import { recentStrengthSessionPatterns } from './strength-session-plan-types'
 import { validateStrengthSession, describeBlockedStrengthChecks, MAX_STRENGTH_GENERATION_ATTEMPTS } from '@/domain/cycling/validation/strengthSessionValidator'
 import { useGenerateWeekSessions } from './use-generate-week-sessions'
@@ -543,6 +544,41 @@ export function useDailyWorkout() {
     }
   }, [user, db, activePlan, planWeek, todayId, memory.injuries, memory.lifestyle, memory.goals, memory.rememberedFacts, budget.realized, budget.target, budget.baseline, budget.trend, budget.exceedsThresholdKJPerKg, governor.status, governor.trainingLoad, governor.signals.hrvTrend, governor.signals.restingHR, enduranceIndex, criticalPowerModel, athlete.isConfigured, athlete.data, lifestyle.latest, lifestyle.readiness, toast])
 
+  // Retour utilisateur : "il faudrait pouvoir rajouter des exercices, et
+  // des tour pour chaque exercice dans la musculation" — AVANT de démarrer
+  // le suivi en direct (le pendant EN DIRECT vit dans
+  // live-strength-session-view.tsx, un état local jamais réécrit ici).
+  // Mêmes deux mutateurs qu'use-training-plan.ts (moveSessionDate/
+  // adjustSessionForLocation) : mapper sur weeks via les helpers purs de
+  // training-plan-types.ts, updateDoc, jamais une deuxième structure de
+  // mutation pour éditer une séance du plan.
+  const addStrengthExercise = useCallback(async (weekNumber: number, sessionIndex: number, exercise: StrengthExercise): Promise<boolean> => {
+    if (!user || !db || !activePlan) return false
+    const weeks = withExerciseAdded(activePlan.weeks, weekNumber, sessionIndex, exercise)
+    const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
+    try {
+      await updateDoc(ref, { weeks })
+      return true
+    } catch {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+      return false
+    }
+  }, [user, db, activePlan])
+
+  /** Pendant "avant de démarrer" de l'ajout de série en direct — ajuste `sets` d'UN exercice déjà présent. */
+  const addStrengthExerciseSet = useCallback(async (weekNumber: number, sessionIndex: number, exerciseIndex: number): Promise<boolean> => {
+    if (!user || !db || !activePlan) return false
+    const weeks = withExerciseSetsAdjusted(activePlan.weeks, weekNumber, sessionIndex, exerciseIndex, 1)
+    const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
+    try {
+      await updateDoc(ref, { weeks })
+      return true
+    } catch {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+      return false
+    }
+  }, [user, db, activePlan])
+
   return {
     stored: stored?.proposal ?? null,
     storedAvailableMinutes: stored?.availableMinutes ?? null,
@@ -570,6 +606,8 @@ export function useDailyWorkout() {
     sendPlanSessionDirectly,
     generateStrengthSession,
     isGeneratingStrength,
+    addStrengthExercise,
+    addStrengthExerciseSet,
     generateWeekSessions,
     generatingSessionsForWeek,
   }

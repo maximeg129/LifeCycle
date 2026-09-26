@@ -15,15 +15,17 @@ import { useState } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Loader2, Send, Apple, Dumbbell, PlayCircle, CheckCircle2, XCircle, ShieldAlert, CalendarClock, ExternalLink, Sparkles, Home, Bike } from 'lucide-react'
+import { Loader2, Send, Apple, Dumbbell, PlayCircle, CheckCircle2, XCircle, ShieldAlert, CalendarClock, ExternalLink, Sparkles, Home, Bike, Plus } from 'lucide-react'
 import { addDays, format } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { LogStrengthSessionDialog } from './log-strength-session-dialog'
 import { LiveStrengthSessionView } from './live-strength-session-view'
 import { WorkoutProfileChart } from './workout-profile-chart'
+import { AddStrengthExerciseDialog } from './add-strength-exercise-dialog'
 import { RideAnalysisDialog } from '@/components/coach/ride-analysis-dialog'
 import { nextAvailableWeekDate, type PlanWeek, type PlanWeekSessionWithValidation, type SessionCompletion } from './training-plan-types'
+import type { StrengthExercise } from '@/ai/flows/strength-exercise-schema'
 
 interface Props {
   session: PlanWeekSessionWithValidation
@@ -39,9 +41,12 @@ interface Props {
   /** Bascule intérieur/extérieur avec régénération réelle du script — chantier Frive/Join, voir use-training-plan.ts (adjustSessionForLocation). */
   isAdjustingLocation: boolean
   onAdjustLocation: (targetLocation: 'indoor' | 'outdoor') => void
+  /** Retour utilisateur : "il faudrait pouvoir rajouter des exercices, et des tour pour chaque exercice dans la musculation" — AVANT de démarrer le suivi en direct (le pendant EN DIRECT vit dans live-strength-session-view.tsx). */
+  onAddExercise: (exercise: StrengthExercise) => void
+  onAddExerciseSet: (exerciseIndex: number) => void
 }
 
-export function PlanSessionDetail({ session, index, week, completion, today, isSending, canSendToIntervals, onSend, onMoveDate, isAdjustingLocation, onAdjustLocation }: Props) {
+export function PlanSessionDetail({ session, index, week, completion, today, isSending, canSendToIntervals, onSend, onMoveDate, isAdjustingLocation, onAdjustLocation, onAddExercise, onAddExerciseSet }: Props) {
   // Retour utilisateur : "un système de suivi de la seance a la salle, avec
   // chronometre, temps de repos" — vue plein écran gardée en state local
   // plutôt qu'un Dialog. Local à CETTE carte (pas au niveau semaine comme
@@ -191,15 +196,30 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
       {session.sessionKind === 'strength' && session.strengthExercises && session.strengthExercises.length > 0 && (
         <div className="flex items-start gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20 text-xs">
           <Dumbbell className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-          <ul className="space-y-0.5">
+          <ul className="space-y-1 flex-1 min-w-0">
             {session.strengthExercises.map((ex, exIndex) => (
-              <li key={exIndex}>
-                <span className="font-medium">{ex.name}</span> : {ex.sets}x{ex.reps} — {ex.loadGuidance}
-                {ex.restSeconds ? ` (repos ${ex.restSeconds}s)` : ''}
+              <li key={exIndex} className="flex items-center gap-1.5">
+                <span className="flex-1 min-w-0">
+                  <span className="font-medium">{ex.name}</span> : {ex.sets}x{ex.reps} — {ex.loadGuidance}
+                  {ex.restSeconds ? ` (repos ${ex.restSeconds}s)` : ''}
+                </span>
+                {/* Retour utilisateur : "des tour pour chaque exercice" — +1 série AVANT de démarrer, même geste qu'en direct (live-strength-session-view.tsx) mais persisté dans le plan. */}
+                <button
+                  type="button"
+                  onClick={() => onAddExerciseSet(exIndex)}
+                  className="shrink-0 w-5 h-5 rounded-full border border-primary/30 text-primary flex items-center justify-center hover:bg-primary/10 transition-colors"
+                  aria-label={`Ajouter une série à ${ex.name}`}
+                  title="Ajouter une série"
+                >
+                  <Plus className="w-3 h-3" />
+                </button>
               </li>
             ))}
           </ul>
         </div>
+      )}
+      {session.sessionKind === 'strength' && (
+        <AddStrengthExerciseDialog onAdd={onAddExercise} triggerLabel="Ajouter un exercice" />
       )}
       {session.sessionKind === 'strength' && session.strengthValidation?.isMaintenanceOnly && (
         <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 bg-amber-500/5 w-fit">

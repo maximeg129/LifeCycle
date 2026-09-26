@@ -229,19 +229,28 @@ export function parseDurationInput(text: string): number {
 export const STRENGTH_DRAFT_MAX_AGE_MS = 12 * 60 * 60 * 1000
 
 /**
- * Un brouillon n'est réutilisable que s'il est assez récent ET qu'il
- * correspond bien à la même liste d'exercices que la séance actuellement
+ * Un brouillon n'est réutilisable que s'il est assez récent ET que ses
+ * exercices commencent bien par la même liste que la séance actuellement
  * ouverte (empreinte par nom, insensible à la casse/aux espaces — même
  * convention que exerciseHistory ci-dessus). Le deuxième cas couvre une
  * séance régénérée ("Régénérer" dans le Plan) entre la sauvegarde du
  * brouillon et la réouverture : restaurer un suivi de séries pour des
  * exercices qui n'existent plus n'aurait aucun sens.
+ *
+ * `currentBaseExerciseNames` est la liste de la séance TELLE QUE PRÉVUE par
+ * le plan/l'IA (session.strengthExercises), SANS les exercices ajoutés
+ * manuellement en direct — retour utilisateur : "il faudrait pouvoir
+ * rajouter des exercices... dans la musculation" (live-strength-session-
+ * view.tsx). Au moment de lire le brouillon, on ne sait pas encore combien
+ * d'exercices manuels il contenait — le brouillon peut donc légitimement en
+ * porter PLUS que la base actuelle (préfixe identique + le reste en plus),
+ * jamais moins ni un préfixe différent.
  */
-export function isDraftUsable(draftSavedAt: number, draftExerciseNames: string[], currentExerciseNames: string[], nowMs: number): boolean {
+export function isDraftUsable(draftSavedAt: number, draftExerciseNames: string[], currentBaseExerciseNames: string[], nowMs: number): boolean {
   if (nowMs - draftSavedAt > STRENGTH_DRAFT_MAX_AGE_MS) return false
-  if (draftExerciseNames.length !== currentExerciseNames.length) return false
+  if (draftExerciseNames.length < currentBaseExerciseNames.length) return false
   const normalize = (n: string) => n.trim().toLowerCase()
-  return draftExerciseNames.every((name, i) => normalize(name) === normalize(currentExerciseNames[i] ?? ''))
+  return currentBaseExerciseNames.every((name, i) => normalize(name) === normalize(draftExerciseNames[i] ?? ''))
 }
 
 // ── Export vers Intervals.icu ────────────────────────────────────────────

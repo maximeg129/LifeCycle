@@ -3328,6 +3328,70 @@ renforcement de texte de prompt (déjà prouvé insuffisant une fois), ce mécan
 seulement de l'obéissance du modèle : soit une tentative parmi 3 finit par produire une séance
 conforme, soit l'échec est signalé honnêtement plutôt que silencieusement toléré.
 
+## Musculation : ajouter un exercice/une série manuellement — avant de démarrer ET en direct
+
+Retour utilisateur : "Il faudrais pouvoir rajouter des exercices, et des tour pour chaque exercice
+dans la musculation." `AskUserQuestion` sur le seul point réellement ambigu (où ce geste devait être
+possible — le message ne nommait pas d'écran précis, et une demande similaire avait explicitement été
+écartée une fois, voir "Suivi en direct v2" : "série improvisée/exercice libre ajouté en direct : non
+aux deux") : réponse retenue, **avant de démarrer** (édite la séance du plan elle-même) **et pendant
+le suivi en direct** (state local, jamais réécrit dans le plan) — jamais dans le formulaire de saisie
+rétroactive (`LogStrengthSessionDialog`), hors scope.
+
+**`AddStrengthExerciseDialog`** (`add-strength-exercise-dialog.tsx`, nouveau composant partagé) —
+même chrome `CrudDialogShell` que tout autre dialogue "ajouter X" de l'app, bien qu'aucune écriture
+Firestore n'ait lieu DANS ce composant (`onSubmit` synchrone, `isSaving={false}`) : c'est l'appelant
+qui décide de ce qu'il fait du résultat (`onAdd: (exercise: StrengthExercise) => void`) — un
+`updateDoc` immédiat avant de démarrer, ou un simple `setState` local pendant le suivi en direct.
+Champs : nom (texte libre), pattern de mouvement (`Select`, réutilise les libellés déjà rédigés dans
+`EXERCISE_TECHNIQUE`, `exercise-technique.ts` — jamais une deuxième liste de libellés qui pourrait
+diverger), séries/répétitions/charge/repos. `repsMin`/`repsMax`/`pct1RMMin`/`pct1RMMax` toujours
+`null` pour un exercice ajouté manuellement — jamais une plage inventée pour un exercice que
+l'athlète décrit lui-même (le contrôle matrice S05 traite déjà ces champs comme "non vérifiable"
+plutôt qu'une violation, voir `strengthSessionValidator.ts`).
+
+**Avant de démarrer** — deux nouveaux helpers purs/testés dans `training-plan-types.ts` :
+`withExerciseAdded()` (ajoute l'exercice à `week.sampleSessions[sessionIndex].strengthExercises`) et
+`withExerciseSetsAdjusted()` (+1 série sur un exercice déjà présent, clampé à 1 minimum) — même
+patron map-over-weeks que `moveSessionDate`/`adjustSessionForLocation` déjà en place
+(`use-training-plan.ts`), jamais une deuxième structure de mutation pour éditer une séance du plan.
+Deux nouveaux mutateurs `addStrengthExercise`/`addStrengthExerciseSet` — dupliqués à l'identique dans
+`use-training-plan.ts` (onglet Plan, `PlanSessionDetail` via `PlanWeekCalendar`/
+`PlanNextSessionsList`) ET `use-daily-workout.ts` (`StrengthSessionCard`, la séance muscu de
+"Aujourd'hui") : les deux hooks lisent déjà indépendamment le même document `trainingPlans/{planId}`
+actif, donc chacun garde son propre `updateDoc` plutôt que d'introduire une dépendance croisée entre
+les deux hooks pour ce seul geste. Un bouton `+` compact à côté de chaque exercice déjà listé
+(+1 série) et `AddStrengthExerciseDialog` sous la liste (nouvel exercice) — dans les deux surfaces.
+
+**En direct** (`live-strength-session-view.tsx`) — jamais réécrit dans le plan, un state local
+`manualExercises: StrengthExercise[]` s'ajoute PAR-DESSUS `session.strengthExercises` (renommé
+`baseExercises`, jamais muté) : `exercises = [...baseExercises, ...manualExercises]` est la liste
+"planned" combinée désormais utilisée partout où l'ancienne liste servait (préremplissage de
+`buildFreshProgress`, détection `isHold`/`isCorePattern`, accordéon "bonne technique") — un exercice
+ajouté en direct bénéficie donc gratuitement de tout ce que l'app fait déjà pour un exercice généré
+par l'IA. `addManualExercise()` ajoute l'exercice ET sa progression vierge en un seul geste (toujours
+en fin de liste — l'index d'un exercice ne bouge jamais après création, tout le reste de la vue en
+dépend) ; `addSetToExercise()` ajoute UNE série à un exercice déjà en cours (base ou manuel),
+préremplie depuis sa dernière série comme `buildFreshProgress` le fait déjà à l'ouverture. "Recommencer"
+(`handleRestart`) remet la progression à zéro mais ne retire JAMAIS un exercice ajouté à la volée —
+reconstruit désormais depuis la liste combinée, pas seulement `session.strengthExercises`.
+
+**⚠️ `isDraftUsable()` (`strength-log-types.ts`) devait tolérer un brouillon plus long que la base**
+— la sauvegarde locale automatique (voir "Suivi en direct — pause/reprise..." plus haut) comparait
+jusqu'ici le brouillon à la séance actuelle par ÉGALITÉ stricte de longueur/noms : un exercice ajouté
+en direct puis une fermeture accidentelle de l'onglet aurait fait échouer cette comparaison (le
+brouillon a plus d'exercices que `session.strengthExercises` seul) et perdu l'exercice ajouté à la
+restauration. Changé en comparaison de PRÉFIXE : le brouillon est utilisable si ses N premiers noms
+(N = nombre d'exercices de la base actuelle) correspondent exactement, qu'il en porte ou non davantage
+ensuite — une séance réellement régénérée (noms différents dès la base) reste correctement rejetée,
+comme avant. `StrengthSessionDraft` porte désormais `manualExercises` à côté de `progress`, pour
+restaurer aussi les exercices ajoutés (pas seulement leur progression).
+
+Tests (`strength-log-types.test.ts`, `isDraftUsable` : 1 test existant réécrit pour la nouvelle
+sémantique de préfixe — "rejette un brouillon avec MOINS d'exercices" remplace l'ancien "longueur
+différente" trop strict — + 2 nouveaux pour le cas superset/préfixe divergent) — 910/910 au total,
+tsc/eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

@@ -38,12 +38,15 @@ import {
   matchSessionCompletion,
   planAutoRescheduleMoves,
   recalibrateRollingWindow,
+  withExerciseAdded,
+  withExerciseSetsAdjusted,
   type PlanWeek,
   type PlanWeekSessionWithValidation,
   type SessionCompletion,
   type RollingWeekInput,
   type WeekdayAvailabilityMinutes,
 } from './training-plan-types'
+import type { StrengthExercise } from '@/ai/flows/strength-exercise-schema'
 import { buildWorkoutEventPayload } from './daily-workout-types'
 import type { CoachGoal } from './coach-memory-types'
 import type { CoachReason } from '@/ai/coach/outputContract'
@@ -385,6 +388,40 @@ export function useTrainingPlan() {
     }
   }, [user, db, activePlan, toast])
 
+  // Retour utilisateur : "il faudrait pouvoir rajouter des exercices, et
+  // des tour pour chaque exercice dans la musculation" — AVANT de démarrer
+  // le suivi en direct (le pendant EN DIRECT vit dans
+  // live-strength-session-view.tsx, un état local jamais réécrit ici).
+  // Même patron map-over-weeks que moveSessionDate/adjustSessionForLocation
+  // ci-dessus, via les helpers purs de training-plan-types.ts — jamais une
+  // deuxième structure de mutation pour éditer une séance du plan.
+  const addStrengthExercise = useCallback(async (weekNumber: number, sessionIndex: number, exercise: StrengthExercise): Promise<boolean> => {
+    if (!user || !db || !activePlan) return false
+    const weeks = withExerciseAdded(activePlan.weeks, weekNumber, sessionIndex, exercise)
+    const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
+    try {
+      await updateDoc(ref, { weeks })
+      return true
+    } catch {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+      return false
+    }
+  }, [user, db, activePlan])
+
+  /** Pendant "avant de démarrer" de l'ajout de série en direct — ajuste `sets` d'UN exercice déjà présent. */
+  const addStrengthExerciseSet = useCallback(async (weekNumber: number, sessionIndex: number, exerciseIndex: number): Promise<boolean> => {
+    if (!user || !db || !activePlan) return false
+    const weeks = withExerciseSetsAdjusted(activePlan.weeks, weekNumber, sessionIndex, exerciseIndex, 1)
+    const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
+    try {
+      await updateDoc(ref, { weeks })
+      return true
+    } catch {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+      return false
+    }
+  }, [user, db, activePlan])
+
   /**
    * Réalisé vs prévu — retour utilisateur : "comment lier les seances
    * realisees aux seance prevues". Réutilise planActivities (déjà fetché
@@ -590,6 +627,8 @@ export function useTrainingPlan() {
     generatingSessionsForWeek,
     moveSessionDate,
     adjustSessionForLocation,
+    addStrengthExercise,
+    addStrengthExerciseSet,
     adjustingLocationKey,
     getSessionCompletion,
     sendSessionToIntervals,

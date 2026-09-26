@@ -56,6 +56,7 @@ export function TrainingPlanTab() {
   const {
     activePlan, isLoadingPlan, isGenerating, goals, isLoadingGoals, generate, archivePlan,
     generateWeekSessions, generatingSessionsForWeek, moveSessionDate, adjustSessionForLocation, adjustingLocationKey,
+    addStrengthExercise, addStrengthExerciseSet,
     getSessionCompletion, sendSessionToIntervals, sendingSessionKey, canSendToIntervals,
     recalibrateNow, isRecalibrating, activities, athleteFtp,
   } = useTrainingPlan()
@@ -496,6 +497,8 @@ export function TrainingPlanTab() {
         getCompletion={(w, session, index) => getSessionCompletion(w, session, index)}
         adjustingLocationKey={adjustingLocationKey}
         onAdjustLocation={(w, index, targetLocation) => adjustSessionForLocation(w.weekNumber, index, targetLocation)}
+        onAddExercise={(w, index, exercise) => addStrengthExercise(w.weekNumber, index, exercise)}
+        onAddExerciseSet={(w, index, exerciseIndex) => addStrengthExerciseSet(w.weekNumber, index, exerciseIndex)}
       />
 
       {/* Retour utilisateur (captures Join à l'appui) : "avoir le Plan
@@ -594,6 +597,8 @@ export function TrainingPlanTab() {
                     athleteFtp={athleteFtp}
                     adjustingLocationKey={adjustingLocationKey}
                     onAdjustLocation={(index, targetLocation) => adjustSessionForLocation(w.weekNumber, index, targetLocation)}
+                    onAddExercise={(index, exercise) => addStrengthExercise(w.weekNumber, index, exercise)}
+                    onAddExerciseSet={(index, exerciseIndex) => addStrengthExerciseSet(w.weekNumber, index, exerciseIndex)}
                   />
                 </div>
               )}
