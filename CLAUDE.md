@@ -3392,6 +3392,74 @@ sémantique de préfixe — "rejette un brouillon avec MOINS d'exercices" rempla
 différente" trop strict — + 2 nouveaux pour le cas superset/préfixe divergent) — 910/910 au total,
 tsc/eslint/build clean.
 
+## Webhook enrichi : compliance plan/zones/intervalles calculée à l'ingestion, pas seulement au clic
+
+Retour utilisateur : "L'ia lorsqu'il analyse les sorties doit regarder les intervals, le contenu de
+la session et pas seulement les indicateurs, il doit vérifier la compliance entre le plan, les
+zones demandées et ce qui a été réalisé par l'athlète." Diagnostic mené par investigation (relecture
+croisée de `ride-analysis-flow.ts`/`use-ride-analysis.ts`/`interval-adherence-types.ts` face à cette
+demande) avant tout code, pour vérifier si CLAUDE.md décrivait déjà cette fonctionnalité (section
+"Analyse de sortie : respect des intervalles (réalisé vs prévu)", plus haut) sans qu'elle couvre
+réellement le cas en question :
+
+**Le mécanisme existait déjà et fonctionnait correctement pour deux chemins sur trois** —
+(1) tout clic manuel "Analyser"/"Régénérer" dans le Journal (n'importe quelle date d'activité),
+(2) l'analyse auto-déclenchée de la sortie du JOUR MÊME dans Coach > Aujourd'hui (voir "Coach : un
+seul onglet 'Aujourd'hui'" plus haut) — les deux passent par le chemin client complet
+(`use-ride-analysis.ts`), qui calcule déjà `plannedWorkout`/`intervalAdherence` correctement.
+
+**Le vrai trou** : une sortie auto-analysée par le webhook Intervals.icu (`/api/intervals/webhook`,
+chantier B2) pour n'importe quel jour AUTRE qu'aujourd'hui restait bloquée à vie sur l'analyse
+"légère" documentée dans son propre commentaire d'en-tête (`plannedWorkout: null,
+intervalAdherence: null` hardcodés, portée volontairement réduite en attendant que l'app OAuth soit
+approuvée — voir "Chantier B2" plus haut) — jamais mise à niveau automatiquement, sauf clic manuel
+"Régénérer" dans le Journal. Or le webhook tourne précisément pour que l'athlète n'ait PAS à ouvrir
+l'app.
+
+**Décision utilisateur (`AskUserQuestion`, 3 options)** : "Webhook enrichi" retenue — calculer la
+comparaison aux zones DIRECTEMENT dans la route webhook (Admin SDK), plutôt qu'un auto-upgrade
+client borné au moment où le Journal est ouvert, ou ne rien changer.
+
+**`findPlannedWorkoutForDateAdmin()`** (`src/app/api/intervals/webhook/route.ts`) — équivalent Admin
+SDK exact de `findPlannedWorkoutForDate` (`use-ride-analysis.ts`) : mêmes deux sources dans le même
+ordre (`workoutProposals/{date}` puis `trainingPlans` actif → `sampleSessions` datée ce jour,
+cycling only), juste réécrite en lectures `db.doc()/db.collection().where()` (Admin SDK) plutôt que
+`useDoc`/`getDoc` (client) — jamais une deuxième logique qui pourrait diverger de l'originale,
+seulement une réécriture du transport de lecture. `parseStructuredWorkoutProfile()`
+(`plan-calendar-types.ts`) et `computeIntervalAdherence()` (`interval-adherence-types.ts`) sont
+réutilisées telles quelles (toutes deux pures, sans `'use client'`/`'use server'`, déjà importables
+tel quel dans une Route Handler) — aucune réimplémentation de la logique de découpage/comparaison.
+
+**Coût réseau additionnel gardé minimal** — le fetch `getActivityStreams()` (watts SEUL, jamais
+heartrate/cadence : inutile à `computeIntervalAdherence`, éviterait un appel plus lourd que
+nécessaire) n'a lieu QUE si `findPlannedWorkoutForDateAdmin` a effectivement retrouvé une séance
+prévue pour cette date — jamais dépensé pour rien sur un jour de repos ou sans plan actif. FTP
+réutilisé depuis le `getAthlete()` déjà appelé par cette route pour CTL/ATL/TSB, aucun appel
+supplémentaire pour ça.
+
+**Best-effort à chaque étage, comme le reste de cette route** — un échec de lecture du plan
+(`workoutProposals`/`trainingPlans`) ou de `getActivityStreams()` (même limite déjà documentée côté
+client : une sortie synchronisée depuis Strava peut ne pas avoir de détail seconde par seconde
+lisible par Intervals.icu lui-même) dégrade silencieusement vers `plannedWorkout: null,
+intervalAdherence: null` — jamais une exception qui ferait échouer le traitement de l'événement
+(le garde-fou `try/catch` par événement déjà en place, voir `POST`, reste inchangé et suffisant
+comme filet de sécurité final).
+
+**Portée volontairement inchangée pour le reste** — durabilité/découplage cardiaque/zones de FC
+(exigent le flux heartrate, jamais fetché ici) et gouverneur de charge interne/budget kJ (exigent
+plusieurs semaines de wellness/activités déjà assemblées côté client) restent hors scope de ce
+correctif, comme avant : la demande utilisateur portait spécifiquement sur "les intervals... la
+compliance entre le plan, les zones demandées et ce qui a été réalisé" — exactement
+`plannedWorkout`/`intervalAdherence`, pas une réplication complète du chemin client. Le secret webhook
+(`INTERVALS_WEBHOOK_SECRET`) et la garde d'idempotence (`rideAnalyses/{activityId}` déjà existant →
+skip) sont inchangés.
+
+Aucun nouveau test (uniquement de l'orchestration Admin SDK/IntervalsService/fonctions pures déjà
+testées ailleurs — pas de nouvelle logique pure à isoler) — 910/910 tests inchangés, tsc/eslint/build
+clean. Comme documenté pour le reste du chantier B2, invérifiable en direct dans ce sandbox (aucun
+accès réseau à Intervals.icu) — à confirmer par l'utilisateur au prochain webhook `ACTIVITY_ANALYZED`
+reçu en prod pour une sortie dont le plan a une séance datée ce jour-là.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
