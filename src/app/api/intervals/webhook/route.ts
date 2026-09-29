@@ -5,6 +5,9 @@ import { sendPushNotification } from '@/lib/push-notifications';
 import { IntervalsService, bestAverageWatts, bestRpe, feelToScore } from '@/lib/intervals-api';
 import { buildCoachContext, type CoachContextInjury, type CoachContextGoal, type CoachContextLifestyle } from '@/components/cycling/coach-context';
 import { rideAnalysis } from '@/ai/flows/ride-analysis-flow';
+import { parseStructuredWorkoutProfile } from '@/components/cycling/plan-calendar-types';
+import { computeIntervalAdherence, type IntervalAdherenceResult } from '@/components/coach/interval-adherence-types';
+import type { PlanWeek } from '@/components/cycling/training-plan-types';
 
 /**
  * Webhook Intervals.icu — chantier "repenser planification/séances/
@@ -20,10 +23,10 @@ import { rideAnalysis } from '@/ai/flows/ride-analysis-flow';
  * ⚠️ Portée volontairement réduite ("version légère", même discipline que
  * le plan glissant 7 jours) par rapport à l'analyse déclenchée manuellement
  * depuis le Journal (use-ride-analysis.ts) :
- * - PAS de flux watts/FC seconde par seconde (getActivityStreams) — donc
- *   pas de zones de puissance/FC, pas de pacing, pas de durabilité, pas de
- *   découplage cardiaque. Juste les champs déjà présents sur l'activité
- *   elle-même (puissance moyenne/normalisée, charge, RPE, feel...).
+ * - PAS de flux FC/cadence seconde par seconde — donc pas de zones de FC,
+ *   pas de durabilité, pas de découplage cardiaque. Juste les champs déjà
+ *   présents sur l'activité elle-même (puissance moyenne/normalisée,
+ *   charge, RPE, feel...).
  * - PAS de gouverneur de charge interne ni de budget kJ (buildCoachContext
  *   les reçoit `undefined` — champs rendus optionnels pour ce chantier,
  *   voir coach-context.ts) : leur calcul exige plusieurs semaines de
@@ -31,12 +34,33 @@ import { rideAnalysis } from '@/ai/flows/ride-analysis-flow';
  *   (use-governor.ts/use-kj-budget.ts), une duplication de logique
  *   substantielle et invérifiable depuis ce sandbox — jugée trop risquée
  *   pour un chemin qui écrit directement une donnée affichée à l'athlète.
- * - PAS de comparaison à la séance prévue (plannedWorkout/intervalAdherence)
- *   — même raison de portée.
  * Une vraie analyse néanmoins, jamais un texte générique : `rideAnalysis`
  * dégrade déjà proprement sur des données partielles (voir son prompt).
  * L'athlète garde la main pour une analyse plus complète via "Régénérer"
  * dans le Journal, qui passe toujours par le chemin client complet.
+ *
+ * ⚠️ "Webhook enrichi" — retour utilisateur : "l'IA... doit vérifier la
+ * compliance entre le plan, les zones demandées et ce qui a été réalisé par
+ * l'athlète." Avant ce correctif, `plannedWorkout`/`intervalAdherence`
+ * étaient hardcodés `null` ici — une sortie jamais ouverte manuellement dans
+ * le Journal (le cas courant : le webhook tourne précisément pour que
+ * l'athlète n'ait PAS à ouvrir l'app) restait donc bloquée sur une analyse
+ * qui ne compare jamais réalisé à prévu, jusqu'à un clic "Régénérer"
+ * explicite. `findPlannedWorkoutForDateAdmin()` (ci-dessous) — même logique
+ * à deux sources que `findPlannedWorkoutForDate` côté client
+ * (use-ride-analysis.ts), juste réécrite en lectures Admin SDK plutôt que
+ * `useDoc`/`getDoc` — retrouve la séance prévue pour la date de l'activité ;
+ * si elle existe, `getActivityStreams()` (watts seul, jamais heartrate/
+ * cadence ici — inutile à `computeIntervalAdherence`, éviter un appel API
+ * plus lourd que nécessaire) et `computeIntervalAdherence()` (réutilisée
+ * telle quelle, pas réimplémentée) donnent le même résultat que le chemin
+ * client. Coût réseau additionnel gardé minimal : le fetch streams
+ * n'intervient QUE si une séance prévue a bien été retrouvée — jamais
+ * dépensé pour rien sur un jour de repos/sans plan actif. Best-effort comme
+ * le reste de cette route (voir plus haut) : un échec de lecture du plan ou
+ * de fetch des streams dégrade silencieusement vers `plannedWorkout: null,
+ * intervalAdherence: null`, jamais une exception qui casserait l'analyse
+ * entière.
  */
 
 interface IntervalsWebhookEvent {
@@ -59,6 +83,54 @@ interface IntervalsWebhookPayload {
 interface IntervalsCredentialsDoc {
   intervalsAthleteId?: string;
   intervalsApiKey?: string;
+}
+
+interface PlannedWorkoutLike {
+  title: string;
+  durationMinutes: number;
+  structuredWorkout: string;
+}
+
+/**
+ * Équivalent Admin SDK de `findPlannedWorkoutForDate`
+ * (src/components/coach/use-ride-analysis.ts) — même logique, mêmes deux
+ * sources dans le même ordre de préférence, jamais réimplémentée
+ * différemment : (1) `workoutProposals/{date}` (la proposition IA du jour,
+ * potentiellement ajustée — la plus fidèle quand elle existe), (2) à défaut
+ * la séance type datée ce jour dans le plan actif. `null` si aucune des
+ * deux ne donne de script exploitable. Best-effort : une erreur de lecture
+ * sur l'une des deux sources n'interrompt jamais le traitement de
+ * l'événement (voir les `catch` silencieux, même discipline que le reste de
+ * cette route).
+ */
+async function findPlannedWorkoutForDateAdmin(
+  db: ReturnType<typeof adminFirestore>,
+  uid: string,
+  activityDate: string
+): Promise<PlannedWorkoutLike | null> {
+  try {
+    const proposalSnap = await db.doc(`users/${uid}/workoutProposals/${activityDate}`).get();
+    const proposal = (proposalSnap.data() as { proposal?: PlannedWorkoutLike } | undefined)?.proposal;
+    if (proposal?.structuredWorkout) {
+      return { title: proposal.title, durationMinutes: proposal.durationMinutes, structuredWorkout: proposal.structuredWorkout };
+    }
+  } catch (e) {
+    console.error('[intervals-webhook] findPlannedWorkoutForDateAdmin: workoutProposals read failed:', e);
+  }
+
+  try {
+    const planSnap = await db.collection(`users/${uid}/trainingPlans`).where('status', '==', 'active').get();
+    const weeks = (planSnap.docs[0]?.data() as { weeks?: PlanWeek[] } | undefined)?.weeks ?? [];
+    const week = weeks.find((w) => activityDate >= w.startDate && activityDate <= w.endDate);
+    const session = week?.sampleSessions?.find((s) => s.date === activityDate && s.sessionKind !== 'strength');
+    if (session?.structuredWorkout) {
+      return { title: session.title, durationMinutes: session.durationMinutes, structuredWorkout: session.structuredWorkout };
+    }
+  } catch (e) {
+    console.error('[intervals-webhook] findPlannedWorkoutForDateAdmin: trainingPlans read failed:', e);
+  }
+
+  return null;
 }
 
 /** Traite un seul événement — jamais laissé remonter une exception au batch appelant (voir POST). */
@@ -118,6 +190,26 @@ async function processActivityAnalyzed(event: IntervalsWebhookEvent): Promise<vo
 
   const avgWatts = bestAverageWatts(activity) ?? undefined;
 
+  // Compliance plan/zones/intervalles — voir le commentaire d'en-tête
+  // "Webhook enrichi". Le fetch streams (watts seul) n'a lieu QUE si une
+  // séance prévue a été retrouvée pour cette date — jamais dépensé pour
+  // rien sur un jour sans plan actif.
+  const plannedWorkout = await findPlannedWorkoutForDateAdmin(db, uid, activityDate);
+  let intervalAdherence: IntervalAdherenceResult | null = null;
+  if (plannedWorkout) {
+    try {
+      const streams = await service.getActivityStreams(activityId, ['watts']);
+      const plannedSteps = parseStructuredWorkoutProfile(plannedWorkout.structuredWorkout);
+      intervalAdherence = computeIntervalAdherence(streams.watts?.data, plannedSteps, athlete?.ftp ?? null);
+    } catch (e) {
+      // Best-effort, même discipline que getActivityStreams côté client
+      // (une sortie synchronisée depuis Strava peut ne pas avoir de détail
+      // seconde par seconde lisible par Intervals.icu lui-même) — dégrade
+      // vers pas de comparaison plutôt que de faire échouer l'événement.
+      console.error('[intervals-webhook] getActivityStreams failed, skipping interval adherence:', e);
+    }
+  }
+
   const result = await rideAnalysis({
     activity: {
       name: activity.name ?? undefined,
@@ -136,6 +228,8 @@ async function processActivityAnalyzed(event: IntervalsWebhookEvent): Promise<vo
       feel: feelToScore(activity) ?? undefined,
     },
     athlete: athlete ? { ftp: athlete.ftp, ctl: athlete.ctl, atl: athlete.atl, tsb: athlete.tsb } : undefined,
+    plannedWorkout: plannedWorkout ?? undefined,
+    intervalAdherence: intervalAdherence?.steps,
     coachContext,
   });
 
@@ -149,11 +243,12 @@ async function processActivityAnalyzed(event: IntervalsWebhookEvent): Promise<vo
     analysis: result.data,
     // Jamais calculés dans ce chemin réduit (voir le commentaire d'en-tête)
     // — `null`, jamais `undefined` (Firestore le refuse), et jamais un
-    // chiffre inventé à la place.
+    // chiffre inventé à la place. plannedWorkout/intervalAdherence, eux,
+    // sont désormais réellement calculés ci-dessus (voir "Webhook enrichi").
     durability: null,
     decoupling: null,
-    plannedWorkout: null,
-    intervalAdherence: null,
+    plannedWorkout: plannedWorkout ?? null,
+    intervalAdherence: intervalAdherence ?? null,
     createdAt: new Date().toISOString(),
   });
 
