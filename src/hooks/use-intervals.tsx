@@ -34,7 +34,7 @@ import { useUser, useFirestore, useDoc, useMemoFirebase } from '@/firebase'
 import { useToast } from '@/hooks/use-toast'
 import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
-import type { IntervalsAthlete, IntervalsActivity, IntervalsWellness, IntervalsFitnessDay, IntervalsPowerCurve } from '@/lib/intervals-api'
+import { dedupeActivities, type IntervalsAthlete, type IntervalsActivity, type IntervalsWellness, type IntervalsFitnessDay, type IntervalsPowerCurve } from '@/lib/intervals-api'
 import type { Bike, BikeComponent } from '@/components/cycling/gear-types'
 import type { Chain } from '@/components/cycling/chain-types'
 import { applyKmDeltaToBikeDependents, computeGearKmFromActivities, computeGearSyncDelta, extractLinkedRides } from '@/components/cycling/km-sync'
@@ -171,8 +171,13 @@ export function IntervalsProvider({ children }: { children: React.ReactNode }) {
       fetchProxy<IntervalsPowerCurve[]>('/api/intervals/power-curve', athleteId, apiKey).catch(() => [] as IntervalsPowerCurve[]),
     ])
 
+    // Revue externe (UX/engine) §1.7 : collabse les doublons observables
+    // (même départ à ±5 min, durée concordante ou absente — voir
+    // dedupeActivities) une seule fois ici, à la source, pour que tout
+    // consommateur de useActivities() (Journal, recalibration, séances
+    // récentes, gouverneur...) en hérite sans changement de son propre code.
     setAthlete(athleteData)
-    setActivities(activitiesData)
+    setActivities(dedupeActivities(activitiesData))
     setWellness(wellnessData)
     setFitness(fitnessData)
     setPowerCurve(powerCurveData)

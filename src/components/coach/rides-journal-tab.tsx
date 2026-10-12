@@ -24,7 +24,7 @@ import { fr } from 'date-fns/locale'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Bike, ChevronRight, Timer, Flame, Dumbbell, CheckCircle2 } from 'lucide-react'
+import { Bike, ChevronRight, Timer, Flame, Dumbbell, CheckCircle2, Footprints } from 'lucide-react'
 import { useActivities, useFitnessChart } from '@/hooks/use-intervals'
 import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
 import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
@@ -35,6 +35,19 @@ import { useStravaLogExport } from '@/components/cycling/use-strava-log-export'
 import { StrengthLogExportButton } from '@/components/cycling/strength-log-export-button'
 import { StrengthAnalysisDialog, StrengthAnalysisTrigger } from '@/components/cycling/strength-analysis-dialog'
 import type { StrengthSessionLogWithId } from '@/components/cycling/strength-log-types'
+
+// Revue externe (UX/engine) §1.7 : "a run shows the bike icon" — cette
+// ligne de journal affichait toujours l'icône vélo, quel que soit le vrai
+// `type` de l'activité (Intervals.icu peut synchroniser une course à pied
+// au même titre qu'une sortie vélo). Liste BLANCHE volontairement étroite
+// (seuls les types course à pied dont ce projet a une lecture directe de
+// la doc Intervals.icu) plutôt qu'une classification exhaustive — un
+// mauvais choix d'icône n'a ici AUCUNE conséquence sur un calcul (contrairement
+// à `isReimportedStrengthActivityType`, qui filtre une vraie donnée du
+// gouverneur), donc le risque d'un faux négatif (une variante de course
+// à pied non listée garde l'icône vélo) est purement cosmétique — jamais
+// un "deviner" qui pourrait corrompre un chiffre.
+const RUN_ACTIVITY_TYPES = new Set(['Run', 'VirtualRun', 'TrailRun'])
 
 type RideActivity = ReturnType<typeof useActivities>['data'][number]
 /** Une entrée du journal fusionné vélo+musculation — voir journalEntries ci-dessous. */
@@ -224,7 +237,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                       recette, voir CLAUDE.md). */}
                   <div className="flex items-center gap-4 min-w-0 flex-1">
                     <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
-                      <Bike className="w-5 h-5" />
+                      {RUN_ACTIVITY_TYPES.has(ride.type ?? '') ? <Footprints className="w-5 h-5" /> : <Bike className="w-5 h-5" />}
                     </div>
                     <div className="min-w-0">
                       <div className="font-semibold truncate">

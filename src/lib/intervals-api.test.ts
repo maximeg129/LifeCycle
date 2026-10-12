@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { IntervalsService, bestAverageWatts, bestRpe, feelToScore, isReimportedStrengthActivityType } from './intervals-api'
+import { IntervalsService, bestAverageWatts, bestRpe, feelToScore, isReimportedStrengthActivityType, dedupeActivities } from './intervals-api'
 
 function jsonResponse(body: unknown, ok = true, status = 200, url = '') {
   return {
@@ -181,6 +181,40 @@ describe('isReimportedStrengthActivityType', () => {
 
   it('is false when type is absent', () => {
     expect(isReimportedStrengthActivityType({})).toBe(false)
+  })
+})
+
+describe('dedupeActivities', () => {
+  it('collapses a near-empty duplicate (date-only, no distance/duration) into the real entry', () => {
+    const real = { start_date_local: '2026-09-26T09:00:00', moving_time: 2220, distance: 15000 }
+    const bareDuplicate = { start_date_local: '2026-09-26T09:02:00' } // same start ±5min, no duration at all
+    expect(dedupeActivities([real, bareDuplicate])).toEqual([real])
+    expect(dedupeActivities([bareDuplicate, real])).toEqual([real]) // order-independent — keeps the complete one either way
+  })
+
+  it('collapses two entries with the same start time and a matching duration (±10%)', () => {
+    const a = { start_date_local: '2026-10-10T08:00:00', moving_time: 2220, distance: 15000 }
+    const b = { start_date_local: '2026-10-10T08:01:00', moving_time: 2280 } // +2.7% duration, no distance
+    expect(dedupeActivities([a, b])).toEqual([a])
+  })
+
+  it('never merges two distinct sequential rides, even with similar durations', () => {
+    // Two real ~35min rides back-to-back the same day — starts are >5min apart (one starts after the other ends).
+    const first = { start_date_local: '2026-10-10T08:00:00', moving_time: 2100, distance: 14000 }
+    const second = { start_date_local: '2026-10-10T08:40:00', moving_time: 2040, distance: 13800 }
+    expect(dedupeActivities([first, second])).toEqual([first, second])
+  })
+
+  it('never merges activities that start more than 5 minutes apart even with identical duration', () => {
+    const a = { start_date_local: '2026-10-10T08:00:00', moving_time: 1800, distance: 10000 }
+    const b = { start_date_local: '2026-10-10T08:10:00', moving_time: 1800, distance: 10000 }
+    expect(dedupeActivities([a, b])).toEqual([a, b])
+  })
+
+  it('leaves a single activity or an empty list untouched', () => {
+    const a = { start_date_local: '2026-10-10T08:00:00', moving_time: 1800 }
+    expect(dedupeActivities([a])).toEqual([a])
+    expect(dedupeActivities([])).toEqual([])
   })
 })
 

@@ -70,7 +70,12 @@ export function GovernorWidget() {
             <span className="text-3xl">{meta.emoji}</span>
             <div>
               <div className={`font-semibold ${meta.className}`}>{meta.label}</div>
-              <div className="text-xs text-muted-foreground">{meta.hint}</div>
+              <div className="text-xs text-muted-foreground">
+                {meta.hint}
+                {governor.status !== 'insufficient_data' && (
+                  <span className="text-muted-foreground/70"> · {governor.knownSignalsCount}/{governor.totalSignalsCount} signaux connus</span>
+                )}
+              </div>
             </div>
           </div>
           <div className="space-y-2">
