@@ -138,6 +138,13 @@ export interface PlanWeekContent {
    * generated; never regenerated automatically once present.
    */
   sampleSessions?: PlanWeekSessionWithValidation[]
+  /**
+   * Posé déterministiquement par flagFtpTestWeek() après la génération —
+   * JAMAIS un champ que le modèle renseigne lui-même (absent du schéma de
+   * sortie de trainingPlanGeneration). Voir flagFtpTestWeek pour le
+   * raisonnement complet (revue externe §1.8).
+   */
+  recommendedFtpTest?: boolean
 }
 
 export interface PlanWeek extends PlanWeekSkeleton, PlanWeekContent {}
@@ -1064,4 +1071,51 @@ export function stripWeekdayMentions(title: string): string {
   if (kept.length > 0 && kept.length < segments.length) return kept.join(' — ').trim()
   if (kept.length === segments.length) return title // aucun segment n'était un jour isolé — rien à retirer
   return title.replace(WEEKDAY_WORD_PATTERN, '').replace(/\s{2,}/g, ' ').trim() || title
+}
+
+const FTP_TEST_RECOMMENDATION_NOTE =
+  'Test FTP (ou effort maximal ~20 min) recommandé cette semaine — pour calibrer les % de la suite du plan sur une référence à jour.'
+
+/**
+ * Revue externe (UX/engine) §1.8 : "no FTP test ever scheduled for an FTP
+ * goal" — trainingPlanGeneration ne génère jamais le contenu d'une séance
+ * (seulement phase/focus/volume par semaine, voir planWeekSessions pour le
+ * détail des séances), donc il ne peut structurellement jamais composer
+ * lui-même une "séance de test". Détecter côté prompt QUAND un test est
+ * pertinent exigerait de deviner depuis targetOutcome (texte libre, aucun
+ * champ structuré "type d'objectif") — exactement le genre de pari fragile
+ * que ce projet évite déjà (voir la tentative de liste blanche abandonnée
+ * pour §1.7, isReimportedStrengthActivityType). Règle déterministe
+ * volontairement agnostique du type d'objectif à la place : CHAQUE plan
+ * assez long pour avoir une vraie phase base/build bénéficie d'un repère
+ * FTP à jour (les % prescrits dans structuredWorkout, planWeekSessions
+ * comme dailyWorkoutRecommendation, sont TOUS calculés contre cette seule
+ * référence) — recommandé que l'objectif soit explicitement un test de
+ * seuil ou non. Un seul test par plan (semaine la plus précoce en base/
+ * build), jamais répété — l'app ne suit de toute façon aucun historique de
+ * date de test FTP (voir CLAUDE.md, page détail FTP : "pas encore
+ * d'historique suivi"), donc il n'y a pas de moyen honnête de savoir si un
+ * test a déjà eu lieu récemment pour en réclamer un second plus tard dans
+ * le plan.
+ *
+ * Jamais posé sur une semaine 'taper'/'recovery' (un test maximal n'a pas
+ * sa place dans une semaine pensée pour réduire la charge) ; absent du
+ * plan entier si aucune semaine 'base'/'build' n'existe (plan très court,
+ * tout en taper/peak — voir le prompt de trainingPlanGeneration).
+ * Composé en texte libre dans `notes` (seul canal déjà affiché par l'UI,
+ * voir training-plan-tab.tsx) ET en flag structuré `recommendedFtpTest`
+ * (pour un futur affichage dédié, ex. un badge) — jamais seulement l'un ou
+ * l'autre.
+ */
+export function flagFtpTestWeek(weeks: PlanWeek[]): PlanWeek[] {
+  const index = weeks.findIndex((w) => w.phase === 'base' || w.phase === 'build')
+  if (index === -1) return weeks
+  return weeks.map((w, i) => {
+    if (i !== index) return w
+    return {
+      ...w,
+      recommendedFtpTest: true,
+      notes: w.notes ? `${w.notes} ${FTP_TEST_RECOMMENDATION_NOTE}` : FTP_TEST_RECOMMENDATION_NOTE,
+    }
+  })
 }

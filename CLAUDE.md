@@ -3640,6 +3640,73 @@ Tests (`coach-chat-types.test.ts`, 5 nouveaux pour `normalizeFactForDedup`/`isDu
 explicitement qu'une course cycliste typée `Race` n'est jamais exclue) — 925/925 au total, tsc/
 eslint/build clean.
 
+## Revue externe UX/engine — pièce 3 : le plan ne sert pas l'objectif (§1.8)
+
+Dernier point P0 de la revue externe (§1.8, "Phase 1 + 2" déjà choisie par l'utilisateur) : pas de
+test FTP jamais programmé pour un objectif qui en dépend, des priorités affichées (sprint, grimpe)
+qui n'orientent jamais réellement le contenu des semaines, une arithmétique phases/semaines qui peut
+ne pas correspondre, et un `summary` qui peut qualifier la progression de "réaliste" sans jamais
+mentionner un CTL qui a pourtant baissé. Décision utilisateur (`AskUserQuestion`) : **"Prompt nudges
++ deterministic test-week guarantee"** — même leçon que la boucle de retry S05 ("une instruction de
+prompt seule reste une préférence que le modèle peut ignorer, jamais une garantie") appliquée ici
+spécifiquement au test FTP, le reste restant du texte de prompt.
+
+**Diagnostic avant code** — lecture complète de `training-plan-generation-flow.ts` et de
+`CoachContextGoal` (`coach-context.ts`) : `trainingPlanGeneration` ne génère QUE `phase`/`focus`/
+`targetWeeklyMinutes`/`notes?`/`targetStrengthMinutes?` par semaine (jamais le contenu d'une séance,
+voir `planWeekSessions` pour ça) ; `goal.targetOutcome` est du texte libre, sans AUCUN champ
+structuré ("type d'objectif", "disciplines prioritaires") pour accrocher une décision déterministe
+du genre "cet objectif a besoin d'un test FTP". Détecter ça depuis le texte libre aurait exigé du
+keyword-matching fragile — exactement le genre de pari que ce projet vient de refuser une fois dans
+cette même revue (§1.7, la tentative de liste blanche abandonnée pour `isReimportedStrengthActivityType`,
+voir pièce 2 ci-dessus) : un faux négatif (le mot-clé choisi ne matche pas une formulation plausible)
+coûterait exactement le bug déjà signalé — aucun test jamais programmé.
+
+**`flagFtpTestWeek()`** (`training-plan-types.ts`, pur/testé) — règle déterministe volontairement
+AGNOSTIQUE du type d'objectif plutôt que dépendante d'un texte à deviner : CHAQUE plan assez long
+pour avoir une vraie semaine `base`/`build` reçoit un repère FTP à jour recommandé sur la plus
+précoce d'entre elles — recommandé que l'objectif soit explicitement un test de seuil ou non, parce
+que TOUTES les prescriptions %FTP du reste du plan (`structuredWorkout`, via `planWeekSessions`
+comme `dailyWorkoutRecommendation`) dépendent de cette seule référence. Jamais posé sur une semaine
+`taper`/`recovery` (un effort maximal n'a pas sa place dans une semaine pensée pour réduire la
+charge) ; absent du plan entier si aucune semaine `base`/`build` n'existe (plan très court, tout en
+taper/peak). Un seul test par plan, jamais répété — l'app ne suit de toute façon aucun historique de
+date de test FTP (voir la page détail FTP, "pas encore d'historique suivi"), donc pas de moyen
+honnête de savoir si un test a déjà eu lieu récemment pour en réclamer un second plus tard. Posé en
+DEUX formes à la fois — `recommendedFtpTest?: boolean` (flag structuré, pour un futur affichage
+dédié) ET un texte ajouté à `notes` (déjà affiché par `training-plan-tab.tsx`, donc visible
+immédiatement sans aucun changement d'UI) — jamais seulement l'un des deux. Appelé dans
+`use-training-plan.ts`'s `generate()` juste après `mergePlanWeeks()`, donc sur CHAQUE plan nouvellement
+créé, indépendamment de l'obéissance du modèle au prompt.
+
+**Prompt nudges, pour les trois autres sous-points** (`training-plan-generation-flow.ts`, "Principes
+de périodisation") — trois règles ajoutées :
+- **Spécificité de l'objectif** : si `OBJECTIF` mentionne des exigences concrètes (sprint, grimpe,
+  rouler en groupe, un format d'épreuve précis...), au moins les semaines `build`/`peak` doivent le
+  refléter explicitement dans leur `focus` — jamais un vocabulaire générique de périodisation qui
+  conviendrait à n'importe quel objectif. Explicitement motivé : c'est ce `focus` que
+  `planWeekSessions` lit ensuite pour composer les séances types — une spécificité jamais mentionnée
+  ici ne se traduira jamais en contenu concret plus tard.
+- **Cohérence arithmétique** : si `summary`/`warnings` décrivent le plan en nombre de semaines par
+  phase, vérifier que la somme correspond EXACTEMENT à `weekCount` avant de répondre — jamais une
+  description qui ne colle pas au tableau `weeks` réellement renvoyé. Portée volontairement limitée
+  au texte du prompt — `mergePlanWeeks()` gère déjà sainement un décompte réellement incohérent côté
+  modèle (contenu en trop ignoré, semaine manquante remplacée par un défaut sûr, voir son propre
+  commentaire de tête, déjà en place avant ce chantier) : le risque ici est un TEXTE qui ne décrit pas
+  fidèlement le VRAI tableau, pas une vraie désynchronisation de longueur de tableau.
+- **Honnêteté face aux données réelles** : si le CTL fourni a visiblement baissé récemment, si le TSB
+  est très négatif, ou si le gouverneur est dégradé, `summary` doit le dire explicitement plutôt que
+  de qualifier la progression de "réaliste"/"crédible" sans mentionner ce signal contraire — jamais
+  une évaluation positive qui contredit silencieusement les chiffres fournis.
+
+Tests (`training-plan-types.test.ts`, 5 nouveaux pour `flagFtpTestWeek` — semaine la plus précoce
+base/build flaggée, préférence pour la première semaine éligible même si c'est une build, note
+existante complétée plutôt qu'écrasée, aucun flag sur un plan tout taper/recovery, un seul flag même
+sur un plan long multi-phases) — 930/930 au total, tsc/eslint/build clean. Comme pour les correctifs
+de prompt précédents de cette même revue, les trois nudges restent invérifiables en direct dans ce
+sandbox (pas d'`ANTHROPIC_API_KEY`) — seul `flagFtpTestWeek()` est garanti par construction, le reste
+à confirmer par l'utilisateur à la prochaine génération réelle d'un plan.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

@@ -32,6 +32,7 @@ import {
   weeksUntilEvent,
   buildPlanWeekSkeleton,
   mergePlanWeeks,
+  flagFtpTestWeek,
   currentPlanWeek,
   planSessionExternalId,
   clampDateToWeek,
@@ -217,7 +218,10 @@ export function useTrainingPlan() {
       const output = result.data
 
       const skeleton = buildPlanWeekSkeleton(today, weekCount)
-      const weeks = mergePlanWeeks(skeleton, output.weeks)
+      // Revue externe §1.8 : garantie déterministe d'un test FTP recommandé
+      // — voir flagFtpTestWeek pour le raisonnement complet (jamais confiée
+      // au modèle, qui n'a pas de champ structuré pour le décider).
+      const weeks = flagFtpTestWeek(mergePlanWeeks(skeleton, output.weeks))
 
       // Archive whatever was previously active — one active plan at a time.
       const existing = await getDocs(query(collection(db, `users/${user.uid}/trainingPlans`), where('status', '==', 'active')))

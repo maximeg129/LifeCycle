@@ -129,6 +129,20 @@ Principes de périodisation à respecter :
   même hausse hebdomadaire qu'un athlète avec un CTL déjà élevé) — mentionne-le dans warnings si le volume
   demandé (weeklyAvailableMinutes) semble agressif compte tenu du niveau actuel.
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
+- Spécificité de l'objectif : si OBJECTIF mentionne des exigences concrètes (sprint, grimpe, rouler en
+  groupe/peloton, un format d'épreuve particulier...), au moins les semaines "build"/"peak" doivent
+  le refléter explicitement dans leur "focus" — jamais un vocabulaire générique de périodisation
+  ("augmenter le volume", "intensité croissante") qui pourrait convenir à n'importe quel objectif.
+  C'est ce "focus" que planWeekSessions lira ensuite pour composer les séances types de la semaine —
+  une spécificité jamais mentionnée ici ne se traduira jamais en contenu concret plus tard.
+- Cohérence arithmétique : si "summary"/"warnings" décrivent le plan en nombre de semaines par phase
+  (ex. "X semaines de base puis Y de build..."), vérifie que X+Y+... correspond EXACTEMENT à
+  ${parsedInput.weekCount} avant de répondre — jamais une description qui ne colle pas au tableau
+  "weeks" réellement renvoyé.
+- Honnêteté face aux données réelles : si le CTL fourni a visiblement baissé récemment, si le TSB est
+  très négatif, ou si le gouverneur de charge interne est dégradé, "summary" doit le dire explicitement
+  plutôt que de qualifier la progression de "réaliste"/"crédible" sans mentionner ce signal contraire —
+  jamais une évaluation positive qui contredit silencieusement les chiffres fournis.
 ${parsedInput.includeStrengthTraining ? `- ${STRENGTH_TRAINING_GUIDANCE}` : '- INCLURE_MUSCULATION=false (ou absent) : ne mets JAMAIS de champ targetStrengthMinutes sur aucune semaine.'}
 
 Réponds en français, avec UNIQUEMENT un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme
