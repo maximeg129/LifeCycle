@@ -226,7 +226,8 @@ export function TrainingPlanTab() {
   // est calculé par l'IA depuis la toute première PR du contrat de sortie
   // coach mais n'était jusqu'ici jamais affiché dans cet onglet (vrai
   // oubli, corrigé ici) — contrairement à la Proposition du jour.
-  const currentVerdict = activePlan?.recalibrations?.at(-1)?.verdict ?? activePlan?.verdict
+  const latestRecalibration = activePlan?.recalibrations?.at(-1)
+  const currentVerdict = latestRecalibration?.verdict ?? activePlan?.verdict
 
   // Retour utilisateur : "ça prend quand même pas mal de place sur la page
   // et ça rallonge... plus user friendly [d']avoir des pastilles... et
@@ -235,16 +236,30 @@ export function TrainingPlanTab() {
   // contrôle de progression de charge) en une seule liste — voir
   // plan-attention-types.ts — affichée par un unique badge compact
   // (PlanAttentionBadge) plutôt que trois blocs toujours dépliés.
+  //
+  // ⚠️ Revue externe (UX/engine) §1.3 : `activePlan.warnings` est figé à la
+  // création du plan et n'est JAMAIS retouché par une recalibration (voir
+  // use-recalibrate-plan.ts — seul `recalibrations[]` est écrit) ; un
+  // warning qui cite un chiffre réel (ex. "TSB très négatif (-17.9)") reste
+  // donc affiché tel quel des semaines plus tard, longtemps après que ce
+  // chiffre a dérivé vers une toute autre valeur — exactement la
+  // contradiction cross-écran remontée par la revue. Dès qu'au moins une
+  // recalibration a tourné, ses propres `risks` (recalculés à CETTE date,
+  // déjà affichés avec leur propre horodatage dans le Journal du plan
+  // juste en dessous) remplacent entièrement les warnings de création —
+  // jamais les deux empilés. Les warnings de création restent la seule
+  // source tant qu'aucune recalibration n'a encore eu lieu (ils sont alors
+  // encore à jour).
   const attentionItems = useMemo(
     () => buildPlanAttentionItems(
       {
         verdict: currentVerdict,
-        recommendation: activePlan?.recalibrations?.at(-1)?.recommendation ?? activePlan?.recommendation,
-        warnings: activePlan?.warnings ?? [],
+        recommendation: latestRecalibration?.recommendation ?? activePlan?.recommendation,
+        warnings: latestRecalibration?.risks ?? activePlan?.warnings ?? [],
       },
       loadProgressionCheck
     ),
-    [currentVerdict, activePlan, loadProgressionCheck]
+    [currentVerdict, latestRecalibration, activePlan, loadProgressionCheck]
   )
 
   const NewPlanForm = (
@@ -439,6 +454,15 @@ export function TrainingPlanTab() {
                   </button>
                 </CollapsibleTrigger>
                 <CollapsibleContent className="pt-2 space-y-3">
+                  {/* Revue externe (UX/engine) §1.3 : ce texte cite les
+                      chiffres réels (CTL/TSB...) tels qu'ils étaient à la
+                      CRÉATION du plan — jamais retouché depuis, voir le
+                      commentaire sur attentionItems ci-dessus pour le même
+                      problème côté warnings. Daté explicitement pour qu'un
+                      lecteur ne le lise jamais comme "la forme actuelle". */}
+                  <p className="text-xs text-muted-foreground/70">
+                    Plan créé la semaine du {format(new Date(`${activePlan.startDate}T00:00:00`), 'dd MMM yyyy', { locale: fr })}
+                  </p>
                   {activePlan.summary && (
                     <p className="text-sm text-muted-foreground leading-relaxed">{activePlan.summary}</p>
                   )}

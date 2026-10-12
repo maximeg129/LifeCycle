@@ -349,6 +349,76 @@ export function isReimportedStrengthActivityType(activity: SportTypeFieldsLike):
   return activity.type === 'WeightTraining';
 }
 
+export interface DedupableActivity {
+  start_date_local?: string;
+  moving_time?: number;
+  distance?: number;
+}
+
+/** Plus de distance/durée réelle gagne — un doublon reconnu par la revue externe (§1.7) n'a typiquement que la date comme titre, rien d'autre. */
+function activityCompletenessScore(a: DedupableActivity): number {
+  let score = 0;
+  if (a.distance != null && a.distance > 0) score += 2;
+  if (a.moving_time != null && a.moving_time > 0) score += 1;
+  return score;
+}
+
+const DEDUPE_START_WINDOW_MS = 5 * 60 * 1000;
+const DEDUPE_DURATION_TOLERANCE = 0.1;
+
+/**
+ * Revue externe (UX/engine) §1.7 : "samedi 26 septembre (Strava) apparaît
+ * deux fois" / "plusieurs entrées Strava n'ont qu'une date comme titre,
+ * sans distance ni durée" — des doublons visibles dans la liste
+ * d'activités elle-même, quelle qu'en soit la cause (réimport via la
+ * synchro Strava→Intervals.icu de l'athlète d'une activité déjà exportée
+ * par cette app, un double-sync côté Intervals.icu...). Plutôt que de
+ * deviner la cause exacte (aucun champ `strava_id`/équivalent n'est
+ * aujourd'hui exposé par ce projet pour tracer un réimport avec certitude
+ * — même limite network-blocked que documentée partout ailleurs dans ce
+ * fichier), ceci collabse ce qui est OBSERVABLEMENT redondant dans la
+ * liste déjà reçue : deux activités dont le départ est à moins de 5
+ * minutes d'écart ET dont la durée concorde à 10% près (ou dont l'une des
+ * deux n'a carrément aucune durée — le cas exact "titre = juste une
+ * date") sont fusionnées, en gardant celle qui porte le plus de données
+ * réelles (distance/durée).
+ *
+ * Volontairement limité à la PROXIMITÉ TEMPORELLE DE DÉPART, jamais à la
+ * seule proximité de durée : trois sorties DISTINCTES mais de durée
+ * similaire (ex. "3 sorties de ~35min le même jour") ne partagent presque
+ * jamais un départ à moins de 5 minutes d'écart si elles sont réellement
+ * séquentielles — un faux positif qui fusionnerait de vraies séances
+ * distinctes serait bien pire qu'un doublon affiché deux fois (perdre de
+ * vraies données d'entraînement plutôt que de voir une ligne en trop).
+ *
+ * Appliqué une seule fois, à la source (IntervalsProvider.fetchReads) —
+ * tous les consommateurs (Journal, recalibration/volume hebdo, séances
+ * récentes, gouverneur...) héritent du même correctif sans changement de
+ * leur propre code, même discipline que `bestAverageWatts`/`feelToScore`.
+ */
+export function dedupeActivities<T extends DedupableActivity>(activities: T[]): T[] {
+  const kept: T[] = [];
+  for (const a of activities) {
+    const aStart = a.start_date_local ? new Date(a.start_date_local).getTime() : NaN;
+    const dupIndex = !isNaN(aStart)
+      ? kept.findIndex((k) => {
+          const kStart = k.start_date_local ? new Date(k.start_date_local).getTime() : NaN;
+          if (isNaN(kStart) || Math.abs(aStart - kStart) > DEDUPE_START_WINDOW_MS) return false;
+          const aDur = a.moving_time ?? 0;
+          const kDur = k.moving_time ?? 0;
+          if (aDur === 0 || kDur === 0) return true;
+          return Math.abs(aDur - kDur) <= DEDUPE_DURATION_TOLERANCE * Math.max(aDur, kDur);
+        })
+      : -1;
+    if (dupIndex === -1) {
+      kept.push(a);
+    } else if (activityCompletenessScore(a) > activityCompletenessScore(kept[dupIndex])) {
+      kept[dupIndex] = a;
+    }
+  }
+  return kept;
+}
+
 export function bestAverageWatts(activity: PowerFieldsLike): number | null {
   const watts = activity.icu_average_watts ?? activity.average_watts ?? activity.icu_weighted_avg_watts ?? activity.weighted_average_watts;
   return watts != null && watts > 0 ? watts : null;

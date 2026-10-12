@@ -17,6 +17,7 @@ import { z } from 'zod';
 import { type FlowResult } from '@/ai/anthropic';
 import { invokeCoachJson } from '@/ai/coach/invokeCoach';
 import { withCoachOutputContract } from '@/ai/coach/outputContract';
+import { parseStructuredWorkoutProfile } from '@/components/cycling/plan-calendar-types';
 
 const ZoneBucketSchema = z.object({
   zone: z.number(),
@@ -133,7 +134,7 @@ const RideAnalysisInputSchema = z.object({
     .object({
       title: z.string(),
       durationMinutes: z.number(),
-      structuredWorkout: z.string().describe('Script "workout builder" Intervals.icu de la séance qui était PRÉVUE ce jour-là (plan d\'entraînement ou proposition IA) — jamais généré par ce flow, seulement recopié pour contexte.'),
+      structuredWorkout: z.string().describe('Script "workout builder" Intervals.icu de la séance qui était PRÉVUE ce jour-là (plan d\'entraînement ou proposition IA) — jamais généré par ce flow. Jamais envoyé tel quel au modèle (voir formatPlannedWorkout) : ses cibles %FTP sont résolues en watts réels avant d\'entrer dans le prompt, pour qu\'un pourcentage ne soit jamais confondu avec une valeur en watts dans le texte généré (revue externe §1.2).'),
     })
     .optional()
     .describe("La séance prévue ce jour-là, si elle a pu être retrouvée (plan actif daté ce jour, ou proposition IA du jour) — absente si aucun plan/proposition ne couvre cette date."),
@@ -188,6 +189,52 @@ function formatDurability(tiers: DurabilityTierInput[] | undefined): string {
     return `  - ${t.tierKJPerKg} kJ/kg franchi : ${mmpText}`;
   });
   return `DURABILITÉ — puissance maximale moyenne (MMP) par palier de travail accumulé déjà franchi pendant cette sortie (comparaison à froid vs fatigué, DANS cette même sortie) :\n${lines.join('\n')}`;
+}
+
+/**
+ * Revue externe (UX/engine) §1.2 : "3×4 min à 135–145% CP" devenait
+ * "Puissance moyenne tenue à 145 W dans la plage prescrite (135–145 W
+ * cible)" dans l'analyse générée — le modèle recopiait le nombre d'un
+ * pourcentage comme s'il s'agissait déjà de watts. Root cause : le script
+ * "workout builder" brut (des lignes "- 4min 135-145%") était interpolé
+ * TEL QUEL dans le prompt, laissant au modèle le soin de faire lui-même la
+ * conversion %FTP→watts — jamais garanti correct, et jamais vérifiable
+ * après coup puisque le texte final ne distingue plus "ce qui était un
+ * pourcentage" de "ce qui est un vrai watt". Corrigé en résolvant CHAQUE
+ * étape en watts réels AVANT que le prompt ne soit construit (même
+ * discipline que `computeIntervalAdherence`/`formatIntervalAdherence` pour
+ * le réalisé, voir plus bas) — le modèle ne voit plus jamais un chiffre de
+ * pourcentage brut à côté du mot "séance prévue".
+ *
+ * Sans FTP connue (cas rare — `athlete.ftp` est optionnel), affiche le %
+ * cible mais TOUJOURS explicitement suffixé "% FTP", jamais un nombre nu
+ * qui pourrait être relu comme des watts par le modèle.
+ */
+function formatPlannedWorkout(
+  planned: { title: string; durationMinutes: number; structuredWorkout: string } | undefined,
+  ftpWatts: number | undefined
+): string {
+  if (!planned) return '';
+  const header = `SÉANCE PRÉVUE CE JOUR-LÀ : "${planned.title}" (${planned.durationMinutes} min)`;
+  const steps = parseStructuredWorkoutProfile(planned.structuredWorkout);
+  if (steps.length === 0) {
+    // Script illisible/vide (cas rare, voir parseStructuredWorkoutProfile) —
+    // garder seulement titre/durée, jamais le texte brut ambigu en repli.
+    return header;
+  }
+  const lines = steps.map((s, i) => {
+    const lo = s.pctFtpLow ?? s.pctFtp;
+    const hi = s.pctFtpHigh ?? s.pctFtp;
+    const pctLabel = lo === hi ? `${lo}% FTP` : `${lo}-${hi}% FTP`;
+    if (ftpWatts != null && ftpWatts > 0) {
+      const lowW = Math.round((lo / 100) * ftpWatts);
+      const highW = Math.round((hi / 100) * ftpWatts);
+      const wattsLabel = lowW === highW ? `${lowW} W` : `${lowW}-${highW} W`;
+      return `  - Étape ${i + 1} (${formatDurationLabel(s.durationSeconds)}) : cible ${wattsLabel} (${pctLabel})`;
+    }
+    return `  - Étape ${i + 1} (${formatDurationLabel(s.durationSeconds)}) : cible ${pctLabel} (FTP inconnue — pas de watts calculables)`;
+  });
+  return `${header}\n${lines.join('\n')}`;
 }
 
 const VERDICT_LABEL: Record<IntervalAdherenceStepInput['verdict'], string> = {
@@ -273,9 +320,8 @@ export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult
     const durabilityText = formatDurability(parsed.durability);
     if (durabilityText) sections.push(durabilityText);
 
-    if (parsed.plannedWorkout) {
-      sections.push(`SÉANCE PRÉVUE CE JOUR-LÀ : "${parsed.plannedWorkout.title}" (${parsed.plannedWorkout.durationMinutes} min)\n${parsed.plannedWorkout.structuredWorkout}`);
-    }
+    const plannedWorkoutText = formatPlannedWorkout(parsed.plannedWorkout, parsed.athlete?.ftp);
+    if (plannedWorkoutText) sections.push(plannedWorkoutText);
 
     const intervalAdherenceText = formatIntervalAdherence(parsed.intervalAdherence);
     if (intervalAdherenceText) sections.push(intervalAdherenceText);
@@ -289,7 +335,7 @@ Si un profil de durabilité est fourni, commente si la puissance tient ou décli
 Si un découplage puissance:FC est fourni, ne l'interprète JAMAIS automatiquement comme un signe de fatigue — contextualise (chaleur, hydratation/hypovolémie, dénivelé, intensité variable sur la sortie) plutôt que d'affirmer une cause précise que les données ne permettent pas de trancher.
 Si une répartition 3 zones est fournie, la cible ~80% en zone basse intensité est une observation DESCRIPTIVE d'athlètes s'entraînant 10-13 fois/semaine, JAMAIS une prescription universelle — ne dis jamais à l'athlète qu'il "devrait" viser 80% sur CETTE sortie (une sortie seuil/intervalles n'a aucune raison d'être en zone basse), décris seulement où se situe cette sortie et laisse le contexte du plan/objectif de l'athlète, pas ce chiffre seul, dicter si c'était le bon choix.
 Le RPE et le Feeling sont deux mesures subjectives distinctes de l'athlète, qui peuvent diverger sans que ce soit un problème — ne les confonds jamais et ne les traite jamais comme contradictoires l'un envers l'autre sans raison réelle. Un RPE bas (proche de 1) et un Feeling positif racontent la MÊME histoire cohérente (séance facile, bien vécue) : ne présente JAMAIS cette combinaison comme un "ressenti négatif inexpliqué" à investiguer, ni comme un écart entre le ressenti et la charge objective — c'est le signal normal et attendu d'une séance facile bien tolérée, pas une anomalie. Symétriquement, un RPE bas ET un Feeling négatif ne sont PAS non plus une anomalie ou une divergence alarmante en soi : le Feeling reflète le bien-être général du moment (stress, sommeil, vie personnelle, motivation), qui peut se dégrader pour des raisons totalement indépendantes de l'effort physique de cette sortie précise — un RPE bas dit seulement que CETTE séance était physiologiquement facile, il ne prédit rien sur le moral de l'athlète ce jour-là. Ne présente donc JAMAIS cette combinaison comme un "signal d'alerte" ni comme une divergence qui "mérite une clarification" : mentionne le Feeling négatif factuellement s'il est pertinent au contexte de la sortie, sans escalade, sauf si d'autres indicateurs objectifs réels fournis ici (FC anormalement élevée, découplage marqué, TSB très négatif...) corroborent une vraie inquiétude à signaler — jamais le RPE ou le Feeling seuls comme preuve d'un problème.
-Si une séance prévue et un respect des intervalles sont fournis, commente si les intervalles ont été tenus dans la cible, en dessous, ou au-dessus — cite les vrais chiffres (%FTP cible vs réalisé) plutôt que de rester vague ("bien tenu" / "un peu court"). Si plusieurs intervalles vont dans le même sens (systématiquement sous ou au-dessus de la cible), propose une piste concrète OU une question ouverte à l'athlète plutôt qu'une affirmation tranchée : fatigue accumulée du jour, conditions extérieures (vent, dénivelé, chaleur) ayant pu justifier l'écart, ou intensité prescrite par le plan à recalibrer (FTP sous/sur-estimé, cible trop ambitieuse en ce moment) — utilise "improvementAreas"/"recommendation" pour ça. Le découpage n'est PAS un repère de tour vérifié par Intervals.icu (juste un cumul des durées prévues sur le flux réel) : reste mesuré, ne dis jamais avec certitude absolue qu'un intervalle précis a été "manqué" pour un écart de quelques % seulement — parle d'écart notable plutôt que d'échec quand la marge est faible.
+Si une séance prévue et/ou un respect des intervalles sont fournis, cite UNIQUEMENT les watts et pourcentages déjà calculés ci-dessus — ne convertis JAMAIS toi-même un pourcentage en watts ni l'inverse, et n'écris jamais un nombre de watts qui n'apparaît pas déjà tel quel dans les données fournies (un pourcentage cible et sa valeur en watts peuvent coïncider numériquement par hasard — ne les confonds jamais, cite toujours l'unité exacte donnée). Commente si les intervalles ont été tenus dans la cible, en dessous, ou au-dessus — cite les vrais chiffres (%FTP cible vs réalisé) plutôt que de rester vague ("bien tenu" / "un peu court"). Si plusieurs intervalles vont dans le même sens (systématiquement sous ou au-dessus de la cible), propose une piste concrète OU une question ouverte à l'athlète plutôt qu'une affirmation tranchée : fatigue accumulée du jour, conditions extérieures (vent, dénivelé, chaleur) ayant pu justifier l'écart, ou intensité prescrite par le plan à recalibrer (FTP sous/sur-estimé, cible trop ambitieuse en ce moment) — utilise "improvementAreas"/"recommendation" pour ça. Le découpage n'est PAS un repère de tour vérifié par Intervals.icu (juste un cumul des durées prévues sur le flux réel) : reste mesuré, ne dis jamais avec certitude absolue qu'un intervalle précis a été "manqué" pour un écart de quelques % seulement — parle d'écart notable plutôt que d'échec quand la marge est faible.
 
 Réponds UNIQUEMENT avec un objet JSON (pas de balises markdown, pas d'autre texte) de cette forme exacte
 (plus les champs de contrat obligatoires décrits plus haut) :

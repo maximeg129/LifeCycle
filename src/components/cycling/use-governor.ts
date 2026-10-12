@@ -55,6 +55,19 @@ export interface TrainingLoadSummary {
 export interface GovernorResult {
   status: GovernorStatus
   signals: GovernorSignals
+  /**
+   * Nombre de signaux réellement connus (non-null) sur les 6 — revue
+   * externe (UX/engine) §1.4 : `status` ('vert'/'orange'/'rouge') ne
+   * nécessite que 2 signaux connus sur 6 pour se prononcer ; sans ce
+   * compte affiché à côté, "🟢 Favorable" se lit comme une conclusion
+   * unanime même quand elle repose sur une minorité des signaux (les 4
+   * autres affichés "N/D" juste en dessous). Jamais une deuxième logique
+   * de décision — computeInternalLoadStatus reste la seule source du
+   * statut lui-même, ceci n'ajoute qu'un chiffre de confiance honnête.
+   */
+  knownSignalsCount: number
+  /** Toujours 6 aujourd'hui — exposé pour que l'affichage ("3/6 signaux connus") ne code jamais ce total en dur à deux endroits différents. */
+  totalSignalsCount: number
   /** `null` tant qu'aucune activité n'a de RPE ET de durée sur les 7 derniers jours (voir le calcul plus bas — jamais une durée inventée pour un feedback local sans activité liée). */
   trainingLoad: TrainingLoadSummary | null
   isLoading: boolean
@@ -199,6 +212,8 @@ export function useGovernor(): GovernorResult {
     return {
       status: computeInternalLoadStatus(signals),
       signals,
+      knownSignalsCount: Object.values(signals).filter((s) => s !== null).length,
+      totalSignalsCount: Object.keys(signals).length,
       trainingLoad,
       isLoading: wellness.isLoading || activities.isLoading || loadingFeedback || loadingHealthMetrics,
     }

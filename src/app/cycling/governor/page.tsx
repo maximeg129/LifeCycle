@@ -64,7 +64,12 @@ export default function GovernorDetailPage() {
                 <span className="text-3xl">{meta.emoji}</span>
                 <div>
                   <div className={`font-semibold ${meta.className}`}>{meta.label}</div>
-                  <div className="text-xs text-muted-foreground">{meta.hint}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {meta.hint}
+                    {governor.status !== 'insufficient_data' && (
+                      <span className="text-muted-foreground/70"> · {governor.knownSignalsCount}/{governor.totalSignalsCount} signaux connus</span>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="space-y-2">
@@ -128,6 +133,10 @@ export default function GovernorDetailPage() {
               de données). Le statut global additionne les signaux non-nuls : somme positive → <span className="font-medium text-foreground">🟢 Favorable</span>,
               somme négative → <span className="font-medium text-foreground">🔴 Dégradé</span>, somme nulle → <span className="font-medium text-foreground">🟠 Stable</span>.
               Avec moins de 2 signaux exploitables, le statut est honnêtement <span className="font-medium text-foreground">⚪ Données insuffisantes</span> plutôt qu&apos;une supposition.
+              Au-dessus de ce seuil, le statut n&apos;exige PAS que les 6 signaux soient tous connus — d&apos;où le
+              compte &laquo;&nbsp;N/6 signaux connus&nbsp;&raquo; affiché à côté : un statut peut rester
+              &laquo;&nbsp;Favorable&nbsp;&raquo; avec seulement 2 ou 3 signaux disponibles, jamais un vote unanime
+              des 6 malgré les &laquo;&nbsp;N/D&nbsp;&raquo; visibles ci-dessous.
               Ce statut pilote ensuite directement l&apos;objectif du <Link href="/cycling/budget" className="text-primary hover:underline">budget kJ de la semaine</Link>.
             </p>
             <div className="space-y-3">

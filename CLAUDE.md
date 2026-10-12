@@ -3707,6 +3707,104 @@ de prompt précédents de cette même revue, les trois nudges restent invérifia
 sandbox (pas d'`ANTHROPIC_API_KEY`) — seul `flagFtpTestWeek()` est garanti par construction, le reste
 à confirmer par l'utilisateur à la prochaine génération réelle d'un plan.
 
+## Revue externe UX/engine — pièce 4 : fermeture des écarts Phase 1+2 (§1.2, §1.3, §1.4, §1.7)
+
+Avant d'attaquer la refonte IA/visuelle (deux nouveaux briefs : `LifeCycle_Pro_UX_Engine_Review.md`
+— le document source complet derrière les pièces 1 à 4, jamais lu en entier avant cette pièce,
+seulement paraphrasé depuis des captures d'écran — et `LifeCycle_Pro_UI_Spec.md`/
+`lifecycle-ui-reference.html`, la couche visuelle), décision utilisateur (`AskUserQuestion`) :
+fermer d'abord les quatre écarts explicitement laissés ouverts dans les pièces 1-3 (§1.2 bug %→watts
+dans l'analyse IA, §1.3 cohérence des métriques entre écrans, §1.4 gouverneur "Favorable" malgré des
+données manquantes, §1.7 dédoublonnage d'activités au-delà du filtre WeightTraining) — "la nouvelle
+IA ne ferait que réafficher les mêmes contradictions sur une mise en page plus jolie sinon."
+
+**§1.2 — "3×4 min à 135–145% CP" devenait "145 W dans la plage prescrite (135–145 W cible)"** —
+root cause confirmée en lisant `ride-analysis-flow.ts` : la ligne "SÉANCE PRÉVUE CE JOUR-LÀ"
+interpolait le script "workout builder" BRUT (des lignes `"- 4min 135-145%"`) directement dans le
+prompt, laissant au modèle le soin de convertir lui-même %FTP→watts — jamais garanti correct, et le
+texte final ne distingue plus "ce qui était un pourcentage" de "ce qui est un vrai watt". Contraste
+avec `intervalAdherence` (le réalisé), déjà résolu en watts réels par `computeIntervalAdherence`
+avant d'entrer dans le prompt — seul le PRÉVU manquait cette discipline. **`formatPlannedWorkout()`**
+(nouvelle fonction privée, même fichier) réutilise `parseStructuredWorkoutProfile`
+(`plan-calendar-types.ts`, déjà pur/partagé) pour résoudre chaque étape en watts réels AVANT la
+construction du prompt — `athlete.ftp` (déjà fourni) donne la conversion ; sans FTP connue, affiche
+le % mais TOUJOURS suffixé "% FTP" explicitement, jamais un nombre nu. Script illisible/vide → titre/
+durée seuls, jamais le texte brut ambigu en repli. Règle de prompt renforcée en complément : "cite
+UNIQUEMENT les watts et pourcentages déjà calculés... ne convertis JAMAIS toi-même un pourcentage en
+watts." Un seul point de correction, hérité par les deux appelants (`use-ride-analysis.ts` côté
+client ET `/api/intervals/webhook` côté Admin SDK) puisque le formatage vit dans le flow lui-même.
+
+**§1.3 — "TSB +6.0, +4.1, +4 et −17.9 selon l'écran"** — audit : `useAthlete()`/`useFitnessChart()`
+sont TOUS deux adossés à un seul `useIntervalsContext()` partagé (un seul fetch par sync, aucune
+lecture indépendante par composant) et la formule `ctl - atl` est identique partout (vérifié par
+grep) — la divergence n'est donc PAS une deuxième formule qui aurait dérivé, c'est un texte IA
+PERSISTÉ qui cite un chiffre en dur et n'est JAMAIS retouché après coup. Deux occurrences confirmées
+dans `training-plan-tab.tsx` :
+- **`activePlan.warnings[]`** (généré une fois par `trainingPlanGeneration` à la création du plan,
+  pouvant citer un TSB/CTL réel de l'époque) n'était JAMAIS mis à jour par aucune recalibration
+  suivante (`use-recalibrate-plan.ts` n'écrit QUE `recalibrations[]`, jamais `warnings`) — un plan
+  vieux de plusieurs semaines affichait donc pour toujours son warning de création ("TSB très négatif
+  (-17.9)...") via `PlanAttentionBadge`, même si le TSB réel était redevenu +4 à +6 depuis. Corrigé :
+  dès qu'au moins une recalibration a tourné, ses propres `risks[]` (recalculés à CETTE date, déjà
+  horodatés dans le Journal du plan) remplacent ENTIÈREMENT les warnings de création — jamais les
+  deux empilés — même patron déjà en place pour `currentVerdict`/`recommendation` (préférer la
+  dernière recalibration, repli sur la création si aucune n'a encore eu lieu).
+- **"Pourquoi ce plan ?"** (`activePlan.summary`/`activePlan.reasons`) cite lui aussi des chiffres de
+  création sans AUCUN horodatage visible — corrigé en ajoutant "Plan créé la semaine du {startDate}"
+  juste au-dessus, pour qu'un lecteur ne le lise jamais comme "la forme actuelle" (même discipline
+  déjà appliquée à `rideAnalysis`'s effortContext en pièce 1).
+
+**§1.4 — gouverneur "Favorable" malgré Sommeil/HRV "—"** — `computeInternalLoadStatus()` n'exige que
+2 signaux connus sur 6 pour se prononcer (comportement INCHANGÉ, volontairement — reconcevoir le
+seuil de décision risquerait de contredire le raisonnement déjà soigneusement sourcé de ce module,
+sans le valider en direct). Le vrai trou : ce seuil n'était jamais communiqué nulle part — "🟢
+Favorable" se lisait comme un vote unanime des 6 signaux plutôt que comme ce qu'il est réellement
+(une majorité parmi ceux qui sont connus). **`GovernorResult.knownSignalsCount`/`totalSignalsCount`**
+(nouveaux champs, `use-governor.ts`) exposent ce compte sans toucher à la logique de décision ;
+affiché à côté du verdict ("Favorable · 3/6 signaux connus") dans `GovernorWidget` ET sa page détail
+(`/cycling/governor`), avec un paragraphe explicite dans "Méthode de calcul" sur ce que ce compte
+veut dire. Portée volontairement limitée à l'UI : ne propage pas ce compte dans `buildCoachContext()`
+(aurait exigé de threader un nouveau paramètre dans les ~8 appelants qui construisent déjà ce
+contexte) — le bug concret observé par la revue était une contradiction VISUELLE sur un écran, pas
+une citation IA erronée.
+
+**§1.7 — doublons d'activités ("samedi 26 septembre" deux fois, entrées Strava sans distance/durée,
+icône vélo sur une course à pied)** — deux correctifs, l'un structurel, l'autre cosmétique :
+- **`dedupeActivities()`** (`intervals-api.ts`, pur/testé) collabse deux activités dont le DÉPART est
+  à moins de 5 minutes d'écart ET dont la durée concorde à 10% près (ou dont l'une des deux n'a
+  carrément aucune durée — exactement le cas "titre = une date, sans distance ni durée" cité par la
+  revue), en gardant celle qui porte le plus de données réelles (distance/durée). Volontairement
+  PAS basé sur la seule proximité de durée (le "3 sorties ~35min le même jour" de la revue) : exiger
+  AUSSI un départ proche évite de fusionner à tort des sorties séquentielles distinctes, qui ne
+  partagent presque jamais un départ à 5 minutes d'écart — un faux positif (perdre de vraies données)
+  serait bien pire qu'un doublon affiché deux fois. Aucun champ `strava_id`/équivalent n'existe dans
+  ce projet pour tracer un réimport avec certitude (même limite network-blocked que documentée
+  partout ailleurs dans ce fichier) — ceci dédoublonne donc ce qui est OBSERVABLEMENT redondant dans
+  la liste déjà reçue, quelle qu'en soit la cause, plutôt que de deviner laquelle. Appliqué UNE SEULE
+  FOIS dans `IntervalsProvider.fetchReads()` (`use-intervals.tsx`) — tout consommateur de
+  `useActivities()` (Journal, recalibration/volume hebdo, séances récentes, gouverneur...) en hérite
+  sans changement de son propre code, même discipline que `bestAverageWatts`/`feelToScore`.
+- **Icône vélo sur une course à pied** (`rides-journal-tab.tsx`) — liste BLANCHE volontairement
+  étroite (`Run`/`VirtualRun`/`TrailRun`) plutôt qu'une classification exhaustive : contrairement à
+  `isReimportedStrengthActivityType` (qui filtre une vraie donnée du gouverneur), un mauvais choix
+  d'icône n'a ICI aucune conséquence sur un calcul — le risque d'un faux négatif (une variante de
+  course non listée garde l'icône vélo) est purement cosmétique, jamais un "deviner" qui pourrait
+  corrompre un chiffre.
+- **"Les sorties hors-plan comptent déjà dans le volume réalisé"** — vérifié plutôt que corrigé :
+  `computeActualWeeklyMinutes()` (`training-plan-types.ts`) somme déjà TOUTES les activités dans la
+  plage de dates de la semaine, sans filtrer par "rapprochée d'une séance prévue" — l'exemple de la
+  revue ("65% réalisé malgré une course et une sortie Zwift") n'est donc pas reproductible depuis la
+  lecture du code tel qu'il est aujourd'hui ; plausiblement expliqué par le bug de doublons ci-dessus
+  (sous-comptage si une activité réelle était masquée par un doublon) plutôt que par un filtre
+  manquant. Aucun changement fait ici faute de cause confirmable.
+
+Tests (`intervals-api.test.ts`, 5 nouveaux pour `dedupeActivities`) — 935/935 au total, tsc/eslint/
+build clean. Comme pour les correctifs de prompt précédents, §1.2 reste invérifiable en direct sans
+`ANTHROPIC_API_KEY` ; §1.3/§1.4/§1.7 sont vérifiables statiquement (logique pure testée, ou lecture de
+code croisée contre l'évidence de la revue) mais pas reproductibles avec les données réelles de
+l'athlète qui a motivé la revue, network-blocked depuis ce sandbox comme documenté partout ailleurs
+dans ce fichier.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
