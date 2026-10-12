@@ -40,6 +40,23 @@
 
 import { W_PRIME_RECONSTITUTION_CONSTANT, requireConstant } from '../evidence/constants'
 
+// ⚠️ Revue externe (UX/engine) : avec seulement 2-3 records perso
+// (settings/powerCurve), la régression linéaire ci-dessous est très sensible
+// au bruit — un seul record légèrement décalé peut produire un W′
+// statistiquement valide (positif) mais physiologiquement absurde (ex. CP
+// 27% sous la FTP, W′ > 50 kJ, l'exemple concret relevé par la revue).
+// `fitCriticalPower` dégradait jusqu'ici vers `null` seulement pour un fit
+// DÉGÉNÉRÉ (CP/W′ négatifs) — jamais pour un fit simplement IMPLAUSIBLE.
+// Plage plausible ci-dessous : une borne produit/UX, PAS une valeur sourcée
+// de la littérature (même statut que SEVERE_WIND_THRESHOLD_KMH, ai/weather.ts,
+// ou READINESS_TREND_FULL_SWING_PCT, lifestyle-types.ts) — W′ publié dans la
+// littérature CP va typiquement de quelques kJ (endurance pure) à ~30 kJ
+// (profil sprinter), une valeur hors de cette fourchette trahit presque
+// toujours un fit mal conditionné plutôt qu'un vrai profil physiologique.
+// Dégrade vers `null` (même traitement que les autres cas dégénérés —
+// masque la tuile plutôt que d'afficher un chiffre invraisemblable).
+const W_PRIME_PLAUSIBLE_RANGE_JOULES = { min: 3000, max: 40000 } as const
+
 export interface PowerRecord {
   seconds: number
   watts: number
@@ -76,6 +93,7 @@ export function fitCriticalPower(records: PowerRecord[]): CriticalPowerModel | n
   const cpWatts = (n * sumXY - sumX * sumY) / denom
   const wPrimeJoules = (sumY - cpWatts * sumX) / n
   if (cpWatts <= 0 || wPrimeJoules <= 0) return null // dégénéré, pas d'interprétation physiologique valide
+  if (wPrimeJoules < W_PRIME_PLAUSIBLE_RANGE_JOULES.min || wPrimeJoules > W_PRIME_PLAUSIBLE_RANGE_JOULES.max) return null // implausible (voir le commentaire sur la plage ci-dessus) — jamais affiché tel quel
 
   return { cpWatts, wPrimeJoules }
 }

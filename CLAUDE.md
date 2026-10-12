@@ -3460,6 +3460,124 @@ clean. Comme documenté pour le reste du chantier B2, invérifiable en direct da
 accès réseau à Intervals.icu) — à confirmer par l'utilisateur au prochain webhook `ACTIVITY_ANALYZED`
 reçu en prod pour une sortie dont le plan a une séance datée ce jour-là.
 
+## Revue externe UX/engine — pièce 1 : vocabulaire des cibles, fit CP implausible, forme figée dans le temps
+
+Retour utilisateur : revue externe complète (observée en live sur l'app, pas sur le code) relevant 8
+points P0 — deux anchors de seuil différents (FTP vs CP), un bug %/watts dans l'analyse IA, des
+chiffres (TSB/CTL/budget kJ) qui divergent d'un écran à l'autre, un gouverneur qui affiche
+"Favorable" malgré des données manquantes, des jours de semaine qui contredisent le calendrier, un
+plan qui ne sert pas l'objectif, et du vocabulaire moteur interne qui fuite dans l'UI. Décision
+utilisateur (`AskUserQuestion`) : "Phase 1 + 2" (data truth + qualité du plan) de l'ordre
+d'implémentation proposé par la revue elle-même.
+
+**Diagnostic mené par LECTURE DU CODE plutôt que par confiance aveugle dans la revue** (qui n'avait
+observé que l'UI) — plusieurs affirmations ne résistaient pas à la vérification, d'autres étaient
+confirmées mais pour une cause plus précise que celle décrite :
+
+- **Confirmé, cause précise** (§1.2, "%CP" affiché comme si c'était des watts) — `computeIntervalAdherence`/
+  `formatIntervalAdherence` (déjà en place) séparent déjà correctement %FTP et watts dans l'encart
+  chiffré "Respect des intervalles" ; ce n'est PAS là que ça casse. La vraie fuite : `coach-context.ts`
+  cite la puissance critique (CP/W′) comme un chiffre réel de plus dans le bloc "CHARGE
+  D'ENTRAÎNEMENT ACTUELLE" envoyé à CHAQUE flow coach (`dailyWorkoutRecommendation`/`planWeekSessions`/
+  `rideAnalysis`...), sans jamais préciser qu'elle est purement informative — rien n'empêchait le
+  modèle de reformuler une cible de séance en "% de CP" en texte libre (titre/rationale) alors que
+  `STRUCTURED_WORKOUT_SYNTAX` force déjà le script lui-même en %FTP strict. Le parseur ne voit jamais
+  ce texte libre, donc l'incohérence n'était visible qu'à l'écran.
+- **Confirmé, cause précise** (§1.6, jours de semaine fictifs) — `planWeekSessions`
+  (`plan-week-sessions-flow.ts`) est le SEUL flow qui génère plusieurs séances pour une semaine entière
+  AVANT que les dates ne soient attribuées (`assignSessionDates`/`assignSessionDatesByAvailability`
+  tournent APRÈS coup, par bin-packing sur la durée — jamais une décision du modèle, voir
+  `training-plan-types.ts`). Le modèle n'a donc structurellement aucune information sur le jour
+  calendaire qu'une séance occupera au moment où il rédige son titre ; rien dans son prompt ne lui
+  interdisait de nommer un jour par habitude stylistique — garantissant un jour fictif dès qu'il le
+  fait.
+- **Confirmé, cause précise** (§1.3, forme "actuelle" qui ne l'est plus) — `rideAnalysis`
+  (`ride-analysis-flow.ts`) composait son `effortContext` en citant le CTL/ATL/TSB sous le libellé
+  "forme ACTUELLE de l'athlète" — correct au moment de la génération, mais une analyse peut être lue
+  bien après (régénération tardive depuis le Journal, ou le webhook qui l'auto-génère pour un jour
+  différent d'aujourd'hui, voir le chantier "Webhook enrichi" juste au-dessus) : le texte généré
+  n'était jamais rattaché à la date de LA SORTIE, donc se lisait comme "mon état en ce moment" même
+  des semaines plus tard.
+- **Confirmé mais surestimé** (§1.1, fit CP implausible) — `fitCriticalPower()`
+  (`criticalPower.ts`) ne dégradait vers `null` QUE pour un fit dégénéré (CP/W′ négatifs) — jamais
+  pour un fit mathématiquement valide mais physiologiquement absurde (l'exemple concret de la revue :
+  CP 27% sous la FTP, W′ 55,6 kJ — très au-dessus de ce qu'un profil humain plausible produit). Avec
+  seulement 2-3 records perso en entrée, la régression est très sensible au bruit. Corrigé par une
+  plage de plausibilité sur le W′ — mais PAS en retirant le modèle CP/W′ lui-même (contrairement à ce
+  que l'intitulé "two different threshold anchors" suggérait) : FTP reste l'ancre pour TOUTE
+  prescription (structuredWorkout, %FTP), CP reste un signal informatif distinct
+  (`riegel-prefer-critical-power-side-cycling`), les deux coexistent délibérément déjà — le vrai bug
+  n'était pas la coexistence des deux ancres, c'était un fit non borné et une fuite de vocabulaire
+  (voir §1.2 ci-dessus).
+- **Ne résiste pas à la vérification** (§1.5, "le budget kJ/kg est une erreur de catégorie, à
+  retirer") — relecture complète de `domain/cycling/metrics/kj.ts`/`use-kj-budget.ts`/
+  `kj-budget-widget.tsx` : le modèle est DÉJÀ en kJ/kg (jamais en kJ bruts, corrigé lors d'un chantier
+  antérieur — voir le commentaire de tête de `load-types.ts`), les paliers de durabilité sont DÉJÀ
+  traités comme des plafonds de référence et explicitement affichés comme tels dans le widget
+  ("plafond, pas une cible"), et `computeTargetKJPerKg()` est déjà documentée comme "une suggestion
+  que l'athlète peut ignorer — jamais une prescription automatique". Retirer cette fonctionnalité sur
+  la base d'une revue qui n'avait vu que l'UI aurait détruit un module déjà correctement sourcé et
+  disciplinée. Le SEUL écart réel trouvé : la formulation du hint du gouverneur ("Le budget kJ peut
+  augmenter") sonnait comme une cible à atteindre, contredisant la discipline que le reste du module
+  respecte déjà — corrigé en alignant le texte ("Marge pour une progression graduelle"), sans toucher
+  au calcul.
+- **Nécessite une reproduction live pour aller plus loin** (§1.4, gouverneur "Favorable" malgré des
+  données manquantes) — `signalLabel()` (`governor-widget.tsx`) rend déjà "N/D" pour un signal `null`
+  ; la contradiction vue par la revue (Sommeil/HRV "—" sur un écran, "Favorable"/"Neutre" sur un
+  autre) est plus probablement deux calculs légitimement différents (le signal de TENDANCE du
+  gouverneur vs le score de readiness ponctuel du jour, voir "Readiness : intégration HRV/FC repos"
+  plus haut) qu'un défaut au niveau du signal manquant lui-même — non corrigé dans cette pièce, pas
+  assez de preuve pour cibler un fichier précis sans une capture d'écran réelle à l'appui.
+
+**Correctifs livrés** :
+- **`session-generation-guardrails.ts`** (nouveau, fichier plain comme `on-bike-fueling-guidance.ts`/
+  `home-trainer-adaptation.ts`) — `SESSION_TARGET_VOCABULARY_GUIDANCE` (interdit "% CP" en lien avec
+  une cible de séance, rappelle que CP reste informatif) et `NO_WEEKDAY_IN_SESSION_TEXT_GUIDANCE`
+  (interdit un jour de semaine dans le titre/rationale). Interpolées dans `plan-week-sessions-flow.ts`
+  (les deux) et `daily-workout-recommendation-flow.ts` (vocabulaire seulement — "aujourd'hui" porte
+  déjà une date connue, le risque de jour fictif y est structurellement plus faible).
+  `adjust-session-location-flow.ts` n'a pas été touché : il ne charge aucun coachContext (donc jamais
+  de citation CP) et ne touche jamais au titre que pour retirer une référence à l'ancien lieu.
+- **`coach-context.ts`** — la ligne citant la CP porte désormais explicitement "(signal informatif
+  sur la forme — jamais la référence pour exprimer une cible de séance, qui reste toujours en %FTP)" ;
+  `governorStatusLabel()`'s cas `'vert'` et `governor-widget.tsx`'s hint reformulés pour ne plus
+  sonner comme une cible à atteindre (voir §1.5 ci-dessus).
+- **`criticalPower.ts`** — `fitCriticalPower()` rejette désormais un W′ hors de `[3000, 40000]` J
+  (plage produit/UX documentée comme telle, PAS une valeur sourcée de la littérature — même statut
+  que `SEVERE_WIND_THRESHOLD_KMH`/`READINESS_TREND_FULL_SWING_PCT`), dégradant vers `null` comme les
+  autres cas dégénérés déjà en place (masque la tuile CP plutôt qu'afficher un chiffre absurde).
+- **`ride-analysis-flow.ts`** — le bloc "FORME DE L'ATHLÈTE" cite désormais explicitement la date de
+  LA SORTIE ("AU MOMENT DE CETTE SORTIE (2026-10-06), PAS 'actuellement'"), et `effortContext` est
+  réancré dans son schéma pour ne jamais décrire la forme "en ce moment" sans la rattacher à cette
+  date — l'analyse d'une sortie lue des semaines après sa génération ne devrait plus se lire comme un
+  état présent.
+- **`stripWeekdayMentions()`** (`training-plan-types.ts`, pur/testé) — filet de sécurité
+  déterministe EN PLUS de la règle de prompt ci-dessus, même discipline que le retry S05 ("une
+  instruction de prompt seule reste une préférence que le modèle peut ignorer, jamais une garantie" —
+  voir "Musculation : retry côté code" plus haut) : retire un jour de semaine isolé par un séparateur
+  usuel (tiret/deux-points/virgule) en fin ou en tête de titre, ex. "Seuil aérobie — Jeudi" →
+  "Seuil aérobie". Limite honnête documentée : un jour mentionné EN LIGNE sans séparateur ("Séance du
+  jeudi") n'est pas détecté, pour ne jamais risquer de mutiler une construction de phrase normale.
+  Appliqué dans `use-generate-week-sessions.ts` juste après réception des séances générées, avant
+  l'attribution des dates.
+- **Déduplication incidente** (`governor-widget.tsx`/`/cycling/governor/page.tsx`) — `STATUS_META`/
+  `signalDot`/`signalLabel` étaient dupliqués à l'identique entre le widget et sa page détail,
+  exactement le genre de "deux sources qui peuvent diverger" que la revue dénonce comme principe
+  général (§0, "one source of truth for every number") — exporté une seule fois depuis le widget,
+  importé par la page détail, plus de deuxième copie à maintenir en synchro manuellement.
+
+**Reste de "Phase 1 + 2", pas encore traité dans cette pièce** : §1.7 (dédoublonnage des activités/
+réimport Strava), §1.8 (le plan ne sert pas l'objectif — test FTP forcé, couverture des priorités
+sprint/grimpe, cohérence phases/durée), §1.9 (dédoublonnage de la mémoire coach). Chacun touche une
+surface plus large (ingestion d'activités, générateur de plan, extraction de mémoire) — volontairement
+scindés en pièces séparées plutôt que risqués dans la même PR.
+
+Tests (`criticalPower.test.ts`, 1 nouveau pour le fit implausible ; `training-plan-types.test.ts`, 6
+nouveaux pour `stripWeekdayMentions`) — 917/917 au total, tsc/eslint/build clean. Comme pour les
+correctifs de prompt précédents, invérifiable en direct dans ce sandbox pour la partie prompt (pas
+d'`ANTHROPIC_API_KEY`) — à confirmer par l'utilisateur à la prochaine génération d'une semaine de
+plan ou d'une analyse de sortie.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

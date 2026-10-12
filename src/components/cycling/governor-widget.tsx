@@ -8,8 +8,12 @@ import { useGovernor } from './use-governor'
 import type { Signal } from './governor-types'
 import type { GovernorStatus } from './load-types'
 
-const STATUS_META: Record<GovernorStatus, { emoji: string; label: string; hint: string; className: string }> = {
-  vert: { emoji: '🟢', label: 'Favorable', hint: 'Le budget kJ peut augmenter', className: 'text-green-400' },
+// Exporté — réutilisé tel quel par /cycling/governor/page.tsx (page détail), qui dupliquait
+// jusqu'ici cette même table (et signalDot/signalLabel ci-dessous) : exactement le genre de
+// "deux sources de vérité qui peuvent diverger" qu'une revue externe a signalé ailleurs dans
+// l'app (voir CLAUDE.md, "Webhook enrichi"/governor-widget). Un seul tableau désormais.
+export const STATUS_META: Record<GovernorStatus, { emoji: string; label: string; hint: string; className: string }> = {
+  vert: { emoji: '🟢', label: 'Favorable', hint: 'Marge pour une progression graduelle', className: 'text-green-400' },
   orange: { emoji: '🟠', label: 'Stable', hint: "Ne pas augmenter la charge cette semaine", className: 'text-orange-400' },
   rouge: { emoji: '🔴', label: 'Dégradé', hint: 'Stabiliser ou réduire la charge', className: 'text-red-400' },
   insufficient_data: { emoji: '⚪', label: 'Données insuffisantes', hint: 'Ajoutez des données de récupération ou du feedback de séance', className: 'text-muted-foreground' },
@@ -24,14 +28,14 @@ const SIGNAL_ROWS: { key: keyof ReturnType<typeof useGovernor>['signals']; label
   { key: 'sleepRecovery', label: 'Sommeil & récup. (Vie & Santé)', icon: Moon },
 ]
 
-function signalDot(signal: Signal): string {
+export function signalDot(signal: Signal): string {
   if (signal === 1) return 'bg-green-400'
   if (signal === -1) return 'bg-red-400'
   if (signal === 0) return 'bg-orange-400'
   return 'bg-muted-foreground/30'
 }
 
-function signalLabel(signal: Signal): string {
+export function signalLabel(signal: Signal): string {
   if (signal === 1) return 'Favorable'
   if (signal === -1) return 'Défavorable'
   if (signal === 0) return 'Neutre'

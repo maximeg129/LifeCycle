@@ -46,6 +46,18 @@ describe('fitCriticalPower', () => {
     // Travail/Durée négative, donc CP <= 0 sur ce fit.
     expect(fitCriticalPower([{ seconds: 60, watts: 100 }, { seconds: 600, watts: 5 }])).toBeNull()
   })
+
+  it('returns null for an implausibly high W′ (bad fit from too few/noisy records)', () => {
+    // Même méthode que la fixture générée exactement par le modèle
+    // ci-dessus, mais avec un W′ de 60000J (> 40000J, hors de la plage
+    // plausible) — l'exemple concret relevé par la revue externe (CP 27%
+    // sous la FTP, W′ 55.6 kJ) : un fit mathématiquement valide (CP/W′ tous
+    // deux positifs) mais physiologiquement absurde, que les gardes
+    // dégénérées existantes ne détectaient pas.
+    const wPrime = 60000
+    const at = (seconds: number) => ({ seconds, watts: (CP * seconds + wPrime) / seconds })
+    expect(fitCriticalPower([at(180), at(600), at(1200)])).toBeNull()
+  })
 })
 
 describe('wPrimeDepletionRateWatts', () => {

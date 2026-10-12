@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { type FlowResult } from '@/ai/anthropic';
 import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
 import { ON_BIKE_FUELING_GUIDANCE } from './on-bike-fueling-guidance';
+import { SESSION_TARGET_VOCABULARY_GUIDANCE, NO_WEEKDAY_IN_SESSION_TEXT_GUIDANCE } from './session-generation-guardrails';
 import { STRENGTH_TRAINING_GUIDANCE } from './strength-training-guidance';
 import { STRENGTH_SESSION_VALIDATION_GUIDANCE } from './strength-session-validation-guidance';
 import { MovementPatternEnum, StrengthExerciseSchema } from './strength-exercise-schema';
@@ -136,6 +137,8 @@ Règles impératives :
 - Si la FTP est fournie, utilise-la pour ancrer le rationale de chaque séance dans des chiffres réels
   (ex: "seuil à 95% FTP, environ 260W" plutôt que "seuil" tout court) — le script structuré reste en % de
   FTP. Si la FTP n'est pas fournie (n/a ci-dessus), reste en %/ressenti, ne l'invente jamais.
+- ${SESSION_TARGET_VOCABULARY_GUIDANCE}
+- ${NO_WEEKDAY_IN_SESSION_TEXT_GUIDANCE}
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
 - Chaque séance a un "sessionKind" ("cycling" ou "strength") : une séance "cycling" porte structuredWorkout et
   fueling (jamais strengthExercises) ; une séance "strength" porte strengthExercises (jamais structuredWorkout

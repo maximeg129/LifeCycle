@@ -1028,3 +1028,40 @@ export function recalibrateRollingWindow(
 
   return { updatedSessionsByWeek, moves, oversizedSessions }
 }
+
+// ── Garde-fou déterministe : jour de semaine fictif dans un titre généré ──
+//
+// Revue externe (UX/engine) : "The day labels contradict the calendar" —
+// `planWeekSessions` (plan-week-sessions-flow.ts) génère plusieurs séances
+// pour une semaine entière AVANT que les dates ne soient attribuées
+// (assignSessionDates/assignSessionDatesByAvailability, juste au-dessus,
+// tournent APRÈS coup, par bin-packing sur la durée — jamais une décision
+// du modèle). Le modèle ne sait donc PAS quel jour calendaire une séance
+// occupera au moment où il rédige son titre — un jour nommé dans le titre
+// est nécessairement une invention, presque toujours fausse une fois les
+// dates réellement assignées. Une règle de prompt a été ajoutée
+// (NO_WEEKDAY_IN_SESSION_TEXT_GUIDANCE, session-generation-guardrails.ts)
+// mais, même leçon déjà tirée une fois pour la grille S05 (voir CLAUDE.md,
+// "retry côté code quand la grille S05 est bloquée") : une instruction de
+// prompt seule reste une préférence que le modèle peut ignorer, jamais une
+// garantie. Filet de sécurité déterministe en plus.
+const WEEKDAY_NAMES = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
+const WEEKDAY_WORD_PATTERN = new RegExp(`\\b(${WEEKDAY_NAMES.join('|')})\\b`, 'i')
+
+/**
+ * Retire un jour de semaine fictif d'un titre de séance généré par l'IA.
+ * Gère le cas réellement observé (un segment séparé par un tiret/deux-
+ * points/virgule qui N'EST QUE le nom du jour, ex. "Seuil aérobie — Jeudi")
+ * — limite honnête : un jour mentionné EN LIGNE dans une phrase sans
+ * séparateur ("Séance du jeudi") n'est pas détecté, pour ne jamais risquer
+ * de mutiler une construction de phrase normale. Renvoie le titre
+ * inchangé si aucun jour n'y apparaît.
+ */
+export function stripWeekdayMentions(title: string): string {
+  if (!WEEKDAY_WORD_PATTERN.test(title)) return title
+  const segments = title.split(/\s*[—–\-:,]\s*/)
+  const kept = segments.filter((seg) => !WEEKDAY_NAMES.includes(seg.trim().toLowerCase()))
+  if (kept.length > 0 && kept.length < segments.length) return kept.join(' — ').trim()
+  if (kept.length === segments.length) return title // aucun segment n'était un jour isolé — rien à retirer
+  return title.replace(WEEKDAY_WORD_PATTERN, '').replace(/\s{2,}/g, ' ').trim() || title
+}

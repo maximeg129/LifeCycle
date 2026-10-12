@@ -32,7 +32,7 @@ import { errorEmitter } from '@/firebase/error-emitter'
 import { FirestorePermissionError } from '@/firebase/errors'
 import { buildCoachContext } from './coach-context'
 import { planWeekSessions } from '@/ai/flows/plan-week-sessions-flow'
-import { assignSessionDates, assignSessionDatesByAvailability, type PlanWeek, type WeekdayAvailabilityMinutes } from './training-plan-types'
+import { assignSessionDates, assignSessionDatesByAvailability, stripWeekdayMentions, type PlanWeek, type WeekdayAvailabilityMinutes } from './training-plan-types'
 import { recentStrengthSessionPatterns } from './strength-session-plan-types'
 import { validateStrengthSession, describeBlockedStrengthChecks, MAX_STRENGTH_GENERATION_ATTEMPTS } from '@/domain/cycling/validation/strengthSessionValidator'
 import { describeActionDispatchError } from '@/lib/utils'
@@ -148,7 +148,13 @@ export function useGenerateWeekSessions(deps: GenerateWeekSessionsDeps) {
         // tableau résultant a un type union que .find() ne peut pas
         // sonder proprement pour cette clé.
         let blockedFeedback: string | undefined
-        const sessionsWithValidation = result.data.sessions.map((session) => {
+        const sessionsWithValidation = result.data.sessions.map((rawSession) => {
+          // Garde-fou déterministe contre un jour de semaine fictif dans le
+          // titre (voir stripWeekdayMentions, training-plan-types.ts) — les
+          // dates ne sont attribuées QU'APRÈS cette boucle, le modèle n'a
+          // donc aucune information réelle sur le jour que cette séance
+          // occupera.
+          const session = { ...rawSession, title: stripWeekdayMentions(rawSession.title) }
           if (session.sessionKind !== 'strength' || !session.strengthPhase) return session
           const strengthValidation = validateStrengthSession({
             session: {
