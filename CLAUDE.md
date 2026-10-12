@@ -3805,6 +3805,64 @@ code croisée contre l'évidence de la revue) mais pas reproductibles avec les d
 l'athlète qui a motivé la revue, network-blocked depuis ce sandbox comme documenté partout ailleurs
 dans ce fichier.
 
+## Refonte UI/IA — chantier en 6 étapes (LifeCycle_Pro_UX_Engine_Review.md §3-4 + LifeCycle_Pro_UI_Spec.md)
+
+Deux nouveaux briefs reçus après la pièce 4 ci-dessus : `LifeCycle_Pro_UX_Engine_Review.md` (le
+document source complet des 4 pièces précédentes — jamais lu en entier avant cette étape, seulement
+paraphrasé depuis des extraits), dont les Phases 4 ("IA & navigation", §3.1-3.3) et 5 ("écrans de
+détail", §3.4-3.6 + §4 polish visuel) restaient ouvertes ; et `LifeCycle_Pro_UI_Spec.md`/
+`lifecycle-ui-reference.html`, la couche visuelle à reconstruire avec la stack existante (Next.js/
+Tailwind/shadcn, Space Grotesk + JetBrains Mono). Deux décisions utilisateur (`AskUserQuestion`,
+après lecture du companion doc demandée explicitement avant de trancher) :
+1. **Adopter l'IA à 3 destinations du §3.1** (Aujourd'hui/Plan/Activités) — fusionne Cyclisme dans
+   Aujourd'hui, sort Plan de son Sheet vers sa propre page, regroupe Journal+détail+graphes dans
+   Activités. Renverse consciemment trois décisions prises plus tôt dans ce même fichier (nav réduite
+   à 2 items, Plan derrière un Sheet, Cyclisme page données séparée) — assumé, sur la base du
+   raisonnement écrit du reviewer plutôt qu'une simple préférence esthétique.
+2. **Un PR par étape**, dans l'ordre d'implémentation donné par le brief UI lui-même (§7) : 1) tokens/
+   typographie, 2) AppShell + nav + Stella, 3) Aujourd'hui, 4) Plan, 5) graphes + Activités, 6)
+   Réglages/états/dark-mode/mobile + checklist d'acceptation (§8).
+
+### Étape 1 — Tokens de design + échelle de rayons
+
+**Valeurs recalculées depuis les hex AUTORITAIRES de `lifecycle-ui-reference.html`** (pas l'arrondi
+HSL donné à la main dans le texte du brief, qui diverge légèrement de ses propres hex — ex. brief
+"60 18% 96%" vs hex #F7F7F3 recalculé = "60 20% 96%") : `--background`/`--foreground`/`--card`/
+`--border`/`--muted`/`--muted-foreground`/`--primary`/`--primary-foreground`/`--secondary`/`--accent`
+remplacés dans `globals.css` (`:root` clair + `.dark`), `--radius` 0.875rem→0.75rem (12px, brief §2).
+`--destructive` aligné sur le nouveau `--bad` (même famille rouge) plutôt que de garder une deuxième
+teinte d'erreur. `--chart-1..5` conservés tels quels pour l'instant (graphes/tags pas encore migrés
+vers le nouveau vocabulaire — chantier en cours, voir étape 5).
+
+**Nouveaux tokens sémantiques** (`globals.css` + `tailwind.config.ts theme.extend.colors`, même
+patron bare `hsl(var(--x))` que les tokens shadcn existants, pour que `bg-good/10` etc. fonctionnent
+pareil que `bg-primary/10`) : `good`/`good-soft` (favorable, dans la cible), `warn`/`warn-soft`
+(prudence), `bad`/`bad-soft` (signal rouge UNIQUEMENT), `unknown` (donnée manquante — jamais vert par
+défaut), `fitness`/`fatigue`/`form` (CTL/ATL/TSB, pour TOUS les graphes à terme), `z1`-`z7` (zones de
+puissance Coggan — même palette partout : profils de séance, légendes, barre de phase, jamais une
+deuxième palette). Pas encore CONSOMMÉS par aucun composant à cette étape — juste posés, prêts pour
+les étapes 3-5 qui les câbleront.
+
+**`.lc-card`** : `rounded-[18px]` arbitraire → `rounded-2xl` (16px), aligné sur l'échelle de rayons du
+brief ("lg 16" pour les cartes) — un seul point de déclaration, toutes les cartes `.lc-card` héritent.
+
+**Portée volontairement limitée à ça** — PAS de balayage `grep -rl 'text-\[1[01]px\]'`/`rounded-lg`
+global à cette étape : la checklist d'acceptation du brief (§8, "no text under 12px", "only radii
+8/12/16/pill") est explicitement l'affaire de l'étape 6, une fois chaque écran reconstruit — corriger
+`performance-bento.tsx` maintenant pour le revoir déplacé/réécrit en étape 3 (fusion dans Aujourd'hui)
+aurait été un double travail. `rounded-lg`/`md`/`sm` restent pour l'instant pilotés par `--radius`
+(comportement inchangé, juste la valeur nue 12px/10px/8px au lieu de 14px/11.76px/10.16px) — retirer
+cet override pour revenir aux tailles Tailwind par défaut (8/12/16/24px, cohérent avec le commentaire
+"Échelle de rayons" déjà écrit dans `globals.css` mais jamais vraiment respecté) est noté pour
+l'étape 6, un changement qui toucherait visuellement CHAQUE composant de l'app d'un coup — trop
+risqué sans revue visuelle écran par écran.
+
+Aucun changement de logique pure — 935/935 tests inchangés, tsc/eslint/build clean. **Non vérifié à
+l'écran** (le serveur de dev de ce sandbox échoue sur toute page avec l'erreur de décodage
+`favicon.ico` déjà documentée ailleurs dans ce fichier) — à confirmer par l'utilisateur au premier
+rendu réel ; risque jugé faible (changement de valeurs de variables CSS uniquement, build Tailwind
+réussi, aucun composant encore câblé sur les nouveaux tokens).
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

@@ -5,71 +5,116 @@
 @layer base {
   :root {
     /* LifeCycle "Performance Lab" — Light Mode
-       Warm off-white ground, near-black text, one fresh lime accent —
-       see AUDIT.md/PLAN.md design-identity section. Values stay bare
-       "H S% L%" triples (not wrapped in hsl(...)) so every existing
-       bg-primary/10, border-border/60 etc. opacity-modifier utility across
-       the app keeps working unchanged (Tailwind rewrites those into
-       hsl(var(--x) / <alpha>) — wrapping the variable itself in hsl() or
-       oklch() here would silently break every one of them). */
-    --background: 60 20% 97%;           /* warm off-white */
-    --foreground: 100 8% 12%;
-    --card: 60 25% 99%;
-    --card-foreground: 100 8% 12%;
-    --popover: 60 25% 99%;
-    --popover-foreground: 100 8% 12%;
-    --primary: 86 68% 40%;              /* fresh lime */
-    --primary-foreground: 0 0% 10%;
-    --secondary: 60 18% 94%;
-    --secondary-foreground: 100 8% 12%;
-    --muted: 60 14% 91%;
-    --muted-foreground: 90 6% 42%;
-    --accent: 86 68% 40%;
-    --accent-foreground: 0 0% 10%;
-    --destructive: 14 82% 52%;          /* warm coral-red, not iOS red */
+       Revue externe UX/engine, refonte visuelle (LifeCycle_Pro_UI_Spec.md
+       §2) : valeurs recalculées depuis les hex AUTORITAIRES de
+       lifecycle-ui-reference.html (ce fichier HTML, pas l'arrondi donné en
+       prose dans le brief, est la source de vérité — ses propres valeurs
+       HSL écrites à la main y divergent légèrement de ses hex exacts).
+       Warm off-white ground, near-black text, un seul accent lime franc.
+       Valeurs en triplet HSL nu ("H S% L%", jamais hsl(...)) pour que tout
+       utilitaire d'opacité existant (bg-primary/10, border-border/60...)
+       continue de fonctionner (Tailwind réécrit en hsl(var(--x) / <alpha>)
+       — un wrapper hsl()/oklch() ici casserait silencieusement chacun). */
+    --background: 60 20% 96%;           /* #F7F7F3 */
+    --foreground: 90 12% 10%;           /* #1A1D17 */
+    --card: 0 0% 100%;                  /* #FFFFFF */
+    --card-foreground: 90 12% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 90 12% 10%;
+    --primary: 89 72% 36%;              /* #5E9E1A — fresh lime */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 60 15% 94%;            /* #F1F1EC — "surface-2" du brief */
+    --secondary-foreground: 90 12% 10%;
+    --muted: 60 15% 94%;
+    --muted-foreground: 93 6% 36%;      /* #5B6156 — passe AA sur blanc */
+    --accent: 89 72% 36%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 9 68% 50%;           /* #D6452B — même famille que --bad ci-dessous */
     --destructive-foreground: 0 0% 99%;
-    --border: 60 14% 88%;
-    --input: 60 14% 88%;
-    --ring: 86 68% 40%;
-    --radius: 0.875rem;                 /* 14px base — slightly softer than the old 12px */
+    --border: 60 13% 88%;               /* #E4E4DC */
+    --input: 60 13% 88%;
+    --ring: 89 72% 36%;
+    --radius: 0.75rem;                  /* 12px base (LifeCycle_Pro_UI_Spec.md §2) */
 
     /* Chart / category colors — lime, coral, violet, sky, warm-red.
        Same family as the accent, used for cross-domain tags (sommeil/
-       budget/HRV/charge) as well as Recharts series. */
+       budget/HRV/charge) as well as Recharts series. Conservés pour les
+       graphes/tags qui n'ont pas encore été migrés vers le vocabulaire
+       sémantique ci-dessous (fitness/fatigue/form, z1-z7) — chantier en
+       cours, voir CLAUDE.md. */
     --chart-1: 86 68% 40%;
     --chart-2: 18 85% 60%;
     --chart-3: 255 70% 62%;
     --chart-4: 200 75% 55%;
     --chart-5: 14 82% 52%;
+
+    /* ── Tokens sémantiques (LifeCycle_Pro_UI_Spec.md §2) ──────────────
+       Statut : good (favorable/dans la cible), warn (prudence), bad
+       (signal rouge UNIQUEMENT), unknown (donnée manquante — jamais vert
+       par défaut). Forme physiologique : fitness/fatigue/form — CTL/ATL/
+       TSB, dans TOUS les graphes, jamais une couleur Tailwind brute.
+       Zones de puissance Coggan : z1-z7, même palette partout (profils de
+       séance, légendes, barre de phase) — jamais une deuxième palette. */
+    --good: 146 67% 37%;         /* #1F9D55 */
+    --good-soft: 144 43% 93%;    /* #E6F5EC */
+    --warn: 37 87% 41%;          /* #C27C0E */
+    --warn-soft: 39 78% 93%;     /* #FBF1DE */
+    --bad: 9 68% 50%;            /* #D6452B */
+    --bad-soft: 10 79% 94%;      /* #FCE9E5 */
+    --unknown: 82 6% 63%;        /* #A3A79C */
+    --fitness: 226 70% 55%;      /* #3E63DD — CTL */
+    --fatigue: 358 75% 59%;      /* #E5484D — ATL */
+    --form: 146 67% 37%;         /* #1F9D55 — TSB (= --good, même famille) */
+    --z1: 82 6% 63%;             /* #A3A79C */
+    --z2: 210 71% 56%;           /* #3E8EDE */
+    --z3: 141 58% 43%;           /* #2EAD5B */
+    --z4: 46 94% 46%;            /* #E2B007 */
+    --z5: 27 88% 52%;            /* #F07A1A */
+    --z6: 358 75% 59%;           /* #E5484D */
+    --z7: 272 51% 54%;           /* #8E4EC6 */
   }
 
   .dark {
-    /* LifeCycle "Performance Lab" — Dark Mode */
-    --background: 100 6% 6%;
-    --foreground: 66 20% 94%;
-    --card: 100 6% 11%;
-    --card-foreground: 66 20% 94%;
-    --popover: 100 6% 11%;
-    --popover-foreground: 66 20% 94%;
-    --primary: 78 90% 66%;              /* bright lime, glows on dark */
-    --primary-foreground: 0 0% 8%;
-    --secondary: 100 5% 16%;
-    --secondary-foreground: 66 20% 94%;
-    --muted: 100 5% 16%;
-    --muted-foreground: 60 8% 62%;
-    --accent: 78 90% 66%;
-    --accent-foreground: 0 0% 8%;
-    --destructive: 12 90% 64%;
-    --destructive-foreground: 100 6% 8%;
-    --border: 100 5% 22%;
-    --input: 100 5% 22%;
-    --ring: 78 90% 66%;
+    /* LifeCycle "Performance Lab" — Dark Mode (mêmes sources que ci-dessus) */
+    --background: 100 10% 6%;           /* #0F110E */
+    --foreground: 75 21% 93%;           /* #EEF0E8 */
+    --card: 96 11% 9%;                  /* #171A15 */
+    --card-foreground: 75 21% 93%;
+    --popover: 96 11% 9%;
+    --popover-foreground: 75 21% 93%;
+    --primary: 86 70% 62%;              /* #A6E25A — bright lime, glows on dark */
+    --primary-foreground: 100 10% 6%;
+    --secondary: 94 11% 12%;            /* #1F231C */
+    --secondary-foreground: 75 21% 93%;
+    --muted: 94 11% 12%;
+    --muted-foreground: 86 8% 65%;      /* #A7AD9F */
+    --accent: 86 70% 62%;
+    --accent-foreground: 100 10% 6%;
+    --destructive: 7 100% 67%;          /* #FF6B57 — même famille que --bad ci-dessous */
+    --destructive-foreground: 100 10% 6%;
+    --border: 93 11% 17%;               /* #2A2F26 */
+    --input: 93 11% 17%;
+    --ring: 86 70% 62%;
 
     --chart-1: 82 85% 68%;
     --chart-2: 20 88% 68%;
     --chart-3: 258 78% 72%;
     --chart-4: 200 78% 65%;
     --chart-5: 12 88% 66%;
+
+    --good: 151 50% 53%;         /* #4CC38A */
+    --good-soft: 147 32% 12%;    /* #15291E */
+    --warn: 38 85% 62%;          /* #F0B44A */
+    --warn-soft: 39 42% 12%;     /* #2C2312 */
+    --bad: 7 100% 67%;           /* #FF6B57 */
+    --bad-soft: 8 42% 14%;       /* #331915 */
+    --unknown: 90 6% 37%;        /* #5F6559 */
+    --fitness: 226 100% 74%;     /* #7C9BFF */
+    --fatigue: 358 100% 74%;     /* #FF7A7F */
+    --form: 151 50% 53%;         /* #4CC38A */
+    /* z1-z7 : mêmes hex qu'en clair (lifecycle-ui-reference.html ne les
+       redéfinit pas sous sa media query sombre — tunées pour marcher sur
+       les deux fonds). */
   }
 }
 
@@ -98,9 +143,12 @@
 
 /* ── Carte standard LifeCycle ───────────────────────────────────────
    Anciennement `.apple-card` — renommée pour ne plus décrire l'app comme
-   une copie du langage visuel Apple (voir l'audit d'identité visuelle). */
+   une copie du langage visuel Apple (voir l'audit d'identité visuelle).
+   rounded-2xl (16px) plutôt que l'ancien rounded-[18px] arbitraire —
+   aligné sur l'échelle de rayons ci-dessus (LifeCycle_Pro_UI_Spec.md §2 :
+   "lg 16" pour les cartes). */
 .lc-card {
-  @apply bg-card rounded-[18px] border border-border/60
+  @apply bg-card rounded-2xl border border-border/60
          shadow-[0_2px_12px_rgba(20,23,10,0.06),0_1px_3px_rgba(20,23,10,0.04)]
          transition-all duration-300
          hover:shadow-[0_4px_24px_rgba(20,23,10,0.1),0_2px_6px_rgba(20,23,10,0.05)]

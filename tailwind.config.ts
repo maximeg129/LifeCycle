@@ -56,6 +56,35 @@ export default {
           '4': 'hsl(var(--chart-4))',
           '5': 'hsl(var(--chart-5))',
         },
+        // LifeCycle_Pro_UI_Spec.md §2 — statut (good/warn/bad/unknown),
+        // forme physiologique (fitness/fatigue/form) et zones de puissance
+        // Coggan (z1-z7). Même patron bare "hsl(var(--x))" que les tokens
+        // shadcn ci-dessus (pas de placeholder <alpha-value> explicite —
+        // Tailwind applique déjà bg-good/10 etc. sur cette forme, comme
+        // pour bg-primary/10 partout ailleurs dans l'app).
+        good: {
+          DEFAULT: 'hsl(var(--good))',
+          soft: 'hsl(var(--good-soft))',
+        },
+        warn: {
+          DEFAULT: 'hsl(var(--warn))',
+          soft: 'hsl(var(--warn-soft))',
+        },
+        bad: {
+          DEFAULT: 'hsl(var(--bad))',
+          soft: 'hsl(var(--bad-soft))',
+        },
+        unknown: 'hsl(var(--unknown))',
+        fitness: 'hsl(var(--fitness))',
+        fatigue: 'hsl(var(--fatigue))',
+        form: 'hsl(var(--form))',
+        z1: 'hsl(var(--z1))',
+        z2: 'hsl(var(--z2))',
+        z3: 'hsl(var(--z3))',
+        z4: 'hsl(var(--z4))',
+        z5: 'hsl(var(--z5))',
+        z6: 'hsl(var(--z6))',
+        z7: 'hsl(var(--z7))',
         sidebar: {
           DEFAULT: 'hsl(var(--sidebar-background))',
           foreground: 'hsl(var(--sidebar-foreground))',
