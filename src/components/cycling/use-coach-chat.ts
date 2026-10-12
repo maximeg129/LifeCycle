@@ -37,7 +37,7 @@ import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { buildCoachContext } from './coach-context'
 import { coachChat, type CoachChatMessage, type CoachChatToolCall } from '@/ai/flows/coach-chat-flow'
 import { describeActionDispatchError } from '@/lib/utils'
-import { trimChatHistoryForPrompt, isSendableChatMessage } from './coach-chat-types'
+import { trimChatHistoryForPrompt, isSendableChatMessage, isDuplicateFact } from './coach-chat-types'
 import { currentPlanWeek, type PlanWeek } from './training-plan-types'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { useRecalibratePlan, type PlanRecalibrationEntry } from './use-recalibrate-plan'
@@ -86,6 +86,8 @@ const MAX_TOOL_ROUNDS = 4
 interface ToolContext {
   /** Voir use-recalibrate-plan.ts — retourne { recalibrated, throughWeekNumber } plutôt que de lever, pour que le tool_result reste honnête même quand rien n'était dû. */
   recalibrateNow: () => Promise<{ recalibrated: boolean; throughWeekNumber?: number }>
+  /** Faits déjà en mémoire, pour que add_remembered_fact détecte un quasi-doublon avant d'écrire (voir isDuplicateFact, coach-chat-types.ts). */
+  existingFacts: string[]
 }
 
 async function executeToolCall(db: Firestore, uid: string, call: CoachChatToolCall, ctx: ToolContext): Promise<ToolResult> {
@@ -109,6 +111,15 @@ async function executeToolCall(db: Firestore, uid: string, call: CoachChatToolCa
       case 'add_remembered_fact': {
         const { fact } = call.input as { fact: string }
         if (!fact?.trim()) throw new Error('fact manquant')
+        // Revue externe (UX/engine) : "Faits retenus" holds the same fact
+        // 3 times — arrayUnion ne dédoublonne que des chaînes EXACTEMENT
+        // identiques, jamais une reformulation légèrement différente du
+        // même fait (voir isDuplicateFact, coach-chat-types.ts). Jamais une
+        // erreur côté Stella — un fait déjà retenu n'est pas un échec,
+        // juste un no-op honnête dans le tool_result.
+        if (isDuplicateFact(fact, ctx.existingFacts)) {
+          return { toolUseId: call.id, content: 'Ce fait est déjà enregistré dans la mémoire coach — rien à ajouter.' }
+        }
         const ref = doc(db, `users/${uid}/coachMemory/facts`)
         await setDoc(ref, { items: arrayUnion(fact.trim()), updatedAt: serverTimestamp() }, { merge: true })
         return { toolUseId: call.id, content: 'Fait ajouté à la mémoire coach avec succès.' }
@@ -287,7 +298,7 @@ export function useCoachChat() {
           finalText = result.data.text
           break
         }
-        const toolResults = await Promise.all(result.data.calls.map((call) => executeToolCall(db, user.uid, call, { recalibrateNow })))
+        const toolResults = await Promise.all(result.data.calls.map((call) => executeToolCall(db, user.uid, call, { recalibrateNow, existingFacts: memory.rememberedFacts })))
         for (let i = 0; i < result.data.calls.length; i++) {
           if (!toolResults[i].isError) executedActions.push(describeToolCall(result.data.calls[i]))
         }

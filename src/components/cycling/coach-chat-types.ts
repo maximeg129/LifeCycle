@@ -31,3 +31,34 @@ export function trimChatHistoryForPrompt<T extends ChatMessageLike>(
 export function isSendableChatMessage(text: string): boolean {
   return text.trim().length > 0
 }
+
+/**
+ * Normalise un fait de mémoire coach pour une comparaison de quasi-doublon
+ * — trim, minuscules, accents retirés, espaces multiples réduits à un
+ * seul, ponctuation de fin retirée. Revue externe (UX/engine) : "Faits
+ * retenus" holds the same training fact 3 times" — `add_remembered_fact`
+ * (use-coach-chat.ts) écrit via `arrayUnion`, qui ne dédoublonne que des
+ * chaînes EXACTEMENT identiques ; le modèle reformule souvent le même fait
+ * légèrement différemment d'un tour à l'autre ("Dort environ 7h par nuit"
+ * vs "L'athlète dort en moyenne 7 heures par nuit"), qu'`arrayUnion` ne
+ * reconnaît jamais comme doublon. Volontairement PAS une similarité
+ * sémantique/par embedding (aucune infra d'embedding dans cette app,
+ * coûterait un appel réseau supplémentaire pour un geste qui doit rester
+ * instantané) — seulement les quasi-doublons mécaniques (casse/accents/
+ * espacement/ponctuation), le cas le plus fréquent en pratique.
+ */
+export function normalizeFactForDedup(fact: string): string {
+  return fact
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/[.!?]+$/, '')
+}
+
+/** `true` si `fact` (une fois normalisé) correspond déjà à l'un de `existingFacts` — voir normalizeFactForDedup. */
+export function isDuplicateFact(fact: string, existingFacts: string[]): boolean {
+  const normalized = normalizeFactForDedup(fact)
+  return existingFacts.some((f) => normalizeFactForDedup(f) === normalized)
+}

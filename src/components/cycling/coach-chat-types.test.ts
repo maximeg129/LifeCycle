@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { trimChatHistoryForPrompt, isSendableChatMessage, type ChatMessageLike } from './coach-chat-types'
+import { trimChatHistoryForPrompt, isSendableChatMessage, isDuplicateFact, normalizeFactForDedup, type ChatMessageLike } from './coach-chat-types'
 
 function msg(i: number): ChatMessageLike {
   return { role: i % 2 === 0 ? 'user' : 'assistant', content: `message ${i}` }
@@ -47,5 +47,31 @@ describe('isSendableChatMessage', () => {
 
   it('rejects whitespace-only text', () => {
     expect(isSendableChatMessage('   \n\t')).toBe(false)
+  })
+})
+
+describe('normalizeFactForDedup', () => {
+  it('lowercases, strips accents, and collapses whitespace', () => {
+    expect(normalizeFactForDedup("  L'athlète  dort   en moyenne 7 Heures.")).toBe("l'athlete dort en moyenne 7 heures")
+  })
+
+  it('strips trailing punctuation only', () => {
+    expect(normalizeFactForDedup('Dort 7h par nuit!!!')).toBe('dort 7h par nuit')
+  })
+})
+
+describe('isDuplicateFact', () => {
+  it('detects a near-duplicate differing only in case/accents/whitespace/punctuation', () => {
+    const existing = ["L'athlète dort en moyenne 7 heures par nuit."]
+    expect(isDuplicateFact('dort en moyenne 7 HEURES par nuit', existing)).toBe(false) // missing "l'athlète" — genuinely different wording
+    expect(isDuplicateFact("l'athlete   dort en moyenne 7 heures par nuit", existing)).toBe(true)
+  })
+
+  it('returns false for a genuinely new fact', () => {
+    expect(isDuplicateFact('Préfère les sorties le matin', ["L'athlète dort 7h par nuit"])).toBe(false)
+  })
+
+  it('returns false against an empty list', () => {
+    expect(isDuplicateFact('Un fait quelconque', [])).toBe(false)
   })
 })

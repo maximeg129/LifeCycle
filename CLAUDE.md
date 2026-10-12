@@ -3578,6 +3578,68 @@ correctifs de prompt précédents, invérifiable en direct dans ce sandbox pour 
 d'`ANTHROPIC_API_KEY`) — à confirmer par l'utilisateur à la prochaine génération d'une semaine de
 plan ou d'une analyse de sortie.
 
+## Revue externe UX/engine — pièce 2 : mémoire coach quasi-dupliquée, pollution muscu→Strava→Intervals.icu
+
+Retour utilisateur : suite de la pièce 1 ci-dessus — §1.9 (mémoire coach dupliquée) et une tranche
+sourcée de §1.7 (ingestion d'activités).
+
+**§1.9, confirmé** — `add_remembered_fact` (`use-coach-chat.ts`) écrivait via `arrayUnion(fact.trim())`,
+qui ne dédoublonne que des chaînes EXACTEMENT identiques. Le modèle reformule souvent le même fait
+légèrement différemment d'un tour de conversation à l'autre ("Dort environ 7h par nuit" vs "L'athlète
+dort en moyenne 7 heures par nuit") — `arrayUnion` ne reconnaît jamais ça comme un doublon,
+confirmant exactement "'Faits retenus' holds the same fact 3 times".
+
+**`normalizeFactForDedup()`/`isDuplicateFact()`** (`coach-chat-types.ts`, purs/testés) — normalisation
+mécanique (minuscules, accents retirés, espaces réduits, ponctuation de fin retirée) et comparaison
+contre les faits déjà en mémoire. Volontairement PAS une similarité sémantique/par embedding (aucune
+infra d'embedding dans cette app, coûterait un appel réseau supplémentaire pour un geste qui doit
+rester instantané) — seulement les quasi-doublons mécaniques, le cas le plus fréquent en pratique.
+`executeToolCall` (`use-coach-chat.ts`) vérifie désormais `isDuplicateFact(fact, ctx.existingFacts)`
+avant d'écrire ; un doublon détecté renvoie un `tool_result` honnête ("déjà enregistré") plutôt
+qu'une écriture silencieuse — jamais présenté comme une erreur côté Stella.
+
+**§1.7, tranche sourcée** — "Strava-tagged entries with only a date for a title and no distance/
+duration (likely re-imported strength sessions) add load." Root cause confirmée en relisant le
+propre code de l'app : `use-strava-log-export.ts`/`strava-api.ts` (chantier "Publication Strava",
+voir plus haut) exporte une séance muscu vers Strava avec `sport_type: 'WeightTraining'`. Un athlète
+dont le compte Strava est LUI-MÊME configuré pour auto-synchroniser vers Intervals.icu (une
+configuration côté Strava/Intervals.icu, entièrement hors du contrôle de cette app) verrait donc
+cette séance muscu réapparaître comme une "vraie" activité Intervals.icu — sans distance, typée
+"WeightTraining" — et jusqu'ici `use-governor.ts` n'appliquait AUCUN filtre de type d'activité :
+cette entrée polluerait silencieusement le RPE/feelings/charge d'entraînement du gouverneur, un
+construct explicitement cycliste (zones de puissance Coggan, %FTP).
+
+**`isReimportedStrengthActivityType()`** (`intervals-api.ts`, pur/testé) — ⚠️ **tentative initiale
+abandonnée en cours de route, documentée pour ne pas la retenter** : une première version tentait une
+liste BLANCHE par motif (`/ride/i` sur `activity.type`, même idiome que `getAthlete()` pour
+`sportSettings.types`) — cassait immédiatement un cas déjà couvert par ce projet :
+`summarizeRecentSessions` a un test existant avec `type: 'Race'` (une course cycliste réelle, avec
+`icu_intensity` renseigné) qui ne contient jamais "ride" dans son type. Sans accès réseau à
+Intervals.icu depuis ce sandbox pour vérifier la vraie taxonomie de types (courses, disciplines
+vélo diverses...), une liste blanche risquait d'exclure à tort de vraies sorties/courses — un faux
+positif bien plus coûteux que le faux négatif (une activité non-vélo rare qui passe au travers)
+qu'une liste noire laisserait filer. Corrigé en liste NOIRE minimale, un seul type aujourd'hui
+(`type === 'WeightTraining'`) — le seul dont ce projet a une preuve directe, lue dans son propre
+code plutôt que deviné. Appliqué dans `use-governor.ts` (filtre en tête de son `useMemo`, avant la
+construction de toute série) — **volontairement PAS appliqué à `summarizeRecentSessions`**
+(`daily-workout-types.ts`) : une tentative y a été faite puis retirée pour la même raison (casser le
+test `Race` existant), et son besoin réel y est moins net (le type y est déjà transmis au modèle en
+clair dans le prompt, qui peut donc déjà distinguer une séance muscu d'une sortie vélo lui-même).
+
+**Hors scope de cette pièce, consciemment** — la "vraie" duplication de niveau Intervals.icu que la
+revue a vue ("samedi 26 septembre" apparaissant deux fois) et l'icône vélo affichée pour une course à
+pied dans le Journal (`rides-journal-tab.tsx`) ne sont pas corrigées ici : la première dépend de ce
+qu'Intervals.icu renvoie réellement (invérifiable sans accès réseau) et pourrait être un vrai doublon
+côté Intervals.icu lui-même, pas forcément un bug de cette app ; la seconde demanderait la même
+classification de type que celle qui vient d'être abandonnée pour cause de données insuffisantes —
+mieux vaut laisser l'icône actuelle (générique, jamais fausse de façon trompeuse pour une décision)
+que de deviner une deuxième fois.
+
+Tests (`coach-chat-types.test.ts`, 5 nouveaux pour `normalizeFactForDedup`/`isDuplicateFact` ;
+`intervals-api.test.ts`, 3 nouveaux pour `isReimportedStrengthActivityType`, dont un qui vérifie
+explicitement qu'une course cycliste typée `Race` n'est jamais exclue) — 925/925 au total, tsc/
+eslint/build clean.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
