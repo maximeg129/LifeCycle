@@ -318,6 +318,37 @@ export interface PowerFieldsLike {
  * present at all — never silently swapped in ahead of it. Null if no power
  * field is present or positive.
  */
+export interface SportTypeFieldsLike {
+  type?: string | null;
+}
+
+/**
+ * Exclut un type d'activité dont ce projet a une preuve DIRECTE qu'il
+ * n'est jamais du vélo — volontairement une liste NOIRE minimale (un seul
+ * type aujourd'hui), jamais une liste blanche par motif ("/ride/i" sur
+ * `type`) : un premier essai de liste blanche a été abandonné après avoir
+ * cassé un cas déjà couvert par ce projet — une COURSE cycliste peut
+ * porter un type qui ne contient jamais "ride" dans son nom (voir
+ * summarizeRecentSessions/daily-workout-types.test.ts, fixture
+ * `type: 'Race'` avec icu_intensity réel). Sans accès réseau à
+ * Intervals.icu depuis ce sandbox pour vérifier la vraie taxonomie de
+ * types, un faux négatif (une activité non-vélo rare qui passe au
+ * travers) est bien moins grave qu'un faux positif (une vraie sortie/
+ * course vélo exclue à tort d'un calcul qui en dépend).
+ *
+ * "WeightTraining" est le seul type dont ce projet a une preuve directe,
+ * lue dans son propre code (strava-api.ts, `buildStravaActivityBody` —
+ * `sport_type: 'WeightTraining'` pour l'export d'une séance muscu vers
+ * Strava) : le cas concret relevé par une revue externe — une séance
+ * muscu exportée vers Strava puis réimportée dans Intervals.icu via la
+ * synchro Strava→Intervals.icu de l'athlète (entièrement hors du
+ * contrôle de cette app) — polluerait sinon le gouverneur de charge
+ * interne (RPE/feelings/charge), un construct explicitement cycliste.
+ */
+export function isReimportedStrengthActivityType(activity: SportTypeFieldsLike): boolean {
+  return activity.type === 'WeightTraining';
+}
+
 export function bestAverageWatts(activity: PowerFieldsLike): number | null {
   const watts = activity.icu_average_watts ?? activity.average_watts ?? activity.icu_weighted_avg_watts ?? activity.weighted_average_watts;
   return watts != null && watts > 0 ? watts : null;

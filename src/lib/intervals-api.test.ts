@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
-import { IntervalsService, bestAverageWatts, bestRpe, feelToScore } from './intervals-api'
+import { IntervalsService, bestAverageWatts, bestRpe, feelToScore, isReimportedStrengthActivityType } from './intervals-api'
 
 function jsonResponse(body: unknown, ok = true, status = 200, url = '') {
   return {
@@ -165,6 +165,22 @@ describe('feelToScore', () => {
   it('is null when there is no feel rating', () => {
     expect(feelToScore({})).toBeNull()
     expect(feelToScore({ feel: null })).toBeNull()
+  })
+})
+
+describe('isReimportedStrengthActivityType', () => {
+  it('flags "WeightTraining" — this app\'s own Strava export type for a strength session', () => {
+    expect(isReimportedStrengthActivityType({ type: 'WeightTraining' })).toBe(true)
+  })
+
+  it('never flags a real cycling type, including a non-"ride"-named one like a race', () => {
+    expect(isReimportedStrengthActivityType({ type: 'Ride' })).toBe(false)
+    expect(isReimportedStrengthActivityType({ type: 'VirtualRide' })).toBe(false)
+    expect(isReimportedStrengthActivityType({ type: 'Race' })).toBe(false)
+  })
+
+  it('is false when type is absent', () => {
+    expect(isReimportedStrengthActivityType({})).toBe(false)
   })
 })
 

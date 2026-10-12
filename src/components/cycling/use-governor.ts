@@ -5,7 +5,7 @@ import { format, subDays } from 'date-fns'
 import { collection, query, where, orderBy, Timestamp } from 'firebase/firestore'
 import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase'
 import { useWellness, useActivities } from '@/hooks/use-intervals'
-import { bestAverageWatts, bestRpe, feelToScore } from '@/lib/intervals-api'
+import { bestAverageWatts, bestRpe, feelToScore, isReimportedStrengthActivityType } from '@/lib/intervals-api'
 import { useSessionFeedback } from './use-session-feedback'
 import {
   windowedTrendSignal,
@@ -79,6 +79,14 @@ export function useGovernor(): GovernorResult {
   const { data: healthMetrics, isLoading: loadingHealthMetrics } = useCollection<HealthMetric>(healthMetricsQuery)
 
   return useMemo(() => {
+    // Revue externe (UX/engine) : une séance muscu exportée vers Strava
+    // puis réimportée dans Intervals.icu (synchro Strava→Intervals.icu de
+    // l'athlète, hors du contrôle de cette app — voir
+    // isReimportedStrengthActivityType, intervals-api.ts) polluait
+    // silencieusement ce gouverneur, un construct explicitement cycliste.
+    // Filtré une seule fois ici, en tête.
+    const cyclingActivities = activities.data.filter((a) => !isReimportedStrengthActivityType(a))
+
     const rhrSeries: DatedValue[] = wellness.data
       .filter((w) => w.restingHR != null)
       .map((w) => ({ date: w.id, value: w.restingHR as number }))
@@ -87,7 +95,7 @@ export function useGovernor(): GovernorResult {
       .filter((w) => w.hrv != null)
       .map((w) => ({ date: w.id, value: w.hrv as number }))
 
-    const efSeries: DatedValue[] = activities.data
+    const efSeries: DatedValue[] = cyclingActivities
       .filter((a) => a.icu_intensity != null && a.icu_intensity < LOW_INTENSITY_THRESHOLD && a.start_date_local)
       .map((a) => ({ date: (a.start_date_local as string).slice(0, 10), ef: efficiencyFactor(bestAverageWatts(a), a.average_heartrate) }))
       .filter((x): x is { date: string; ef: number } => x.ef != null)
@@ -99,7 +107,7 @@ export function useGovernor(): GovernorResult {
     // Intervals.icu doesn't have for a given date (not-yet-rated activities,
     // or a standalone daily-* check-in with no linked activity) rather than
     // being dropped, but never doubles up a date Intervals.icu already covers.
-    const intervalsRpeSeries: DatedValue[] = activities.data
+    const intervalsRpeSeries: DatedValue[] = cyclingActivities
       .map((a) => {
         const rpe = bestRpe(a)
         if (rpe == null || !a.start_date_local) return null
@@ -112,7 +120,7 @@ export function useGovernor(): GovernorResult {
       .map((f) => ({ date: f.date, value: f.rpe as number }))
     const rpeSeries: DatedValue[] = [...intervalsRpeSeries, ...localRpeSeries]
 
-    const intervalsFeelSeries: DatedValue[] = activities.data
+    const intervalsFeelSeries: DatedValue[] = cyclingActivities
       .map((a) => {
         const score = feelToScore(a)
         if (score == null || !a.start_date_local) return null
@@ -167,7 +175,7 @@ export function useGovernor(): GovernorResult {
     // combler ce trou (contrairement à rpeSeries plus haut, qui n'a pas
     // besoin de durée et peut donc inclure le feedback local).
     const dailyLoadByDate = new Map<string, number>()
-    for (const a of activities.data) {
+    for (const a of cyclingActivities) {
       const rpe = bestRpe(a)
       const durationMinutes = a.moving_time != null ? a.moving_time / 60 : null
       if (rpe == null || durationMinutes == null || !a.start_date_local) continue
