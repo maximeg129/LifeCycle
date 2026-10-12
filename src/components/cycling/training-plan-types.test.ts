@@ -28,6 +28,7 @@ import {
   groupRollingDaysByWeek,
   pastPlanSessions,
   stripWeekdayMentions,
+  flagFtpTestWeek,
   type PlanWeekContent,
   type PlanWeek,
   type PlanWeekAdjustment,
@@ -1057,5 +1058,46 @@ describe('stripWeekdayMentions', () => {
 
   it('never returns an empty string, even if the whole title was just a weekday', () => {
     expect(stripWeekdayMentions('Jeudi')).toBe('Jeudi')
+  })
+})
+
+describe('flagFtpTestWeek', () => {
+  function weeksOf(phases: PlanWeekContent['phase'][]): PlanWeek[] {
+    const skeleton = buildPlanWeekSkeleton('2026-08-28', phases.length)
+    const content: PlanWeekContent[] = phases.map((phase) => ({ phase, focus: 'x', targetWeeklyMinutes: 300 }))
+    return mergePlanWeeks(skeleton, content)
+  }
+
+  it('flags the earliest base/build week with the structured flag and an appended note', () => {
+    const weeks = flagFtpTestWeek(weeksOf(['base', 'base', 'build', 'taper']))
+    expect(weeks[0].recommendedFtpTest).toBe(true)
+    expect(weeks[0].notes).toContain('Test FTP')
+    expect(weeks[1].recommendedFtpTest).toBeUndefined()
+    expect(weeks[2].recommendedFtpTest).toBeUndefined()
+  })
+
+  it('prefers the first eligible week even when it is build rather than base', () => {
+    const weeks = flagFtpTestWeek(weeksOf(['recovery', 'build', 'peak']))
+    expect(weeks[0].recommendedFtpTest).toBeUndefined()
+    expect(weeks[1].recommendedFtpTest).toBe(true)
+    expect(weeks[2].recommendedFtpTest).toBeUndefined()
+  })
+
+  it('appends to an existing note rather than overwriting it', () => {
+    const skeleton = buildPlanWeekSkeleton('2026-08-28', 1)
+    const weeks = flagFtpTestWeek(mergePlanWeeks(skeleton, [{ phase: 'base', focus: 'x', targetWeeklyMinutes: 300, notes: 'Reprise prudente.' }]))
+    expect(weeks[0].notes).toBe('Reprise prudente. Test FTP (ou effort maximal ~20 min) recommandé cette semaine — pour calibrer les % de la suite du plan sur une référence à jour.')
+  })
+
+  it('never flags any week when the whole plan is taper/recovery (too short for a real base/build phase)', () => {
+    const weeks = flagFtpTestWeek(weeksOf(['recovery', 'taper']))
+    expect(weeks.every((w) => w.recommendedFtpTest === undefined)).toBe(true)
+    expect(weeks.every((w) => w.notes === undefined)).toBe(true)
+  })
+
+  it('flags exactly one week even across a long multi-phase plan', () => {
+    const weeks = flagFtpTestWeek(weeksOf(['base', 'base', 'build', 'build', 'recovery', 'build', 'peak', 'taper']))
+    expect(weeks.filter((w) => w.recommendedFtpTest).length).toBe(1)
+    expect(weeks[0].recommendedFtpTest).toBe(true)
   })
 })
