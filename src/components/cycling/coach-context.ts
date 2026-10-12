@@ -103,7 +103,7 @@ export interface CoachContextInput {
 
 function governorStatusLabel(status: GovernorStatus): string {
   switch (status) {
-    case 'vert': return '🟢 Favorable (le budget peut augmenter)'
+    case 'vert': return '🟢 Favorable (marge pour une progression graduelle, jamais une cible à atteindre)'
     case 'orange': return '🟠 Stable (ne pas augmenter)'
     case 'rouge': return '🔴 Dégradé (stabiliser ou réduire la charge)'
     default: return '⚪ Données insuffisantes pour statuer'
@@ -161,7 +161,14 @@ export function buildCoachContext(input: CoachContextInput): string {
       lines.push(`- Indice d'endurance (Riegel) : ${input.enduranceIndex.toFixed(2)}`)
     }
     if (input.criticalPower) {
-      lines.push(`- Puissance critique (CP/W′, R14) : ${Math.round(input.criticalPower.cpWatts)} W, réserve W′ ${input.criticalPower.wPrimeKJ.toFixed(1)} kJ`)
+      // ⚠️ Revue externe (UX/engine) : le modèle reformulait parfois une cible
+      // de séance en "% de CP" en texte libre (titre/rationale) alors que le
+      // script structuré lui-même reste toujours en %FTP (STRUCTURED_WORKOUT_
+      // SYNTAX) — la CP n'est ici qu'un signal informatif sur la forme de
+      // l'athlète (riegel-prefer-critical-power-side-cycling), jamais la
+      // référence pour exprimer une intensité de séance. Rappel explicite pour
+      // ne pas laisser le modèle mélanger les deux vocabulaires.
+      lines.push(`- Puissance critique (CP/W′, R14) : ${Math.round(input.criticalPower.cpWatts)} W, réserve W′ ${input.criticalPower.wPrimeKJ.toFixed(1)} kJ (signal informatif sur la forme — jamais la référence pour exprimer une cible de séance, qui reste toujours en %FTP)`)
     }
   }
 

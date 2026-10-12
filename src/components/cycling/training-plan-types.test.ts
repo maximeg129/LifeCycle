@@ -27,6 +27,7 @@ import {
   sessionsForNext7Days,
   groupRollingDaysByWeek,
   pastPlanSessions,
+  stripWeekdayMentions,
   type PlanWeekContent,
   type PlanWeek,
   type PlanWeekAdjustment,
@@ -1029,5 +1030,32 @@ describe('pastPlanSessions', () => {
     }
     const result = pastPlanSessions([weekA, weekB], '2026-09-16')
     expect(result.map((e) => e.session.title)).toEqual(['S2', 'S1'])
+  })
+})
+
+describe('stripWeekdayMentions', () => {
+  it('removes a weekday that is its own trailing segment, separated by an em dash', () => {
+    expect(stripWeekdayMentions('Seuil aérobie — Jeudi')).toBe('Seuil aérobie')
+  })
+
+  it('removes a weekday that is its own leading segment', () => {
+    expect(stripWeekdayMentions('Mercredi — VO2max')).toBe('VO2max')
+  })
+
+  it('is case-insensitive and accent-insensitive on the separator form', () => {
+    expect(stripWeekdayMentions('Endurance facile - lundi')).toBe('Endurance facile')
+    expect(stripWeekdayMentions('Endurance facile, Dimanche')).toBe('Endurance facile')
+  })
+
+  it('leaves a title with no weekday untouched', () => {
+    expect(stripWeekdayMentions('Seuil aérobie')).toBe('Seuil aérobie')
+  })
+
+  it('leaves an inline weekday mention untouched (documented limitation, no separator to detect)', () => {
+    expect(stripWeekdayMentions('Séance du jeudi')).toBe('Séance du jeudi')
+  })
+
+  it('never returns an empty string, even if the whole title was just a weekday', () => {
+    expect(stripWeekdayMentions('Jeudi')).toBe('Jeudi')
   })
 })

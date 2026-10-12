@@ -18,15 +18,7 @@ import { PageHeader } from '@/components/ui/page-header'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useGovernor } from '@/components/cycling/use-governor'
-import type { Signal } from '@/components/cycling/governor-types'
-import type { GovernorStatus } from '@/components/cycling/load-types'
-
-const STATUS_META: Record<GovernorStatus, { emoji: string; label: string; hint: string; className: string }> = {
-  vert: { emoji: '🟢', label: 'Favorable', hint: 'Le budget kJ peut augmenter', className: 'text-green-400' },
-  orange: { emoji: '🟠', label: 'Stable', hint: "Ne pas augmenter la charge cette semaine", className: 'text-orange-400' },
-  rouge: { emoji: '🔴', label: 'Dégradé', hint: 'Stabiliser ou réduire la charge', className: 'text-red-400' },
-  insufficient_data: { emoji: '⚪', label: 'Données insuffisantes', hint: 'Ajoutez des données de récupération ou du feedback de séance', className: 'text-muted-foreground' },
-}
+import { STATUS_META, signalDot, signalLabel } from '@/components/cycling/governor-widget'
 
 const SIGNAL_ROWS: { key: keyof ReturnType<typeof useGovernor>['signals']; label: string; icon: typeof HeartPulse; explanation: string }[] = [
   { key: 'restingHR', label: 'FC repos (tendance)', icon: HeartPulse, explanation: "FC repos du matin (auto-sync Intervals.icu). Moyenne des 7 derniers jours comparée à la moyenne des 21 jours précédents — plus bas est favorable (variation de plus de 3%)." },
@@ -36,20 +28,6 @@ const SIGNAL_ROWS: { key: keyof ReturnType<typeof useGovernor>['signals']; label
   { key: 'feelings', label: 'Sensations & motivation', icon: Smile, explanation: "Sensation ('feel') saisie sur Intervals.icu en priorité, sinon sensation + motivation du feedback local de l'app. Règle différente des 5 autres signaux : moyenne des 7 derniers jours seulement (pas de comparaison à une période précédente) — au-dessus de +0,25 c'est favorable, en dessous de -0,25 c'est défavorable." },
   { key: 'sleepRecovery', label: 'Sommeil & récup. (Vie & Santé)', icon: Moon, explanation: "Score de readiness calculé depuis la même série fusionnée (auto-sync Intervals.icu + saisie manuelle) que la page Vie & Santé. Plus haut est favorable. Même comparaison 7j vs 21j précédents." },
 ]
-
-function signalDot(signal: Signal): string {
-  if (signal === 1) return 'bg-green-400'
-  if (signal === -1) return 'bg-red-400'
-  if (signal === 0) return 'bg-orange-400'
-  return 'bg-muted-foreground/30'
-}
-
-function signalLabel(signal: Signal): string {
-  if (signal === 1) return 'Favorable'
-  if (signal === -1) return 'Défavorable'
-  if (signal === 0) return 'Neutre'
-  return 'N/D'
-}
 
 export default function GovernorDetailPage() {
   const governor = useGovernor()

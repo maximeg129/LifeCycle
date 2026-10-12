@@ -153,7 +153,7 @@ const RideAnalysisOutputSchema = withCoachOutputContract({
   summary: z.string().min(1).describe('2-4 sentence narrative overview of how the ride went'),
   strengths: z.array(z.string()).describe('1-4 short, specific positives, referencing real numbers when possible'),
   improvementAreas: z.array(z.string()).describe('1-4 short, specific things to work on next time — empty array if genuinely nothing stands out'),
-  effortContext: z.string().describe("1-2 sentences on how this effort fits the athlete's current form (CTL/ATL/TSB) and any active goal"),
+  effortContext: z.string().describe("1-2 sentences on how this effort fit the athlete's form (CTL/ATL/TSB) AT THE TIME OF THIS RIDE and any active goal — anchored to the ride's date, never phrased as the athlete's form right now (this analysis can be read long after the ride)"),
   recommendation: z.string().min(1).describe('One concrete suggestion for the next session or for recovery'),
 }).describe('Output of the ride analysis flow.');
 
@@ -261,7 +261,13 @@ export async function rideAnalysis(input: RideAnalysisInput): Promise<FlowResult
         t.atl != null ? `ATL (fatigue) : ${t.atl}` : '',
         t.tsb != null ? `TSB (forme) : ${t.tsb}` : '',
       ].filter(Boolean).join(', ');
-      if (line) sections.push(`FORME ACTUELLE DE L'ATHLÈTE : ${line}`);
+      // ⚠️ Revue externe (UX/engine) : cette analyse peut être lue bien après
+      // la sortie (régénération tardive, webhook différé) — ces chiffres sont
+      // ceux calculés AU MOMENT de cette sortie précise (${a.date}), jamais
+      // "l'état actuel" de l'athlète au moment où le texte est lu. Rappel
+      // explicite pour que le modèle n'écrive jamais "ta forme actuelle" sans
+      // la rattacher à cette date.
+      if (line) sections.push(`FORME DE L'ATHLÈTE AU MOMENT DE CETTE SORTIE (${a.date}, PAS "actuellement") : ${line}`);
     }
 
     const durabilityText = formatDurability(parsed.durability);

@@ -18,6 +18,7 @@ import { fetchWeatherForecast, degreesToCompass, isSevereWeather, SEVERE_WIND_TH
 import { STRUCTURED_WORKOUT_SYNTAX } from './structured-workout-syntax';
 import { HOME_TRAINER_ADAPTATION_GUIDANCE } from './home-trainer-adaptation';
 import { ON_BIKE_FUELING_GUIDANCE } from './on-bike-fueling-guidance';
+import { SESSION_TARGET_VOCABULARY_GUIDANCE } from './session-generation-guardrails';
 import { invokeCoachJson } from '@/ai/coach/invokeCoach';
 import { withCoachOutputContract } from '@/ai/coach/outputContract';
 
@@ -310,6 +311,7 @@ Règles impératives :
   95% de la FTP, environ 260W" plutôt que "séance de seuil" tout court) — le script structuré lui-même reste
   en % de FTP (voir la syntaxe ci-dessous, que l'app convertit déjà en watts côté Intervals.icu). Si la FTP
   n'est pas fournie (n/a ci-dessus), reste en %/ressenti dans rationale, ne l'invente jamais.
+- ${SESSION_TARGET_VOCABULARY_GUIDANCE}
 - N'invente pas de données manquantes — travaille avec ce qui est fourni.
 - ${ON_BIKE_FUELING_GUIDANCE}
 ${buildRideGuidance({ forceIndoor, weatherIsSevere, windIsSignificant })}
