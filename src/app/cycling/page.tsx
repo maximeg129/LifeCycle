@@ -1,14 +1,16 @@
 "use client"
 
-// Cyclisme — la page "données" : où j'en suis aujourd'hui (tuiles Vue
-// d'ensemble), le budget/gouverneur de charge, et les tendances historiques
-// (PMC). Plus aucun onglet depuis la refonte IA (voir CLAUDE.md section
-// Navigation) : PMC n'était séparé que pour des raisons de poids de bundle
-// (Recharts), pas parce que c'est une destination différente — le fusionner
-// ici retire un clic pour voir la tendance derrière le chiffre du jour. Tout
-// ce qui concerne planifier/relire une sortie (Plan, Proposition du jour,
-// Journal, Météo & Tenue, Stella, Mémoire coach) vit désormais dans le hub
-// Coach (/coach), une destination de nav à part.
+// Cyclisme → "Aujourd'hui" — refonte UI/IA (LifeCycle_Pro_UX_Engine_
+// Review.md §3.1/3.3) : cette page reste à l'URL /cycling (trop de liens/
+// code existants pour la renommer sans bénéfice réel) mais EST désormais
+// la destination "Aujourd'hui" de la nouvelle IA à 3 entrées — fusionne ce
+// qui vivait ici (tuiles Vue d'ensemble, budget/gouverneur, PMC) avec ce
+// qui vivait dans Coach > Aujourd'hui (séance du jour, 7 prochains jours —
+// voir TrainingPlanTab, slimmé à cette seule responsabilité). Plan (grille
+// complète, recalibration) et Activités (Journal, détail, graphes) sont
+// désormais leurs propres destinations top-level (/plan, et pour l'instant
+// /coach pour Activités — voir CLAUDE.md, cette dernière reste à
+// reconstruire dans un chantier séparé).
 
 import React from 'react'
 import dynamic from 'next/dynamic'
@@ -23,6 +25,7 @@ import { KJBudgetWidget } from '@/components/cycling/kj-budget-widget'
 import { GovernorWidget } from '@/components/cycling/governor-widget'
 import { useGovernor } from '@/components/cycling/use-governor'
 import { PerformanceBento } from '@/components/cycling/performance-bento'
+import { TrainingPlanTab } from '@/components/cycling/training-plan-tab'
 
 // Code-split: PMC pulls in Recharts, which nothing else on this page needs.
 // See PLAN.md 2.4 — cycling used to be the single heaviest page in the app
@@ -70,7 +73,7 @@ export default function CyclingHub() {
       {/* No PageHeader on this page anymore — retour utilisateur : le bloc
           "Performance / LifeCycle Vault" faisait doublon avec le header
           mobile fixe + la sidebar desktop, qui disent déjà "LifeCycle" et
-          surlignent "Cyclisme" comme page active. pt-20 (au lieu du p-4
+          surlignent "Aujourd'hui" comme page active. pt-20 (au lieu du p-4
           habituel) remplace la clearance mobile que PageHeader apportait
           via son propre mt-16, pour ne pas passer sous le header fixe. */}
       <main className="px-4 pt-20 pb-4 md:p-8 max-w-7xl mx-auto space-y-8">
@@ -95,6 +98,14 @@ export default function CyclingHub() {
                 </CardContent>
               </Card>
             ) : null}
+
+            {/* Séance du jour + 7 prochains jours (refonte UI/IA — voir le
+                commentaire de tête de ce fichier) : le "Plan header" une
+                ligne, puis la séance du jour elle-même, puis la fenêtre
+                glissante. Rendu même sans connexion Intervals.icu — ses
+                propres sous-composants gèrent déjà chacun leur dégradation
+                (voir IntervalsOnboardingNotice à l'intérieur). */}
+            <TrainingPlanTab />
 
             {/* kJ budget + internal load governor — real mechanical work, not TSS/rigid plan */}
             <section className="grid grid-cols-1 md:grid-cols-2 gap-4">

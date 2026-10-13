@@ -3863,6 +3863,87 @@ l'écran** (le serveur de dev de ce sandbox échoue sur toute page avec l'erreur
 rendu réel ; risque jugé faible (changement de valeurs de variables CSS uniquement, build Tailwind
 réussi, aucun composant encore câblé sur les nouveaux tokens).
 
+### Étape 2 — Nav à 3 destinations, AppShell, panneau Stella
+
+Deux décisions utilisateur (`AskUserQuestion`) ont scopé ce chantier avant tout code : **"Adopt it"**
+— adopter l'IA à 3 destinations du brief §3.1 (Aujourd'hui/Plan/Activités) plutôt que les 2 items
+(Cyclisme/Coach) en place — et, une fois le code lu et l'ampleur réelle découverte,
+**"Do the full combined refactor now"** — faire les deux extractions (Plan → sa propre page ET le
+contenu "aujourd'hui" → /cycling) dans la même PR plutôt que par étapes séparées.
+
+**Diagnostic avant d'écrire la moindre ligne** — `training-plan-tab.tsx` (749 lignes) portait déjà à
+la fois "Aujourd'hui" (bandeau RPE manquant + `DailyWorkoutTab` + 7 prochains jours) ET toute la
+gestion du plan (progression, "Pourquoi ce plan ?", vigilance, grille 12 semaines, prévu/réalisé,
+journal des recalibrations) derrière un unique bouton "Plan" qui ouvrait un `Sheet` — un seul
+composant, un seul appel `useTrainingPlan()`. Scinder la nav sans scinder ce composant aurait
+produit soit une page `/plan` vide/factice, soit une page `/cycling` qui réimporte le même Sheet —
+aucune des deux n'aurait été une vraie extraction. D'où la question posée à l'utilisateur plutôt
+qu'une improvisation silencieuse.
+
+**Extraction réelle, pas un renommage** :
+- **`plan-tab.tsx`** (nouveau) — tout le contenu qui vivait dans le Sheet (formulaire de nouveau
+  plan, dialog de disponibilité, carte de progression/"Pourquoi ce plan ?"/vigilance, actions
+  Disponibilité/Recalibrer/Nouveau plan/Archiver — désormais inline dans l'en-tête puisqu'il n'y a
+  plus de Sheet à déclencher —, `PlanOverviewGrid`/`PlanWeekCalendar`, `PlanAdherenceChart`, le
+  journal des recalibrations). Sa propre instance de `useTrainingPlan()` — un deuxième listener
+  Firestore indépendant sur `trainingPlans`, même donnée, pas un prop-drilling entre deux routes
+  sans ancêtre commun (même pattern déjà en place pour `useGovernor()` ailleurs dans l'app).
+- **`src/app/plan/page.tsx`** (nouveau) — route top-level, `PageHeader` category="Entraînement",
+  charge `PlanTab` en `next/dynamic` (toute la logique de génération/recalibration IA + la grille
+  complète n'a jamais besoin d'exister au premier rendu d'Aujourd'hui).
+- **`training-plan-tab.tsx`** (réécrit, nom de fichier/fonction conservés pour ne pas re-churner les
+  ~15 commentaires de la base qui y font référence) — réduit au "Plan header" du brief (une ligne
+  "Semaine N/T · Phase · J jours avant l'objectif · Voir le plan ›", lien vers `/plan`) +
+  `PendingFeedbackBanner`/`DailyWorkoutTab` (inchangés) + `PlanNextSessionsList` (`hideToday`,
+  puisque `DailyWorkoutTab` couvre déjà aujourd'hui). Sa propre instance de `useTrainingPlan()`
+  également — même raison que ci-dessus, deux routes séparées.
+- **`src/app/cycling/page.tsx`** — devient la destination "Aujourd'hui" : rend maintenant
+  `<TrainingPlanTab />` juste sous `PerformanceBento`, donc "qu'est-ce que je dois faire aujourd'hui"
+  est visible sans aller-retour de nav vers Coach. `TodaysSessionCard`/`useTodaysPlanSession`
+  (construits pour exactement ce besoin dans un chantier précédent, voir plus haut "Cyclisme :
+  aperçu de la séance prévue") deviennent redondants avec ce que `TrainingPlanTab` affiche
+  maintenant directement (titre/durée/profil réels plutôt qu'un simple aperçu read-only) —
+  supprimés, aucun autre appelant (confirmé par grep).
+- **`src/app/coach/page.tsx`** — devient la destination "Activités" (reste à l'URL `/coach`, trop de
+  deep-links existants — `?tab=memory`/`?tab=library`, le bouton flottant Stella, les notifications
+  push du chantier B — pour la renommer sans bénéfice réel). `'today'` retiré de `VALID_TABS`
+  (`['rides', 'weather', 'memory', 'library']`), son `TabsContent`/`TabsTrigger` supprimés, premier
+  onglet par défaut redevenu `'rides'` (Journal). Les deep-links `/coach?tab=journal` trouvés dans
+  `push-notifications.ts`/`/api/intervals/webhook/route.ts`/`use-strength-session-analysis.ts`
+  (`'journal'` n'a jamais été une valeur valide de `VALID_TABS` — un bug latent préexistant, sans
+  rapport avec ce chantier mais corrigé au passage) pointent désormais vers `?tab=rides`.
+- **`sidebar.tsx`** — `navItems` passe de 2 à 3 entrées : **Aujourd'hui** (`/cycling`, `Sun`),
+  **Plan** (`/plan`, `CalendarRange`), **Activités** (`/coach`, `Activity`). Bottom nav mobile
+  suit (4 icônes + Stella, au lieu de 3). `messages/fr.json`/`en.json` : clés `Nav.cycling`/
+  `Nav.coach` remplacées par `Nav.today`/`Nav.plan`/`Nav.activities` (seul `sidebar.tsx` consomme ce
+  namespace, vérifié par grep). `command-palette.tsx` (`PAGES[]`) suit la même nomenclature.
+
+**Panneau Stella — persistant sur desktop, bottom sheet sur mobile** (review §3.1/3.2,
+"checklist d'acceptation") — avant ce correctif, le bouton flottant ouvrait TOUJOURS un `Sheet
+side="bottom"` (hérité du seul traitement mobile d'origine), y compris sur desktop où le brief
+attend un panneau latéral. `useIsMobile()` (hook déjà existant, même seuil 768px que le `md:` du
+reste de la nav) choisit `side="right"` (420px, pleine hauteur, `flex flex-col` pour que le chat
+remplisse le panneau) sur desktop et `side="bottom"` (inchangé) sur mobile — un seul `Sheet` monté,
+pas deux instances cachées en CSS qui dupliqueraient l'overlay/le piège de focus Radix pour le même
+état.
+
+**Stella rend le Markdown** (même item de checklist §2) — `coachChat` est un flow texte libre (pas
+`generateJson`, voir plus haut) et peut déjà produire du gras/listes/titres en Markdown brut ; avant
+ce correctif, `stella-chat-tab.tsx` affichait `{m.content}` tel quel, astérisques visibles compris.
+`react-markdown@10.1.0` ajouté (peer `react >=18`, compatible React 19) — pas de
+`@tailwindcss/typography` dans ce projet (`tailwind.config.ts`), donc un mapping minimal
+élément-par-élément (`p`/`strong`/`em`/`ul`/`ol`/`li`/`a`/`code`/`h1-3`) plutôt qu'une nouvelle
+dépendance pour une poignée de balises. Appliqué uniquement aux messages `role: 'assistant'` — un
+message `'user'` reste en texte brut `whitespace-pre-wrap` (l'athlète tape du texte, jamais du
+Markdown à interpréter).
+
+Tests : aucun nouveau (restructuration JSX/routing/état local, aucune logique pure touchée) —
+935/935 inchangés, tsc/eslint/build clean (`/plan` apparaît dans la sortie de `next build` comme
+nouvelle route). **Non vérifié à l'écran** (même limite `favicon.ico` que l'étape 1) — en particulier
+le panneau Stella desktop (largeur/mise en page du chat dans un panneau plutôt qu'un bottom sheet) et
+le rendu Markdown lui-même sont invérifiables visuellement dans ce sandbox ; à confirmer par
+l'utilisateur au premier rendu réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

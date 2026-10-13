@@ -1,29 +1,18 @@
 "use client"
 
-// Coach — tout ce qui concerne planifier, faire et relire une sortie, plus
-// la relation avec le coach IA lui-même. Nouvelle destination de nav issue
-// de la refonte IA (voir CLAUDE.md section Navigation), qui remplace
-// l'ancien onglet "Coaching" de Cyclisme ET l'ancienne page /weather :
-// planifier une sortie avec la bonne intensité (Proposition du jour) et
-// planifier une sortie avec la bonne tenue (Météo & Tenue) sont le même
-// geste, ça n'avait pas de sens que ce soit deux destinations différentes.
-// /weather redirige ici (next.config.ts).
-//
-// "Aujourd'hui" et "Plan" — deux onglets séparés, PAS fusionnés. Ça l'ont
-// été un temps (voir CLAUDE.md "Page Coach restructurée : 7 → 6
-// sous-onglets") : une fois le plan daté par jour et la Proposition du
-// jour devenue son ajustement au jour le jour, garder deux onglets pour la
-// même notion de "mon plan" ne semblait plus avoir de sens. Retour
-// utilisateur après usage réel, une fois le plan périodisé lui-même devenu
-// un vrai écran de gestion (vue calendrier, badge de vigilance, journal des
-// recalibrations) : "je reste vraiment pas sûre d'avoir le côté plan et
-// séances du jour sur le même onglet." Analyse (voir CLAUDE.md) : le vrai
-// distinguo n'est pas "plan vs séance du jour", c'est "coup d'œil quotidien
-// vs écran de gestion occasionnel" — exactement la distinction que
-// TrainerRoad fait entre son écran "Career" et son "Calendar" séparé.
-// Redéfusionnés : "Aujourd'hui" (bandeau à traiter + `DailyWorkoutTab`)
-// reste l'onglet par défaut ; "Plan" (le plan périodisé complet,
-// `TrainingPlanTab`) redevient sa propre destination.
+// Coach → "Activités" — refonte UI/IA (LifeCycle_Pro_UX_Engine_Review.md
+// §3.1/3.4) : cette page reste à l'URL /coach (trop de liens/deep-links
+// existants — ?tab=memory/library, le bouton flottant Stella — pour la
+// renommer sans bénéfice réel) mais EST désormais la destination
+// "Activités" de la nouvelle IA à 3 entrées (Aujourd'hui/Plan/Activités).
+// "Aujourd'hui" (ex-premier onglet, `TrainingPlanTab`) a déménagé sur
+// /cycling — voir CLAUDE.md et le commentaire de tête de ce fichier côté
+// cycling/page.tsx — donc le premier onglet ici redevient Journal, le
+// cœur de cette destination (sorties + détail + analyse). Météo & Tenue et
+// le menu "Plus" (Mémoire coach/Bibliothèque) restent inchangés.
+// Reconstruction complète de cet écran (détail activité, filtres, charts —
+// voir LifeCycle_Pro_UI_Spec.md §Activités) différée à un chantier séparé,
+// voir CLAUDE.md.
 
 import { Suspense, useState } from 'react'
 import dynamic from 'next/dynamic'
@@ -35,16 +24,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { cn } from '@/lib/utils'
-import { Activity, CloudSun, Sun, BrainCircuit, Library, MoreHorizontal } from 'lucide-react'
+import { Activity, CloudSun, BrainCircuit, Library, MoreHorizontal } from 'lucide-react'
 import { useAthlete } from '@/hooks/use-intervals'
 import { useGovernor } from '@/components/cycling/use-governor'
 
-// Code-split : seule TrainingPlanTab (le contenu de l'unique onglet
-// "Aujourd'hui" — voir le commentaire en tête de ce fichier) ship dans le
-// bundle principal, les autres se chargent à la demande.
-const TrainingPlanTab = dynamic(() => import('@/components/cycling/training-plan-tab').then(m => m.TrainingPlanTab), {
-  loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
-})
 const RidesJournalTab = dynamic(() => import('@/components/coach/rides-journal-tab').then(m => m.RidesJournalTab), {
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
@@ -58,16 +41,12 @@ const CoachLibraryTab = dynamic(() => import('@/components/cycling/coach-library
   loading: () => <Skeleton className="h-[400px] w-full rounded-lg" />,
 })
 
-// Retour utilisateur, captures Frive/Join à l'appui : "je pense qu'il faut
-// revoir l'onglet coach... j'aimerais avoir un seul tab." "Aujourd'hui" et
-// "Plan" (deux onglets depuis "Aujourd'hui et Plan redéfusionnés", voir
-// CLAUDE.md) refusionnent en un seul écran continu — voir training-plan-
-// tab.tsx pour le détail (en-tête façon Join + séance du jour + 6 prochains
-// jours, la gestion occasionnelle du plan restant derrière son propre
-// bouton "Plan", pas supprimée). Stella sort aussi de la TabsList — "je
-// garderais Stella en bouton flottant" — remplacée par l'overlay flottant
-// de sidebar.tsx (StellaChatTab n'est donc plus importé ici du tout).
-const VALID_TABS = ['today', 'rides', 'weather', 'memory', 'library'] as const
+// Stella est sortie de la TabsList il y a déjà un moment — "je garderais
+// Stella en bouton flottant" — remplacée par l'overlay flottant de
+// sidebar.tsx (StellaChatTab n'est donc jamais importé ici). "today" a
+// quitté VALID_TABS avec ce chantier (son contenu vit sur /cycling) — le
+// premier onglet valide/par défaut redevient "rides" (Journal).
+const VALID_TABS = ['rides', 'weather', 'memory', 'library'] as const
 type CoachTab = (typeof VALID_TABS)[number]
 
 // Lit ?tab=... (bouton flottant Stella de la nav mobile — sidebar.tsx —
@@ -80,7 +59,7 @@ function CoachTabs() {
   const governor = useGovernor()
   const searchParams = useSearchParams()
   const paramTab = searchParams.get('tab')
-  const initialTab: CoachTab = (VALID_TABS as readonly string[]).includes(paramTab ?? '') ? (paramTab as CoachTab) : 'today'
+  const initialTab: CoachTab = (VALID_TABS as readonly string[]).includes(paramTab ?? '') ? (paramTab as CoachTab) : 'rides'
   const [tab, setTab] = useState<CoachTab>(initialTab)
 
   // Retour utilisateur : "nous devrions peut être effectuer un audit...
@@ -99,9 +78,6 @@ function CoachTabs() {
     <Tabs value={tab} onValueChange={(v) => setTab(v as CoachTab)} className="space-y-6">
       <div className="flex items-center gap-1 flex-wrap">
         <TabsList className="bg-card/50 border border-border p-1 h-auto flex flex-wrap gap-1">
-          <TabsTrigger value="today" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
-            <Sun className="w-3.5 h-3.5 mr-1.5" /> Aujourd&apos;hui
-          </TabsTrigger>
           <TabsTrigger value="rides" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground px-3 py-1.5 text-sm">
             <Activity className="w-3.5 h-3.5 mr-1.5" /> Journal
           </TabsTrigger>
@@ -136,15 +112,6 @@ function CoachTabs() {
       <TabsContent value="weather" className="space-y-8">
         <WeatherOutfitTab />
       </TabsContent>
-      {/* Retour utilisateur, captures Frive/Join à l'appui, après le
-          va-et-vient documenté plus haut dans CLAUDE.md entre fusionné et
-          séparé : "je pense qu'il faut revoir l'onglet coach... j'aimerais
-          avoir un seul tab." TrainingPlanTab porte maintenant tout le
-          contenu de ce qui était "Aujourd'hui" ET "Plan" — voir son propre
-          commentaire de fichier pour le détail. */}
-      <TabsContent value="today" className="space-y-8">
-        <TrainingPlanTab />
-      </TabsContent>
       <TabsContent value="memory" className="space-y-8">
         <CoachMemoryTab governorStatus={governor.status} />
       </TabsContent>
@@ -163,10 +130,10 @@ export default function CoachPage() {
 
       {/* No PageHeader on cette page — retour utilisateur : le bandeau
           "Coaching IA / Coach" fait doublon avec la sidebar desktop + la
-          bottom nav mobile, qui surlignent déjà "Coach" comme page active
-          (pathname exact match, voir sidebar.tsx). pt-20 (au lieu du p-4
-          habituel) remplace la clearance mobile que PageHeader apportait
-          via son propre mt-16 — même traitement que Cyclisme. */}
+          bottom nav mobile, qui surlignent déjà "Activités" comme page
+          active (pathname exact match, voir sidebar.tsx). pt-20 (au lieu du
+          p-4 habituel) remplace la clearance mobile que PageHeader
+          apportait via son propre mt-16 — même traitement qu'Aujourd'hui. */}
       <main className="px-4 pt-20 pb-4 md:p-8 max-w-7xl mx-auto space-y-6">
         <Suspense fallback={<Skeleton className="h-12 w-full rounded-lg" />}>
           <CoachTabs />

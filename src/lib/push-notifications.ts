@@ -15,7 +15,7 @@ import { adminFirestore, adminMessaging } from './firebase-admin'
 export interface PushNotificationPayload {
   title: string
   body: string
-  /** Chemin relatif (ex. "/coach?tab=journal") ouvert au clic sur la notification — voir firebase-messaging service worker handler. */
+  /** Chemin relatif (ex. "/coach?tab=rides") ouvert au clic sur la notification — voir firebase-messaging service worker handler. */
   url?: string
 }
 

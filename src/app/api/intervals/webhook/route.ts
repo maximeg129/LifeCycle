@@ -255,7 +255,7 @@ async function processActivityAnalyzed(event: IntervalsWebhookEvent): Promise<vo
   await sendPushNotification(uid, {
     title: 'Analyse de sortie prête',
     body: activity.name || 'Votre sortie a été analysée automatiquement.',
-    url: '/coach?tab=journal',
+    url: '/coach?tab=rides',
   });
 }
 
