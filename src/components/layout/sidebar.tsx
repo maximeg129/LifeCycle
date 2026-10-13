@@ -89,7 +89,7 @@ export function AppNavigation() {
             <LifeCycleMark className="w-9 h-9 shadow-md shadow-primary/25 group-hover:scale-105 transition-transform rounded-lg" />
             <div className="flex flex-col leading-none">
               <span className="text-[15px] font-semibold tracking-tight">LifeCycle</span>
-              <span className="text-[10px] font-medium text-muted-foreground tracking-widest uppercase mt-0.5">Pro</span>
+              <span className="text-xs font-medium text-muted-foreground tracking-widest uppercase mt-0.5">Pro</span>
             </div>
           </Link>
         </div>
@@ -102,13 +102,13 @@ export function AppNavigation() {
           >
             <Search className="w-4 h-4 shrink-0" />
             <span className="text-[13px] flex-1">{t('search')}</span>
-            <kbd className="text-[10px] font-mono bg-background/80 border border-border/60 rounded px-1.5 py-0.5">⌘K</kbd>
+            <kbd className="text-xs font-mono bg-background/80 border border-border/60 rounded px-1.5 py-0.5">⌘K</kbd>
           </button>
         </div>
 
         {/* Nav */}
         <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto">
-          <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-widest px-3 pb-2">
+          <p className="text-xs font-semibold text-muted-foreground/50 uppercase tracking-widest px-3 pb-2">
             {t('modules')}
           </p>
           {navItems.map((item) => {
@@ -149,7 +149,7 @@ export function AppNavigation() {
             <LogOut className="w-[18px] h-[18px] shrink-0" />
             <span className="text-[13.5px] font-medium">{t('logout')}</span>
           </button>
-          <p className="px-3 pt-2 text-[10px] font-mono text-muted-foreground/40 select-text">
+          <p className="px-3 pt-2 text-xs font-mono text-muted-foreground/40 select-text">
             {formatVersionLabel(APP_VERSION.gitSha, APP_VERSION.buildTime)}
           </p>
         </div>
@@ -184,7 +184,7 @@ export function AppNavigation() {
                     <LifeCycleMark className="w-9 h-9 shadow-md shadow-primary/25 rounded-lg" />
                     <div>
                       <span className="text-[15px] font-semibold tracking-tight block">LifeCycle</span>
-                      <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Pro</span>
+                      <span className="text-xs text-muted-foreground uppercase tracking-widest">Pro</span>
                     </div>
                   </div>
                 </div>
@@ -225,7 +225,7 @@ export function AppNavigation() {
                     <LogOut className="w-5 h-5 shrink-0" />
                     <span className="text-[14px] font-medium">{t('logout')}</span>
                   </button>
-                  <p className="px-3 pt-2 text-[10px] font-mono text-muted-foreground/40 select-text">
+                  <p className="px-3 pt-2 text-xs font-mono text-muted-foreground/40 select-text">
                     {formatVersionLabel(APP_VERSION.gitSha, APP_VERSION.buildTime)}
                   </p>
                 </div>
@@ -255,7 +255,7 @@ export function AppNavigation() {
                     <item.icon className="w-[20px] h-[20px]" />
                   </div>
                   <span className={cn(
-                    "text-[9px] font-medium tracking-tight",
+                    "text-xs font-medium tracking-tight",
                     isActive ? "text-primary" : "text-muted-foreground"
                   )}>
                     {item.label}

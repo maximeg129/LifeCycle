@@ -156,7 +156,7 @@ export default function LifestylePage() {
                     <div className={cn('w-10 h-10 rounded-2xl flex items-center justify-center', m.bg)}>
                       <m.icon className={cn('w-5 h-5', m.color)} />
                     </div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{m.label}</span>
+                    <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{m.label}</span>
                   </div>
                   <div className="text-3xl font-bold tracking-tight mb-2">{m.value}</div>
                   <p className="text-xs text-muted-foreground mb-4">{m.subtitle}</p>
@@ -267,7 +267,7 @@ export default function LifestylePage() {
                   <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 flex items-center justify-center">
                     <Moon className="w-5 h-5 text-indigo-500" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Moyenne</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Moyenne</span>
                 </div>
                 <div className="text-3xl font-bold tracking-tight">{sleepValues.length ? `${avgSleep.toFixed(1)}h` : '—'}</div>
                 <p className="text-xs text-muted-foreground mt-1">sur {sleepValues.length} jour{sleepValues.length > 1 ? 's' : ''} renseigné{sleepValues.length > 1 ? 's' : ''}</p>
@@ -277,7 +277,7 @@ export default function LifestylePage() {
                   <div className="w-10 h-10 rounded-2xl bg-green-500/10 flex items-center justify-center">
                     <TrendingUp className="w-5 h-5 text-green-500" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Qualité Moy.</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Qualité Moy.</span>
                 </div>
                 <div className="text-3xl font-bold tracking-tight">{qualityValues.length ? `${avgQuality}%` : '—'}</div>
                 <p className="text-xs text-muted-foreground mt-1">sur les 7 derniers jours</p>
@@ -328,7 +328,7 @@ export default function LifestylePage() {
                       <span className="text-sm font-bold w-16 text-right">{night.sleepHours}h</span>
                       {night.sleepQuality !== undefined && (
                         <Badge variant="outline" className={cn(
-                          'ml-4 rounded-full text-[10px] font-bold border-none px-3',
+                          'ml-4 rounded-full text-xs font-bold border-none px-3',
                           night.sleepQuality >= 85 ? 'bg-green-500/10 text-green-500' :
                           night.sleepQuality >= 70 ? 'bg-yellow-500/10 text-yellow-500' :
                           'bg-red-500/10 text-red-500'

@@ -19,7 +19,7 @@ export function KpiGrid({ items }: { items: KpiGridItem[] }) {
     <div className="grid grid-cols-3 gap-px bg-border rounded-xl overflow-hidden">
       {items.map((item, i) => (
         <div key={i} className="bg-card p-3 flex flex-col gap-0.5 min-w-0">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground truncate">{item.label}</span>
+          <span className="text-xs uppercase tracking-wider text-muted-foreground truncate">{item.label}</span>
           <span className="font-data text-sm font-bold truncate">
             {item.value}
             {item.unit && <span className="text-xs font-normal text-muted-foreground ml-1">{item.unit}</span>}

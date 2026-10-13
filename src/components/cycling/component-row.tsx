@@ -56,7 +56,7 @@ export function ComponentRow({ comp, onEdit, onReplace, onDelete }: Props) {
           <span className="font-medium text-sm">{COMPONENT_CATEGORY_LABELS[comp.category]}</span>
           {comp.brand && <span className="text-xs text-muted-foreground">{comp.brand} {comp.model}</span>}
           {hasWarranty && (
-            <Badge variant="outline" className="text-[10px] gap-1">
+            <Badge variant="outline" className="text-xs gap-1">
               <Shield className="w-3 h-3" /> Garantie {formatWarrantyExpiry(comp)}
             </Badge>
           )}
@@ -82,12 +82,12 @@ export function ComponentRow({ comp, onEdit, onReplace, onDelete }: Props) {
         </div>
       </div>
       <Progress value={ratio} className="h-1.5" />
-      <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-tight">
+      <div className="flex justify-between text-xs text-muted-foreground uppercase tracking-tight">
         <span>Usage: {comp.currentKm.toLocaleString('fr-FR')} km</span>
         <span>Seuil: {comp.thresholdKm.toLocaleString('fr-FR')} km</span>
       </div>
       {(comp.purchasePrice != null && comp.purchasePrice > 0 || cpk) && (
-        <div className="text-[10px] text-muted-foreground flex items-center gap-3 flex-wrap">
+        <div className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
           {comp.purchasePrice != null && comp.purchasePrice > 0 && (
             <span className="flex items-center gap-1"><Euro className="w-3 h-3" /> {comp.purchasePrice.toFixed(2)} EUR</span>
           )}

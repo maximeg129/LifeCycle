@@ -102,7 +102,7 @@ export function WardrobeTab() {
               <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-secondary/40">
                 <div className="min-w-0">
                   <p className="text-sm font-bold truncate">{item.name}</p>
-                  <p className="text-[10px] text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide flex items-center gap-2">
                     {CLOTHING_TYPE_LABELS[item.type]} · {item.temperatureRangeCelsius}
                     {item.windproof && <Wind className="w-3 h-3" />}
                     {item.waterproof && <Droplets className="w-3 h-3" />}

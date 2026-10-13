@@ -155,12 +155,12 @@ export function MealPlanWeekView() {
               className="w-56 shrink-0 space-y-3"
             >
               <div className="text-center">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">{format(day, 'EEEE', { locale: fr })}</p>
+                <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{format(day, 'EEEE', { locale: fr })}</p>
                 <p className="text-sm font-bold">{format(day, 'dd MMM', { locale: fr })}</p>
               </div>
               <div className="space-y-2 min-h-[80px]">
                 {mealsByDay[dayIndex].length === 0 ? (
-                  <div className="h-16 rounded-xl border border-dashed border-border/50 flex items-center justify-center text-[10px] text-muted-foreground/50">
+                  <div className="h-16 rounded-xl border border-dashed border-border/50 flex items-center justify-center text-xs text-muted-foreground/50">
                     Vide
                   </div>
                 ) : mealsByDay[dayIndex].map((meal) => (
@@ -172,13 +172,13 @@ export function MealPlanWeekView() {
                     className={cn('lc-card border-none p-3 space-y-2 cursor-grab active:cursor-grabbing', meal.status === 'saute' && 'opacity-60')}
                   >
                     <div className="flex items-start justify-between gap-1">
-                      <span className="text-[9px] font-bold uppercase tracking-widest text-muted-foreground">{MEAL_TYPE_LABELS[meal.mealType]}</span>
-                      <Badge variant="outline" className={cn('text-[9px] border-none px-1.5 py-0', STATUS_STYLES[meal.status])}>
+                      <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">{MEAL_TYPE_LABELS[meal.mealType]}</span>
+                      <Badge variant="outline" className={cn('text-xs border-none px-1.5 py-0', STATUS_STYLES[meal.status])}>
                         {STATUS_LABELS[meal.status]}
                       </Badge>
                     </div>
                     <p className={cn('text-sm font-bold leading-tight', meal.status === 'saute' && 'line-through')}>{meal.recipeName}</p>
-                    <p className="text-[10px] text-muted-foreground">{meal.macros.calories} kcal</p>
+                    <p className="text-xs text-muted-foreground">{meal.macros.calories} kcal</p>
 
                     <div className="flex flex-wrap gap-1 pt-1">
                       {meal.status === 'propose' && (
@@ -204,7 +204,7 @@ export function MealPlanWeekView() {
                     </div>
 
                     <Select value={String(dayIndex)} onValueChange={(v) => handleMove(meal, Number(v))}>
-                      <SelectTrigger className="h-6 text-[10px] px-2"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-6 text-xs px-2"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         {weekDays.map((d, i) => (
                           <SelectItem key={i} value={String(i)} className="text-xs capitalize">{indexToDayName(i)} {format(d, 'dd/MM')}</SelectItem>

@@ -4148,6 +4148,21 @@ Tests : aucun nouveau (changement de tokens CSS/config Tailwind, aucune logique 
 949/949 inchangés, tsc/eslint/build clean. **Non vérifié à l'écran** — risque le plus élevé de toute
 la restructuration ; à confirmer en priorité par l'utilisateur au premier rendu réel.
 
+### Pièce 2 — "No text under 12px" (checklist §8)
+
+Balayage mécanique, même discipline que la pièce 1 : `grep -rohE 'text-\[[0-9]+px\]' src/` montrait
+148 `text-[10px]` + 29 `text-[11px]` + 8 `text-[9px]` (185 occurrences, 42 fichiers) — exactement ce
+que l'item "No text under 12px" de la checklist d'acceptation (§8) interdit. Toutes des micro-
+libellés/badges/puces sans aucun calcul de layout qui dépende de leur taille exacte (vérifié par
+échantillonnage avant le balayage complet) — `sed` global vers `text-xs` (12px, le palier Tailwind
+standard le plus proche). Les quelques tailles restantes sous forme arbitraire (`text-[13-15px]`,
+`text-[80px]`/`text-[90px]` — des displays de chiffre géant, hors sujet) sont déjà ≥12px, rien à
+corriger.
+
+Tests : aucun nouveau — 949/949 inchangés, tsc/eslint/build clean. **Non vérifié à l'écran** (même
+limite que la pièce 1) — risque jugé plus faible qu'un changement de radius/couleur (un texte 1-2px
+plus grand déborde rarement un conteneur déjà prévu pour du texte), mais toujours invérifiable ici.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

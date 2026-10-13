@@ -57,7 +57,7 @@ export function KJBudgetWidget({ governorStatus }: { governorStatus: GovernorSta
           )}
         </div>
         {budget.exceedsThresholdKJPerKg != null && (
-          <p className="mt-2 text-[11px] text-muted-foreground">
+          <p className="mt-2 text-xs text-muted-foreground">
             Palier de durabilité de référence dépassé cette semaine : {budget.exceedsThresholdKJPerKg} kJ/kg (plafond, pas une cible).
           </p>
         )}

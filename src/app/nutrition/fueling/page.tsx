@@ -99,28 +99,28 @@ export default function FuelingDetailPage() {
                   <Flame className="w-3.5 h-3.5 text-orange-400" /> Sport
                 </div>
                 <div className="text-2xl font-bold">{sportBurned}</div>
-                <div className="text-[10px] text-muted-foreground">kcal</div>
+                <div className="text-xs text-muted-foreground">kcal</div>
               </div>
               <div>
                 <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
                   <ActivityIcon className="w-3.5 h-3.5 text-purple-400" /> Métabolisme
                 </div>
                 <div className="text-2xl font-bold">{bmr ?? '—'}</div>
-                <div className="text-[10px] text-muted-foreground">{bmr != null ? 'kcal' : 'à configurer'}</div>
+                <div className="text-xs text-muted-foreground">{bmr != null ? 'kcal' : 'à configurer'}</div>
               </div>
               <div>
                 <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
                   <UtensilsCrossed className="w-3.5 h-3.5 text-green-400" /> Mangé
                 </div>
                 <div className="text-2xl font-bold">{eaten}</div>
-                <div className="text-[10px] text-muted-foreground">kcal</div>
+                <div className="text-xs text-muted-foreground">kcal</div>
               </div>
               <div>
                 <div className="flex items-center justify-center gap-1 text-xs text-muted-foreground mb-1">
                   <Scale className="w-3.5 h-3.5 text-primary" /> Écart
                 </div>
                 <div className={`text-2xl font-bold ${gap < 0 ? 'text-red-400' : 'text-green-400'}`}>{gap > 0 ? '+' : ''}{gap}</div>
-                <div className="text-[10px] text-muted-foreground">kcal récup.</div>
+                <div className="text-xs text-muted-foreground">kcal récup.</div>
               </div>
             </div>
 
@@ -131,7 +131,7 @@ export default function FuelingDetailPage() {
                   <span>{nutrition.totals.protein}g / {protein.min}-{protein.max}g</span>
                 </div>
                 <Progress value={Math.min(100, Math.round((nutrition.totals.protein / protein.max) * 100))} className="h-1.5" />
-                <p className="text-[10px] text-muted-foreground mt-1">1.6-2.0 g/kg, basé sur {weightKg} kg (Intervals.icu)</p>
+                <p className="text-xs text-muted-foreground mt-1">1.6-2.0 g/kg, basé sur {weightKg} kg (Intervals.icu)</p>
               </div>
             )}
           </MetricCard>

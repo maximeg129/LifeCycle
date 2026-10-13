@@ -73,7 +73,7 @@ export function RecipeQuickLog({ recipes }: { recipes: Recipe[] }) {
                   <Plus className="w-3.5 h-3.5" />
                 </span>
               </div>
-              <span className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{recipe.calories} kcal</span>
+              <span className="text-xs text-muted-foreground font-bold uppercase tracking-wider">{recipe.calories} kcal</span>
             </button>
           ))}
         </div>

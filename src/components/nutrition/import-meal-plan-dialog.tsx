@@ -161,7 +161,7 @@ export function ImportMealPlanDialog({ weekStart }: { weekStart: Date }) {
           <p className="text-xs font-bold text-yellow-600 flex items-center gap-2">
             <AlertTriangle className="w-3.5 h-3.5" /> {errors.length} entrée(s) ignorée(s)
           </p>
-          <ul className="text-[11px] text-muted-foreground space-y-0.5 pl-5 list-disc">
+          <ul className="text-xs text-muted-foreground space-y-0.5 pl-5 list-disc">
             {errors.map((err, i) => <li key={i}>{err}</li>)}
           </ul>
         </div>

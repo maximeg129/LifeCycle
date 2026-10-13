@@ -44,13 +44,13 @@ export function PlanAdherenceChart({ weeks, getCompletion, todayIso }: Props) {
                 <div className="absolute inset-x-0 bottom-0 bg-border" style={{ height: `${plannedPct}%` }} />
                 <div className="absolute inset-x-0 bottom-0 bg-primary" style={{ height: `${completedPct}%` }} />
               </div>
-              <span className="text-[10px] font-medium text-muted-foreground">S{w.weekNumber}</span>
-              <span className="text-[9px] text-muted-foreground/70 font-data">{w.sessionsDone}/{w.sessionsPlanned}</span>
+              <span className="text-xs font-medium text-muted-foreground">S{w.weekNumber}</span>
+              <span className="text-xs text-muted-foreground/70 font-data">{w.sessionsDone}/{w.sessionsPlanned}</span>
             </div>
           )
         })}
       </div>
-      <div className="flex items-center gap-4 text-[10px] text-muted-foreground">
+      <div className="flex items-center gap-4 text-xs text-muted-foreground">
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-border inline-block" /> Prévu</span>
         <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-sm bg-primary inline-block" /> Réalisé</span>
       </div>

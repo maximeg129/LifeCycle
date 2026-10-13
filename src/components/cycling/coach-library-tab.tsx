@@ -108,7 +108,7 @@ export function CoachLibraryTab() {
                         {ref.level}
                       </Badge>
                       {ref.openAccess && (
-                        <Badge variant="secondary" className="text-[10px] font-normal">
+                        <Badge variant="secondary" className="text-xs font-normal">
                           accès libre
                         </Badge>
                       )}

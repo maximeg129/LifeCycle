@@ -337,7 +337,7 @@ export default function SettingsPage() {
                   <p className="text-xs text-muted-foreground">Tâches récurrentes et plantes.</p>
                 </div>
                 {overdueHome > 0 && (
-                  <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+                  <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-xs font-bold flex items-center justify-center">
                     {overdueHome}
                   </span>
                 )}

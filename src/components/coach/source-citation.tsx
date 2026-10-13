@@ -60,12 +60,12 @@ export function SourceCitation({ ruleIds, className, label = 'Voir la source' }:
           <div key={rule.id} className="space-y-1.5 pb-3 border-b border-border last:pb-0 last:border-0">
             <div className="flex items-center gap-1.5 flex-wrap">
               {rule.convention ? (
-                <Badge variant="secondary" className="text-[10px] font-normal">
+                <Badge variant="secondary" className="text-xs font-normal">
                   convention
                 </Badge>
               ) : (
                 rule.refs.map((refId) => (
-                  <Badge key={refId} variant="outline" className="text-[10px] font-data font-normal">
+                  <Badge key={refId} variant="outline" className="text-xs font-data font-normal">
                     {refId}
                   </Badge>
                 ))
@@ -77,7 +77,7 @@ export function SourceCitation({ ruleIds, className, label = 'Voir la source' }:
                 const ref = REFERENCES[refId]
                 if (!ref) return null
                 return (
-                  <p key={refId} className="text-[11px] text-muted-foreground">
+                  <p key={refId} className="text-xs text-muted-foreground">
                     <span className="font-data">{refId}</span> — {ref.authors}, {ref.year}. {ref.title}. {ref.source}. (niveau {ref.level})
                   </p>
                 )

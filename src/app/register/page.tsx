@@ -156,7 +156,7 @@ export default function RegisterPage() {
           <div className="absolute inset-0 flex items-center">
             <span className="w-full border-t border-border/50" />
           </div>
-          <span className="relative flex justify-center bg-card px-3 text-[11px] font-semibold text-muted-foreground uppercase tracking-widest">
+          <span className="relative flex justify-center bg-card px-3 text-xs font-semibold text-muted-foreground uppercase tracking-widest">
             ou
           </span>
         </div>

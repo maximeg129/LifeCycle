@@ -137,7 +137,7 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
             <BikeIcon className="w-3 h-3" /> {bike?.name ?? 'Vélo inconnu'}
           </p>
         </div>
-        <Badge variant="outline" className={cn('text-[10px] border-none px-2', chain.status === 'montee' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>
+        <Badge variant="outline" className={cn('text-xs border-none px-2', chain.status === 'montee' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>
           {CHAIN_STATUS_LABELS[chain.status]}
         </Badge>
       </div>
@@ -145,12 +145,12 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
       <div className="space-y-2">
         <div className="flex justify-between items-baseline">
           <span className="text-2xl font-bold tracking-tight">{chain.kmSinceWax} km</span>
-          <Badge variant="outline" className={cn('text-[10px] border-none px-2', WAX_LEVEL_STYLES[waxLevel])}>
+          <Badge variant="outline" className={cn('text-xs border-none px-2', WAX_LEVEL_STYLES[waxLevel])}>
             {waxLevel === 'critical' ? 'À farter' : waxLevel === 'warning' ? 'Bientôt' : 'OK'}
           </Badge>
         </div>
         <Progress value={progress} className="h-1.5" />
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+        <p className="text-xs text-muted-foreground uppercase tracking-wide">
           Depuis le fartage · seuil {chain.waxThresholdKm} km
         </p>
       </div>
@@ -169,14 +169,14 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
       {chain.mountedDate && (
         <Collapsible open={showRides} onOpenChange={setShowRides}>
           <CollapsibleTrigger asChild>
-            <button className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+            <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
               <Activity className="w-3 h-3" /> Sorties depuis le montage ({rides.length})
               <ChevronDown className={cn('w-3 h-3 transition-transform', showRides && 'rotate-180')} />
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent className="pt-2 space-y-1">
             {rides.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Aucune sortie synchronisée depuis le montage — la prochaine synchronisation automatique (ou manuelle depuis Réglages) les ajoutera.
               </p>
             ) : rides.map((r) => (
@@ -185,7 +185,7 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
                 href={`https://intervals.icu/activities/${r.activityId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground hover:text-primary border-b border-border/30 pb-1 last:border-none"
+                className="flex items-center justify-between gap-2 text-xs text-muted-foreground hover:text-primary border-b border-border/30 pb-1 last:border-none"
               >
                 <span className="truncate min-w-0">
                   {r.name || 'Sortie'} · {format(parseISO(r.date), 'dd MMM', { locale: fr })}
@@ -200,7 +200,7 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
       )}
 
       {needsCheck && (
-        <div className="p-2.5 rounded-xl bg-orange-500/5 border border-orange-500/20 flex items-center gap-2 text-[11px] text-orange-600">
+        <div className="p-2.5 rounded-xl bg-orange-500/5 border border-orange-500/20 flex items-center gap-2 text-xs text-orange-600">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
           {chain.totalKm} km au total — vérifiez l&apos;usure avec un outil dédié.
         </div>
@@ -230,13 +230,13 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
       <Collapsible open={showHistory} onOpenChange={setShowHistory}>
         <div className="flex items-center justify-between">
           <CollapsibleTrigger asChild>
-            <button className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+            <button className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors">
               <History className="w-3 h-3" /> Historique de fartage
               <ChevronDown className={cn('w-3 h-3 transition-transform', showHistory && 'rotate-180')} />
             </button>
           </CollapsibleTrigger>
           <button
-            className="flex items-center gap-1 text-[11px] text-primary hover:underline"
+            className="flex items-center gap-1 text-xs text-primary hover:underline"
             onClick={() => { setAddingHistory(true); setShowHistory(true) }}
           >
             <Plus className="w-3 h-3" /> Ajouter
@@ -244,9 +244,9 @@ export function ChainCard({ chain, bike, otherMountedOnSameBike }: Props) {
         </div>
         <CollapsibleContent className="pt-3 space-y-1.5">
           {!history || history.length === 0 ? (
-            <p className="text-[11px] text-muted-foreground">Aucun fartage enregistré.</p>
+            <p className="text-xs text-muted-foreground">Aucun fartage enregistré.</p>
           ) : history.map((h) => (
-            <div key={h.id} className="flex items-start justify-between gap-2 text-[11px] text-muted-foreground border-b border-border/30 pb-1.5 last:border-none group">
+            <div key={h.id} className="flex items-start justify-between gap-2 text-xs text-muted-foreground border-b border-border/30 pb-1.5 last:border-none group">
               <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                 <div className="flex justify-between">
                   <span className="font-medium text-foreground">Farté le {format(parseISO(h.waxDate), 'dd MMM yyyy', { locale: fr })}</span>

@@ -120,7 +120,7 @@ export function PlanWeekCalendar({ week, isGenerating, sendingSessionKey, canSen
                 !hasSessions && 'opacity-60 cursor-default'
               )}
             >
-              <p className={cn('text-[10px] uppercase font-bold tracking-wider', isToday ? 'text-primary' : 'text-muted-foreground')}>
+              <p className={cn('text-xs uppercase font-bold tracking-wider', isToday ? 'text-primary' : 'text-muted-foreground')}>
                 {format(new Date(`${day}T00:00:00`), 'EEE d', { locale: fr })}
               </p>
               <div className="mt-2 space-y-1">
@@ -136,7 +136,7 @@ export function PlanWeekCalendar({ week, isGenerating, sendingSessionKey, canSen
                   >
                     <span
                       className={cn(
-                        'flex items-center gap-1 text-[10px] font-medium leading-tight',
+                        'flex items-center gap-1 text-xs font-medium leading-tight',
                         session.sessionKind === 'strength' && 'text-primary bg-primary/10 rounded px-1 py-0.5 -mx-1'
                       )}
                       style={session.sessionKind === 'strength' ? undefined : { color: zone?.color }}

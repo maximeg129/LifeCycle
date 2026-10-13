@@ -139,7 +139,7 @@ function WeekRow({ week, isSelected, onSelect, getCompletion, activities, athlet
       ) : (
         // Semaine pas encore générée (sampleSessions lazy) — badge de phase
         // plutôt que 7 pastilles vides, voir ⚠️ en tête de fichier.
-        <span className={cn('shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-md', PHASE_BADGE_CLASS[week.phase])}>
+        <span className={cn('shrink-0 text-xs font-medium px-1.5 py-0.5 rounded-md', PHASE_BADGE_CLASS[week.phase])}>
           {PHASE_LABELS[week.phase]}
         </span>
       )}

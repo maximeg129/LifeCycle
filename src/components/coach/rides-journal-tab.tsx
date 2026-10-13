@@ -178,7 +178,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
         ) : (
           weekGroups.map((group) => (
           <div key={group.key}>
-            <p className="px-4 pt-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/20">
+            <p className="px-4 pt-3 pb-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground bg-muted/20">
               {weekGroupLabel(group.key)}
             </p>
             <div className="divide-y divide-border">
@@ -199,7 +199,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                       <div className="flex items-center gap-2 min-w-0">
                         <span className="font-semibold truncate">{entry.log.title}</span>
                         {entry.log.planWeekNumber != null && (
-                          <Badge variant="outline" className="text-[10px] shrink-0">Plan S{entry.log.planWeekNumber}</Badge>
+                          <Badge variant="outline" className="text-xs shrink-0">Plan S{entry.log.planWeekNumber}</Badge>
                         )}
                       </div>
                       <div className="text-xs text-muted-foreground">
@@ -209,7 +209,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                   </div>
                   <div className="hidden md:flex flex-col items-end shrink-0">
                     <span className="text-sm font-medium">{entry.log.exercises.length} exercice{entry.log.exercises.length > 1 ? 's' : ''}</span>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       {entry.log.exercises.reduce((sum, e) => sum + e.sets, 0)} série{entry.log.exercises.reduce((sum, e) => sum + e.sets, 0) > 1 ? 's' : ''}
                     </span>
                   </div>
@@ -224,7 +224,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                       créerait un doublon. */}
                   <div className="flex items-center gap-1 shrink-0">
                     {entry.log.intervalsActivityId ? (
-                      <span className="hidden sm:flex items-center gap-1 text-[11px] text-primary shrink-0" title="Déjà exportée sur Intervals.icu">
+                      <span className="hidden sm:flex items-center gap-1 text-xs text-primary shrink-0" title="Déjà exportée sur Intervals.icu">
                         <CheckCircle2 className="w-3.5 h-3.5" />
                       </span>
                     ) : (
@@ -242,7 +242,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                         garde stravaActivityId qu'intervalsActivityId
                         ci-dessus — pas d'upsert côté Strava non plus. */}
                     {entry.log.stravaActivityId ? (
-                      <span className="hidden sm:flex items-center gap-1 text-[11px] text-[#FC4C02] shrink-0" title="Déjà exportée sur Strava">
+                      <span className="hidden sm:flex items-center gap-1 text-xs text-[#FC4C02] shrink-0" title="Déjà exportée sur Strava">
                         <CheckCircle2 className="w-3.5 h-3.5" />
                       </span>
                     ) : (
@@ -302,7 +302,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                     {ride.distance ? (
                       <div className="hidden md:flex flex-col items-end">
                         <span className="text-sm font-medium">{formatDistance(ride.distance)}</span>
-                        <span className="text-[10px] text-muted-foreground">Distance</span>
+                        <span className="text-xs text-muted-foreground">Distance</span>
                       </div>
                     ) : null}
                     {ride.moving_time ? (
@@ -310,7 +310,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                         <span className="text-sm font-medium flex items-center gap-1">
                           <Timer className="w-3 h-3" /> {formatDuration(ride.moving_time)}
                         </span>
-                        <span className="text-[10px] text-muted-foreground">Durée</span>
+                        <span className="text-xs text-muted-foreground">Durée</span>
                       </div>
                     ) : null}
                     {(ride.icu_training_load || load) && (
@@ -319,7 +319,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                           <Flame className="w-3 h-3 text-orange-400" />
                           {Math.round(ride.icu_training_load ?? load ?? 0)}
                         </span>
-                        <span className="text-[10px] text-muted-foreground">Charge</span>
+                        <span className="text-xs text-muted-foreground">Charge</span>
                       </div>
                     )}
                     <QuickFeedbackButton activityId={ride.id} date={dateStr ?? format(new Date(), 'yyyy-MM-dd')} />
