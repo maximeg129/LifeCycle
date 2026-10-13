@@ -894,6 +894,31 @@ export function groupRollingDaysByWeek(days: RollingDay[]): RollingDaySegment[] 
   return segments
 }
 
+export interface WeekStripLoad {
+  cyclingMinutes: number
+  strengthMinutes: number
+}
+
+/**
+ * Somme des durationMinutes des séances déjà visibles dans la fenêtre
+ * (RollingDay[], sessionsForNext7Days), par sessionKind — pour le résumé
+ * "Xh vélo · Yh force" du WeekStrip (restructuration lifecycle-ui-
+ * reference.html). Chaque séance comptée une seule fois (une entrée par
+ * jour, jamais recomptée), jamais une deuxième lecture des sessions — juste
+ * une agrégation de ce que l'appelant a déjà en main.
+ */
+export function summarizeWeekStripLoad(days: RollingDay[]): WeekStripLoad {
+  let cyclingMinutes = 0
+  let strengthMinutes = 0
+  for (const day of days) {
+    for (const { session } of day.sessions) {
+      if (session.sessionKind === 'strength') strengthMinutes += session.durationMinutes
+      else cyclingMinutes += session.durationMinutes
+    }
+  }
+  return { cyclingMinutes, strengthMinutes }
+}
+
 // ── Séances passées — révélées sur demande ───────────────────────────────
 //
 // Retour utilisateur, même message que sessionsForNext7Days ci-dessus : "les

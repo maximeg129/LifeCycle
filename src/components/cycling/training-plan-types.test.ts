@@ -32,6 +32,7 @@ import {
   buildPhaseSegments,
   phaseSegmentLabel,
   weekAdherencePercent,
+  summarizeWeekStripLoad,
   type PlanWeekContent,
   type PlanWeek,
   type PlanWeekAdjustment,
@@ -42,6 +43,7 @@ import {
   type WeekdayAvailabilityMinutes,
   type RollingWeekInput,
   type WeeklyAdherence,
+  type RollingDay,
 } from './training-plan-types'
 
 describe('clampWeeklyMinutes', () => {
@@ -953,6 +955,36 @@ describe('sessionsForNext7Days', () => {
     expect(outside.week).toBeNull()
     expect(outside.weekNotGenerated).toBe(false)
     expect(outside.sessions).toEqual([])
+  })
+})
+
+describe('summarizeWeekStripLoad', () => {
+  const weekA: PlanWeek = { weekNumber: 1, startDate: '2026-09-14', endDate: '2026-09-20', phase: 'base', focus: 'Base', targetWeeklyMinutes: 300 }
+
+  it('returns zero for an empty window', () => {
+    expect(summarizeWeekStripLoad([])).toEqual({ cyclingMinutes: 0, strengthMinutes: 0 })
+  })
+
+  it('sums cycling and strength durations separately, across multiple days', () => {
+    const days: RollingDay[] = [
+      { date: '2026-09-14', week: weekA, weekNotGenerated: false, sessions: [{ week: weekA, index: 0, session: { ...minimalSession('Sortie'), durationMinutes: 90 } }] },
+      { date: '2026-09-15', week: weekA, weekNotGenerated: false, sessions: [{ week: weekA, index: 1, session: { ...minimalSession('Muscu'), sessionKind: 'strength', durationMinutes: 50 } }] },
+      { date: '2026-09-16', week: weekA, weekNotGenerated: false, sessions: [] },
+    ]
+    expect(summarizeWeekStripLoad(days)).toEqual({ cyclingMinutes: 90, strengthMinutes: 50 })
+  })
+
+  it('accumulates multiple sessions of the same kind on different days', () => {
+    const days: RollingDay[] = [
+      { date: '2026-09-14', week: weekA, weekNotGenerated: false, sessions: [{ week: weekA, index: 0, session: { ...minimalSession('A'), durationMinutes: 60 } }] },
+      { date: '2026-09-15', week: weekA, weekNotGenerated: false, sessions: [{ week: weekA, index: 1, session: { ...minimalSession('B'), durationMinutes: 120 } }] },
+    ]
+    expect(summarizeWeekStripLoad(days)).toEqual({ cyclingMinutes: 180, strengthMinutes: 0 })
+  })
+
+  it('ignores days flagged weekNotGenerated (no sessions to count there)', () => {
+    const days: RollingDay[] = [{ date: '2026-09-21', week: null, weekNotGenerated: true, sessions: [] }]
+    expect(summarizeWeekStripLoad(days)).toEqual({ cyclingMinutes: 0, strengthMinutes: 0 })
   })
 })
 

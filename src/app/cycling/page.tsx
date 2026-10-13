@@ -26,6 +26,7 @@ import { GovernorWidget } from '@/components/cycling/governor-widget'
 import { useGovernor } from '@/components/cycling/use-governor'
 import { PerformanceBento } from '@/components/cycling/performance-bento'
 import { TrainingPlanTab } from '@/components/cycling/training-plan-tab'
+import { TodayGreeting } from '@/components/cycling/today-greeting'
 
 // Code-split: PMC pulls in Recharts, which nothing else on this page needs.
 // See PLAN.md 2.4 — cycling used to be the single heaviest page in the app
@@ -77,6 +78,12 @@ export default function CyclingHub() {
           habituel) remplace la clearance mobile que PageHeader apportait
           via son propre mt-16, pour ne pas passer sous le header fixe. */}
       <main className="px-4 pt-20 pb-4 md:p-8 max-w-7xl mx-auto space-y-8">
+        {/* Retour utilisateur, capture d'écran jointe : eyebrow date +
+            "Bonjour {Prénom}" en tête de l'écran — voir today-greeting.tsx
+            (volontairement indépendant du reste de la page, aucune donnée
+            de plan). */}
+        <TodayGreeting />
+
         {!isConfigured && !athlete.isLoading ? (
           <NotConfiguredBanner />
         ) : (
