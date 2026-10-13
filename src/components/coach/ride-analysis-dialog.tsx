@@ -8,10 +8,13 @@
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { KpiGrid, type KpiGridItem } from '@/components/ui/kpi-grid'
 import { Sparkles, Loader2, TrendingUp, Zap, Target, BatteryMedium, HeartPulse, ListChecks, CheckCircle2, ArrowDown, ArrowUp } from 'lucide-react'
 import { useRideAnalysis } from './use-ride-analysis'
 import { summarizeDurabilityForDisplay } from './ride-analysis-types'
 import type { IntervalAdherenceVerdict } from './interval-adherence-types'
+import { formatDuration, formatDistance } from './activity-format'
+import type { IntervalsActivity } from '@/lib/intervals-api'
 import { cn } from '@/lib/utils'
 
 /** Icône + couleur par verdict — même vocabulaire "dans la cible / en dessous / au-dessus" que le prompt IA (ride-analysis-flow.ts), pour que le texte et l'encart chiffré ne puissent jamais se contredire visuellement. */
@@ -31,11 +34,34 @@ interface Props {
   rideLabel: string
   open: boolean
   onOpenChange: (open: boolean) => void
+  /**
+   * La ligne déjà chargée par le Journal (useActivities(), voir
+   * rides-journal-tab.tsx) — optionnel : le déclenchement depuis
+   * "Aujourd'hui" (daily-workout-tab.tsx) n'a que l'id, jamais la ligne
+   * complète, et ce composant n'en a pas besoin pour fonctionner (juste
+   * pour afficher le KpiGrid, voir plus bas). Jamais un nouveau fetch
+   * ajouté ici pour la compléter — refonte UI/IA §3.4, "KpiGrid: Durée,
+   * Distance, NP, IF, TSS, FC moy".
+   */
+  ride?: IntervalsActivity
 }
 
-export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange }: Props) {
+const KPI_NUMBER_FORMAT = (v: number | null | undefined, digits = 0) => (v != null && !isNaN(v) ? v.toFixed(digits) : '—')
+
+export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange, ride }: Props) {
   const { analysis, durability, decoupling, plannedWorkout, intervalAdherence, isLoadingStored, isGenerating, canAnalyze, generate } = useRideAnalysis(open ? activityId : null)
   const durabilitySummary = summarizeDurabilityForDisplay(durability)
+
+  const kpiItems: KpiGridItem[] | null = ride
+    ? [
+        { label: 'Durée', value: formatDuration(ride.moving_time) },
+        { label: 'Distance', value: formatDistance(ride.distance) },
+        { label: 'NP', value: KPI_NUMBER_FORMAT(ride.icu_weighted_avg_watts ?? ride.weighted_average_watts), unit: 'W' },
+        { label: 'IF', value: KPI_NUMBER_FORMAT(ride.icu_intensity, 2) },
+        { label: 'TSS', value: KPI_NUMBER_FORMAT(ride.icu_training_load) },
+        { label: 'FC moy', value: KPI_NUMBER_FORMAT(ride.average_heartrate), unit: 'bpm' },
+      ]
+    : null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -44,6 +70,11 @@ export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange }
           <DialogTitle>{analysis?.headline || 'Analyse de la sortie'}</DialogTitle>
         </DialogHeader>
         <p className="text-xs text-muted-foreground -mt-2">{rideLabel}</p>
+
+        {/* KpiGrid (refonte UI/IA §3.4) — toujours visible dès que la ligne
+            est en main, indépendamment de l'analyse IA (générée ou pas) :
+            ce sont des chiffres déjà réels, pas une sortie du modèle. */}
+        {kpiItems && <KpiGrid items={kpiItems} />}
 
         {!canAnalyze ? (
           <p className="text-sm text-muted-foreground py-6 text-center">

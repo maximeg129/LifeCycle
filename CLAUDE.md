@@ -4025,6 +4025,70 @@ Tests (`readiness-strip-types.test.ts`, 17 nouveaux ; `ring-metrics.test.ts` sup
 mise en page de `<ReadinessStrip>` (5 cellules, divider responsive mobile/desktop, sparklines 12px)
 est invérifiable visuellement dans ce sandbox ; à confirmer par l'utilisateur au premier rendu réel.
 
+### Étape 5 — "Activités" : `<KpiGrid>`, filtre segmenté, liste groupée par semaine
+
+Brief §3.4/§5 pour "Activités (list)" : rangées groupées par semaine, filtre segmenté
+("Tout · Plan · Hors plan · Courses"), et pour "Activité (detail)" : lien retour + eyebrow + h1 +
+chips, `<KpiGrid>` (Durée/Distance/NP/IF/TSS/FC moy), graphique puissance/FC avec intervalles cibles
+ombrés, tableau d'intervalles, `<CoachInsight>`.
+
+**Audit avant code** — `rides-journal-tab.tsx` (le Journal) et `RideAnalysisDialog` (le détail, en
+dialogue plutôt qu'une page séparée — convention déjà établie dans toute l'app, jamais remise en
+cause ici) couvrent déjà : lien retour (`onOpenChange`/fermeture du dialogue), eyebrow (`rideLabel`),
+h1 (`analysis.headline`), tableau d'intervalles coloré good/warn/bad ("Respect des intervalles",
+déjà construit — voir plus haut "Analyse de sortie : respect des intervalles"), et `<CoachInsight>`
+(résumé/points forts/à travailler/recommandation, déjà la structure de ce composant générique). **Deux
+manques réels identifiés** : aucun `<KpiGrid>` (le dialogue n'affichait JAMAIS les chiffres bruts de
+la sortie — durée/distance/NP/IF/TSS/FC moy — seulement du texte IA et des encarts dérivés comme la
+durabilité) ; et la liste du Journal n'était ni groupée par semaine ni filtrable.
+
+**`<KpiGrid>`** (`src/components/ui/kpi-grid.tsx`, nouveau, générique) — grille à `gap-px bg-border`
+(hairline dividers, exactement la description du brief) + valeurs `font-data`. `RideAnalysisDialog`
+reçoit un nouveau prop optionnel `ride?: IntervalsActivity` — la ligne déjà chargée par
+`rides-journal-tab.tsx` (`useActivities()`, déjà en mémoire pour afficher la liste), jamais un
+nouveau fetch. `ride.icu_weighted_avg_watts` (NP — intentionnellement la puissance PONDÉRÉE, pas
+`bestAverageWatts()` qui préfère la moyenne réelle pour les calculs d'énergie/kJ, voir "Fueling vs
+Workload" plus haut : NP et "puissance moyenne réelle" ne sont PAS le même chiffre et ce dialogue a
+besoin du premier), `icu_intensity` (IF), `icu_training_load` (TSS), `average_heartrate` (FC moy).
+Optionnel : le déclenchement depuis "Aujourd'hui" (`daily-workout-tab.tsx`) n'a que l'`activityId`,
+jamais la ligne complète — `kpiItems` est alors `null`, le `<KpiGrid>` ne s'affiche simplement pas,
+jamais une donnée inventée pour le combler. Affiché EN HAUT du dialogue, avant même l'état "pas
+encore analysé" — ce sont des chiffres déjà réels, indépendants de toute génération IA.
+`formatDuration`/`formatDistance` (dupliqués dans `rides-journal-tab.tsx` et nécessaires ici aussi)
+extraits dans `activity-format.ts` plutôt que dupliqués une deuxième fois — ce fichier-ci ne peut pas
+les importer directement DE `rides-journal-tab.tsx` (qui importe déjà `RideAnalysisDialog`, donc un
+cycle d'import).
+
+**Filtre segmenté + liste groupée par semaine** (`rides-journal-tab.tsx`) — `journal-types.ts`
+(nouveau, pur/testé, extrait du composant "use client" pour rester testable comme les autres
+fichiers `*-types.ts` du projet) : `groupByWeek()` regroupe les entrées déjà triées (le plus récent
+d'abord) par semaine calendaire lundi-dimanche (même convention que `buildPlanWeekSkeleton`) —
+jamais un deuxième tri, suppose l'ordre déjà correct. **"Plan"/"Hors plan" remplacés par
+"Vélo"/"Musculation"** dans le filtre, décision documentée plutôt que silencieusement ignorée :
+savoir si une activité "appartient au plan" exigerait de la rapprocher d'une séance type
+(`matchSessionCompletion`), qui ne couvre fiablement que la semaine du plan déjà générée en mémoire
+(les autres semaines restent lazy, voir "vue calendrier v2" plus haut) — sur une fenêtre de 30 jours,
+la plupart des semaines passées n'ont plus leurs `sampleSessions` chargées, donc ce badge aurait
+affiché un faux "hors plan" bien plus souvent qu'une vraie absence de plan. "Vélo"/"Musculation"/
+"Courses" (`ride.type === 'Race'`) restent des filtres 100% fiables sur un champ déjà connu, jamais
+une classification devinée — même discipline que le refus d'une liste blanche risquée documenté
+ailleurs dans ce fichier (`isReimportedStrengthActivityType`).
+
+**Reste du brief, non construit dans cette pièce** — le graphique puissance/FC avec intervalles
+cibles ombrés (`<Chart>` wrapper générique + migration des graphiques existants, explicitement
+groupés comme une seule étape dans l'implementation order du brief, §7.5) n'a pas été construit :
+une vraie nouvelle fonctionnalité de rendu (fetch de streams déjà fait côté serveur pour le prompt
+IA, jamais affiché côté client) plutôt qu'un réagencement de données déjà en main — un risque/effort
+different des deux pièces ci-dessus, invérifiable visuellement dans ce sandbox. Les encarts chiffrés
+déjà existants (durabilité/découplage/respect des intervalles) couvrent déjà une bonne partie du
+même besoin ("voir si les zones/intervalles sont respectés") sans ce graphique. Différé à une pièce
+dédiée plutôt que risqué ici.
+
+Tests (`journal-types.test.ts`, 8 nouveaux) — 949/949 au total, tsc/eslint/build clean. **Non
+vérifié à l'écran** (même limite `favicon.ico`) — le `<KpiGrid>`/le filtre segmenté/le groupement par
+semaine sont invérifiables visuellement dans ce sandbox ; à confirmer par l'utilisateur au premier
+rendu réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

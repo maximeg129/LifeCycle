@@ -24,6 +24,7 @@ import { fr } from 'date-fns/locale'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 import { Bike, ChevronRight, Timer, Flame, Dumbbell, CheckCircle2, Footprints } from 'lucide-react'
 import { useActivities, useFitnessChart } from '@/hooks/use-intervals'
 import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
@@ -35,6 +36,8 @@ import { useStravaLogExport } from '@/components/cycling/use-strava-log-export'
 import { StrengthLogExportButton } from '@/components/cycling/strength-log-export-button'
 import { StrengthAnalysisDialog, StrengthAnalysisTrigger } from '@/components/cycling/strength-analysis-dialog'
 import type { StrengthSessionLogWithId } from '@/components/cycling/strength-log-types'
+import { formatDuration, formatDistance } from './activity-format'
+import { groupByWeek, weekGroupLabel } from './journal-types'
 
 // Revue externe (UX/engine) §1.7 : "a run shows the bike icon" — cette
 // ligne de journal affichait toujours l'icône vélo, quel que soit le vrai
@@ -55,19 +58,19 @@ type JournalEntry =
   | { kind: 'ride'; ride: RideActivity; date: string }
   | { kind: 'strength'; log: StrengthSessionLogWithId; date: string }
 
-function formatDuration(seconds: number | null | undefined): string {
-  if (!seconds) return '—'
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  if (h > 0) return `${h}h${m.toString().padStart(2, '0')}`
-  return `${m}min`
-}
-
-function formatDistance(meters: number | null | undefined): string {
-  if (meters == null || isNaN(meters)) return '—'
-  const km = meters / 1000
-  return km >= 100 ? `${Math.round(km)} km` : `${km.toFixed(1)} km`
-}
+// Refonte UI/IA (LifeCycle_Pro_UX_Engine_Review.md §3.4, "Activités (list,
+// not mocked)... Filters as a segmented control: Tout · Plan · Hors plan ·
+// Courses") — "Plan"/"Hors plan" remplacés par "Vélo"/"Musculation" :
+// savoir si une activité "appartient au plan" exigerait de la rapprocher
+// d'une séance type (matchSessionCompletion, training-plan-types.ts), qui
+// ne couvre fiablement que la semaine du plan déjà générée (les autres
+// restent lazy, voir "vue calendrier v2" plus haut) — sur 30 jours de
+// Journal, la plupart des semaines passées n'ont plus leurs sampleSessions
+// en mémoire, donc ce badge serait souvent un faux "hors plan" plutôt
+// qu'une vraie absence de plan. "Vélo"/"Musculation"/"Courses" restent des
+// filtres 100% fiables (type de l'entrée, `ride.type === 'Race'`), jamais
+// une classification devinée.
+type JournalFilter = 'all' | 'ride' | 'strength' | 'race'
 
 const today = new Date()
 const newest = format(today, 'yyyy-MM-dd')
@@ -80,8 +83,9 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
   const strengthLogs = useStrengthLogs()
   const { exportLog, sendingLogId, canExport } = useStrengthLogExport()
   const { exportLog: exportLogToStrava, sendingLogId: sendingLogIdToStrava, canExport: canExportToStrava, disabledReasonFor } = useStravaLogExport()
-  const [analyzingRide, setAnalyzingRide] = useState<{ id: string; label: string } | null>(null)
+  const [analyzingRide, setAnalyzingRide] = useState<{ id: string; label: string; ride: RideActivity } | null>(null)
   const [analyzingStrengthLog, setAnalyzingStrengthLog] = useState<StrengthSessionLogWithId | null>(null)
+  const [filter, setFilter] = useState<JournalFilter>('all')
 
   // Map date → charge d'entraînement du jour, pour les activités qui
   // n'ont pas leur propre icu_training_load renseigné.
@@ -105,18 +109,54 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
     return [...rideEntries, ...strengthEntries].sort((a, b) => b.date.localeCompare(a.date))
   }, [activities.data, strengthLogs.logs])
 
+  // Refonte UI/IA §3.4 — segmented control, voir le commentaire sur
+  // JournalFilter plus haut pour pourquoi "Vélo/Musculation/Courses" plutôt
+  // que "Plan/Hors plan".
+  const filteredEntries = useMemo(() => {
+    if (filter === 'all') return journalEntries
+    if (filter === 'ride') return journalEntries.filter((e) => e.kind === 'ride')
+    if (filter === 'strength') return journalEntries.filter((e) => e.kind === 'strength')
+    return journalEntries.filter((e) => e.kind === 'ride' && e.ride.type === 'Race')
+  }, [journalEntries, filter])
+
+  const weekGroups = useMemo(() => groupByWeek(filteredEntries.slice(0, 20)), [filteredEntries])
+
   if (!isConfigured && !athleteLoading) return <NotConfiguredBanner />
 
   const totalCount = journalEntries.length
   const isLoading = activities.isLoading || strengthLogs.isLoading
 
+  const FILTERS: { id: JournalFilter; label: string }[] = [
+    { id: 'all', label: 'Tout' },
+    { id: 'ride', label: 'Vélo' },
+    { id: 'strength', label: 'Musculation' },
+    { id: 'race', label: 'Courses' },
+  ]
+
   return (
     <Card className="bg-card/40 border-border">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle>Journal d&apos;activités</CardTitle>
-        <Badge variant="secondary" className="text-xs">
-          {totalCount} activité{totalCount > 1 ? 's' : ''}
-        </Badge>
+      <CardHeader className="space-y-3">
+        <div className="flex items-center justify-between">
+          <CardTitle>Journal d&apos;activités</CardTitle>
+          <Badge variant="secondary" className="text-xs">
+            {totalCount} activité{totalCount > 1 ? 's' : ''}
+          </Badge>
+        </div>
+        <div className="flex gap-0.5 rounded-full bg-muted p-0.5 w-fit flex-wrap">
+          {FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setFilter(f.id)}
+              className={cn(
+                'px-3 py-1.5 rounded-full text-xs font-semibold transition-colors',
+                filter === f.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
       </CardHeader>
       <CardContent className="p-0">
         {isLoading ? (
@@ -131,13 +171,18 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
               </div>
             ))}
           </div>
-        ) : totalCount === 0 ? (
+        ) : filteredEntries.length === 0 ? (
           <div className="p-8 text-center text-sm text-muted-foreground">
-            Aucune activité sur les 30 derniers jours
+            {totalCount === 0 ? 'Aucune activité sur les 30 derniers jours' : 'Aucune activité pour ce filtre'}
           </div>
         ) : (
-          <div className="divide-y divide-border">
-            {journalEntries.slice(0, 20).map((entry) =>
+          weekGroups.map((group) => (
+          <div key={group.key}>
+            <p className="px-4 pt-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground bg-muted/20">
+              {weekGroupLabel(group.key)}
+            </p>
+            <div className="divide-y divide-border">
+            {group.entries.map((entry) =>
               entry.kind === 'strength' ? (
                 <div key={`s-${entry.log.id}`} className="flex items-center justify-between gap-3 p-4">
                   {/* min-w-0 sur chaque niveau flex + truncate sur le titre
@@ -282,6 +327,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
                       onClick={() => setAnalyzingRide({
                         id: ride.id,
                         label: ride.name || (dateStr ? format(parseISO(dateStr), 'EEEE d MMMM', { locale: fr }) : 'Activité'),
+                        ride,
                       })}
                     />
                     <ChevronRight className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" />
@@ -290,13 +336,16 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
               )
             })()
             )}
+            </div>
           </div>
+          ))
         )}
       </CardContent>
       {analyzingRide && (
         <RideAnalysisDialog
           activityId={analyzingRide.id}
           rideLabel={analyzingRide.label}
+          ride={analyzingRide.ride}
           open={!!analyzingRide}
           onOpenChange={(open) => { if (!open) setAnalyzingRide(null) }}
         />
