@@ -36,7 +36,11 @@ export function WorkoutProfileChart({ structuredWorkout, height = 16, className 
       {bars.map((bar, i) => (
         <div
           key={i}
-          className="rounded-[1px] shrink-0"
+          // rounded-t-[3px] — nub décoratif, pas un radius de composant
+          // (voir globals.css "Échelle de rayons") : même valeur que
+          // ".profile span{border-radius:3px 3px 0 0}" dans
+          // lifecycle-ui-reference.html, coins arrondis en haut seulement.
+          className="rounded-t-[3px] shrink-0"
           style={{ width: `${bar.widthPct}%`, height: `${bar.heightPct}%`, backgroundColor: bar.color }}
         />
       ))}

@@ -78,7 +78,7 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
       {/* Logo */}
       <Link href="/" className="mb-10 flex flex-col items-center gap-2.5 group">
-        <LifeCycleMark className="w-14 h-14 shadow-lg shadow-primary/25 transition-transform group-hover:scale-105 rounded-[16px]" />
+        <LifeCycleMark className="w-14 h-14 shadow-lg shadow-primary/25 transition-transform group-hover:scale-105 rounded-2xl" />
         <span className="text-xl font-semibold tracking-tight">LifeCycle</span>
       </Link>
 
@@ -88,7 +88,7 @@ export default function RegisterPage() {
           <Link href="/login" className="flex-1 text-center py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors">
             Connexion
           </Link>
-          <Link href="/register" className="flex-1 text-center py-2 text-[13px] font-semibold rounded-[10px] bg-card shadow-sm text-foreground">
+          <Link href="/register" className="flex-1 text-center py-2 text-[13px] font-semibold rounded-lg bg-card shadow-sm text-foreground">
             Inscription
           </Link>
         </div>

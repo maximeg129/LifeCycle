@@ -103,7 +103,7 @@ export default function OnboardingPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-start gap-3">
                   <div className={cn(
-                    'w-10 h-10 rounded-[10px] flex items-center justify-center shrink-0',
+                    'w-10 h-10 rounded-lg flex items-center justify-center shrink-0',
                     step.done ? 'bg-green-500/10' : 'bg-primary/10'
                   )}>
                     {step.done ? <CheckCircle2 className="w-5 h-5 text-green-600" /> : <step.icon className="w-5 h-5 text-primary" />}
@@ -146,7 +146,7 @@ export default function OnboardingPage() {
         <Card className="lc-card">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-muted rounded-[10px] flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center shrink-0">
                 <Clock className="w-5 h-5 text-muted-foreground" />
               </div>
               <div>
@@ -180,7 +180,7 @@ export default function OnboardingPage() {
         <Card className="lc-card">
           <CardHeader className="pb-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-muted rounded-[10px] flex items-center justify-center shrink-0">
+              <div className="w-10 h-10 bg-muted rounded-lg flex items-center justify-center shrink-0">
                 <BadgeInfo className="w-5 h-5 text-muted-foreground" />
               </div>
               <div>

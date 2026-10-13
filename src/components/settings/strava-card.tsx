@@ -104,7 +104,7 @@ export function StravaCard() {
       <CardHeader className="pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[#FC4C02]/10 rounded-[10px] flex items-center justify-center">
+            <div className="w-10 h-10 bg-[#FC4C02]/10 rounded-lg flex items-center justify-center">
               <StravaMark />
             </div>
             <div>

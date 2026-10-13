@@ -133,7 +133,7 @@ export default function LandingPage() {
         isScrolled ? "bg-white/70 dark:bg-black/70 backdrop-blur-2xl border-b border-border/40 py-3" : "bg-transparent"
       )}>
         <div className="flex items-center gap-2.5">
-          <LifeCycleMark className="w-9 h-9 shadow-lg rounded-[10px]" />
+          <LifeCycleMark className="w-9 h-9 shadow-lg rounded-lg" />
           <span className="text-xl font-bold tracking-tight">LifeCycle <span className="font-light opacity-40">Pro</span></span>
         </div>
 

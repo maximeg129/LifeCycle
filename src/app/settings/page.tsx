@@ -102,7 +102,7 @@ export default function SettingsPage() {
         <Card className="lc-card">
           <CardHeader className="pb-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-purple-500/10 rounded-[10px] flex items-center justify-center">
+              <div className="w-10 h-10 bg-purple-500/10 rounded-lg flex items-center justify-center">
                 <Palette className="w-5 h-5 text-purple-500" />
               </div>
               <div>
@@ -169,7 +169,7 @@ export default function SettingsPage() {
           <CardHeader className="pb-4">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-primary/10 rounded-[10px] flex items-center justify-center">
+                <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center">
                   <ShieldCheck className="w-5 h-5 text-primary" />
                 </div>
                 <div>
@@ -308,7 +308,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-2">
             <Link href="/garage" className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group">
-              <div className="w-9 h-9 rounded-[10px] bg-chart-4/10 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-chart-4/10 flex items-center justify-center shrink-0">
                 <Wrench className="w-4 h-4 text-chart-4" />
               </div>
               <div className="flex-1">
@@ -318,7 +318,7 @@ export default function SettingsPage() {
               <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
             </Link>
             <Link href="/nutrition" className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group">
-              <div className="w-9 h-9 rounded-[10px] bg-chart-5/10 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-chart-5/10 flex items-center justify-center shrink-0">
                 <CookingPot className="w-4 h-4 text-chart-5" />
               </div>
               <div className="flex-1">
@@ -328,7 +328,7 @@ export default function SettingsPage() {
               <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
             </Link>
             <Link href="/home-management" className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group">
-              <div className="w-9 h-9 rounded-[10px] bg-chart-1/10 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-chart-1/10 flex items-center justify-center shrink-0">
                 <Home className="w-4 h-4 text-chart-1" />
               </div>
               <div className="flex-1 flex items-center gap-2">
@@ -345,7 +345,7 @@ export default function SettingsPage() {
               <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors shrink-0" />
             </Link>
             <Link href="/lifestyle" className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group">
-              <div className="w-9 h-9 rounded-[10px] bg-chart-2/10 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-chart-2/10 flex items-center justify-center shrink-0">
                 <HeartPulse className="w-4 h-4 text-chart-2" />
               </div>
               <div className="flex-1">
@@ -355,7 +355,7 @@ export default function SettingsPage() {
               <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-foreground transition-colors" />
             </Link>
             <Link href="/finance" className="flex items-center gap-3 p-4 rounded-xl bg-muted/50 hover:bg-muted transition-colors group">
-              <div className="w-9 h-9 rounded-[10px] bg-chart-3/10 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 rounded-lg bg-chart-3/10 flex items-center justify-center shrink-0">
                 <Wallet className="w-4 h-4 text-chart-3" />
               </div>
               <div className="flex-1">

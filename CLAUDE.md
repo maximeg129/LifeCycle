@@ -4089,6 +4089,65 @@ vérifié à l'écran** (même limite `favicon.ico`) — le `<KpiGrid>`/le filtr
 semaine sont invérifiables visuellement dans ce sandbox ; à confirmer par l'utilisateur au premier
 rendu réel.
 
+## Restructuration complète (lifecycle-ui-reference.html, version affinée)
+
+Retour utilisateur, nouvelle version de `lifecycle-ui-reference.html` jointe : "j'aimerais bien que
+tu restructure entièrement l'app comme proposé dans le html ci joint." Mandat explicite et sans
+ambiguïté — contrairement aux étapes 1-5 (où chaque écran a été audité pour ne construire QUE les
+vrais manques), ce chantier reconstruit l'app pour correspondre fidèlement à cette référence,
+reprenant au passage certaines décisions antérieures de ce même fichier quand la référence les
+contredit explicitement (documenté section par section, pas silencieusement écrasé).
+
+**Diagnostic avant code** — cette nouvelle version du HTML de référence partage ses valeurs hex avec
+celle déjà utilisée pour l'étape 1 (`--background`/`--primary`/`--good`/`--z1`-`--z7`... déjà
+exacts) mais introduit 3 tokens que l'étape 1 n'avait pas posés (`--border-strong`, `--brand-strong`,
+`--text-3`) et révèle un vrai bug structurel jamais corrigé : l'override `borderRadius.{lg,md,sm}`
+de `tailwind.config.ts` (`lg: var(--radius)` = 12px) désaccordait l'app de sa PROPRE convention déjà
+écrite en commentaire dans `globals.css` depuis l'étape 1 ("rounded-lg (8px)... rounded-xl
+(12px)... rounded-2xl (16px)") — ce commentaire décrivait une intention jamais appliquée. Signalé
+dès l'étape 1 comme "trop risqué sans revue visuelle écran par écran" ; le mandat explicite de ce
+chantier lève cette réserve.
+
+### Pièce 1 — Tokens restants + échelle de rayons enfin réelle
+
+**Tokens ajoutés** (`globals.css`, clair+sombre) : `--border-strong` (#CFCFC5/#3A4035 — emphase
+hover/segmented control), `--brand-strong` (#4C8412/#B9EC77 — hover du bouton primaire),
+`--subtle` (#8A8F84/#767C6F — 3ᵉ palier de gris, plus clair que `--muted-foreground`). Volontairement
+PAS de `--brand-soft` : déjà couvert par `bg-primary/5`/`bg-primary/10` (opacité), convention déjà
+utilisée partout dans l'app (la tuile Riegel, entre autres) — un token dédié ferait doublon avec un
+mécanisme qui marche déjà. Exposés dans `tailwind.config.ts` (`border-strong`, `brand-strong`,
+`subtle`).
+
+**`borderRadius` override supprimé** de `tailwind.config.ts` — l'échelle Tailwind PAR DÉFAUT
+(sm=2px, md=6px, lg=8px, xl=12px, 2xl=16px, 3xl=24px) correspond déjà exactement à r-sm/r-md/r-lg du
+brief une fois cet override retiré, SANS renommer une seule classe `rounded-*` dans les ~90 fichiers
+qui les utilisent déjà selon la convention documentée. `--radius` devenu inutile, retiré de
+`globals.css`. Deux corrections ciblées là où une primitive shadcn câblait `rounded-md` en dur sans
+suivre cette convention : `button.tsx`/`input.tsx`/`textarea.tsx`/`select.tsx` (`rounded-md` →
+`rounded-lg`, 8px — ce sont des champs/boutons, "éléments interactifs inline") et `card.tsx` (le
+`<Card>` shadcn générique, `rounded-lg` → `rounded-2xl`, 16px, même valeur que `.lc-card` — corrige
+d'un coup les ~90 cartes `bg-card/40 border-border` de l'app qui s'appuyaient sur ce défaut sans le
+surcharger elles-mêmes). `button.tsx`'s hover du variant par défaut passe de `bg-primary/90`
+(opacité) à `bg-brand-strong` (vraie couleur plus foncée, exactement le rôle pour lequel ce token a
+été ajouté). Balayage `rounded-[10px]`/`rounded-[16px]` (sed, ~17 fichiers) → `rounded-lg`/
+`rounded-2xl` — ces valeurs arbitraires dataient d'avant l'existence du système de tokens et
+tombaient déjà, par coïncidence de valeur, sur ce que l'échelle réelle donne maintenant.
+`workout-profile-chart.tsx` : `rounded-[1px]` → `rounded-t-[3px]` (coins arrondis en haut
+seulement), pour matcher exactement `.profile span{border-radius:3px 3px 0 0}` de la référence — un
+nub décoratif de barre de graphique, pas un radius de composant, donc hors de l'échelle 8/12/16/pill
+par design (la référence elle-même l'utilise en valeur libre).
+
+**⚠️ Ampleur du changement, assumée consciemment** — ce correctif touche visuellement CHAQUE
+composant `rounded-lg`/`rounded-md`/`rounded-sm`/`<Card>` de l'app EN MÊME TEMPS (99 usages directs
+de ces classes + ~90 `<Card>` implicites) : exactement le changement que l'étape 1 avait différé
+comme "trop risqué sans revue visuelle écran par écran". Le mandat explicite de l'utilisateur pour
+cette restructuration lève cette réserve — mais le risque reste réel et **totalement invérifiable
+dans ce sandbox** (serveur de dev cassé, `favicon.ico`, documenté partout ailleurs dans ce fichier).
+
+Tests : aucun nouveau (changement de tokens CSS/config Tailwind, aucune logique pure touchée) —
+949/949 inchangés, tsc/eslint/build clean. **Non vérifié à l'écran** — risque le plus élevé de toute
+la restructuration ; à confirmer en priorité par l'utilisateur au premier rendu réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

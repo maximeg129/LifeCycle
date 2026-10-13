@@ -32,9 +32,19 @@
     --destructive: 9 68% 50%;           /* #D6452B — même famille que --bad ci-dessous */
     --destructive-foreground: 0 0% 99%;
     --border: 60 13% 88%;               /* #E4E4DC */
+    --border-strong: 60 9% 79%;         /* #CFCFC5 — hover/segmented-control emphasis */
     --input: 60 13% 88%;
     --ring: 89 72% 36%;
-    --radius: 0.75rem;                  /* 12px base (LifeCycle_Pro_UI_Spec.md §2) */
+
+    /* Ajoutés — refonte UI/IA, restructuration complète sur
+       lifecycle-ui-reference.html (version affinée, voir CLAUDE.md) :
+       3 tokens que le brief utilise mais que l'étape 1 n'avait pas encore
+       posés. `--brand-soft` n'est volontairement PAS ajouté : déjà
+       couvert par `bg-primary/5`/`bg-primary/10` (opacité), convention
+       déjà utilisée partout dans l'app (ex. la tuile Riegel) — un token
+       dédié ferait doublon. */
+    --brand-strong: 89 76% 29%;         /* #4C8412 — hover sur bouton primaire */
+    --subtle: 87 5% 54%;                /* #8A8F84 — 3e palier de gris, plus clair que --muted-foreground */
 
     /* Chart / category colors — lime, coral, violet, sky, warm-red.
        Same family as the accent, used for cross-domain tags (sommeil/
@@ -93,8 +103,11 @@
     --destructive: 7 100% 67%;          /* #FF6B57 — même famille que --bad ci-dessous */
     --destructive-foreground: 100 10% 6%;
     --border: 93 11% 17%;               /* #2A2F26 */
+    --border-strong: 93 9% 23%;         /* #3A4035 */
     --input: 93 11% 17%;
     --ring: 86 70% 62%;
+    --brand-strong: 86 75% 70%;         /* #B9EC77 */
+    --subtle: 88 6% 46%;                /* #767C6F */
 
     --chart-1: 82 85% 68%;
     --chart-2: 20 88% 68%;
@@ -130,15 +143,19 @@
 }
 
 /* ── Échelle de rayons ──────────────────────────────────────────────
-   Convention pour tout nouveau composant (pas une réécriture rétroactive —
-   voir AUDIT.md section 3 pour l'inventaire des valeurs arbitraires
-   existantes) :
-     rounded-lg   (8px)  → éléments interactifs inline (badges, inputs, boutons compacts)
-     rounded-xl   (12px) → boutons pleine taille, petits panneaux
-     rounded-2xl  (16px) → cartes (voir .lc-card, qui utilise 18px pour son cas précis)
+   Restructuration complète (lifecycle-ui-reference.html, voir CLAUDE.md
+   "Refonte UI/IA... restructuration complète") : ceci décrivait une
+   CONVENTION jusqu'à cette passe (l'override lg/md/sm de
+   tailwind.config.ts pointait en réalité vers --radius, désaccordant
+   l'app de ce texte) — l'override est retiré, donc c'est maintenant
+   l'échelle Tailwind réelle, appliquée partout :
+     rounded-lg   (8px)  → éléments interactifs inline (badges, inputs, boutons)
+     rounded-xl   (12px) → panneaux secondaires, grilles KPI, cellules de jour
+     rounded-2xl  (16px) → cartes (.lc-card)
      rounded-3xl  (24px) → dialogues / feuilles modales plein écran
    Éviter les valeurs arbitraires ad hoc (rounded-[Npx]) sauf besoin réel
-   non couvert par cette échelle.
+   non couvert par cette échelle (ex. le nub 3px d'une barre de profil de
+   séance, qui n'est pas un radius de composant).
    ────────────────────────────────────────────────────────────────── */
 
 /* ── Carte standard LifeCycle ───────────────────────────────────────
