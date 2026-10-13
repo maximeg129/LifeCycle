@@ -1,19 +1,22 @@
 "use client"
 
-// ── <ReadinessStrip> — refonte UI/IA (LifeCycle_Pro_UX_Engine_Review.md
-// §3.3/§5, "Aujourd'hui") : "one card, 5 cells: verdict ... then Forme,
-// Récupération, Sommeil, HRV·FC. Each cell has a confidence dot
-// (good/warn/bad/unknown), a mono value and a 12px trend line. Replaces
-// the 3 rings." Remplace le panneau RingItem×3/StatChip×2 de
+// ── <ReadinessStrip> — restructuration complète (lifecycle-ui-reference.
+// html, voir CLAUDE.md) : "one card, 5 cells: verdict (icon tile + title +
+// sentence), then Forme, Récupération, Sommeil, HRV·FC. Each cell has a
+// confidence dot (good/warn/bad/unknown), a mono value and a trend
+// caption." Remplace le panneau RingItem×3/StatChip×2 de
 // performance-bento.tsx — même donnée (tsb/readiness/sommeil/hrv/FC
-// repos), juste reclassée en cellules compactes avec un vocabulaire de
-// confiance unique (readiness-strip-types.ts) plutôt que 3 anneaux +
-// 2 puces visuellement disjoints. RingGauge n'est pas retiré de l'app —
-// toujours utilisé pour la progression du plan (plan-tab.tsx), un concept
-// différent (% d'achèvement, pas un signal physiologique).
+// repos/ctl/atl), reclassée en cellules compactes.
+//
+// ⚠️ La version précédente de ce composant affichait une mini sparkline
+// SVG sous chaque valeur — remplacée par une légende TEXTE (voir
+// readiness-strip-types.ts) pour matcher exactement la référence
+// affinée, qui montre "CTL 48 · ATL 44"/"↓ 8 vs moy. 7 j"/"Qualité 87 %"/
+// "Dans ta norme" plutôt qu'un tracé.
 
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { Check, AlertTriangle, AlertOctagon, HelpCircle, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
   type Confidence,
@@ -22,92 +25,96 @@ import {
   sleepConfidence,
   vitalsConfidence,
   buildReadinessVerdict,
-  sparklinePoints,
+  formeTrendCaption,
+  windowAverageTrendCaption,
+  sleepTrendCaption,
+  vitalsTrendCaption,
 } from './readiness-strip-types'
 import { formatSleepDuration } from '@/components/lifestyle/lifestyle-types'
+import type { DatedValue } from './governor-types'
 
-// Tokens posés à l'étape 1 (globals.css/tailwind.config.ts), jamais encore
-// consommés avant ce composant — voir CLAUDE.md "Refonte UI/IA... étape 1".
+// Tokens posés à l'étape 1 (globals.css/tailwind.config.ts) — good/warn/
+// bad/unknown, consommés ici pour le point de confiance, le badge de
+// verdict ET la couleur du delta (Récupération uniquement — les 3 autres
+// légendes de tendance restent neutres, voir plus bas).
 const CONFIDENCE_DOT_CLASS: Record<Confidence, string> = {
-  good: 'bg-good',
-  warn: 'bg-warn',
-  bad: 'bg-bad',
-  neutral: 'bg-muted-foreground',
-  unknown: 'bg-unknown',
+  good: 'bg-good', warn: 'bg-warn', bad: 'bg-bad', neutral: 'bg-muted-foreground', unknown: 'bg-unknown',
+}
+const CONFIDENCE_BADGE_CLASS: Record<Confidence, string> = {
+  good: 'bg-good-soft text-good', warn: 'bg-warn-soft text-warn', bad: 'bg-bad-soft text-bad',
+  neutral: 'bg-muted text-muted-foreground', unknown: 'bg-muted text-unknown',
+}
+const CONFIDENCE_BADGE_ICON: Record<Confidence, LucideIcon> = {
+  good: Check, warn: AlertTriangle, bad: AlertOctagon, neutral: HelpCircle, unknown: HelpCircle,
+}
+const CONFIDENCE_TEXT_CLASS: Record<Confidence, string> = {
+  good: 'text-good', warn: 'text-warn', bad: 'text-bad', neutral: 'text-subtle', unknown: 'text-subtle',
+}
+const CONFIDENCE_TITLE: Record<Confidence, string> = {
+  good: 'Favorable', warn: 'Vigilance', bad: 'Signal défavorable', neutral: 'Donnée connue', unknown: 'Pas de donnée',
 }
 
 function ConfidenceDot({ confidence, title }: { confidence: Confidence; title: string }) {
-  return <span className={cn('inline-block w-1.5 h-1.5 rounded-full shrink-0', CONFIDENCE_DOT_CLASS[confidence])} title={title} />
-}
-
-function Sparkline({ values, color }: { values: number[]; color: string }) {
-  const width = 44
-  const height = 12
-  const points = sparklinePoints(values, width, height)
-  if (!points) return <div className="h-3" aria-hidden />
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="shrink-0" aria-hidden>
-      <polyline points={points} fill="none" stroke={color} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  )
+  return <span className={cn('inline-block w-2 h-2 rounded-full shrink-0', CONFIDENCE_DOT_CLASS[confidence])} title={title} />
 }
 
 interface CellProps {
   href: string
   label: string
   confidence: Confidence
-  confidenceTitle: string
   value: ReactNode
-  sparklineValues?: number[]
-  sparklineColor?: string
+  unit?: string
+  /** Légende de tendance — texte, jamais une sparkline (voir le commentaire de tête du fichier). */
+  trendText?: string | null
+  /** 'confidence' colore la légende comme le point (ex. Récupération) ; sinon toujours neutre (text-subtle). */
+  trendColor?: 'confidence' | 'neutral'
 }
 
-function Cell({ href, label, confidence, confidenceTitle, value, sparklineValues, sparklineColor }: CellProps) {
+function Cell({ href, label, confidence, value, unit, trendText, trendColor = 'neutral' }: CellProps) {
   return (
-    <Link href={href} className="flex-1 flex flex-col gap-1.5 px-3 py-2 group min-w-0">
-      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-        <ConfidenceDot confidence={confidence} title={confidenceTitle} />
+    <Link href={href} className="flex flex-col gap-1 px-4 sm:px-5 py-4 min-w-0">
+      <span className="text-xs font-medium text-subtle flex items-center gap-1.5 truncate">
+        <ConfidenceDot confidence={confidence} title={CONFIDENCE_TITLE[confidence]} />
         {label}
       </span>
-      <span className="font-data text-lg font-bold text-foreground">{value}</span>
-      {sparklineValues && sparklineValues.length >= 2 ? (
-        <Sparkline values={sparklineValues} color={sparklineColor ?? 'hsl(var(--muted-foreground))'} />
+      <span className="font-data text-2xl font-bold leading-tight truncate">
+        {value}
+        {unit && <small className="font-body text-[13px] font-medium text-subtle ml-0.5 normal-case">{unit}</small>}
+      </span>
+      {trendText ? (
+        <span className={cn('text-xs', trendColor === 'confidence' ? CONFIDENCE_TEXT_CLASS[confidence] : 'text-subtle')}>
+          {trendText}
+        </span>
       ) : (
-        <div className="h-3" aria-hidden />
+        <span className="text-xs text-subtle">&nbsp;</span>
       )}
     </Link>
   )
 }
 
-const CONFIDENCE_TITLE: Record<Confidence, string> = {
-  good: 'Favorable',
-  warn: 'Vigilance',
-  bad: 'Signal défavorable',
-  neutral: 'Donnée connue',
-  unknown: 'Pas de donnée',
-}
-
 export interface ReadinessStripProps {
   tsb: number | null
   readiness: number | null
+  ctl: number | null | undefined
+  atl: number | null | undefined
   sleepHours: number | null | undefined
   sleepQuality: number | null | undefined
   hrv: number | null | undefined
   restingHR: number | null | undefined
-  /** Derniers points TSB (le plus ancien d'abord) — déjà chargés par la page pour la courbe PMC, voir cycling/page.tsx. */
-  tsbSeries?: number[]
-  /** `lifestyle.readinessSeries`/dailySeries — déjà calculés par useLifestyleData(), aucun nouveau fetch. */
-  readinessSeries?: number[]
-  sleepSeries?: number[]
-  hrvSeries?: number[]
-  restingHrSeries?: number[]
+  /** `lifestyle.readinessSeries` (déjà calculé par useLifestyleData()) — pour la légende "vs moy. N j" de Récupération. */
+  readinessHistory: DatedValue[]
+  /** `lifestyle.dailySeries` filtré sur hrv/restingHR — pour "Dans ta norme" (vitalsTrendCaption, ≥35j nécessaires). */
+  hrvHistory: DatedValue[]
+  restingHrHistory: DatedValue[]
+  todayIso: string
 }
 
 export function ReadinessStrip({
-  tsb, readiness, sleepHours, sleepQuality, hrv, restingHR,
-  tsbSeries, readinessSeries, sleepSeries, hrvSeries, restingHrSeries,
+  tsb, readiness, ctl, atl, sleepHours, sleepQuality, hrv, restingHR,
+  readinessHistory, hrvHistory, restingHrHistory, todayIso,
 }: ReadinessStripProps) {
   const verdict = buildReadinessVerdict(tsb, readiness)
+  const BadgeIcon = CONFIDENCE_BADGE_ICON[verdict.confidence]
   const vitals = vitalsConfidence(hrv, restingHR)
   const vitalsValue = hrv != null || restingHR != null
     ? [hrv != null ? `${Math.round(hrv)} ms` : '—', restingHR != null ? `${Math.round(restingHR)} bpm` : '—'].join(' · ')
@@ -115,54 +122,48 @@ export function ReadinessStrip({
 
   return (
     <div className="lc-card p-0 overflow-hidden">
-      <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-border">
-        {/* Verdict — pleine largeur sur mobile (spec §5.2), première cellule sur desktop */}
-        <Link href="/cycling/metric/tsb" className="flex-1 flex items-center gap-3 px-4 py-3 group min-w-0 sm:max-w-[220px]">
-          <ConfidenceDot confidence={verdict.confidence} title={CONFIDENCE_TITLE[verdict.confidence]} />
+      <div className="grid grid-cols-2 sm:grid-cols-[1.3fr_repeat(4,1fr)] divide-y sm:divide-y-0 sm:divide-x divide-border">
+        {/* Verdict — pleine largeur sur mobile (2 colonnes), 1ère cellule sur desktop. Badge icône dans un cercle coloré, pas un simple point — voir .verdict .badge de la référence. */}
+        <Link href="/cycling/metric/tsb" className="col-span-2 sm:col-span-1 flex items-start gap-3 px-4 sm:px-5 py-4 min-w-0">
+          <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center shrink-0', CONFIDENCE_BADGE_CLASS[verdict.confidence])}>
+            <BadgeIcon className="w-5 h-5" />
+          </div>
           <div className="min-w-0">
-            <p className="text-[13px] font-bold truncate">{verdict.title}</p>
-            <p className="text-xs text-muted-foreground line-clamp-2">{verdict.sentence}</p>
+            <h3 className="text-sm font-semibold truncate">{verdict.title}</h3>
+            <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{verdict.sentence}</p>
           </div>
         </Link>
 
-        <div className="flex-1 grid grid-cols-2 sm:flex sm:flex-row divide-x divide-border [&>*:nth-child(2)]:border-t-0 sm:[&>*]:border-t-0">
-          <Cell
-            href="/cycling/metric/tsb"
-            label="Forme"
-            confidence={tsbConfidence(tsb)}
-            confidenceTitle={CONFIDENCE_TITLE[tsbConfidence(tsb)]}
-            value={tsb != null ? (tsb > 0 ? `+${tsb}` : tsb) : '—'}
-            sparklineValues={tsbSeries}
-            sparklineColor="hsl(var(--form))"
-          />
-          <Cell
-            href="/cycling/metric/readiness"
-            label="Récupération"
-            confidence={readinessConfidence(readiness)}
-            confidenceTitle={CONFIDENCE_TITLE[readinessConfidence(readiness)]}
-            value={readiness != null ? `${readiness}%` : '—'}
-            sparklineValues={readinessSeries}
-            sparklineColor="hsl(var(--primary))"
-          />
-          <Cell
-            href="/cycling/metric/sleep"
-            label="Sommeil"
-            confidence={sleepConfidence(sleepQuality)}
-            confidenceTitle={CONFIDENCE_TITLE[sleepConfidence(sleepQuality)]}
-            value={sleepHours != null ? formatSleepDuration(sleepHours) : '—'}
-            sparklineValues={sleepSeries}
-            sparklineColor="hsl(var(--primary))"
-          />
-          <Cell
-            href="/cycling/metric/hrv"
-            label="HRV · FC"
-            confidence={vitals}
-            confidenceTitle={CONFIDENCE_TITLE[vitals]}
-            value={vitalsValue}
-            sparklineValues={restingHrSeries ?? hrvSeries}
-            sparklineColor="hsl(var(--muted-foreground))"
-          />
-        </div>
+        <Cell
+          href="/cycling/metric/tsb"
+          label="Forme (TSB)"
+          confidence={tsbConfidence(tsb)}
+          value={tsb != null ? (tsb > 0 ? `+${tsb}` : tsb) : '—'}
+          trendText={formeTrendCaption(ctl, atl)}
+        />
+        <Cell
+          href="/cycling/metric/readiness"
+          label="Récupération"
+          confidence={readinessConfidence(readiness)}
+          value={readiness != null ? readiness : '—'}
+          unit={readiness != null ? '%' : undefined}
+          trendText={windowAverageTrendCaption(readinessHistory, todayIso)}
+          trendColor="confidence"
+        />
+        <Cell
+          href="/cycling/metric/sleep"
+          label="Sommeil"
+          confidence={sleepConfidence(sleepQuality)}
+          value={sleepHours != null ? formatSleepDuration(sleepHours) : '—'}
+          trendText={sleepTrendCaption(sleepQuality)}
+        />
+        <Cell
+          href="/cycling/metric/hrv"
+          label="HRV · FC repos"
+          confidence={vitals}
+          value={vitalsValue}
+          trendText={vitalsTrendCaption(hrvHistory, restingHrHistory, todayIso)}
+        />
       </div>
     </div>
   )

@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { tsbConfidence, readinessConfidence, sleepConfidence, vitalsConfidence, buildReadinessVerdict, sparklinePoints } from './readiness-strip-types'
+import {
+  tsbConfidence,
+  readinessConfidence,
+  sleepConfidence,
+  vitalsConfidence,
+  buildReadinessVerdict,
+  formeTrendCaption,
+  windowAverageTrendCaption,
+  sleepTrendCaption,
+  vitalsTrendCaption,
+} from './readiness-strip-types'
 
 describe('tsbConfidence', () => {
   it('is unknown without a value', () => {
@@ -76,17 +86,70 @@ describe('buildReadinessVerdict', () => {
   })
 })
 
-describe('sparklinePoints', () => {
-  it('is null with fewer than 2 values — nothing to trace', () => {
-    expect(sparklinePoints([], 40, 12)).toBeNull()
-    expect(sparklinePoints([50], 40, 12)).toBeNull()
+describe('formeTrendCaption', () => {
+  it('is null without any value', () => {
+    expect(formeTrendCaption(null, null)).toBeNull()
   })
-  it('traces a flat line at mid-height when all values are equal', () => {
-    const points = sparklinePoints([50, 50, 50], 40, 12)
-    expect(points).toBe('0.0,6.0 20.0,6.0 40.0,6.0')
+  it('joins both when present', () => {
+    expect(formeTrendCaption(48, 44)).toBe('CTL 48 · ATL 44')
   })
-  it('normalizes min/max across the full height', () => {
-    const points = sparklinePoints([0, 100], 40, 12)
-    expect(points).toBe('0.0,12.0 40.0,0.0')
+  it('degrades to the one known value', () => {
+    expect(formeTrendCaption(48, null)).toBe('CTL 48')
+    expect(formeTrendCaption(null, 44)).toBe('ATL 44')
+  })
+})
+
+describe('windowAverageTrendCaption', () => {
+  const history = [
+    { date: '2024-01-05', value: 50 },
+    { date: '2024-01-06', value: 54 },
+    { date: '2024-01-07', value: 58 },
+    { date: '2024-01-08', value: 46 }, // today
+  ]
+  it('is null when today is absent from the series', () => {
+    expect(windowAverageTrendCaption(history, '2024-01-09')).toBeNull()
+  })
+  it('is null when there is no prior day to compare', () => {
+    expect(windowAverageTrendCaption([{ date: '2024-01-08', value: 46 }], '2024-01-08')).toBeNull()
+  })
+  it('computes a signed delta vs the prior-days average, with the real count used', () => {
+    // prior avg = (50+54+58)/3 = 54; today 46 -> delta -8
+    expect(windowAverageTrendCaption(history, '2024-01-08')).toBe('↓ 8 vs moy. 3 j')
+  })
+  it('shows "=" for an exact tie', () => {
+    const tie = [{ date: '2024-01-07', value: 50 }, { date: '2024-01-08', value: 50 }]
+    expect(windowAverageTrendCaption(tie, '2024-01-08')).toBe('= 0 vs moy. 1 j')
+  })
+})
+
+describe('sleepTrendCaption', () => {
+  it('is null without a value', () => {
+    expect(sleepTrendCaption(undefined)).toBeNull()
+  })
+  it('formats the quality percentage', () => {
+    expect(sleepTrendCaption(87.4)).toBe('Qualité 87 %')
+  })
+})
+
+describe('vitalsTrendCaption', () => {
+  const today = '2024-02-15'
+  function series(baseDate: string, count: number, value: number, stepDays: number): { date: string; value: number }[] {
+    const points = []
+    const start = new Date(baseDate + 'T00:00:00')
+    for (let i = 0; i < count; i++) {
+      const d = new Date(start)
+      d.setDate(d.getDate() - i * stepDays)
+      points.push({ date: d.toISOString().slice(0, 10), value })
+    }
+    return points
+  }
+  it('is null without enough baseline history on either signal', () => {
+    expect(vitalsTrendCaption([], [], today)).toBeNull()
+  })
+  it('says "Dans ta norme" when both HRV and resting HR trends are favorable or neutral', () => {
+    // Flat series (no real deviation) for both, with full 7+28 day coverage
+    const hrv = series(today, 40, 55, 1)
+    const rhr = series(today, 40, 50, 1)
+    expect(vitalsTrendCaption(hrv, rhr, today)).toBe('Dans ta norme')
   })
 })
