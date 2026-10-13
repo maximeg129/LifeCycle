@@ -7,7 +7,7 @@ import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebas
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import {
-  Search, Bike, CookingPot, Home, HeartPulse, Wallet, Settings, CornerDownLeft, Wrench, Sun, CalendarRange, Activity,
+  Search, Bike, CookingPot, Home, HeartPulse, Wallet, Settings, CornerDownLeft, Wrench, Sun, Calendar, Activity,
 } from 'lucide-react'
 
 interface ResultItem {
@@ -24,7 +24,7 @@ interface ResultItem {
 // "Aujourd'hui"/"Plan"/"Activités" (3 destinations, /cycling+/plan+/coach).
 const PAGES: ResultItem[] = [
   { id: 'page-today', label: 'Aujourd\'hui', href: '/cycling', icon: Sun, group: 'Pages' },
-  { id: 'page-plan', label: 'Plan', href: '/plan', icon: CalendarRange, group: 'Pages' },
+  { id: 'page-plan', label: 'Plan', href: '/plan', icon: Calendar, group: 'Pages' },
   { id: 'page-activities', label: 'Activités', href: '/coach', icon: Activity, group: 'Pages' },
   { id: 'page-garage', label: 'Garage', href: '/garage', icon: Wrench, group: 'Pages' },
   { id: 'page-nutrition', label: 'Nutrition', href: '/nutrition', icon: CookingPot, group: 'Pages' },
