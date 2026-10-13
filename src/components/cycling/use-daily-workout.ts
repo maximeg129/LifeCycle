@@ -30,7 +30,7 @@ import { buildCoachContext } from './coach-context'
 import { dailyWorkoutRecommendation, type DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
 import { dailyStrengthRecommendation, type DailyStrengthRecommendationOutput } from '@/ai/flows/daily-strength-recommendation-flow'
 import { clampAvailableMinutes, summarizeRecentSessions, buildWorkoutEventPayload, signalToTrendLabel } from './daily-workout-types'
-import { currentPlanWeek, planSessionExternalId, matchSessionCompletion, findWeekStrengthSession, withExerciseAdded, withExerciseSetsAdjusted, type PlanWeek, type SessionCompletion, type PlanWeekSessionWithValidation } from './training-plan-types'
+import { currentPlanWeek, planSessionExternalId, matchSessionCompletion, findWeekStrengthSession, withExerciseAdded, withExerciseSetsAdjusted, clampDateToWeek, type PlanWeek, type SessionCompletion, type PlanWeekSessionWithValidation } from './training-plan-types'
 import type { StrengthExercise } from '@/ai/flows/strength-exercise-schema'
 import { recentStrengthSessionPatterns } from './strength-session-plan-types'
 import { validateStrengthSession, describeBlockedStrengthChecks, MAX_STRENGTH_GENERATION_ATTEMPTS } from '@/domain/cycling/validation/strengthSessionValidator'
@@ -579,6 +579,33 @@ export function useDailyWorkout() {
     }
   }, [user, db, activePlan])
 
+  /**
+   * "Déplacer" sur la carte séance muscu d'Aujourd'hui (StrengthSessionCard,
+   * daily-workout-tab.tsx — restructuration lifecycle-ui-reference.html) —
+   * même mécanique que moveSessionDate (use-training-plan.ts, onglet Plan),
+   * jamais une deuxième logique de déplacement : clampDateToWeek borne la
+   * nouvelle date aux limites de la semaine en cours, puis un simple
+   * updateDoc sur sampleSessions[sessionIndex].date.
+   */
+  const moveStrengthSessionDate = useCallback(async (weekNumber: number, sessionIndex: number, newDate: string): Promise<boolean> => {
+    if (!user || !db || !activePlan) return false
+    const week = activePlan.weeks.find((w) => w.weekNumber === weekNumber)
+    if (!week || !week.sampleSessions) return false
+    const clamped = clampDateToWeek(newDate, week)
+    const weeks = activePlan.weeks.map((w) => {
+      if (w.weekNumber !== weekNumber || !w.sampleSessions) return w
+      return { ...w, sampleSessions: w.sampleSessions.map((s, i) => (i === sessionIndex ? { ...s, date: clamped } : s)) }
+    })
+    const ref = doc(db, `users/${user.uid}/trainingPlans/${activePlan.id}`)
+    try {
+      await updateDoc(ref, { weeks })
+      return true
+    } catch {
+      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: ref.path, operation: 'update', requestResourceData: { weeks } }))
+      return false
+    }
+  }, [user, db, activePlan])
+
   return {
     stored: stored?.proposal ?? null,
     storedAvailableMinutes: stored?.availableMinutes ?? null,
@@ -608,6 +635,7 @@ export function useDailyWorkout() {
     isGeneratingStrength,
     addStrengthExercise,
     addStrengthExerciseSet,
+    moveStrengthSessionDate,
     generateWeekSessions,
     generatingSessionsForWeek,
   }

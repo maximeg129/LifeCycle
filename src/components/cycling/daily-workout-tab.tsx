@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, CheckCircle2, MapPin, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle, Plus } from 'lucide-react'
+import { Sparkles, Loader2, Send, CheckCircle2, MapPin, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle, Plus, CalendarDays, Pencil } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -21,6 +21,7 @@ import { LogStrengthSessionDialog } from './log-strength-session-dialog'
 import { AddStrengthExerciseDialog } from './add-strength-exercise-dialog'
 import type { StrengthExercise } from '@/ai/flows/strength-exercise-schema'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { findWeekStrengthSession, type PlanWeekSessionWithValidation } from './training-plan-types'
 import { IntervalsOnboardingNotice } from './intervals-onboarding-notice'
 import { WorkoutProfileChart } from './workout-profile-chart'
@@ -30,6 +31,12 @@ import { cn } from '@/lib/utils'
 
 const DEFAULT_MINUTES = 60
 const DEFAULT_RIDE_TIME = '09:00'
+
+/** "90s"/"240s" -> "2′"/"4′" — même esprit que formatDuration (activity-format.ts), compact pour une ligne d'exercice. */
+function formatRestSeconds(seconds: number): string {
+  if (seconds >= 60) return `${Math.round(seconds / 60)}′`
+  return `${seconds}″`
+}
 
 /**
  * Carte séance musculation "à faire aujourd'hui" — extraite pour être
@@ -41,8 +48,17 @@ const DEFAULT_RIDE_TIME = '09:00'
  * peut pas faire de vélo, mais pour aller à la gym"). Mêmes actions que
  * l'onglet Plan (suivi en direct / saisie rétroactive) — gère son propre
  * état d'ouverture du suivi en direct, self-contained.
+ *
+ * Restructuration lifecycle-ui-reference.html ("make the Aujourd'hui page
+ * as the attached") : `.hero-grid` — liste d'exercices numérotée à gauche,
+ * colonne `.stack` à droite (Durée/Séries + Démarrer la séance + Logger/
+ * Déplacer) — même patron que la carte "séance du jour" vélo (voir plus
+ * bas, showPlanCard). Les affordances d'édition (+1 série par exercice,
+ * ajouter un exercice) restent disponibles mais repliées derrière
+ * "Modifier les exercices" — la référence ne les montre pas au premier
+ * coup d'œil, contrairement à l'ancienne liste qui les affichait toujours.
  */
-function StrengthSessionCard({ session, weekNumber, sessionIndex, badge, description, onAddExercise, onAddExerciseSet }: {
+function StrengthSessionCard({ session, weekNumber, sessionIndex, badge, description, onAddExercise, onAddExerciseSet, week, onMoveDate }: {
   session: PlanWeekSessionWithValidation
   weekNumber: number
   sessionIndex: number
@@ -51,9 +67,14 @@ function StrengthSessionCard({ session, weekNumber, sessionIndex, badge, descrip
   /** Retour utilisateur : "il faudrait pouvoir rajouter des exercices, et des tour pour chaque exercice dans la musculation" — AVANT de démarrer le suivi en direct (le pendant EN DIRECT vit dans live-strength-session-view.tsx). */
   onAddExercise: (weekNumber: number, sessionIndex: number, exercise: StrengthExercise) => void
   onAddExerciseSet: (weekNumber: number, sessionIndex: number, exerciseIndex: number) => void
+  /** Bornes de la semaine en cours, pour le sélecteur "Déplacer" — toujours planWeek, la seule semaine que les 3 appelants de ce composant affichent sur Aujourd'hui. Optionnels : masquent le bouton "Déplacer" si absents (ex. séance pas encore datée). */
+  week?: { startDate: string; endDate: string }
+  onMoveDate?: (weekNumber: number, sessionIndex: number, newDate: string) => void
 }) {
   const [liveOpen, setLiveOpen] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
   const exercises = session.strengthExercises ?? []
+  const totalSets = exercises.reduce((sum, ex) => sum + ex.sets, 0)
   return (
     <>
       {/* .lc-card + ring-2 ring-primary/50 — même vocabulaire "à faire
@@ -71,35 +92,95 @@ function StrengthSessionCard({ session, weekNumber, sessionIndex, badge, descrip
           </CardTitle>
           <CardDescription>{description ?? session.rationale}</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {exercises.length > 0 && (
-            <ul className="space-y-1.5 text-sm">
-              {exercises.map((ex, i) => (
-                <li key={i} className="flex items-center gap-2 p-2 rounded-lg bg-primary/5 border border-primary/20">
-                  <span className="flex-1 min-w-0">
-                    <span className="font-medium">{ex.name}</span>{' '}
-                    <span className="text-muted-foreground">— {ex.sets}x{ex.reps} — {ex.loadGuidance}{ex.restSeconds ? ` (repos ${ex.restSeconds}s)` : ''}</span>
-                  </span>
-                  {/* Retour utilisateur : "des tour pour chaque exercice" — +1 série AVANT de démarrer, même geste qu'en direct (live-strength-session-view.tsx) mais persisté dans le plan. */}
-                  <button
-                    type="button"
-                    onClick={() => onAddExerciseSet(weekNumber, sessionIndex, i)}
-                    className="shrink-0 w-5 h-5 rounded-full border border-primary/30 text-primary flex items-center justify-center hover:bg-primary/10 transition-colors"
-                    aria-label={`Ajouter une série à ${ex.name}`}
-                    title="Ajouter une série"
-                  >
-                    <Plus className="w-3 h-3" />
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-[1fr_200px]">
+            <div className="min-w-0 space-y-3">
+              {exercises.length > 0 && (
+                <ul className="rounded-xl border border-border divide-y divide-border overflow-hidden">
+                  {exercises.map((ex, i) => (
+                    <li key={i} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                      <span className="font-data text-xs text-subtle shrink-0 w-5">{(i + 1).toString().padStart(2, '0')}</span>
+                      <span className="flex-1 min-w-0 font-medium truncate">{ex.name}</span>
+                      <span className="text-right shrink-0">
+                        <span className="font-data font-semibold block">{ex.sets} × {ex.reps}</span>
+                        {(ex.loadGuidance || ex.restSeconds) && (
+                          <span className="text-xs text-subtle block whitespace-nowrap">
+                            {ex.loadGuidance}
+                            {ex.restSeconds ? `${ex.loadGuidance ? ' · ' : ''}${formatRestSeconds(ex.restSeconds)}` : ''}
+                          </span>
+                        )}
+                      </span>
+                      {showEdit && (
+                        // Retour utilisateur : "des tour pour chaque exercice" — +1 série AVANT de démarrer, même geste qu'en direct (live-strength-session-view.tsx) mais persisté dans le plan.
+                        <button
+                          type="button"
+                          onClick={() => onAddExerciseSet(weekNumber, sessionIndex, i)}
+                          className="shrink-0 w-5 h-5 rounded-full border border-primary/30 text-primary flex items-center justify-center hover:bg-primary/10 transition-colors"
+                          aria-label={`Ajouter une série à ${ex.name}`}
+                          title="Ajouter une série"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              <Collapsible open={showEdit} onOpenChange={setShowEdit}>
+                <CollapsibleTrigger asChild>
+                  <button className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+                    <Pencil className="w-3.5 h-3.5" /> Modifier les exercices
+                    <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', showEdit && 'rotate-180')} />
                   </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <AddStrengthExerciseDialog onAdd={(exercise) => onAddExercise(weekNumber, sessionIndex, exercise)} triggerLabel="Ajouter un exercice" />
-          <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
-            <Button onClick={() => setLiveOpen(true)} className="gap-2">
-              <PlayCircle className="w-4 h-4" /> Démarrer la séance
-            </Button>
-            <LogStrengthSessionDialog session={session} weekNumber={weekNumber} sessionIndex={sessionIndex} />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <AddStrengthExerciseDialog onAdd={(exercise) => onAddExercise(weekNumber, sessionIndex, exercise)} triggerLabel="Ajouter un exercice" />
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-muted/40 p-3 text-center">
+                  <p className="text-xs text-subtle">Durée</p>
+                  <p className="font-data text-xl font-bold">{session.durationMinutes}′</p>
+                </div>
+                {totalSets > 0 && (
+                  <div className="rounded-xl bg-muted/40 p-3 text-center">
+                    <p className="text-xs text-subtle">Séries</p>
+                    <p className="font-data text-xl font-bold">{totalSets}</p>
+                  </div>
+                )}
+              </div>
+              <Button onClick={() => setLiveOpen(true)} className="gap-2 justify-center">
+                <PlayCircle className="w-4 h-4" /> Démarrer la séance
+              </Button>
+              <div className="flex gap-2">
+                <LogStrengthSessionDialog session={session} weekNumber={weekNumber} sessionIndex={sessionIndex} />
+                {week && onMoveDate && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button size="sm" variant="outline" className="gap-1.5 h-8 flex-1 justify-center">
+                        <CalendarDays className="w-3.5 h-3.5" /> Déplacer
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-3" align="start">
+                      <label className="text-xs text-muted-foreground mb-1.5 block">Déplacer la séance</label>
+                      <Input
+                        type="date"
+                        value={session.date ?? week.startDate}
+                        min={week.startDate}
+                        max={week.endDate}
+                        onChange={(e) => onMoveDate(weekNumber, sessionIndex, e.target.value)}
+                        className="h-8 text-xs"
+                        aria-label={`Jour de la séance "${session.title}"`}
+                      />
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -137,6 +218,7 @@ export function DailyWorkoutTab() {
     isGeneratingStrength,
     addStrengthExercise,
     addStrengthExerciseSet,
+    moveStrengthSessionDate,
     todaysPlanSession,
     todaysPlanSessionIsStrength,
     generateWeekSessions,
@@ -389,6 +471,8 @@ export function DailyWorkoutTab() {
           }
           onAddExercise={addStrengthExercise}
           onAddExerciseSet={addStrengthExerciseSet}
+          week={planWeek ?? undefined}
+          onMoveDate={moveStrengthSessionDate}
         />
       </div>
     )
@@ -506,6 +590,8 @@ export function DailyWorkoutTab() {
             description="Basculée depuis le vélo — la séance muscu déjà prévue cette semaine par le plan, peu importe le jour où elle était datée à l'origine."
             onAddExercise={addStrengthExercise}
             onAddExerciseSet={addStrengthExerciseSet}
+            week={planWeek ?? undefined}
+            onMoveDate={moveStrengthSessionDate}
           />
         ) : (
           <EmptyState
@@ -546,6 +632,8 @@ export function DailyWorkoutTab() {
             }
             onAddExercise={addStrengthExercise}
             onAddExerciseSet={addStrengthExerciseSet}
+            week={planWeek ?? undefined}
+            onMoveDate={moveStrengthSessionDate}
           />
           <Button variant="outline" size="sm" onClick={handleProposeStrength} disabled={isGeneratingStrength} className="gap-1.5">
             {isGeneratingStrength ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shuffle className="w-3.5 h-3.5" />}

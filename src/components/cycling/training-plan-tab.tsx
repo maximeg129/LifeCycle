@@ -22,10 +22,13 @@ import { PendingFeedbackBanner } from '@/components/coach/pending-feedback-banne
 // garde plus que ce que le brief UI appelle le "Plan header" : une seule
 // ligne ("Semaine 7/12 · Build · 47 j avant le test FTP · Voir le plan ›")
 // plus la séance du jour elle-même (PendingFeedbackBanner/DailyWorkoutTab,
-// réutilisés tels quels) et les 7 prochains jours (PlanNextSessionsList,
-// hideToday puisque DailyWorkoutTab couvre déjà aujourd'hui). Rendu
-// directement sur /cycling (voir ce fichier), qui devient ainsi
-// "Aujourd'hui" au sens de la nouvelle IA.
+// réutilisés tels quels) et les 7 prochains jours (PlanNextSessionsList) —
+// inclut désormais le jour "Aujourd'hui" lui-même dans la bande (voir le
+// commentaire de tête de plan-next-sessions-list.tsx, "make the Aujourd'hui
+// page as the attached" : la référence montre la tuile du jour surlignée
+// dans la bande, à côté de la grande carte "séance du jour" juste
+// au-dessus — redondant mais intentionnel). Rendu directement sur /cycling
+// (voir ce fichier), qui devient ainsi "Aujourd'hui" au sens de la nouvelle IA.
 export function TrainingPlanTab() {
   const {
     activePlan, isLoadingPlan,
@@ -82,7 +85,6 @@ export function TrainingPlanTab() {
         <PlanNextSessionsList
           weeks={activePlan.weeks}
           today={today}
-          hideToday
           generatingSessionsForWeek={generatingSessionsForWeek}
           sendingSessionKey={sendingSessionKey}
           canSendToIntervals={canSendToIntervals}

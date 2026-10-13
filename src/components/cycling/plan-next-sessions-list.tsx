@@ -21,6 +21,17 @@
 //    lazy, voir "vue calendrier v2").
 // 2. Séances déjà passées révélées via "Voir les séances passées"
 //    (pastPlanSessions) — Collapsible, inchangé.
+//
+// ⚠️ Capture d'écran fournie par l'utilisateur ("make the Aujourd'hui page
+// as the attached") : la bande inclut la tuile d'AUJOURD'HUI elle-même
+// (surlignée), à côté de la grande carte "séance du jour" déjà affichée
+// plus haut sur l'écran — redondant mais intentionnel dans la référence
+// (coup d'œil sur toute la semaine, y compris le jour en cours). `hideToday`
+// (qui l'excluait auparavant pour éviter ce doublon) est retiré — son seul
+// appelant (training-plan-tab.tsx) ne le passait de toute façon que pour
+// CE motif, devenu caduc. Le titre "Cette semaine" + le résumé de charge
+// (summarizeWeekStripLoad, "6h20 vélo · 1h30 force") remplacent l'ancienne
+// plage de dates affichée à droite du titre.
 
 import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -37,6 +48,7 @@ import {
   groupRollingDaysByWeek,
   pastPlanSessions,
   sessionsForNext7Days,
+  summarizeWeekStripLoad,
   type PlanWeek,
   type PlanWeekSessionWithValidation,
   type SessionCompletion,
@@ -47,8 +59,6 @@ import type { StrengthExercise } from '@/ai/flows/strength-exercise-schema'
 interface Props {
   weeks: PlanWeek[]
   today: string
-  /** Masque le jour "Aujourd'hui" de la fenêtre glissante — quand la séance du jour vit déjà ailleurs à l'écran (voir training-plan-tab.tsx : DailyWorkoutTab), jamais montrée deux fois. */
-  hideToday?: boolean
   generatingSessionsForWeek: number | null
   sendingSessionKey: string | null
   canSendToIntervals: boolean
@@ -64,6 +74,14 @@ interface Props {
   /** Pour colorer une séance déjà faite selon son intensité réelle — voir completedRideZone, plan-calendar-types.ts. Même donnée déjà fetchée pour le Plan (use-training-plan.ts), aucun nouveau fetch. */
   activities: IntervalsActivity[]
   athleteFtp: number | null | undefined
+}
+
+/** "6h20"/"45min" — même convention que formatDuration (activity-format.ts), en minutes plutôt qu'en secondes. */
+function formatMinutesShort(minutes: number): string {
+  const h = Math.floor(minutes / 60)
+  const m = minutes % 60
+  if (h > 0) return `${h}h${m > 0 ? m.toString().padStart(2, '0') : ''}`
+  return `${m}min`
 }
 
 function dayLabel(dateIso: string, todayIso: string): string {
@@ -82,16 +100,16 @@ interface TileSession {
 }
 
 export function PlanNextSessionsList({
-  weeks, today, hideToday, generatingSessionsForWeek, sendingSessionKey, canSendToIntervals,
+  weeks, today, generatingSessionsForWeek, sendingSessionKey, canSendToIntervals,
   onRegenerate, onSend, onMoveDate, getCompletion, adjustingLocationKey, onAdjustLocation,
   onAddExercise, onAddExerciseSet, activities, athleteFtp,
 }: Props) {
   const [showPast, setShowPast] = useState(false)
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
-  const days = useMemo(() => sessionsForNext7Days(weeks, today), [weeks, today])
-  const visibleDays = useMemo(() => (hideToday ? days.filter((d) => d.date !== today) : days), [days, hideToday, today])
+  const visibleDays = useMemo(() => sessionsForNext7Days(weeks, today), [weeks, today])
   const segments = useMemo(() => groupRollingDaysByWeek(visibleDays), [visibleDays])
+  const weekLoad = useMemo(() => summarizeWeekStripLoad(visibleDays), [visibleDays])
   const past = useMemo(() => pastPlanSessions(weeks, today), [weeks, today])
 
   // Tuiles par jour — même patron que plan-week-calendar.tsx (une seule
@@ -152,10 +170,13 @@ export function PlanNextSessionsList({
 
       <div className="space-y-3">
         <div className="flex items-baseline justify-between">
-          <h3 className="text-sm font-semibold">{hideToday ? 'Cette semaine' : 'Prochains jours'}</h3>
-          {visibleDays.length > 0 && (
-            <span className="text-xs text-muted-foreground">
-              {format(new Date(`${visibleDays[0].date}T00:00:00`), 'dd MMM', { locale: fr })} – {format(new Date(`${visibleDays.at(-1)!.date}T00:00:00`), 'dd MMM', { locale: fr })}
+          <h3 className="text-sm font-semibold">Cette semaine</h3>
+          {(weekLoad.cyclingMinutes > 0 || weekLoad.strengthMinutes > 0) && (
+            <span className="text-xs text-muted-foreground font-data">
+              {[
+                weekLoad.cyclingMinutes > 0 ? `${formatMinutesShort(weekLoad.cyclingMinutes)} vélo` : null,
+                weekLoad.strengthMinutes > 0 ? `${formatMinutesShort(weekLoad.strengthMinutes)} force` : null,
+              ].filter(Boolean).join(' · ')}
             </span>
           )}
         </div>

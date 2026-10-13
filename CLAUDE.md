@@ -4508,6 +4508,66 @@ lui-même (échelle, segments coupés, bandes ombrées superposées aux lignes) 
 visuellement dans ce sandbox ; à confirmer par l'utilisateur à la prochaine analyse IA régénérée
 d'une sortie avec flux seconde par seconde disponible.
 
+### Pièce 10 — Aujourd'hui : salutation, carte séance muscu en hero-grid, WeekStrip avec aujourd'hui + résumé de charge
+
+Retour utilisateur, capture d'écran jointe de la référence affinée ("make the Aujourd'hui page as
+the attached") : un dernier écart visible entre l'écran réel et la référence — eyebrow date +
+"Bonjour {Prénom}" en tête (jamais construit jusqu'ici), la carte "séance du jour" MUSCULATION
+encore en simple liste (contrairement à son pendant vélo, déjà `.hero-grid` depuis la Pièce 7), et
+la bande "Cette semaine" qui excluait le jour même (pour éviter un doublon avec la grande carte
+au-dessus) alors que la référence montre la tuile d'aujourd'hui surlignée dans la bande.
+
+**`<TodayGreeting>`** (`today-greeting.tsx`, nouveau) — eyebrow (jour + date, `date-fns`/`fr`) +
+"Bonjour {Prénom}" (premier prénom du `displayName` Firebase, replié sur la partie locale de
+l'email, jamais un prénom deviné au-delà de ce que l'athlète a renseigné). Volontairement
+INDÉPENDANT des données du plan — ne lit que `useUser()`, pas une deuxième instance de
+`useTrainingPlan()` (qui agrège budget/gouverneur/mémoire coach, bien trop lourd juste pour un
+prénom) : la ligne "Semaine N/T · Phase · Jj avant l'objectif · Voir le plan ›" reste donc là où
+elle vivait déjà (`training-plan-tab.tsx`, sa propre instance du hook), pas fusionnée sur la même
+rangée que la référence — un risque de duplication de lecture Firestore jugé pire qu'un alignement
+pixel-parfait. Rendu en tête de `cycling/page.tsx`, avant `PerformanceBento`.
+
+**`StrengthSessionCard` restylée en `.hero-grid`** (`daily-workout-tab.tsx`) — même patron que la
+carte "séance du jour" vélo (`showPlanCard`, Pièce 7) : liste d'exercices numérotée (`01`/`02`...,
+mono) à gauche, colonne `.stack` à droite (stat box Durée + stat box Séries — somme de `ex.sets` —
++ "Démarrer la séance" pleine largeur + rangée "Logger"/"Déplacer"). Les affordances d'édition
+(bouton `+1 série` par exercice, `AddStrengthExerciseDialog`) — toujours visibles avant ce
+correctif, jamais montrées par la référence au premier coup d'œil — repliées derrière un nouveau
+disclosure "Modifier les exercices" (même patron `Collapsible` que "Modifier le script de la
+séance" côté vélo).
+
+**"Déplacer" — fonctionnalité réelle, pas un bouton décoratif** (jamais inventé sans effet) :
+`moveStrengthSessionDate()` (`use-daily-workout.ts`, nouveau mutateur) reprend EXACTEMENT la même
+mécanique que `moveSessionDate` (`use-training-plan.ts`, onglet Plan) — `clampDateToWeek` borne la
+nouvelle date aux limites de la semaine en cours, puis un simple `updateDoc` sur
+`sampleSessions[sessionIndex].date`, jamais une deuxième logique de déplacement. Exposé via une
+`Popover` (icône `CalendarDays` + `<Input type="date">`) plutôt qu'un sélecteur toujours visible —
+`StrengthSessionCard` reçoit `week`/`onMoveDate` en props OPTIONNELS (masquent le bouton si
+absents) ; les 3 appelants de ce composant dans `daily-workout-tab.tsx` (séance strength datée
+aujourd'hui par le plan, séance muscu de la semaine via le toggle Vélo/Salle, draft généré par
+`dailyStrengthRecommendation`) pointent tous vers la MÊME semaine (`planWeek`, déjà confirmé par
+lecture de `findWeekStrengthSession(planWeek)`/`generateStrengthSession()` — les trois chemins
+restent dans `planWeek.sampleSessions`), donc `week={planWeek}` suffit aux trois.
+
+**WeekStrip ("Cette semaine")** (`plan-next-sessions-list.tsx`) — `hideToday` (qui excluait le jour
+même de la bande, pour éviter un doublon visuel avec `DailyWorkoutTab` juste au-dessus) retiré :
+son seul appelant (`training-plan-tab.tsx`) ne le passait de toute façon que pour ce motif, rendu
+caduc par la référence elle-même, qui montre la tuile d'aujourd'hui surlignée dans la bande à côté
+de la grande carte — redondant mais intentionnel. Le titre redevient toujours "Cette semaine" (plus
+de branchement `hideToday ? ... : 'Prochains jours'`, la seule valeur `false` de ce prop n'étant
+plus jamais atteinte) ; l'ancienne plage de dates affichée à droite du titre ("13 oct – 19 oct")
+est remplacée par **`summarizeWeekStripLoad()`** (`training-plan-types.ts`, pur/testé) — somme des
+`durationMinutes` déjà visibles dans la fenêtre de 7 jours, par `sessionKind`, formatée "6h20 vélo
+· 1h30 force" (`formatMinutesShort()`, même convention `XhYY` que `formatDuration()`,
+`activity-format.ts`, en minutes plutôt qu'en secondes).
+
+Tests (`training-plan-types.test.ts`, 4 nouveaux pour `summarizeWeekStripLoad` — fenêtre vide,
+somme vélo/muscu séparée sur plusieurs jours, accumulation de plusieurs séances du même type,
+jour `weekNotGenerated` ignoré) — 985/985 au total, tsc/eslint/build clean. **Non vérifié à l'écran**
+(même limite `favicon.ico` que le reste de cette restructuration) — la salutation, le gabarit
+`1fr_200px` de la carte muscu et la bande incluant aujourd'hui sont invérifiables visuellement dans
+ce sandbox ; à confirmer par l'utilisateur au premier rendu réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
