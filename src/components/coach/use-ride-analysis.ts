@@ -33,6 +33,7 @@ import { computeDurabilityProfile } from '@/domain/cycling/metrics/durability'
 import { computeDecoupling, type DecouplingResult } from '@/domain/cycling/metrics/decoupling'
 import { computePowerZoneDistribution3, type ThreeZoneBucket } from '@/domain/cycling/metrics/zones'
 import { computeIntervalAdherence, type IntervalAdherenceResult } from './interval-adherence-types'
+import { downsampleRideSeries, type RideChartSeries } from './ride-chart-types'
 import { parseStructuredWorkoutProfile } from '@/components/cycling/plan-calendar-types'
 import type { PlanWeek } from '@/components/cycling/training-plan-types'
 import { describeActionDispatchError } from '@/lib/utils'
@@ -64,6 +65,14 @@ interface StoredRideAnalysis {
   // Adherence a refusé de produire un résultat (voir sa propre doc).
   plannedWorkout: PlannedWorkoutLike | null
   intervalAdherence: IntervalAdherenceResult | null
+  // Restructuration lifecycle-ui-reference.html, écran "Activité (detail)" :
+  // graphique puissance/FC avec fenêtres cibles ombrées (RidePowerHrChart).
+  // Même raison de persister que durability/decoupling/intervalAdherence
+  // ci-dessus — les flux watts/heartrate bruts ne sont jamais conservés
+  // (voir plus bas, `watts`/`heartrate`), seule cette version downsamplée
+  // (ride-chart-types.ts) l'est. `null` si aucun des deux flux n'avait de
+  // données (voir downsampleRideSeries).
+  chartSeries: RideChartSeries | null
 }
 
 /** Le sous-ensemble d'une séance prévue (proposition IA du jour ou séance type du plan) dont rideAnalysis a besoin — jamais le document entier, qui porte des champs propres à sa propre collection (sentToIntervals, verdict du contrat coach...) sans rapport avec l'analyse d'une sortie. */
@@ -262,6 +271,12 @@ export function useRideAnalysis(activityId: string | null) {
       // deux séries manque ou si elles n'ont pas la même longueur.
       const decoupling = watts && heartrate ? computeDecoupling(watts, heartrate) ?? undefined : undefined
 
+      // Graphique Puissance & FC (RidePowerHrChart) — même flux déjà
+      // récupéré ci-dessus, réduit (downsampleRideSeries, ride-chart-
+      // types.ts) à une série persistable plutôt que de garder les
+      // milliers de points bruts.
+      const chartSeries = downsampleRideSeries(watts, heartrate)
+
       const totalSeconds = activity.moving_time ?? watts?.length ?? heartrate?.length ?? 0
 
       const today = format(new Date(), 'yyyy-MM-dd')
@@ -339,6 +354,7 @@ export function useRideAnalysis(activityId: string | null) {
         decoupling: decoupling ?? null,
         plannedWorkout: plannedWorkout ?? null,
         intervalAdherence: intervalAdherence ?? null,
+        chartSeries: chartSeries ?? null,
         createdAt: serverTimestamp(),
       }
       try {
@@ -362,6 +378,7 @@ export function useRideAnalysis(activityId: string | null) {
     decoupling: stored?.decoupling ?? null,
     plannedWorkout: stored?.plannedWorkout ?? null,
     intervalAdherence: stored?.intervalAdherence ?? null,
+    chartSeries: stored?.chartSeries ?? null,
     isLoadingStored,
     isGenerating,
     canAnalyze: !!creds?.intervalsAthleteId && !!creds?.intervalsApiKey,

@@ -4437,6 +4437,77 @@ teinte fin — les nouvelles valeurs restent dans la même famille de couleur qu
 bleu→bleu, jaune→jaune — donc risque visuel jugé faible, mais toujours invérifiable dans ce
 sandbox) — à confirmer par l'utilisateur au premier rendu réel.
 
+### Pièce 9 — Activité (detail) : graphique Puissance & FC avec fenêtres cibles ombrées
+
+Retour utilisateur, suite directe de la pièce 8 : "Tackle... the power/HR chart next" — dernier
+écart de l'étape 5 de cette restructuration ("le graphique puissance/FC avec intervalles cibles
+ombrés... différé à une pièce dédiée... un risque/effort différent... invérifiable visuellement
+dans ce sandbox").
+
+**Diagnostic avant code** — `use-ride-analysis.ts`'s `generate()` fetche déjà les flux bruts
+`watts`/`heartrate` seconde par seconde (`/api/intervals/activities/[id]`, déjà en place) pour
+calculer `durability`/`decoupling`/`intervalAdherence`, mais les tableaux bruts eux-mêmes ne sont
+JAMAIS persistés ni exposés par le hook — jetés une fois la fonction retournée. Construire ce
+graphique exigeait donc une nouvelle donnée persistée, suivant le même patron que `durability`/
+`decoupling`/`intervalAdherence` (voir plus haut), jamais un nouveau fetch de streams juste pour
+l'affichage. `IntervalAdherenceStep` (`interval-adherence-types.ts`) porte déjà la durée de chaque
+étape prévue mais pas son offset cumulé (seulement une variable locale `cursor`, jamais exposée) —
+reconstruit par simple cumul plutôt que par un changement de signature de `computeIntervalAdherence`.
+
+**`ride-chart-types.ts`** (nouveau, pur/testé, `src/components/coach/`) :
+- **`downsampleRideSeries(watts, heartrate, maxPoints = 120)`** — réduit les flux bruts (potentiellement
+  des milliers de points) à au plus 120 points moyennés par intervalle, `RideChartSeries` =
+  `{totalSeconds, points: {t, watts, hr}[]}`. `watts`/`hr` restent `null` (jamais une valeur devinée)
+  si l'intervalle de downsampling n'a aucune donnée réelle — ex. un flux watts plus court que le
+  flux heartrate (cas déjà rencontré pour `computeDecoupling`). `null` (toute la série) si ni l'un
+  ni l'autre flux n'a de données.
+- **`chartSeriesRange()`** — min/max réels d'une série en ignorant les `null`, `null` (jamais 0-0)
+  si aucune valeur — pour que le composant de rendu normalise l'échelle y sans jamais diviser par
+  une plage inventée.
+- **`buildChartLineSegments()`** — convertit la série en segments de polyligne SVG (coordonnées x/y
+  déjà dans le référentiel du viewBox), **plusieurs segments plutôt qu'un seul chemin continu dès
+  qu'un trou de données existe** — jamais une ligne qui interpolerait entre deux points réels
+  séparés par une absence (même discipline "jamais inventé" que le reste de l'app). Un min=max (série
+  plate) centre la ligne à mi-hauteur plutôt que de diviser par zéro.
+- **`buildIntervalTargetWindows(steps)`** — reconstruit l'offset de départ cumulé de chaque étape
+  prévue (`IntervalAdherenceStep.targetDurationSeconds`, sommé dans l'ordre) en `IntervalTargetWindow[]`
+  (`{startSeconds, endSeconds, pctLow, pctHigh, verdict}`) — pour positionner les bandes ombrées du
+  graphique sur son propre axe temporel, jamais une deuxième logique de découpage du flux réel.
+
+**`RidePowerHrChart`** (`ride-power-hr-chart.tsx`, nouveau) — SVG (comme `WorkoutProfileChart`/
+`RingGauge`, pas Recharts : un widget compact à deux séries + bandes ombrées, plus simple à
+positionner pixel par pixel) : ligne puissance (`hsl(var(--primary))`), ligne FC (`hsl(var(--fatigue))`,
+le token déjà posé à l'étape 1 de cette restructuration pour ATL — même famille sémantique
+"fatigue/charge" que la FC pendant l'effort), bandes ombrées `hsl(var(--z5))` à 14% d'opacité pour
+chaque fenêtre cible (même couleur/opacité que `.zones-legend`/les `<rect>` de la référence HTML).
+Légende compacte (3 puces) au-dessus du graphique, n'affichant que les séries réellement présentes
+(`powerSegments.length > 0`, etc.) — jamais une puce pour une ligne qui ne sera pas tracée.
+`null` (composant qui ne rend rien) si ni puissance ni FC n'ont de segment à tracer.
+
+**Persistance** (`use-ride-analysis.ts`) — `chartSeries: RideChartSeries | null` rejoint
+`durability`/`decoupling`/`plannedWorkout`/`intervalAdherence` dans `StoredRideAnalysis`, calculé
+une fois à `generate()` (`downsampleRideSeries(watts, heartrate)`) et écrasé à la régénération —
+même raison que les trois champs existants : recalculer exigerait de refetcher les streams. Exposé
+par le hook (`chartSeries: stored?.chartSeries ?? null`).
+
+**`RideAnalysisDialog`** — nouvel encart "Puissance & FC" (icône `LineChart`), placé juste après le
+bandeau `effortContext` et avant l'encart Durabilité — même position relative que la carte
+"Puissance & FC" dans la référence HTML (entre les KPIs et le tableau "Intervalles"/l'analyse du
+coach). `targetWindows` calculé via `useMemo`/`buildIntervalTargetWindows(intervalAdherence.steps)`,
+`undefined` si `intervalAdherence` est `null` (aucune comparaison prévu/réalisé possible pour cette
+sortie) — le graphique s'affiche alors sans bandes ombrées plutôt que de ne pas s'afficher du tout.
+`chartSeries` absent (analyse générée avant ce correctif, jamais recalculée rétroactivement, ou
+sortie sans flux seconde par seconde exploitable — voir `streamsError`) → l'encart entier ne
+s'affiche pas, jamais un graphique vide.
+
+Tests (`ride-chart-types.test.ts`, 12 nouveaux : downsampling avec/sans trou de données et au-delà
+de `maxPoints`, plage min/max avec/sans valeurs nulles, segments de ligne continus/coupés par un
+trou/série plate, cumul des fenêtres cibles) — 981/981 au total, tsc/eslint/build clean. **Non
+vérifié à l'écran** (même limite `favicon.ico` que le reste de cette restructuration) — le tracé SVG
+lui-même (échelle, segments coupés, bandes ombrées superposées aux lignes) est invérifiable
+visuellement dans ce sandbox ; à confirmer par l'utilisateur à la prochaine analyse IA régénérée
+d'une sortie avec flux seconde par seconde disponible.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
