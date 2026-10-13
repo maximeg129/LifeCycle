@@ -3944,6 +3944,87 @@ le panneau Stella desktop (largeur/mise en page du chat dans un panneau plutôt 
 le rendu Markdown lui-même sont invérifiables visuellement dans ce sandbox ; à confirmer par
 l'utilisateur au premier rendu réel.
 
+### Étape 3 — "Aujourd'hui" : `<ReadinessStrip>` remplace les 3 anneaux
+
+Le brief (§3.3/§5) décrit 5 composants pour cet écran : `<ReadinessStrip>`, `<SessionHero>`,
+`<WorkoutProfile>`, `<WeekStrip>`, `<RpeQuickInput>`. Audit avant tout code : **4 des 5 existaient
+déjà, construits au fil de chantiers antérieurs documentés plus haut dans ce fichier**, avec une
+fidélité fonctionnelle déjà proche du brief — `daily-workout-tab.tsx` (chips/titre/description/
+`WorkoutProfileChart`/actions primaire-secondaire, voir "Coach Aujourd'hui : graphique de profil...")
+couvre déjà `SessionHero`+`WorkoutProfile` ; `plan-next-sessions-list.tsx` couvre `WeekStrip` (sous
+une forme différente, voir plus bas) ; `pending-feedback-banner.tsx` (nom de rangée + mono meta +
+chips RPE via `QuickFeedbackButton`) couvre déjà `RpeQuickInput`. **Seul `<ReadinessStrip>` manquait
+réellement** — les 3 anneaux Forme/Récupération/Sommeil + les 2 `StatChip` HRV/FC repos
+(`performance-bento.tsx`) n'avaient jamais de distinction honnête "donnée manquante" (un anneau vide
+pouvait déjà se confondre avec un anneau plein à 0%) — exactement le défaut que §6 du brief interdit
+("No status shows green when its data is missing").
+
+**`readiness-strip-types.ts`** (pur, testé) — `tsbConfidence`/`readinessConfidence`/
+`sleepConfidence` reclassent des classifications DÉJÀ en place (`tsbZone`, les seuils readiness déjà
+affichés sur `/lifestyle`, `sleepQualityBand`) dans le vocabulaire good/warn/bad/unknown du brief —
+jamais une nouvelle échelle inventée. `vitalsConfidence` (HRV·FC repos) reste volontairement
+`'neutral'`/`'unknown'` SEULEMENT — jamais good/bad : le signe d'une variation de HRV reste ambigu en
+soi (`principle-3-hrv-sign-ambiguous`, déjà la raison pour laquelle la tuile HRV n'a jamais eu de LED
+jour/veille, voir plus haut). `buildReadinessVerdict()` compose la cellule "verdict" (titre + phrase)
+à partir des deux signaux déjà fiables (TSB, readiness) — jamais un 3ᵉ score composite inventé, même
+discipline que le refus du "JOIN Level" (voir "Audit Join Cycling" plus haut) ; réutilise mot pour
+mot le texte déjà affiché sur `/lifestyle` pour ces mêmes seuils ("Prêt pour l'effort"/"Effort modéré
+conseillé"/"Privilégiez la récupération") plutôt que d'inventer une deuxième formulation.
+`sparklinePoints()` (normalisation min/max → `points` SVG) alimente les mini sparklines 12px du brief
+— `null` (jamais une ligne inventée) si moins de 2 valeurs réelles.
+
+**`readiness-strip.tsx`** — une seule carte à 5 cellules (verdict + Forme/Récupération/Sommeil/HRV·FC),
+chacune avec son point de confiance + sparkline, remplace entièrement le panneau `RingItem`×3/
+`StatChip`×2 de `performance-bento.tsx`. Séries déjà en main, aucun nouveau fetch : `tsbSeries` vient
+de `fitnessSeries` (12 semaines déjà fetchées par `cycling/page.tsx` pour `PmcTab` — nouveau prop
+`fitnessSeries` sur `PerformanceBento`), `readinessSeries`/sommeil/HRV/FC repos viennent de
+`lifestyle.readinessSeries`/`lifestyle.dailySeries` (`useLifestyleData()`, déjà appelé). `RingGauge`
+n'est pas retiré de l'app (toujours utilisé pour la progression du plan, `plan-tab.tsx`/
+`plan-adherence-chart.tsx` — un concept différent, % d'achèvement plutôt qu'un signal
+physiologique) — seuls `tsbRingPercent`/`tsbRingColor`/`readinessRingColor`/`sleepRingPercent`/
+`sleepRingColor` (`ring-metrics.ts`) deviennent orphelins après cette migration et sont supprimés
+avec leur fichier de test (11 tests retirés, remplacés par les 17 nouveaux de
+`readiness-strip-types.test.ts`).
+
+**Décisions conscientes de NE PAS suivre le brief à la lettre, documentées plutôt que silencieusement
+ignorées** :
+- **`<WeekStrip>` reste une liste verticale, pas 7 tuiles de 128px** — le brief générique décrit des
+  tuiles compactes type calendrier ; `plan-next-sessions-list.tsx` a déjà traversé ce débat
+  spécifiquement dans CETTE app (voir "Plan calendrier v1" → "Plan : séance du jour + 7 prochains
+  jours" plus haut) : l'utilisateur est explicitement revenu d'une bande de tuiles compacte vers une
+  LISTE complète avec détail inline, via `AskUserQuestion`, après usage réel ("les séances passées
+  devraient être accessibles en pull... je ne pense pas qu'il soit utile d'avoir [tuiles]"). Une
+  décision récente et spécifique à cette app prime sur une maquette générique — revenir aux tuiles
+  maintenant contredirait directement ce choix déjà tranché deux fois.
+- **Pas de migration des couleurs de zone (`z1`-`z7`, posées à l'étape 1) dans
+  `WorkoutProfileChart`/`plan-week-calendar.tsx`/`plan-overview-grid.tsx`** — dépendance bloquante
+  réelle trouvée en auditant : `plan-week-calendar.tsx` compose `` `${zone.color}26` `` (un hex à 6
+  chiffres + 2 chiffres d'alpha, syntaxe CSS `#rrggbbaa`) pour une version translucide de la couleur
+  de zone — `zone.color` doit donc rester un hex littéral ; le remplacer par `hsl(var(--z4))` casserait
+  silencieusement cette technique (`hsl(var(--z4))26` n'est pas une couleur CSS valide) sur un chemin
+  invérifiable visuellement dans ce sandbox. Checklist §8 ("Zone colours are identical in profiles,
+  legends and the phase bar") déjà honorée aujourd'hui par construction (`ZONE_COLORS`, un seul objet
+  partagé par les 3 fichiers) — seule la palette hex elle-même (proche mais pas identique aux
+  tokens `--z1`..`--z7`) diffère. Migration réelle (`zone.color` → un objet `{solid, soft}` ou
+  `color-mix()`) différée à l'étape 6, en même temps que le nettoyage `rounded-lg/md/sm` déjà noté
+  comme différé à l'étape 1 — pour la même raison : un changement visuel large, à faire d'un bloc avec
+  une vraie revue écran par écran plutôt que glissé ici.
+- **`<SessionHero>`/`<RpeQuickInput>` non réécrits** — `daily-workout-tab.tsx` (946 lignes, la carte
+  "séance du jour"/suggestion/formulaire la plus itérée de l'app, voir les ~15 sections "Coach
+  Aujourd'hui..." plus haut) et `pending-feedback-banner.tsx` couvrent déjà la substance du brief
+  (chips, titre, description, profil graphique, actions primaire/secondaire, ligne RPE compacte).
+  Une réécriture structurelle (colonne KPI dédiée 280px, hauteurs de carte exactes) toucherait un
+  composant dont CHAQUE branche conditionnelle (séance du plan / suggestion / formulaire alternatif /
+  séance muscu) a déjà été spécifiquement validée par l'utilisateur à travers plusieurs
+  `AskUserQuestion` — un risque de régression réel sur un flux business-critique, sans aucun moyen de
+  vérifier visuellement le résultat dans ce sandbox. Reporté à l'étape 6 (polish cosmétique une fois
+  TOUS les écrans construits) plutôt que risqué isolément ici.
+
+Tests (`readiness-strip-types.test.ts`, 17 nouveaux ; `ring-metrics.test.ts` supprimé, -11) —
+941/941 au total, tsc/eslint/build clean. **Non vérifié à l'écran** (même limite `favicon.ico`) — la
+mise en page de `<ReadinessStrip>` (5 cellules, divider responsive mobile/desktop, sparklines 12px)
+est invérifiable visuellement dans ce sandbox ; à confirmer par l'utilisateur au premier rendu réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

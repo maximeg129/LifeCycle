@@ -10,7 +10,7 @@ import type { ReactNode } from 'react'
 interface RingGaugeProps {
   /** 0-100 — clamped internally, so an out-of-range value never breaks the arc math. */
   percent: number
-  /** Real CSS color for the progress arc — see ring-metrics.ts for why this is a color string, not a Tailwind class. */
+  /** Real CSS color for the progress arc — see tsb-zones.ts for why this is a color string, not a Tailwind class (an SVG <circle> paints via `stroke`, not the `background-color` a `bg-*` utility sets). */
   color: string
   trackColor?: string
   size?: number

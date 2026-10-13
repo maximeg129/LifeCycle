@@ -90,7 +90,7 @@ export default function CyclingHub() {
                 <FitnessCardSkeleton />
               </section>
             ) : athlete.data ? (
-              <PerformanceBento athlete={athlete.data} />
+              <PerformanceBento athlete={athlete.data} fitnessSeries={fitness.data} />
             ) : athlete.error ? (
               <Card className="bg-card/40 border-border">
                 <CardContent className="py-8 text-center text-sm text-destructive">
