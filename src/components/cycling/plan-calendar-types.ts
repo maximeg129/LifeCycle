@@ -104,21 +104,40 @@ export function averageIntensityPct(steps: WorkoutProfileStep[]): number | null 
 
 /**
  * Une couleur réelle par zone Coggan (jamais une classe Tailwind — voir le
- * même piège documenté dans tsb-zones.ts pour une forme SVG
- * peinte via `fill`, ici utilisée aussi bien en CSS `background-color`
- * qu'en `fill` selon le contexte de rendu). Dégradé bleu→vert→jaune→
- * orange→rouge→violet, du plus facile au plus dur — même logique de
- * gradient que les autres échelles de sévérité déjà en place dans l'app
- * (tsb-zones.ts), pas une palette inventée pour l'occasion.
+ * même piège documenté dans tsb-zones.ts pour une forme SVG peinte via
+ * `fill`, ici utilisée aussi bien en CSS `background-color` qu'en `fill`
+ * selon le contexte de rendu). Dégradé bleu→vert→jaune→orange→rouge→
+ * violet, du plus facile au plus dur — même logique de gradient que les
+ * autres échelles de sévérité déjà en place dans l'app (tsb-zones.ts), pas
+ * une palette inventée pour l'occasion.
+ *
+ * ⚠️ Restructuration lifecycle-ui-reference.html, checklist §8 ("Zone
+ * colours are identical in profiles, legends and the phase bar") : ces 7
+ * hex sont désormais VOLONTAIREMENT IDENTIQUES aux tokens `--z1`..`--z7`
+ * posés dans `globals.css` à l'étape 1 de cette restructuration (déjà
+ * consommés tels quels, via `hsl(var(--z1))`..`hsl(var(--z7))`, par
+ * `PlanPhaseBar` — voir "Plan : barre de phases" plus haut dans CLAUDE.md) —
+ * avant ce correctif, les deux vivaient comme deux palettes hex proches
+ * mais NUMÉRIQUEMENT différentes (#3b82f6 ici vs #3E8EDE côté token),
+ * exactement le genre de "deux sources qui peuvent diverger" que la revue
+ * externe dénonce comme principe général. Restent des hex LITTÉRAUX plutôt
+ * que `hsl(var(--zN))` ici (pas un oubli) : `plan-week-calendar.tsx`/
+ * `plan-next-sessions-list.tsx` composent `` `${zone.color}26` `` (syntaxe
+ * CSS `#rrggbbaa`, une version translucide de la couleur) — une technique
+ * qui exige un hex à 6 chiffres, `hsl(var(--z4))26` ne serait pas une
+ * couleur CSS valide. Les tokens `--z1`..`--z7` ne sont d'ailleurs jamais
+ * redéfinis dans `.dark` (vérifié dans `globals.css`) — une couleur de zone
+ * reste la même quel que soit le thème, donc ce hex figé ne peut jamais
+ * diverger du thème sombre.
  */
 const ZONE_COLORS: Record<number, string> = {
-  1: '#94a3b8', // Récupération
-  2: '#3b82f6', // Endurance
-  3: '#22c55e', // Tempo
-  4: '#eab308', // Seuil
-  5: '#f97316', // VO2max
-  6: '#ef4444', // Anaérobie
-  7: '#a855f7', // Neuromusculaire
+  1: '#A3A79C', // Récupération
+  2: '#3E8EDE', // Endurance
+  3: '#2EAD5B', // Tempo
+  4: '#E2B007', // Seuil
+  5: '#F07A1A', // VO2max
+  6: '#E5484D', // Anaérobie
+  7: '#8E4EC6', // Neuromusculaire
 }
 
 export interface ZoneInfo {
