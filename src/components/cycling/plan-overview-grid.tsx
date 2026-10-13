@@ -6,60 +6,62 @@
 // d'info et on peut se perdre... un peu à l'exemple de intervals". La vue
 // semaine (plan-week-calendar.tsx) montre une semaine à la fois en détail ;
 // cette grille donne l'orientation inverse — TOUT le plan d'un coup d'œil,
-// une ligne compacte par semaine avec 7 petites pastilles de couleur, pour
-// naviguer directement à la semaine voulue sans dérouler 12 cartes à la
-// suite. Une semaine pas encore générée (sampleSessions lazy, voir
-// training-plan-types.ts) affiche le badge de sa phase plutôt que 7
-// pastilles vides — voir ⚠️ ci-dessous.
+// une ligne compacte par semaine, pour naviguer directement à la semaine
+// voulue sans dérouler 12 cartes à la suite.
 //
-// ⚠️ Retour utilisateur après premier usage réel : "étant donné que l'IA
-// génère seulement une semaine de plan d'entraînement, les petites
-// pastilles pour le reste du plan d'entraînement sont vides... il y a très
-// peu d'intérêt." Décision consciente de NE PAS générer tout le plan
-// d'avance (ça irait à l'encontre du principe "jamais tous les appels IA
-// du plan d'un coup", voir training-plan-tab.tsx) — l'utilisateur préfère
-// lui-même garder la génération paresseuse et se rabattre sur "une couleur
-// particulière pour le thème un petit peu comme [avant la vue calendrier]"
-// pour toute semaine pas encore composée : WeekRow affiche alors le badge
-// de phase (PHASE_LABELS/PHASE_BADGE_CLASS, training-plan-types.ts — mêmes
-// tables que l'ancien accordéon) à la place des 7 pastilles.
+// ⚠️ Restructuration lifecycle-ui-reference.html (`.wk`, voir CLAUDE.md
+// "Refonte UI/IA... Work Package D") : remplace l'ancienne prévisualisation
+// "7 pastilles de couleur par jour" par une seule barre réalisé/prévu par
+// semaine (weekAdherencePercent, training-plan-types.ts — même donnée que
+// PlanAdherenceChart, pas une deuxième lecture) + une colonne Heures à
+// droite, dans une grille à 4 colonnes avec en-tête (Sem./Contenu/Réalisé-
+// prévu/Heures). Une semaine pas encore générée (sampleSessions lazy)
+// affiche toujours le badge de sa phase plutôt qu'une barre vide sans
+// contexte — PHASE_LABELS/PHASE_BADGE_CLASS, inchangé depuis la version
+// précédente de ce composant.
 //
-// La semaine sélectionnée s'ouvre maintenant directement sous sa propre
+// La semaine sélectionnée s'ouvre toujours directement sous sa propre
 // ligne (renderExpanded) plutôt que dans un bloc séparé sous toute la
 // grille — retour utilisateur : "j'irai mettre chaque séance
 // d'entraînement de la semaine en cours directement sous la semaine en
 // cours."
 
 import { useMemo, type ReactNode } from 'react'
-import { addDays, format } from 'date-fns'
 import { cn } from '@/lib/utils'
-import { sessionZone } from './plan-calendar-types'
-import { PHASE_LABELS, PHASE_BADGE_CLASS } from './training-plan-types'
-import type { PlanPhase, PlanWeek, PlanWeekSessionWithValidation, SessionCompletion } from './training-plan-types'
-import type { IntervalsActivity } from '@/lib/intervals-api'
-
-const PHASE_DOT_CLASS: Record<PlanPhase, string> = {
-  base: 'bg-blue-500',
-  build: 'bg-orange-500',
-  peak: 'bg-red-500',
-  taper: 'bg-purple-500',
-  recovery: 'bg-green-500',
-}
+import {
+  PHASE_LABELS, PHASE_BADGE_CLASS, computeWeeklyAdherence, weekAdherencePercent,
+  type PlanWeek, type PlanWeekSessionWithValidation, type SessionCompletion, type WeeklyAdherence,
+} from './training-plan-types'
 
 interface Props {
   weeks: PlanWeek[]
   selectedWeekNumber: number | null
   onSelectWeek: (weekNumber: number) => void
   getCompletion: (week: PlanWeek, session: PlanWeekSessionWithValidation, index: number) => SessionCompletion
-  activities: IntervalsActivity[]
-  athleteFtp: number | null | undefined
+  /** yyyy-MM-dd — pour l'adhérence réalisé/prévu de chaque ligne (voir WeekRow) et le fond "semaine en cours". */
+  todayIso: string
   /** Contenu affiché directement sous la ligne de la semaine sélectionnée — voir ⚠️ ci-dessus. */
   renderExpanded: (week: PlanWeek) => ReactNode
 }
 
-export function PlanOverviewGrid({ weeks, selectedWeekNumber, onSelectWeek, getCompletion, activities, athleteFtp, renderExpanded }: Props) {
+export function PlanOverviewGrid({ weeks, selectedWeekNumber, onSelectWeek, getCompletion, todayIso, renderExpanded }: Props) {
+  // Calculé une seule fois pour tout le plan (pas par ligne) — même donnée
+  // que PlanAdherenceChart, jamais une deuxième lecture de getCompletion.
+  const adherenceByWeek = useMemo(() => {
+    const map = new Map<number, WeeklyAdherence>()
+    for (const a of computeWeeklyAdherence(weeks, getCompletion, todayIso, weeks.length)) map.set(a.weekNumber, a)
+    return map
+  }, [weeks, getCompletion, todayIso])
+
   return (
     <div className="space-y-1">
+      {/* En-tête de colonnes — même grille que les lignes ci-dessous, masqué sur mobile avec la colonne barre elle-même. */}
+      <div className="hidden sm:grid grid-cols-[56px_1fr_120px_56px] gap-3 px-2.5 pb-1 text-xs text-subtle">
+        <span>Sem.</span>
+        <span>Contenu</span>
+        <span>Réalisé / prévu</span>
+        <span className="text-right">Heures</span>
+      </div>
       {weeks.map((week) => {
         const isSelected = week.weekNumber === selectedWeekNumber
         return (
@@ -67,10 +69,9 @@ export function PlanOverviewGrid({ weeks, selectedWeekNumber, onSelectWeek, getC
             <WeekRow
               week={week}
               isSelected={isSelected}
+              isCurrent={week.startDate <= todayIso && todayIso <= week.endDate}
               onSelect={() => onSelectWeek(week.weekNumber)}
-              getCompletion={getCompletion}
-              activities={activities}
-              athleteFtp={athleteFtp}
+              adherencePercent={weekAdherencePercent(adherenceByWeek.get(week.weekNumber))}
             />
             {isSelected && <div className="pt-2 pb-1">{renderExpanded(week)}</div>}
           </div>
@@ -80,71 +81,46 @@ export function PlanOverviewGrid({ weeks, selectedWeekNumber, onSelectWeek, getC
   )
 }
 
-function WeekRow({ week, isSelected, onSelect, getCompletion, activities, athleteFtp }: {
+/** good si la semaine a atteint ~80% de son volume prévu, warn sinon — honnête sur les vraies valeurs, jamais un 3e palier inventé. */
+function barColor(percent: number, isCurrentWeek: boolean): string {
+  if (isCurrentWeek) return 'hsl(var(--primary))'
+  return percent >= 80 ? 'hsl(var(--good))' : 'hsl(var(--warn))'
+}
+
+function WeekRow({ week, isSelected, isCurrent, onSelect, adherencePercent }: {
   week: PlanWeek
   isSelected: boolean
+  isCurrent: boolean
   onSelect: () => void
-  getCompletion: Props['getCompletion']
-  activities: IntervalsActivity[]
-  athleteFtp: number | null | undefined
+  adherencePercent: number | null
 }) {
-  const days = useMemo(() => {
-    const weekStart = new Date(`${week.startDate}T00:00:00`)
-    return Array.from({ length: 7 }, (_, i) => format(addDays(weekStart, i), 'yyyy-MM-dd'))
-  }, [week.startDate])
-
-  const colorByDay = useMemo(() => {
-    const map = new Map<string, string | 'strength' | null>()
-    for (const day of days) map.set(day, null)
-    for (let i = 0; i < (week.sampleSessions ?? []).length; i++) {
-      const session = week.sampleSessions![i]
-      if (!session.date || !map.has(session.date)) continue
-      if (session.sessionKind === 'strength') {
-        map.set(session.date, 'strength')
-        continue
-      }
-      const completion = getCompletion(week, session, i)
-      const zone = sessionZone(session, completion, activities, athleteFtp)
-      map.set(session.date, zone?.color ?? null)
-    }
-    return map
-  }, [days, week, getCompletion, activities, athleteFtp])
-
   return (
     <button
       type="button"
       onClick={onSelect}
       className={cn(
-        'w-full flex items-center gap-3 p-2.5 rounded-xl border text-left transition-colors',
-        isSelected ? 'border-primary/40 bg-primary/5' : 'border-transparent hover:bg-muted/40'
+        'w-full grid grid-cols-[56px_1fr_56px] sm:grid-cols-[56px_1fr_120px_56px] gap-3 items-center p-2.5 rounded-xl border text-left transition-colors',
+        isSelected ? 'border-primary/40 bg-primary/5' : isCurrent ? 'border-transparent bg-primary/[0.04]' : 'border-transparent hover:bg-muted/40'
       )}
     >
-      <div className="flex items-center gap-1.5 shrink-0 w-14">
-        <span className={cn('w-1.5 h-1.5 rounded-full', PHASE_DOT_CLASS[week.phase])} />
-        <span className="text-xs font-medium">S{week.weekNumber}</span>
+      <span className={cn('font-data text-xs', isCurrent ? 'font-semibold text-foreground' : 'text-subtle')}>S{week.weekNumber}</span>
+      <div className="min-w-0">
+        <p className={cn('text-sm truncate', isCurrent && 'font-semibold')}>{week.focus}</p>
+        {!week.sampleSessions && (
+          // Semaine pas encore générée (sampleSessions lazy) — badge de phase
+          // plutôt qu'une barre vide sans contexte, voir ⚠️ en tête de fichier.
+          <span className={cn('inline-block mt-0.5 text-xs font-medium px-1.5 py-0.5 rounded-md', PHASE_BADGE_CLASS[week.phase])}>
+            {PHASE_LABELS[week.phase]}
+          </span>
+        )}
       </div>
-      {week.sampleSessions ? (
-        <div className="flex gap-1 shrink-0">
-          {days.map((day) => {
-            const color = colorByDay.get(day)
-            return (
-              <span
-                key={day}
-                className={cn('w-2.5 h-2.5 rounded-[3px]', color == null && 'bg-muted')}
-                style={color && color !== 'strength' ? { backgroundColor: color } : color === 'strength' ? { backgroundColor: 'hsl(var(--primary))' } : undefined}
-              />
-            )
-          })}
-        </div>
-      ) : (
-        // Semaine pas encore générée (sampleSessions lazy) — badge de phase
-        // plutôt que 7 pastilles vides, voir ⚠️ en tête de fichier.
-        <span className={cn('shrink-0 text-xs font-medium px-1.5 py-0.5 rounded-md', PHASE_BADGE_CLASS[week.phase])}>
-          {PHASE_LABELS[week.phase]}
-        </span>
-      )}
-      <p className="text-xs text-muted-foreground truncate flex-1 min-w-0">{week.focus}</p>
-      <p className="text-xs text-muted-foreground shrink-0 whitespace-nowrap">{Math.round(week.targetWeeklyMinutes / 60 * 10) / 10}h</p>
+      {/* Barre réalisé/prévu — masquée sur mobile (<640px), même que la référence (`.wk .bar{display:none}` en media query étroite) : pas assez de place pour une 4e colonne lisible. */}
+      <div className="hidden sm:block h-1.5 rounded-full bg-muted overflow-hidden">
+        {adherencePercent != null && (
+          <div className="h-full rounded-full" style={{ width: `${Math.max(4, adherencePercent)}%`, backgroundColor: barColor(adherencePercent, isCurrent) }} />
+        )}
+      </div>
+      <span className="font-data text-xs text-subtle text-right whitespace-nowrap">{Math.round(week.targetWeeklyMinutes / 60 * 10) / 10}h</span>
     </button>
   )
 }
