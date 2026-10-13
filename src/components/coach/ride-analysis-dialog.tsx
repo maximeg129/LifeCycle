@@ -6,13 +6,16 @@
 // rides-journal-tab.tsx), so the trigger stops propagation/default exactly
 // like QuickFeedbackButton's Popover trigger does for the same reason.
 
+import { useMemo } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { KpiGrid, type KpiGridItem } from '@/components/ui/kpi-grid'
-import { Sparkles, Loader2, TrendingUp, Zap, Target, BatteryMedium, HeartPulse, ListChecks, CheckCircle2, ArrowDown, ArrowUp } from 'lucide-react'
+import { Sparkles, Loader2, TrendingUp, Zap, Target, BatteryMedium, HeartPulse, ListChecks, CheckCircle2, ArrowDown, ArrowUp, LineChart } from 'lucide-react'
 import { useRideAnalysis } from './use-ride-analysis'
 import { summarizeDurabilityForDisplay } from './ride-analysis-types'
 import type { IntervalAdherenceVerdict } from './interval-adherence-types'
+import { buildIntervalTargetWindows } from './ride-chart-types'
+import { RidePowerHrChart } from './ride-power-hr-chart'
 import { formatDuration, formatDistance } from './activity-format'
 import type { IntervalsActivity } from '@/lib/intervals-api'
 import { cn } from '@/lib/utils'
@@ -49,8 +52,15 @@ interface Props {
 const KPI_NUMBER_FORMAT = (v: number | null | undefined, digits = 0) => (v != null && !isNaN(v) ? v.toFixed(digits) : '—')
 
 export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange, ride }: Props) {
-  const { analysis, durability, decoupling, plannedWorkout, intervalAdherence, isLoadingStored, isGenerating, canAnalyze, generate } = useRideAnalysis(open ? activityId : null)
+  const { analysis, durability, decoupling, plannedWorkout, intervalAdherence, chartSeries, isLoadingStored, isGenerating, canAnalyze, generate } = useRideAnalysis(open ? activityId : null)
   const durabilitySummary = summarizeDurabilityForDisplay(durability)
+  // RidePowerHrChart — fenêtres cibles ombrées, reconstruites depuis
+  // intervalAdherence.steps (voir buildIntervalTargetWindows) ; absent si
+  // aucune comparaison prévu/réalisé n'a pu être calculée pour cette sortie.
+  const targetWindows = useMemo(
+    () => (intervalAdherence ? buildIntervalTargetWindows(intervalAdherence.steps) : undefined),
+    [intervalAdherence]
+  )
 
   const kpiItems: KpiGridItem[] | null = ride
     ? [
@@ -103,6 +113,22 @@ export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange, 
               <Target className="w-4 h-4 text-primary shrink-0 mt-0.5" />
               <p className="text-sm">{analysis.effortContext}</p>
             </div>
+
+            {/* Restructuration lifecycle-ui-reference.html, écran
+                "Activité (detail)" : ligne puissance/FC + fenêtres cibles
+                ombrées — RidePowerHrChart, voir ride-chart-types.ts.
+                `chartSeries` est `null` sur une analyse générée avant ce
+                correctif (jamais recalculé rétroactivement) ou sans flux
+                seconde par seconde exploitable (sortie Strava non lisible
+                par Intervals.icu, voir streamsError plus haut). */}
+            {chartSeries && (
+              <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
+                <h5 className="font-bold text-xs flex items-center gap-1.5">
+                  <LineChart className="w-3.5 h-3.5 text-primary" /> Puissance & FC
+                </h5>
+                <RidePowerHrChart series={chartSeries} targetWindows={targetWindows} />
+              </div>
+            )}
 
             {/* Retour utilisateur, audit des indicateurs Cyclisme : "mettre
                 tous les indicateurs que nous avons définis" — durability.ts
