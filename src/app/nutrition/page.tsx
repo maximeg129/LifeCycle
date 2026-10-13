@@ -115,7 +115,7 @@ export default function NutritionPage() {
             <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               <Card className="lc-card border-none">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-[10px] text-muted-foreground uppercase flex items-center gap-2">
+                  <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
                     <Flame className="w-3 h-3 text-orange-500" /> Calories
                   </CardTitle>
                 </CardHeader>
@@ -126,7 +126,7 @@ export default function NutritionPage() {
               </Card>
               <Card className="lc-card border-none">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-[10px] text-muted-foreground uppercase flex items-center gap-2">
+                  <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
                     <Beef className="w-3 h-3 text-red-500" /> Protéines
                   </CardTitle>
                 </CardHeader>
@@ -137,7 +137,7 @@ export default function NutritionPage() {
               </Card>
               <Card className="lc-card border-none">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-[10px] text-muted-foreground uppercase flex items-center gap-2">
+                  <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
                     <Wheat className="w-3 h-3 text-yellow-500" /> Glucides
                   </CardTitle>
                 </CardHeader>
@@ -148,7 +148,7 @@ export default function NutritionPage() {
               </Card>
               <Card className="lc-card border-none">
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-[10px] text-muted-foreground uppercase flex items-center gap-2">
+                  <CardTitle className="text-xs text-muted-foreground uppercase flex items-center gap-2">
                     <Droplets className="w-3 h-3 text-blue-500" /> Hydratation
                   </CardTitle>
                 </CardHeader>
@@ -156,8 +156,8 @@ export default function NutritionPage() {
                   <div className="text-2xl font-bold">{hydrationLiters.toFixed(1)} / {goals.hydrationTargetLiters}L</div>
                   <Progress value={progressPct(hydrationLiters, goals.hydrationTargetLiters)} className="h-1 mt-3 bg-blue-500/10" />
                   <div className="flex gap-2 mt-3">
-                    <Button size="sm" variant="outline" className="h-7 px-2 text-[10px] rounded-full" onClick={() => handleAddWater(0.25)}>+250ml</Button>
-                    <Button size="sm" variant="outline" className="h-7 px-2 text-[10px] rounded-full" onClick={() => handleAddWater(0.5)}>+500ml</Button>
+                    <Button size="sm" variant="outline" className="h-7 px-2 text-xs rounded-full" onClick={() => handleAddWater(0.25)}>+250ml</Button>
+                    <Button size="sm" variant="outline" className="h-7 px-2 text-xs rounded-full" onClick={() => handleAddWater(0.5)}>+500ml</Button>
                   </div>
                 </CardContent>
               </Card>
@@ -196,7 +196,7 @@ export default function NutritionPage() {
                         <div className="text-right flex items-center gap-6">
                           <div>
                             <div className="font-bold">{entry.calories} kcal</div>
-                            <div className="text-[10px] text-muted-foreground">
+                            <div className="text-xs text-muted-foreground">
                               {entry.date?.seconds ? new Date(entry.date.seconds * 1000).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : ''}
                             </div>
                           </div>

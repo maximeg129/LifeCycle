@@ -33,7 +33,7 @@ export function RecipeCard({ recipe, onOpen, onDelete }: { recipe: Recipe; onOpe
         </Button>
       </div>
       <h3 className="font-bold text-lg leading-snug line-clamp-2">{recipe.title}</h3>
-      <div className="flex items-center gap-4 text-[10px] text-muted-foreground font-bold uppercase tracking-wider">
+      <div className="flex items-center gap-4 text-xs text-muted-foreground font-bold uppercase tracking-wider">
         <span className="flex items-center gap-1"><Flame className="w-3 h-3 text-orange-500" /> {recipe.calories} kcal</span>
         <span className="flex items-center gap-1"><Beef className="w-3 h-3 text-red-500" /> {recipe.protein}g</span>
         <span className="flex items-center gap-1"><Wheat className="w-3 h-3 text-yellow-500" /> {recipe.carbs}g</span>

@@ -275,7 +275,7 @@ export function PlantsTab() {
         >
           <Plus className="w-5 h-5 mr-2" /> Ajouter une plante
           {overdueCount > 0 && (
-            <span className="ml-3 w-5 h-5 rounded-full bg-orange-400 text-white text-[10px] flex items-center justify-center font-bold">{overdueCount}</span>
+            <span className="ml-3 w-5 h-5 rounded-full bg-orange-400 text-white text-xs flex items-center justify-center font-bold">{overdueCount}</span>
           )}
         </Button>
       </div>
@@ -309,11 +309,11 @@ export function PlantsTab() {
                     </div>
                   )}
                   <div className="absolute top-3 left-3 right-3 flex items-start justify-between gap-2">
-                    <Badge className="rounded-full bg-black/40 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5 shrink-0">
+                    <Badge className="rounded-full bg-black/40 backdrop-blur text-white font-bold border-none px-3 py-1 text-xs flex items-center gap-1.5 shrink-0">
                       <MapPin className="w-3 h-3 shrink-0" /> <span className="truncate max-w-[80px]">{plant.location || 'Non défini'}</span>
                     </Badge>
                     <Badge className={cn(
-                      "rounded-full backdrop-blur shadow-sm font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5 shrink-0",
+                      "rounded-full backdrop-blur shadow-sm font-bold border-none px-3 py-1 text-xs flex items-center gap-1.5 shrink-0",
                       needsWater ? "bg-orange-500/90 text-white" : "bg-white/95 text-green-600"
                     )}>
                       {needsWater
@@ -324,7 +324,7 @@ export function PlantsTab() {
                   </div>
                   {isAnalysisOverdue(plant) && (
                     <div className="absolute bottom-3 left-3">
-                      <Badge className="rounded-full bg-purple-500/90 backdrop-blur text-white font-bold border-none px-3 py-1 text-[10px] flex items-center gap-1.5">
+                      <Badge className="rounded-full bg-purple-500/90 backdrop-blur text-white font-bold border-none px-3 py-1 text-xs flex items-center gap-1.5">
                         <Camera className="w-3 h-3" /> Analyse recommandée
                       </Badge>
                     </div>
@@ -339,13 +339,13 @@ export function PlantsTab() {
 
                   <div className="space-y-1.5">
                     {acquisitionDate && (
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <ShoppingBag className="w-3.5 h-3.5 text-primary/60 shrink-0" />
                         <span className="font-medium">Acquis le</span>
                         <span className="ml-auto font-bold text-foreground/70">{format(acquisitionDate, 'dd MMM yyyy', { locale: fr })}</span>
                       </div>
                     )}
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Droplets className={cn("w-3.5 h-3.5 shrink-0", needsWater ? "text-orange-400" : "text-blue-400")} />
                       <span className="font-medium">Dernier arrosage</span>
                       <span className={cn("ml-auto font-bold", needsWater ? "text-orange-400" : "text-foreground/70")}>
@@ -353,7 +353,7 @@ export function PlantsTab() {
                       </span>
                     </div>
                     {!needsWater && (
-                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Calendar className="w-3.5 h-3.5 text-primary/60 shrink-0" />
                         <span className="font-medium">Prochain arrosage</span>
                         <span className="ml-auto font-bold text-foreground/70">dans {daysUntil}j</span>
@@ -362,7 +362,7 @@ export function PlantsTab() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest opacity-40">
+                    <div className="flex justify-between text-xs font-bold uppercase tracking-widest opacity-40">
                       <span>Santé</span>
                       <span className={getHealthColor(score)}>{score}%</span>
                     </div>
@@ -458,7 +458,7 @@ export function PlantsTab() {
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <span className={cn("text-2xl font-bold", getHealthColor(scanResult.healthScore))}>{scanResult.healthScore}%</span>
-                        <span className="text-[10px] uppercase font-bold opacity-40">Santé</span>
+                        <span className="text-xs uppercase font-bold opacity-40">Santé</span>
                       </div>
                     </div>
 
@@ -480,19 +480,19 @@ export function PlantsTab() {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="bg-blue-500/10 rounded-2xl p-3 space-y-1">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Arrosage</p>
+                        <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest">Arrosage</p>
                         <p className="text-sm font-bold text-blue-400">{scanResult.hydrationPlan.frequency}</p>
                         <p className="text-xs text-muted-foreground">{scanResult.hydrationPlan.amount}</p>
                       </div>
                       <div className="bg-secondary/40 rounded-2xl p-3 space-y-1">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Conseil eau</p>
+                        <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest">Conseil eau</p>
                         <p className="text-xs text-muted-foreground leading-relaxed">{scanResult.hydrationPlan.tips}</p>
                       </div>
                     </div>
 
                     {scanResult.generalCare.length > 0 && (
                       <div className="space-y-1.5">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Entretien</p>
+                        <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest">Entretien</p>
                         {scanResult.generalCare.map((tip, i) => (
                           <div key={i} className="flex items-start gap-2 text-muted-foreground text-xs">
                             <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary/60" />
@@ -508,45 +508,45 @@ export function PlantsTab() {
               <Separator className="opacity-20" />
 
               <div className="space-y-4">
-                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Détails de la plante</p>
+                <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest">Détails de la plante</p>
 
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Surnom *</Label>
+                  <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Surnom *</Label>
                   <Input value={nickname} onChange={e => setNickname(e.target.value)} placeholder="ex: Mon Monstera, Ficus du salon…" className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Emplacement</Label>
+                    <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Emplacement</Label>
                     <Select value={location} onValueChange={setLocation}>
                       <SelectTrigger className="h-12 rounded-2xl bg-secondary/50 border-none px-5"><SelectValue /></SelectTrigger>
                       <SelectContent>{LOCATIONS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Fréquence (jours)</Label>
+                    <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Fréquence (jours)</Label>
                     <Input type="number" min={1} value={wateringDays} onChange={e => setWateringDays(Number(e.target.value))} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Quantité (ml)</Label>
+                    <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Quantité (ml)</Label>
                     <Input type="number" min={10} step={10} value={wateringAmount} onChange={e => setWateringAmount(Number(e.target.value))} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Dernier arrosage</Label>
+                    <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Dernier arrosage</Label>
                     <Input type="date" value={lastWateringDate} onChange={e => setLastWateringDate(e.target.value)} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Date d'acquisition</Label>
+                  <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Date d'acquisition</Label>
                   <Input type="date" value={purchaseDate} onChange={e => setPurchaseDate(e.target.value)} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Notes</Label>
+                  <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Notes</Label>
                   <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Observations, emplacement précis…" className="rounded-2xl bg-secondary/50 border-none px-5 py-3 min-h-[80px] resize-none" />
                 </div>
               </div>
@@ -634,7 +634,7 @@ export function PlantsTab() {
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <span className={cn("text-2xl font-bold", getHealthColor(detailScanResult.healthScore))}>{detailScanResult.healthScore}%</span>
-                        <span className="text-[10px] uppercase font-bold opacity-40">Santé</span>
+                        <span className="text-xs uppercase font-bold opacity-40">Santé</span>
                       </div>
                     </div>
                     <Progress value={detailScanResult.healthScore} className="h-1.5" />
@@ -655,7 +655,7 @@ export function PlantsTab() {
 
               {selectedPlant && (
                 <div className="space-y-1.5">
-                  <div className="flex justify-between text-[10px] font-bold uppercase tracking-widest opacity-40">
+                  <div className="flex justify-between text-xs font-bold uppercase tracking-widest opacity-40">
                     <span>Santé</span>
                     <span className={getHealthColor(selectedPlant.healthScore ?? 75)}>{selectedPlant.healthScore ?? 75}%</span>
                   </div>
@@ -668,7 +668,7 @@ export function PlantsTab() {
 
               {selectedPlant?.lastHealthAnalysis && !detailScanResult && (
                 <div className="space-y-3">
-                  <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest flex items-center gap-2">
+                  <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest flex items-center gap-2">
                     <Sparkles className="w-3.5 h-3.5" /> Dernière analyse IA
                   </p>
                   <div className="bg-green-500/8 border border-green-500/20 rounded-[20px] p-5 space-y-4">
@@ -690,12 +690,12 @@ export function PlantsTab() {
                         <Separator className="opacity-20" />
                         <div className="grid grid-cols-2 gap-3">
                           <div className="bg-blue-500/10 rounded-2xl p-3 space-y-1">
-                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Arrosage</p>
+                            <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest">Arrosage</p>
                             <p className="text-sm font-bold text-blue-400">{selectedPlant.lastHydrationPlan.frequency}</p>
                             <p className="text-xs text-muted-foreground">{selectedPlant.lastHydrationPlan.amount}</p>
                           </div>
                           <div className="bg-secondary/40 rounded-2xl p-3 space-y-1">
-                            <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Conseil eau</p>
+                            <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest">Conseil eau</p>
                             <p className="text-xs text-muted-foreground leading-relaxed">{selectedPlant.lastHydrationPlan.tips}</p>
                           </div>
                         </div>
@@ -704,7 +704,7 @@ export function PlantsTab() {
 
                     {(selectedPlant.lastGeneralCare?.length ?? 0) > 0 && (
                       <div className="space-y-1.5">
-                        <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Entretien</p>
+                        <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest">Entretien</p>
                         {selectedPlant.lastGeneralCare!.map((tip, i) => (
                           <div key={i} className="flex items-start gap-2 text-muted-foreground text-xs">
                             <Info className="w-3.5 h-3.5 mt-0.5 shrink-0 text-primary/60" />
@@ -715,7 +715,7 @@ export function PlantsTab() {
                     )}
 
                     {selectedPlant.lastAnalysisDate?.seconds && (
-                      <p className="text-[10px] text-muted-foreground/50 text-right">
+                      <p className="text-xs text-muted-foreground/50 text-right">
                         Analysé le {format(new Date(selectedPlant.lastAnalysisDate.seconds * 1000), 'dd MMMM yyyy', { locale: fr })}
                       </p>
                     )}
@@ -726,40 +726,40 @@ export function PlantsTab() {
               <Separator className="opacity-20" />
 
               <div className="space-y-4">
-                <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest">Modifier les informations</p>
+                <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest">Modifier les informations</p>
 
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Surnom *</Label>
+                  <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Surnom *</Label>
                   <Input value={editNickname} onChange={e => setEditNickname(e.target.value)} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Emplacement</Label>
+                    <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Emplacement</Label>
                     <Select value={editLocation} onValueChange={setEditLocation}>
                       <SelectTrigger className="h-12 rounded-2xl bg-secondary/50 border-none px-5"><SelectValue /></SelectTrigger>
                       <SelectContent>{LOCATIONS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}</SelectContent>
                     </Select>
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Fréquence (jours)</Label>
+                    <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Fréquence (jours)</Label>
                     <Input type="number" min={1} value={editWateringDays} onChange={e => setEditWateringDays(Number(e.target.value))} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                   </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Quantité (ml)</Label>
+                    <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Quantité (ml)</Label>
                     <Input type="number" min={10} step={10} value={editWateringAmount} onChange={e => setEditWateringAmount(Number(e.target.value))} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                   </div>
                   <div className="space-y-1.5">
-                    <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Date d'acquisition</Label>
+                    <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Date d'acquisition</Label>
                     <Input type="date" value={editPurchaseDate} onChange={e => setEditPurchaseDate(e.target.value)} className="h-12 rounded-2xl bg-secondary/50 border-none px-5" />
                   </div>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1 tracking-widest">Notes</Label>
+                  <Label className="text-xs uppercase font-bold text-muted-foreground ml-1 tracking-widest">Notes</Label>
                   <Textarea value={editNotes} onChange={e => setEditNotes(e.target.value)} placeholder="Observations…" className="rounded-2xl bg-secondary/50 border-none px-5 py-3 min-h-[80px] resize-none" />
                 </div>
               </div>
@@ -768,7 +768,7 @@ export function PlantsTab() {
                 <>
                   <Separator className="opacity-20" />
                   <div className="space-y-4">
-                    <p className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest flex items-center gap-2">
+                    <p className="text-xs uppercase font-bold text-muted-foreground tracking-widest flex items-center gap-2">
                       <History className="w-3.5 h-3.5" /> Historique des analyses
                     </p>
 
@@ -803,7 +803,7 @@ export function PlantsTab() {
                           {analysis.alerts?.length > 0 && (
                             <div className="flex flex-wrap gap-1.5">
                               {analysis.alerts.map((alert, j) => (
-                                <Badge key={j} variant="outline" className="text-[10px] text-orange-400 border-orange-400/30">{alert}</Badge>
+                                <Badge key={j} variant="outline" className="text-xs text-orange-400 border-orange-400/30">{alert}</Badge>
                               ))}
                             </div>
                           )}

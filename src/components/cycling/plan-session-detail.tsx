@@ -80,14 +80,14 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
         <div>
           <div className="flex items-center gap-1.5 flex-wrap">
             {session.date && (
-              <Badge variant="secondary" className="text-[10px] capitalize">
+              <Badge variant="secondary" className="text-xs capitalize">
                 {format(new Date(`${session.date}T00:00:00`), 'EEEE d MMM', { locale: fr })}
               </Badge>
             )}
             <p className="text-sm font-medium">{session.title}</p>
             {completion.status === 'done' && (
               <>
-                <Badge className="text-[10px] gap-1 bg-primary/15 text-primary border-primary/30 hover:bg-primary/15">
+                <Badge className="text-xs gap-1 bg-primary/15 text-primary border-primary/30 hover:bg-primary/15">
                   <CheckCircle2 className="w-3 h-3" /> Réalisée{completion.actualDurationMinutes != null ? ` · ${Math.round(completion.actualDurationMinutes)}min` : ''}
                 </Badge>
                 {completion.activityId && (
@@ -96,7 +96,7 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
                       size="sm"
                       variant="outline"
                       onClick={() => setAnalysisOpen(true)}
-                      className="h-6 px-2 text-[10px] gap-1"
+                      className="h-6 px-2 text-xs gap-1"
                       title="Analyse IA de l'activité liée"
                     >
                       <Sparkles className="w-3 h-3" /> Analyser
@@ -105,7 +105,7 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
                       href={`https://intervals.icu/activities/${completion.activityId}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-border text-[10px] text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+                      className="inline-flex items-center gap-1 h-6 px-2 rounded-md border border-border text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
                     >
                       <ExternalLink className="w-3 h-3" /> Voir sur Intervals.icu
                     </a>
@@ -115,7 +115,7 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
             )}
             {completion.status === 'missed' && (
               <>
-                <Badge variant="outline" className="text-[10px] gap-1 border-destructive/40 text-destructive bg-destructive/5">
+                <Badge variant="outline" className="text-xs gap-1 border-destructive/40 text-destructive bg-destructive/5">
                   <XCircle className="w-3 h-3" /> Manquée
                 </Badge>
                 <Button
@@ -123,7 +123,7 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
                   variant="outline"
                   onClick={() => rescheduleDate && onMoveDate(index, rescheduleDate)}
                   disabled={!rescheduleDate}
-                  className="h-6 px-2 text-[10px] gap-1"
+                  className="h-6 px-2 text-xs gap-1"
                   title={rescheduleDate ? `Déplacer au ${format(new Date(`${rescheduleDate}T00:00:00`), 'EEEE d MMM', { locale: fr })}` : 'Aucun jour libre restant cette semaine — choisissez une date ci-dessous'}
                 >
                   <CalendarClock className="w-3 h-3" /> Reprogrammer
@@ -134,7 +134,7 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
           <p className="text-xs text-muted-foreground mt-0.5">{session.rationale}</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <Badge variant="outline" className="text-[10px]">{session.intensityLabel}</Badge>
+          <Badge variant="outline" className="text-xs">{session.intensityLabel}</Badge>
           <span className="text-xs text-muted-foreground whitespace-nowrap">{session.durationMinutes} min</span>
         </div>
       </div>
@@ -152,14 +152,14 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
           sur les pages détail métrique. */}
       {(!session.sessionKind || session.sessionKind === 'cycling') && session.structuredWorkout && (
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-muted-foreground">Lieu :</span>
+          <span className="text-xs text-muted-foreground">Lieu :</span>
           <div className="flex gap-0.5 rounded-full bg-muted p-0.5">
             <button
               type="button"
               onClick={() => onAdjustLocation('outdoor')}
               disabled={isAdjustingLocation}
               className={cn(
-                'flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors disabled:opacity-60',
+                'flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition-colors disabled:opacity-60',
                 session.sportType !== 'VirtualRide' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -170,7 +170,7 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
               onClick={() => onAdjustLocation('indoor')}
               disabled={isAdjustingLocation}
               className={cn(
-                'flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold transition-colors disabled:opacity-60',
+                'flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold transition-colors disabled:opacity-60',
                 session.sportType === 'VirtualRide' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
               )}
             >
@@ -222,7 +222,7 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
         <AddStrengthExerciseDialog onAdd={onAddExercise} triggerLabel="Ajouter un exercice" />
       )}
       {session.sessionKind === 'strength' && session.strengthValidation?.isMaintenanceOnly && (
-        <Badge variant="outline" className="text-[10px] border-amber-500/40 text-amber-600 bg-amber-500/5 w-fit">
+        <Badge variant="outline" className="text-xs border-amber-500/40 text-amber-600 bg-amber-500/5 w-fit">
           {session.sessionType === 'entretien' ? 'Entretien' : 'Top-up'} — pas la séance principale de la semaine
         </Badge>
       )}

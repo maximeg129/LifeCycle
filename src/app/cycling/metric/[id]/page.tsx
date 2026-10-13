@@ -283,7 +283,7 @@ export default function MetricDetailPage() {
                     type="button"
                     onClick={() => setRange(r.id)}
                     className={cn(
-                      'px-2.5 py-1 rounded-full text-[11px] font-semibold transition-colors',
+                      'px-2.5 py-1 rounded-full text-xs font-semibold transition-colors',
                       range === r.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
                     )}
                   >
@@ -320,7 +320,7 @@ export default function MetricDetailPage() {
                 {id === 'tsb' && (
                   <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-border">
                     {TSB_ZONES_ORDERED.map((z) => (
-                      <span key={z.id} className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                      <span key={z.id} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
                         <span className={cn('w-2 h-2 rounded-full', z.dotClassName)} />
                         {z.label}
                       </span>

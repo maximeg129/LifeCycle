@@ -74,19 +74,19 @@ export function TasksTab() {
           contentClassName="sm:max-w-[480px] rounded-3xl p-8 border-none shadow-3xl"
         >
           <div className="space-y-2">
-            <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Tâche</Label>
+            <Label className="text-xs uppercase font-bold text-muted-foreground ml-1">Tâche</Label>
             <Input name="taskName" placeholder="ex: Nettoyer la machine à café..." className="rounded-2xl bg-secondary/50 border-none h-14 px-5" required />
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Pièce</Label>
+              <Label className="text-xs uppercase font-bold text-muted-foreground ml-1">Pièce</Label>
               <Select value={room} onValueChange={setRoom}>
                 <SelectTrigger className="rounded-2xl h-14"><SelectValue /></SelectTrigger>
                 <SelectContent>{ROOMS.map(r => <SelectItem key={r} value={r}>{r}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Priorité</Label>
+              <Label className="text-xs uppercase font-bold text-muted-foreground ml-1">Priorité</Label>
               <Select value={priority} onValueChange={(v) => setPriority(v as Task['priority'])}>
                 <SelectTrigger className="rounded-2xl h-14"><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="low">Basse</SelectItem><SelectItem value="medium">Moyenne</SelectItem><SelectItem value="high">Haute</SelectItem></SelectContent>
@@ -95,11 +95,11 @@ export function TasksTab() {
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Durée (min)</Label>
+              <Label className="text-xs uppercase font-bold text-muted-foreground ml-1">Durée (min)</Label>
               <Input name="duration" type="number" defaultValue={15} className="rounded-2xl h-14" />
             </div>
             <div className="space-y-2">
-              <Label className="text-[10px] uppercase font-bold text-muted-foreground ml-1">Récurrence (jours)</Label>
+              <Label className="text-xs uppercase font-bold text-muted-foreground ml-1">Récurrence (jours)</Label>
               <Input name="recurrenceDays" type="number" defaultValue={7} className="rounded-2xl h-14" />
             </div>
           </div>
@@ -117,11 +117,11 @@ export function TasksTab() {
           <Card key={task.id} className="lc-card border-none p-6 flex flex-col justify-between h-full">
             <div className="space-y-5">
               <div className="flex justify-between items-start">
-                <Badge variant="outline" className="bg-primary/5 text-primary font-bold rounded-full text-[10px] border-none px-3 py-1 uppercase tracking-wider">{task.room}</Badge>
+                <Badge variant="outline" className="bg-primary/5 text-primary font-bold rounded-full text-xs border-none px-3 py-1 uppercase tracking-wider">{task.room}</Badge>
                 <div className={cn('w-2.5 h-2.5 rounded-full shadow-sm', task.priority === 'high' ? 'bg-destructive' : task.priority === 'medium' ? 'bg-orange-500' : 'bg-green-500')} />
               </div>
               <h3 className="text-xl font-bold tracking-tight">{task.name}</h3>
-              <div className="flex gap-6 text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+              <div className="flex gap-6 text-xs font-bold text-muted-foreground uppercase tracking-widest">
                 <span className="flex items-center gap-2"><Clock className="w-3.5 h-3.5 opacity-60" /> {task.estimatedMinutes} min</span>
                 <span className="flex items-center gap-2"><Calendar className="w-3.5 h-3.5 opacity-60" /> {task.nextDueDate?.seconds ? format(new Date(task.nextDueDate.seconds * 1000), 'dd MMM', { locale: fr }) : 'N/A'}</span>
               </div>

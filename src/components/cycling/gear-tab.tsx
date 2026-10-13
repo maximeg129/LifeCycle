@@ -311,7 +311,7 @@ export function GearTab() {
                               </SelectContent>
                             </Select>
                             {bike.lastSyncDate && (
-                              <span className="text-[10px] text-muted-foreground" title="Date de la dernière synchronisation (automatique à l'ouverture de l'app, ou manuelle depuis Réglages) — n'indique pas si les km ont bougé ce jour-là">
+                              <span className="text-xs text-muted-foreground" title="Date de la dernière synchronisation (automatique à l'ouverture de l'app, ou manuelle depuis Réglages) — n'indique pas si les km ont bougé ce jour-là">
                                 Dernier sync : {bike.lastSyncDate}
                               </span>
                             )}
@@ -329,7 +329,7 @@ export function GearTab() {
                               return (
                                 <div key={group.label}>
                                   <div className="px-4 py-2 bg-muted/20">
-                                    <span className="text-[10px] uppercase font-bold text-muted-foreground tracking-wider">{group.label}</span>
+                                    <span className="text-xs uppercase font-bold text-muted-foreground tracking-wider">{group.label}</span>
                                   </div>
                                   {groupComps.map(comp => (
                                     <ComponentRow key={comp.id} comp={comp} onEdit={setEditingComponent} onReplace={setReplacingComponent} onDelete={handleDeleteComponent} />
@@ -387,7 +387,7 @@ export function GearTab() {
                       </div>
                     </div>
                     <Progress value={ratio} className="h-2" />
-                    <div className="flex justify-between text-[10px] text-muted-foreground uppercase tracking-tight">
+                    <div className="flex justify-between text-xs text-muted-foreground uppercase tracking-tight">
                       <span>Usage: {alert.currentKm.toLocaleString('fr-FR')} km</span>
                       <span>Seuil: {alert.thresholdKm.toLocaleString('fr-FR')} km</span>
                     </div>
@@ -441,16 +441,16 @@ export function GearTab() {
             <div className="grid grid-cols-2 gap-3 text-center">
               <div className="p-3 bg-muted rounded-lg">
                 <div className="text-lg font-bold">{totalCost.bikes.toFixed(0)}<span className="text-xs ml-0.5">EUR</span></div>
-                <div className="text-[10px] text-muted-foreground uppercase">Velos</div>
+                <div className="text-xs text-muted-foreground uppercase">Velos</div>
               </div>
               <div className="p-3 bg-muted rounded-lg">
                 <div className="text-lg font-bold">{totalCost.components.toFixed(0)}<span className="text-xs ml-0.5">EUR</span></div>
-                <div className="text-[10px] text-muted-foreground uppercase">Composants</div>
+                <div className="text-xs text-muted-foreground uppercase">Composants</div>
               </div>
             </div>
             <div className="p-3 bg-primary/10 rounded-lg text-center">
               <div className="text-2xl font-bold text-primary">{totalCost.total.toFixed(0)}<span className="text-sm ml-1">EUR</span></div>
-              <div className="text-[10px] text-muted-foreground uppercase">Total investi</div>
+              <div className="text-xs text-muted-foreground uppercase">Total investi</div>
             </div>
             {totalCost.costPerKm != null && (
               <div className="p-3 bg-muted/50 rounded-lg text-center">
@@ -460,7 +460,7 @@ export function GearTab() {
                     ? `${totalCost.costPerKm.toFixed(2)} EUR/km`
                     : `${(totalCost.costPerKm * 100).toFixed(1)} ct/km`}
                 </div>
-                <div className="text-[10px] text-muted-foreground uppercase">Cout moyen par km</div>
+                <div className="text-xs text-muted-foreground uppercase">Cout moyen par km</div>
               </div>
             )}
           </CardContent>
@@ -481,14 +481,14 @@ export function GearTab() {
                 <div key={cost.id} className="flex justify-between items-center py-2 border-b border-border last:border-0">
                   <div>
                     <div className="text-sm font-medium">{COMPONENT_CATEGORY_LABELS[cost.category]}</div>
-                    <div className="text-[10px] text-muted-foreground">
+                    <div className="text-xs text-muted-foreground">
                       {cost.brand} {cost.model}
                       {cost.purchaseDate && ` · ${format(parseISO(cost.purchaseDate), 'dd MMM yyyy', { locale: fr })}`}
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="font-bold text-accent">{cost.purchasePrice?.toFixed(2)} EUR</div>
-                    {cost.retailer && <div className="text-[10px] text-muted-foreground">{cost.retailer}</div>}
+                    {cost.retailer && <div className="text-xs text-muted-foreground">{cost.retailer}</div>}
                   </div>
                 </div>
               ))

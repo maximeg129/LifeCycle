@@ -127,7 +127,7 @@ export function PowerCurveCard() {
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="space-y-2">
             <Label className="text-xs flex items-center gap-1.5">
-              Court (3-7 min) {isAuto.short && <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Auto</Badge>}
+              Court (3-7 min) {isAuto.short && <Badge variant="secondary" className="text-xs px-1.5 py-0">Auto</Badge>}
             </Label>
             <div className="flex gap-2">
               <Input name="shortMinutes" type="number" step={0.1} min={0} placeholder="min" defaultValue={data?.shortRecord ? data.shortRecord.seconds / 60 : undefined} />
@@ -136,7 +136,7 @@ export function PowerCurveCard() {
           </div>
           <div className="space-y-2">
             <Label className="text-xs flex items-center gap-1.5">
-              Moyen (~20 min) {isAuto.medium && <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Auto</Badge>}
+              Moyen (~20 min) {isAuto.medium && <Badge variant="secondary" className="text-xs px-1.5 py-0">Auto</Badge>}
             </Label>
             <div className="flex gap-2">
               <Input name="mediumMinutes" type="number" step={0.1} min={0} placeholder="min" defaultValue={data?.mediumRecord ? data.mediumRecord.seconds / 60 : undefined} />
@@ -145,7 +145,7 @@ export function PowerCurveCard() {
           </div>
           <div className="space-y-2">
             <Label className="text-xs flex items-center gap-1.5">
-              Long (&gt;60 min) {isAuto.long && <Badge variant="secondary" className="text-[9px] px-1.5 py-0">Auto</Badge>}
+              Long (&gt;60 min) {isAuto.long && <Badge variant="secondary" className="text-xs px-1.5 py-0">Auto</Badge>}
             </Label>
             <div className="flex gap-2">
               <Input name="longMinutes" type="number" step={0.1} min={0} placeholder="min" defaultValue={data?.longRecord ? data.longRecord.seconds / 60 : undefined} />

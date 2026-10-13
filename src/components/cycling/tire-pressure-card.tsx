@@ -72,7 +72,7 @@ export function TirePressureCard({ bikes, components }: Props) {
         {/* Bike selector */}
         {bikes.length > 1 && (
           <div className="space-y-1">
-            <label className="text-[10px] uppercase font-bold text-muted-foreground">Velo</label>
+            <label className="text-xs uppercase font-bold text-muted-foreground">Velo</label>
             <Select value={selectedBikeId || bikes[0]?.id || ''} onValueChange={setSelectedBikeId}>
               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -86,11 +86,11 @@ export function TirePressureCard({ bikes, components }: Props) {
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-[10px] uppercase font-bold text-muted-foreground">Poids (kg)</label>
+            <label className="text-xs uppercase font-bold text-muted-foreground">Poids (kg)</label>
             <Input type="number" value={weight} onChange={e => setWeight(Number(e.target.value))} className="h-8" />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] uppercase font-bold text-muted-foreground">
+            <label className="text-xs uppercase font-bold text-muted-foreground">
               Largeur {tireInfo.hasTires ? '(auto)' : '(mm)'}
             </label>
             <Input
@@ -103,7 +103,7 @@ export function TirePressureCard({ bikes, components }: Props) {
         </div>
 
         {tireInfo.hasTires && (tireInfo.frontLabel || tireInfo.rearLabel) && (
-          <div className="text-[10px] text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             {tireInfo.frontLabel && <div>Avant : {tireInfo.frontLabel} ({tireInfo.frontWidth}mm)</div>}
             {tireInfo.rearLabel && <div>Arriere : {tireInfo.rearLabel} ({tireInfo.rearWidth}mm)</div>}
           </div>
@@ -117,11 +117,11 @@ export function TirePressureCard({ bikes, components }: Props) {
           <div className="pt-4 border-t border-border grid grid-cols-2 gap-4 text-center">
             <div className="p-3 bg-muted rounded-lg">
               <div className="text-xl font-bold">{pressure.front}</div>
-              <div className="text-[10px] text-muted-foreground uppercase">Avant (Bar)</div>
+              <div className="text-xs text-muted-foreground uppercase">Avant (Bar)</div>
             </div>
             <div className="p-3 bg-muted rounded-lg">
               <div className="text-xl font-bold">{pressure.rear}</div>
-              <div className="text-[10px] text-muted-foreground uppercase">Arriere (Bar)</div>
+              <div className="text-xs text-muted-foreground uppercase">Arriere (Bar)</div>
             </div>
           </div>
         )}

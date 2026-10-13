@@ -307,7 +307,7 @@ export function WeatherOutfitTab() {
               <Card className="bg-card/60 border-accent/20 border-2 overflow-hidden shadow-xl">
                 <div className="bg-accent/10 px-6 py-3 border-b border-accent/20 flex items-center justify-between">
                   <span className="text-xs font-bold text-accent uppercase tracking-widest">Analyse LifeCycle Pro</span>
-                  <Badge variant="secondary" className="text-[10px]">Date: {format(date, "dd MMM", { locale: fr })}</Badge>
+                  <Badge variant="secondary" className="text-xs">Date: {format(date, "dd MMM", { locale: fr })}</Badge>
                 </div>
                 <CardContent className="pt-6 space-y-6">
                   <div className="space-y-2">

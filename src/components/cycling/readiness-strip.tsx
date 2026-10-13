@@ -65,7 +65,7 @@ interface CellProps {
 function Cell({ href, label, confidence, confidenceTitle, value, sparklineValues, sparklineColor }: CellProps) {
   return (
     <Link href={href} className="flex-1 flex flex-col gap-1.5 px-3 py-2 group min-w-0">
-      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+      <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
         <ConfidenceDot confidence={confidence} title={confidenceTitle} />
         {label}
       </span>
@@ -121,7 +121,7 @@ export function ReadinessStrip({
           <ConfidenceDot confidence={verdict.confidence} title={CONFIDENCE_TITLE[verdict.confidence]} />
           <div className="min-w-0">
             <p className="text-[13px] font-bold truncate">{verdict.title}</p>
-            <p className="text-[11px] text-muted-foreground line-clamp-2">{verdict.sentence}</p>
+            <p className="text-xs text-muted-foreground line-clamp-2">{verdict.sentence}</p>
           </div>
         </Link>
 

@@ -46,15 +46,15 @@ export function ReplacementHistory({ components, bikes }: Props) {
       <div className="grid grid-cols-3 gap-3">
         <div className="p-3 bg-card/40 border border-border rounded-lg text-center">
           <div className="text-lg font-bold">{totalRetired}</div>
-          <div className="text-[10px] text-muted-foreground uppercase">Composants remplaces</div>
+          <div className="text-xs text-muted-foreground uppercase">Composants remplaces</div>
         </div>
         <div className="p-3 bg-card/40 border border-border rounded-lg text-center">
           <div className="text-lg font-bold">{totalSpent.toFixed(0)} <span className="text-xs">EUR</span></div>
-          <div className="text-[10px] text-muted-foreground uppercase">Total depense</div>
+          <div className="text-xs text-muted-foreground uppercase">Total depense</div>
         </div>
         <div className="p-3 bg-card/40 border border-border rounded-lg text-center">
           <div className="text-lg font-bold">{totalKmServed.toLocaleString('fr-FR')}</div>
-          <div className="text-[10px] text-muted-foreground uppercase">Km cumules</div>
+          <div className="text-xs text-muted-foreground uppercase">Km cumules</div>
         </div>
       </div>
 
@@ -81,11 +81,11 @@ export function ReplacementHistory({ components, bikes }: Props) {
                           <span className="text-xs text-muted-foreground">{comp.brand} {comp.model}</span>
                         )}
                       </div>
-                      <Badge variant="outline" className="text-[10px]">
+                      <Badge variant="outline" className="text-xs">
                         {comp.retiredReason ? RETIRE_REASON_LABELS[comp.retiredReason] || comp.retiredReason : 'Retire'}
                       </Badge>
                     </div>
-                    <div className="text-[10px] text-muted-foreground flex items-center gap-3 flex-wrap">
+                    <div className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
                       {bike && <span>{bike.name}</span>}
                       <span>{kmServed.toLocaleString('fr-FR')} km parcourus</span>
                       {comp.retiredDate && (
@@ -102,7 +102,7 @@ export function ReplacementHistory({ components, bikes }: Props) {
                       )}
                     </div>
                     {comp.installedDate && comp.retiredDate && (
-                      <div className="text-[10px] text-muted-foreground">
+                      <div className="text-xs text-muted-foreground">
                         Duree de vie : {format(parseISO(comp.installedDate), 'dd/MM/yy')} → {format(parseISO(comp.retiredDate), 'dd/MM/yy')}
                       </div>
                     )}

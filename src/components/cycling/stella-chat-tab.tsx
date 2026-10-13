@@ -83,7 +83,7 @@ export function StellaChatTab() {
               </div>
               <div>
                 <p className="text-sm font-bold">Stella</p>
-                <p className="text-[10px] text-muted-foreground">Votre coach IA</p>
+                <p className="text-xs text-muted-foreground">Votre coach IA</p>
               </div>
             </div>
             {messages.length > 0 && (

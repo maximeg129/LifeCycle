@@ -383,12 +383,12 @@ export function PlanTab() {
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
                     {format(new Date(`${w.startDate}T00:00:00`), 'dd MMM', { locale: fr })}
                   </span>
-                  <Badge variant="outline" className={cn('text-[10px]', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge>
+                  <Badge variant="outline" className={cn('text-xs', PHASE_BADGE_CLASS[w.phase])}>{PHASE_LABELS[w.phase]}</Badge>
                   {week?.weekNumber === w.weekNumber && (
-                    <Badge variant="secondary" className="text-[10px]">Semaine actuelle</Badge>
+                    <Badge variant="secondary" className="text-xs">Semaine actuelle</Badge>
                   )}
                   {adjustedWeekNumbers.has(w.weekNumber) && (
-                    <Badge variant="outline" className="text-[9px] gap-0.5 text-primary border-primary/30" title="Recalibrée depuis le plan d'origine — voir le journal ci-dessous">
+                    <Badge variant="outline" className="text-xs gap-0.5 text-primary border-primary/30" title="Recalibrée depuis le plan d'origine — voir le journal ci-dessous">
                       <RefreshCw className="w-2.5 h-2.5" /> ajustée
                     </Badge>
                   )}
@@ -399,7 +399,7 @@ export function PlanTab() {
               <div className="text-right shrink-0">
                 <p className="text-sm font-medium whitespace-nowrap">{Math.round(w.targetWeeklyMinutes / 60 * 10) / 10}h</p>
                 {w.targetStrengthMinutes != null && (
-                  <p className="text-[10px] text-muted-foreground whitespace-nowrap">+ {Math.round(w.targetStrengthMinutes / 60 * 10) / 10}h muscu</p>
+                  <p className="text-xs text-muted-foreground whitespace-nowrap">+ {Math.round(w.targetStrengthMinutes / 60 * 10) / 10}h muscu</p>
                 )}
               </div>
             </div>
@@ -455,7 +455,7 @@ export function PlanTab() {
                     {format(new Date(`${entry.date}T00:00:00`), 'dd MMM yyyy', { locale: fr })} — après la semaine {entry.throughWeekNumber}
                   </p>
                   {entry.verdict !== 'ok' && (
-                    <Badge variant="outline" className={cn('text-[10px] gap-1', entry.verdict === 'block' ? 'text-destructive border-destructive/30' : 'text-yellow-600 border-yellow-500/30')}>
+                    <Badge variant="outline" className={cn('text-xs gap-1', entry.verdict === 'block' ? 'text-destructive border-destructive/30' : 'text-yellow-600 border-yellow-500/30')}>
                       <ShieldAlert className="w-2.5 h-2.5" /> {entry.verdict === 'block' ? 'Bloquant' : 'Réserve'}
                     </Badge>
                   )}

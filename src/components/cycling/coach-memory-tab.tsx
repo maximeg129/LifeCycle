@@ -113,7 +113,7 @@ function InjuriesPanel() {
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{i.bodyRegion}</span>
-                  <Badge variant={i.status === 'active' ? 'destructive' : 'secondary'} className="text-[10px]">
+                  <Badge variant={i.status === 'active' ? 'destructive' : 'secondary'} className="text-xs">
                     {INJURY_STATUS_LABELS[i.status]} · sévérité {i.severity}/5
                   </Badge>
                 </div>
@@ -235,7 +235,7 @@ function GoalsPanel() {
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-medium">{g.eventName}</span>
-                  <Badge variant="secondary" className="text-[10px]">{GOAL_PRIORITY_LABELS[g.priority] ?? g.priority}</Badge>
+                  <Badge variant="secondary" className="text-xs">{GOAL_PRIORITY_LABELS[g.priority] ?? g.priority}</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground">{g.eventDate}</p>
                 {g.targetOutcome && <p className="text-sm mt-1">{g.targetOutcome}</p>}

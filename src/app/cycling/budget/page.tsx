@@ -82,7 +82,7 @@ export default function BudgetDetailPage() {
               )}
             </div>
             {budget.exceedsThresholdKJPerKg != null && (
-              <p className="mt-2 text-[11px] text-muted-foreground">
+              <p className="mt-2 text-xs text-muted-foreground">
                 Palier de durabilité de référence dépassé cette semaine : {budget.exceedsThresholdKJPerKg} kJ/kg — un plafond de
                 référence (R08/R10/R11), jamais une cible à atteindre.
               </p>

@@ -153,7 +153,7 @@ export function CommandPalette() {
             <p className="text-sm text-muted-foreground text-center py-8">Aucun résultat</p>
           ) : grouped.map(([group, items]) => (
             <div key={group} className="mb-2">
-              <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-muted-foreground/60">{group}</p>
+              <p className="px-3 py-1.5 text-xs font-bold uppercase tracking-widest text-muted-foreground/60">{group}</p>
               {items.map((item) => (
                 <button
                   key={item.id}
@@ -163,7 +163,7 @@ export function CommandPalette() {
                   <item.icon className="w-4 h-4 text-muted-foreground shrink-0" />
                   <span className="text-sm font-medium flex-1 truncate">{item.label}</span>
                   {item.sublabel && item.group !== 'Pages' && (
-                    <span className="text-[10px] text-muted-foreground uppercase tracking-wide shrink-0">{item.sublabel}</span>
+                    <span className="text-xs text-muted-foreground uppercase tracking-wide shrink-0">{item.sublabel}</span>
                   )}
                   <CornerDownLeft className="w-3 h-3 text-muted-foreground/40 shrink-0" />
                 </button>

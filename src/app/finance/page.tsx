@@ -123,7 +123,7 @@ export default function FinancePage() {
                   <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center">
                     <CreditCard className="w-5 h-5 text-primary" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Dépensé ce mois</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Dépensé ce mois</span>
                 </div>
                 <div className="text-3xl font-bold tracking-tight">{formatEuro(totalSpentThisMonth)}</div>
                 {currentMonthLimit > 0 && (
@@ -140,7 +140,7 @@ export default function FinancePage() {
                   <div className="w-10 h-10 rounded-2xl bg-green-500/10 flex items-center justify-center">
                     <PiggyBank className="w-5 h-5 text-green-500" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Épargne cumulée</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Épargne cumulée</span>
                 </div>
                 <div className="text-3xl font-bold tracking-tight">{formatEuro(totalSavings)}</div>
                 <p className="text-xs text-muted-foreground mt-2">sur les {monthIds.length} derniers mois</p>
@@ -151,7 +151,7 @@ export default function FinancePage() {
                   <div className="w-10 h-10 rounded-2xl bg-orange-500/10 flex items-center justify-center">
                     <Target className="w-5 h-5 text-orange-500" />
                   </div>
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Budget mensuel</span>
+                  <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Budget mensuel</span>
                 </div>
                 {currentMonthLimit > 0 ? (
                   <>
@@ -214,7 +214,7 @@ export default function FinancePage() {
                             {tx.date?.seconds ? format(new Date(tx.date.seconds * 1000), 'dd MMM', { locale: fr }) : ''}
                           </p>
                         </div>
-                        <Badge variant="outline" className="rounded-full text-[10px] font-bold border-none bg-secondary px-3 mr-4">
+                        <Badge variant="outline" className="rounded-full text-xs font-bold border-none bg-secondary px-3 mr-4">
                           {tx.categoryName}
                         </Badge>
                         <span className="font-bold text-sm text-red-500">-{tx.amount.toFixed(2)}€</span>
@@ -326,7 +326,7 @@ export default function FinancePage() {
                     <PiggyBank className="w-6 h-6 text-green-500" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Épargne cumulée</span>
+                    <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Épargne cumulée</span>
                     <div className="text-3xl font-bold tracking-tight">{formatEuro(totalSavings)}</div>
                   </div>
                 </div>
@@ -346,7 +346,7 @@ export default function FinancePage() {
                     <Target className="w-6 h-6 text-primary" />
                   </div>
                   <div>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Objectif</span>
+                    <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Objectif</span>
                     <div className="text-2xl font-bold tracking-tight">{financeSettings?.savingsGoalLabel || 'Aucun objectif'}</div>
                   </div>
                 </div>

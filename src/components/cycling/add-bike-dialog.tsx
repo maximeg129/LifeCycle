@@ -194,11 +194,11 @@ export function AddBikeDialog() {
       <div className="flex items-center justify-between p-3 bg-muted/30 rounded-lg border border-border">
         <div>
           <div className="text-sm font-medium">Initialiser les composants</div>
-          <div className="text-[10px] text-muted-foreground">
+          <div className="text-xs text-muted-foreground">
             {templateCount} composants standard pour un velo {BIKE_TYPE_LABELS[bikeType].toLowerCase()}
           </div>
           {initComponents && (
-            <div className="text-[10px] text-muted-foreground mt-1">
+            <div className="text-xs text-muted-foreground mt-1">
               {BIKE_TEMPLATES[bikeType].map(t => COMPONENT_CATEGORY_LABELS[t.category]).join(', ')}
             </div>
           )}

@@ -52,7 +52,7 @@ function MetricTile({ label, value, unit, sublabel, href, className }: TileProps
   const content = (
     <div className={cn('lc-card p-4 flex flex-col justify-between h-[104px]', href && 'group', className)}>
       <div className="flex items-center justify-between">
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           {label}
         </span>
         {href && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:translate-x-0.5 transition-transform" />}
@@ -61,7 +61,7 @@ function MetricTile({ label, value, unit, sublabel, href, className }: TileProps
         <span className="font-data text-2xl font-bold">{value}</span>
         {unit && <span className="text-xs text-muted-foreground">{unit}</span>}
       </div>
-      {sublabel && <div className="text-[11px] text-muted-foreground">{sublabel}</div>}
+      {sublabel && <div className="text-xs text-muted-foreground">{sublabel}</div>}
     </div>
   )
   return href ? <Link href={href}>{content}</Link> : content
@@ -118,7 +118,7 @@ export function PerformanceBento({ athlete, fitnessSeries }: { athlete: Interval
 
       {/* "Entraînement" — training-load numbers only; Riegel right after the panel per earlier user feedback ("un des premiers"), only shown when the athlete has entered power records */}
       <div className="space-y-1.5">
-        <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground px-1">Entraînement</p>
+        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">Entraînement</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {enduranceIndex != null ? (
             <MetricTile
@@ -157,7 +157,7 @@ export function PerformanceBento({ athlete, fitnessSeries }: { athlete: Interval
         <LogMetricDialog isAutoSynced={isAutoSynced} />
       </div>
       {enduranceIndex == null && powerCurve.data == null && !powerCurve.isLoading && (
-        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
           <Zap className="w-3 h-3" /> Renseignez vos records de puissance (page détail Indice Riegel) pour débloquer l&apos;indice Riegel.
         </p>
       )}

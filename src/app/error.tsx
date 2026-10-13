@@ -28,7 +28,7 @@ export default function GlobalError({
           Quelque chose s&apos;est mal passé. Vous pouvez réessayer, ou revenir à l&apos;accueil.
         </p>
         {error.digest && (
-          <p className="text-[10px] font-mono text-muted-foreground/60">Réf: {error.digest}</p>
+          <p className="text-xs font-mono text-muted-foreground/60">Réf: {error.digest}</p>
         )}
       </div>
       <div className="flex items-center gap-3">

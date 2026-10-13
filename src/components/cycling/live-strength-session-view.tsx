@@ -645,7 +645,7 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
           </Button>
           <div className="text-right px-1">
             <p className={cn('lc-data text-lg font-bold tabular-nums', isPaused && 'text-muted-foreground')}>{formatTimer(elapsedSeconds)}</p>
-            <p className="text-[10px] text-muted-foreground">{isPaused ? 'En pause' : `${doneSets}/${totalSets} séries`}</p>
+            <p className="text-xs text-muted-foreground">{isPaused ? 'En pause' : `${doneSets}/${totalSets} séries`}</p>
           </div>
           <Button variant="ghost" size="icon" onClick={() => setRestartConfirmOpen(true)} aria-label="Recommencer la séance" title="Recommencer">
             <RotateCcw className="w-4 h-4" />
@@ -756,7 +756,7 @@ export function LiveStrengthSessionView({ session, weekNumber, sessionIndex, ses
                       répété sur chaque ligne (une des causes du débordement
                       hors cadre signalé), une seule ligne d'en-tête au-dessus
                       de la liste, alignée sur les mêmes largeurs de colonne. */}
-                  <div className="flex items-center gap-1.5 px-2 text-[10px] uppercase tracking-wide text-muted-foreground">
+                  <div className="flex items-center gap-1.5 px-2 text-xs uppercase tracking-wide text-muted-foreground">
                     <span className="w-5 shrink-0 text-center">#</span>
                     <span className="w-16 shrink-0 text-center">{isHold ? 'Temps' : 'Reps'}</span>
                     {isHold && <span className="w-9 shrink-0" />}
