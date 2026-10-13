@@ -22,15 +22,18 @@
 
 import type { ReactNode } from 'react'
 import Link from 'next/link'
+import { format } from 'date-fns'
 import { ChevronRight, Gauge, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { IntervalsAthlete, IntervalsFitnessDay } from '@/lib/intervals-api'
+import type { IntervalsAthlete } from '@/lib/intervals-api'
 import { usePowerCurve } from './use-power-curve'
 import { fitEnduranceCurve, type PowerRecord } from '@/domain/cycling/metrics/endurance'
 import { fitCriticalPower } from '@/domain/cycling/metrics/criticalPower'
 import { ReadinessStrip } from './readiness-strip'
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
+import { readinessBaselineLookbackDays } from '@/components/lifestyle/lifestyle-types'
 import { LogMetricDialog } from '@/components/lifestyle/log-metric-dialog'
+import type { DatedValue } from './governor-types'
 
 function safeRound(value: number | null | undefined): string {
   if (value == null || isNaN(value)) return '—'
@@ -67,9 +70,16 @@ function MetricTile({ label, value, unit, sublabel, href, className }: TileProps
   return href ? <Link href={href}>{content}</Link> : content
 }
 
-export function PerformanceBento({ athlete, fitnessSeries }: { athlete: IntervalsAthlete; fitnessSeries?: IntervalsFitnessDay[] }) {
+// ReadinessStrip a besoin de ≥35j d'historique HRV/FC repos pour
+// vitalsTrendCaption (7j récents + 28j de ligne de base, windowedTrendSignal
+// — même fenêtre que le gouverneur de charge interne). readinessBaselineLookbackDays()
+// réutilise la même constante que computeReadiness() plutôt qu'un chiffre
+// inventé pour l'occasion.
+const READINESS_STRIP_HISTORY_DAYS = 7 + readinessBaselineLookbackDays()
+
+export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
   const powerCurve = usePowerCurve()
-  const lifestyle = useLifestyleData()
+  const lifestyle = useLifestyleData(READINESS_STRIP_HISTORY_DAYS)
 
   const powerRecords = [powerCurve.data?.shortRecord, powerCurve.data?.mediumRecord, powerCurve.data?.longRecord].filter((r): r is PowerRecord => !!r)
   const enduranceIndex = fitEnduranceCurve(powerRecords)?.enduranceIndex ?? null
@@ -87,16 +97,15 @@ export function PerformanceBento({ athlete, fitnessSeries }: { athlete: Interval
 
   const isAutoSynced = lifestyle.wellnessStatus.isConfigured && lifestyle.wellnessStatus.hasAnyEntry
 
-  // Séries courtes pour les mini sparklines de ReadinessStrip — toutes déjà
-  // chargées par les hooks existants (fitnessSeries vient du fetch 12
-  // semaines déjà fait par la page pour PmcTab ; dailySeries/readinessSeries
-  // viennent de useLifestyleData(), déjà fetché ci-dessus), aucun nouveau
-  // fetch réseau pour cet affichage.
-  const tsbSeries = fitnessSeries?.slice(-14).map((f) => f.tsb)
-  const readinessSparkline = lifestyle.readinessSeries.map((r) => r.value)
-  const sleepSeries = lifestyle.dailySeries.filter((d) => d.sleepQuality != null).map((d) => d.sleepQuality as number)
-  const hrvSeries = lifestyle.dailySeries.filter((d) => d.hrv != null).map((d) => d.hrv as number)
-  const restingHrSeries = lifestyle.dailySeries.filter((d) => d.restingHR != null).map((d) => d.restingHR as number)
+  // Séries datées pour les légendes de tendance de ReadinessStrip — toutes
+  // déjà chargées par useLifestyleData(READINESS_STRIP_HISTORY_DAYS)
+  // ci-dessus (élargi pour cette carte, voir son commentaire), aucun
+  // nouveau fetch réseau. `dayId` renommé `date` pour matcher DatedValue
+  // (governor-types.ts) — même forme que windowedTrendSignal attend déjà.
+  const readinessHistory: DatedValue[] = lifestyle.readinessSeries.map((r) => ({ date: r.dayId, value: r.value }))
+  const hrvHistory: DatedValue[] = lifestyle.dailySeries.filter((d) => d.hrv != null).map((d) => ({ date: d.dayId, value: d.hrv as number }))
+  const restingHrHistory: DatedValue[] = lifestyle.dailySeries.filter((d) => d.restingHR != null).map((d) => ({ date: d.dayId, value: d.restingHR as number }))
+  const todayIso = format(new Date(), 'yyyy-MM-dd')
 
   return (
     <div className="space-y-4">
@@ -105,15 +114,16 @@ export function PerformanceBento({ athlete, fitnessSeries }: { athlete: Interval
       <ReadinessStrip
         tsb={tsb}
         readiness={lifestyle.readiness}
+        ctl={athlete.ctl}
+        atl={athlete.atl}
         sleepHours={lifestyle.latest?.sleepHours}
         sleepQuality={lifestyle.latest?.sleepQuality}
         hrv={lifestyle.latest?.hrv}
         restingHR={lifestyle.latest?.restingHR}
-        tsbSeries={tsbSeries}
-        readinessSeries={readinessSparkline}
-        sleepSeries={sleepSeries}
-        hrvSeries={hrvSeries}
-        restingHrSeries={restingHrSeries}
+        readinessHistory={readinessHistory}
+        hrvHistory={hrvHistory}
+        restingHrHistory={restingHrHistory}
+        todayIso={todayIso}
       />
 
       {/* "Entraînement" — training-load numbers only; Riegel right after the panel per earlier user feedback ("un des premiers"), only shown when the athlete has entered power records */}

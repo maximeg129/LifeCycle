@@ -4204,6 +4204,46 @@ Tests : aucun nouveau (JSX/classes uniquement) — 949/949 inchangés, tsc/eslin
 vérifié à l'écran** — à confirmer par l'utilisateur au premier rendu réel, notamment le
 repositionnement du bouton Stella en mobile et le contour `inset` de l'item de nav actif.
 
+### Pièce 4 — `<ReadinessStrip>` : badge de verdict + légendes de tendance TEXTE (remplace les sparklines de l'étape 3)
+
+La référence affinée montre une légende TEXTE sous chaque valeur ("CTL 48 · ATL 44", "↓ 8 vs moy.
+7 j", "Qualité 87 %", "Dans ta norme") plutôt qu'une mini sparkline — et un badge de verdict (icône
+dans un cercle coloré) plutôt qu'un simple point + titre inline. Révise directement l'étape 3
+("`<ReadinessStrip>` remplace les 3 anneaux") — assumé, le mandat de cette restructuration prime sur
+un choix déjà fait sous une version antérieure du même brief.
+
+**`sparklinePoints()` et ses 3 appelants supprimés** (`readiness-strip-types.ts`/`.tsx`) — plus
+aucun graphe min/max normalisé ; remplacés par 4 nouvelles fonctions pures/testées, chacune
+réutilisant une donnée ou un mécanisme déjà en place, jamais un nouveau calcul inventé :
+- **`formeTrendCaption(ctl, atl)`** — "CTL 48 · ATL 44", purement informatif (CTL/ATL n'ont pas de
+  delta jour/jour simple à juger) — juste les deux chiffres déjà sur `athlete`.
+- **`windowAverageTrendCaption(history, todayIso)`** — "↓ 8 vs moy. N j" pour Récupération : delta
+  du jour vs la moyenne des jours précédents disponibles. `N` reflète toujours le VRAI nombre de
+  jours utilisés (jamais figé à "7 j" si la fenêtre réellement disponible est plus courte) — seule
+  légende colorée par la confiance de la cellule (`trendColor="confidence"`), les 3 autres restent
+  neutres (`text-subtle`), exactement comme la référence (`class="trend delta-warn"` UNIQUEMENT sur
+  Récupération, `class="trend subtle"` ailleurs).
+- **`sleepTrendCaption(sleepQuality)`** — "Qualité 87 %", déjà une donnée directe.
+- **`vitalsTrendCaption(hrvHistory, restingHrHistory, todayIso)`** — "Dans ta norme" / "Écart vs ta
+  ligne de base" : réutilise `windowedTrendSignal()` (`governor-types.ts`, déjà le mécanisme du
+  gouverneur de charge interne pour exactement cette comparaison 7j récents/28j de ligne de base) —
+  jamais un second calcul. `null` (pas de légende) si l'UN des deux signaux manque de recul —
+  jamais une affirmation à moitié informée. Ne parle QUE de la PAIRE HRV+FC repos, jamais d'un
+  verdict HRV isolé (`vitalsConfidence` reste `'neutral'`, jamais good/bad — principle-3, inchangé).
+
+**`performance-bento.tsx`** — `useLifestyleData()` élargi à `7 + readinessBaselineLookbackDays()`
+jours (35j, même constante que `computeReadiness()` — pas un chiffre inventé) pour que
+`vitalsTrendCaption` dispose d'assez d'historique HRV/FC repos ; `dailySeries`/`readinessSeries`
+(déjà `dayId`-keyés) remappés en `DatedValue[]` (`{date, value}`, la forme que
+`governor-types.ts` attend déjà). `fitnessSeries` (le prop ajouté à l'étape 3 pour la sparkline
+Forme, plus nécessaire) supprimé — `ctl`/`atl` viennent directement de `athlete`, déjà en main,
+`cycling/page.tsx` ne passe donc plus ce prop.
+
+Tests (`readiness-strip-types.test.ts` réécrit : -3 tests sparkline, +11 nouveaux sur les 4
+fonctions de légende) — 957/957 au total, tsc/eslint/build clean. **Non vérifié à l'écran** — le
+badge de verdict (icône dans un cercle coloré) et les 4 légendes de tendance sont invérifiables
+visuellement dans ce sandbox ; à confirmer par l'utilisateur au premier rendu réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

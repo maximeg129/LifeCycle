@@ -1,15 +1,25 @@
-// ── Verdict/confidence composition for <ReadinessStrip> ─────────────────
+// ── Verdict/confidence/trend composition for <ReadinessStrip> ───────────
 //
-// Refonte UI/IA (LifeCycle_Pro_UX_Engine_Review.md §3.3/§5, "Aujourd'hui" —
-// ReadinessStrip remplace les 3 anneaux Forme/Récupération/Sommeil) : chaque
-// cellule porte un point de confiance good/warn/bad/unknown — ce fichier ne
-// réévalue AUCUN signal, il reclasse des classifications déjà en place
-// (tsbZone, les seuils readiness déjà affichés sur /lifestyle, sleepQualityBand)
-// dans ce vocabulaire à 4 valeurs plutôt que d'inventer une nouvelle échelle.
-// Jamais vert par défaut : une valeur absente retourne toujours 'unknown'.
+// Restructuration complète (lifecycle-ui-reference.html, voir CLAUDE.md) —
+// chaque cellule porte un point de confiance good/warn/bad/unknown (ce
+// fichier ne réévalue AUCUN signal, il reclasse des classifications déjà
+// en place — tsbZone, les seuils readiness déjà affichés sur /lifestyle,
+// sleepQualityBand — dans ce vocabulaire à 4 valeurs) et une légende de
+// tendance TEXTE (pas une sparkline — voir ci-dessous pourquoi ce choix a
+// changé depuis la première version de ce fichier). Jamais vert par
+// défaut : une valeur absente retourne toujours 'unknown'.
+//
+// ⚠️ Remplace les sparklines de la version précédente de ce fichier (voir
+// CLAUDE.md "Refonte UI/IA... étape 3") : la référence HTML affinée
+// affiche une LÉGENDE TEXTE sous chaque valeur ("CTL 48 · ATL 44",
+// "↓ 8 vs moy. 7 j", "Qualité 87 %", "Dans ta norme") plutôt qu'un mini
+// graphique — plus lisible qu'un tracé de 44×12px, et réutilise des
+// nombres déjà calculés ailleurs dans l'app plutôt qu'une normalisation
+// min/max. sparklinePoints() est donc supprimée (plus aucun appelant).
 
 import { tsbZone } from './tsb-zones'
 import { sleepQualityBand } from '@/components/lifestyle/lifestyle-types'
+import { averageOrNull, windowedTrendSignal, type DatedValue } from './governor-types'
 
 export type Confidence = 'good' | 'warn' | 'bad' | 'unknown' | 'neutral'
 
@@ -56,29 +66,6 @@ export function sleepConfidence(sleepQuality: number | null | undefined): Confid
 export function vitalsConfidence(hrv: number | null | undefined, restingHR: number | null | undefined): Confidence {
   if (hrv == null && restingHR == null) return 'unknown'
   return 'neutral'
-}
-
-/**
- * Coordonnées SVG `points` pour une mini sparkline (12px de haut, voir le
- * brief UI §4.2) à partir d'une série de valeurs déjà disponibles (aucune
- * agrégation statistique — juste une normalisation min/max pour le tracé).
- * `null` (jamais une ligne plate inventée) si moins de 2 valeurs réelles —
- * rien à tracer. Toutes les valeurs égales (ligne plate réelle) se trace au
- * milieu de la hauteur plutôt que de diviser par zéro.
- */
-export function sparklinePoints(values: number[], width: number, height: number): string | null {
-  if (values.length < 2) return null
-  const min = Math.min(...values)
-  const max = Math.max(...values)
-  const range = max - min
-  const step = width / (values.length - 1)
-  return values
-    .map((v, i) => {
-      const x = i * step
-      const y = range === 0 ? height / 2 : height - ((v - min) / range) * height
-      return `${x.toFixed(1)},${y.toFixed(1)}`
-    })
-    .join(' ')
 }
 
 export interface ReadinessVerdict {
@@ -128,4 +115,61 @@ export function buildReadinessVerdict(tsb: number | null | undefined, readiness:
   const title = confidence === 'good' ? 'Prêt à performer' : confidence === 'bad' ? 'Récupération prioritaire' : 'Vigilance'
   const sentence = detailParts.length > 0 ? detailParts.join(', ') + '.' : title + '.'
   return { confidence, title, sentence }
+}
+
+// ── Légendes de tendance (texte, pas une sparkline — voir le commentaire
+// de tête du fichier) ────────────────────────────────────────────────────
+
+/** "CTL 48 · ATL 44" — purement informatif, jamais un delta/jugement (CTL/ATL n'ont pas de "mieux/moins bien" simple au jour le jour). */
+export function formeTrendCaption(ctl: number | null | undefined, atl: number | null | undefined): string | null {
+  const parts: string[] = []
+  if (ctl != null && !isNaN(ctl)) parts.push(`CTL ${Math.round(ctl)}`)
+  if (atl != null && !isNaN(atl)) parts.push(`ATL ${Math.round(atl)}`)
+  return parts.length > 0 ? parts.join(' · ') : null
+}
+
+/**
+ * "↓ 8 vs moy. 6 j" — delta du jour vs la moyenne des jours PRÉCÉDENTS
+ * disponibles dans `history` (jamais figé à "7 j" si moins de jours
+ * existent réellement — le nombre affiché est toujours celui des points
+ * utilisés). `null` si `history` ne contient pas le jour `todayIso` ou
+ * aucun jour antérieur à comparer.
+ */
+export function windowAverageTrendCaption(history: DatedValue[], todayIso: string, maxPriorDays = 7): string | null {
+  const todayEntry = history.find((d) => d.date === todayIso)
+  if (!todayEntry) return null
+  const prior = history
+    .filter((d) => d.date < todayIso)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, maxPriorDays)
+  if (prior.length === 0) return null
+  const avg = averageOrNull(prior.map((d) => d.value))
+  if (avg == null) return null
+  const delta = Math.round(todayEntry.value - avg)
+  const arrow = delta > 0 ? '↑' : delta < 0 ? '↓' : '='
+  return `${arrow} ${Math.abs(delta)} vs moy. ${prior.length} j`
+}
+
+/** "Qualité 87 %" — déjà une donnée directe, aucun calcul. */
+export function sleepTrendCaption(sleepQuality: number | null | undefined): string | null {
+  if (sleepQuality == null || isNaN(sleepQuality)) return null
+  return `Qualité ${Math.round(sleepQuality)} %`
+}
+
+/**
+ * "Dans ta norme" / "Écart vs ta ligne de base" — jamais une lecture
+ * HRV isolée (voir vitalsConfidence ci-dessus) : ne parle QUE si les DEUX
+ * signaux (HRV tendance favorable='higher', FC repos tendance
+ * favorable='lower' — même windowedTrendSignal déjà utilisé par le
+ * gouverneur de charge interne, pas un deuxième calcul) ont assez
+ * d'historique pour se prononcer (≥7j récents + ≥28j de ligne de base
+ * chacun) ; `null` (jamais une affirmation à moitié informée) si l'un des
+ * deux manque de recul. Jamais "HRV en baisse" ou "FC repos élevée"
+ * isolément — toujours la paire, jamais un verdict good/bad.
+ */
+export function vitalsTrendCaption(hrvHistory: DatedValue[], restingHrHistory: DatedValue[], todayIso: string): string | null {
+  const hrvSignal = windowedTrendSignal(hrvHistory, todayIso, 'higher')
+  const rhrSignal = windowedTrendSignal(restingHrHistory, todayIso, 'lower')
+  if (hrvSignal == null || rhrSignal == null) return null
+  return hrvSignal >= 0 && rhrSignal >= 0 ? 'Dans ta norme' : 'Écart vs ta ligne de base'
 }
