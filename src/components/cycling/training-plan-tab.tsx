@@ -32,6 +32,7 @@ export function TrainingPlanTab() {
     generateWeekSessions, generatingSessionsForWeek, moveSessionDate, adjustSessionForLocation, adjustingLocationKey,
     addStrengthExercise, addStrengthExerciseSet,
     getSessionCompletion, sendSessionToIntervals, sendingSessionKey, canSendToIntervals,
+    activities, athleteFtp,
   } = useTrainingPlan()
   const today = format(new Date(), 'yyyy-MM-dd')
   const week = activePlan ? currentPlanWeek(activePlan.weeks, today) : null
@@ -93,6 +94,8 @@ export function TrainingPlanTab() {
           onAdjustLocation={(w, index, targetLocation) => adjustSessionForLocation(w.weekNumber, index, targetLocation)}
           onAddExercise={(w, index, exercise) => addStrengthExercise(w.weekNumber, index, exercise)}
           onAddExerciseSet={(w, index, exerciseIndex) => addStrengthExerciseSet(w.weekNumber, index, exerciseIndex)}
+          activities={activities}
+          athleteFtp={athleteFtp}
         />
       )}
     </div>
