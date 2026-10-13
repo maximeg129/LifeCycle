@@ -4283,6 +4283,83 @@ logique pure) — 957/957 inchangés, tsc/eslint/build clean. **Non vérifié à
 plus faible que les pièces précédentes (le même patron de tuile tourne déjà en production pour
 `PlanWeekCalendar`, seule la source de données change) ; à confirmer par l'utilisateur.
 
+### Pièce 6 — Plan : barre de phases + lignes de semaine `.wk` (grille réalisé/prévu), Trajectoire déclinée
+
+La référence montre, pour l'écran Plan, une carte "Phases" à deux parties : une `.phasebar` (une
+seule barre horizontale, segments colorés larges proportionnellement au nombre de semaines qu'ils
+couvrent — Base/R/Build/R/B/Pic/Test, triangle sous le segment en cours) suivie de lignes `.wk`
+(Sem./Contenu/barre réalisé-prévu/Heures, grille 4 colonnes, fond teinté pour la semaine courante).
+Remplace l'ancienne grille `PlanOverviewGrid` qui n'affichait, par ligne, que 7 pastilles de couleur
+par jour (ou un badge de phase pour une semaine pas encore générée) — jamais de vue d'ensemble du
+plan entier par PHASE, ni de comparaison réalisé/prévu au niveau de la semaine elle-même (seulement
+au niveau du jour, via les pastilles).
+
+**`buildPhaseSegments()`/`phaseSegmentLabel()`** (`training-plan-types.ts`, purs/testés) —
+regroupent les semaines consécutives de même phase en UN segment (flex proportionnel au nombre de
+semaines couvertes), jamais une pastille par semaine individuelle (déjà couvert ailleurs, par la
+barre `.wk` elle-même). Une semaine marquée `recommendedFtpTest` (`flagFtpTestWeek`, voir "Revue
+externe UX/engine — pièce 3" plus haut) casse TOUJOURS le run en cours et forme son propre segment
+"Test", même si sa vraie phase (base/build) serait identique à ses voisines — le test FTP est une
+semaine à part dans la narration du plan, jamais fondue dans sa phase sous-jacente. Libellé : plein
+(`PHASE_LABELS`) sauf pour un segment d'une seule semaine en `recovery`/`build` ("R"/"B" — exactement
+l'abréviation observée dans la référence pour une sliver trop étroite), jamais abrégé pour
+base/peak/taper (déjà assez courts). `PlanPhaseBar` (nouveau composant) colore chaque segment en z1
+(récup)/z2 (base)/z3 (affûtage)/z4 (développement)/z5 (pic) — les mêmes tokens de zone Coggan posés
+à l'étape 1 de cette restructuration, jamais consommés nulle part jusqu'ici — avec un triangle
+(`border` CSS, pas de SVG) sous le segment contenant la semaine en cours.
+
+**`weekAdherencePercent()`** (`training-plan-types.ts`, pur/testé) — réutilise EXACTEMENT
+`computeWeeklyAdherence()` (déjà en place pour `PlanAdherenceChart`, voir "Refonte UX" plus haut),
+réduit à un seul `%` par semaine (capé à 100, jamais un dépassement visuel même si la séance réelle a
+dépassé la prévue — le chiffre exact resterait dans un texte, pas construit ici faute de place dans
+la ligne compacte). `null` — jamais un 0% trompeur — pour une semaine pas encore commencée ou dont
+`sampleSessions` n'a jamais été généré (`computeWeeklyAdherence` ne couvre déjà que les semaines
+`startDate <= today` avec contenu réel). `WeekRow` (dans `plan-overview-grid.tsx`, réécrit) : barre
+`hsl(var(--primary))` pour la semaine EN COURS (peu importe le %, cohérent avec la référence —
+`S7` à 8% y est bien colorée "brand", pas "warn" malgré un faible %, puisque la semaine n'est pas
+encore terminée), sinon `hsl(var(--good))` si ≥80% réalisé, `hsl(var(--warn))` sinon — jamais un 3ᵉ
+palier inventé, seuil choisi par cohérence avec le seuil déjà utilisé ailleurs dans l'app pour
+good/warn (ex. `barColor` du module). Grille 4 colonnes (`grid-cols-[56px_1fr_56px]` sur mobile —
+la colonne barre masquée sous 640px, comme `.wk .bar{display:none}` dans la référence —
+`grid-cols-[56px_1fr_120px_56px]` au-delà), en-tête de colonnes (Sem./Contenu/Réalisé-prévu/Heures)
+une seule fois au-dessus de la liste. Fond teinté `bg-primary/[0.04]` pour la semaine littéralement
+EN COURS (`week.startDate <= today <= week.endDate`) — indépendant de la sélection/expansion
+(`isSelected`, qui garde son propre traitement `bg-primary/5 border-primary/40`), même distinction
+que la référence entre `.wk.current` (toujours visible) et un état de sélection/clic (absent de la
+référence elle-même, mais déjà une fonctionnalité de cette app — "taper une semaine la
+sélectionne/l'ouvre en détail" reste inchangé).
+
+**`activities`/`athleteFtp` retirés de `PlanOverviewGrid`** — devenus orphelins une fois les 7
+pastilles de couleur par jour remplacées par la barre d'adhérence hebdomadaire (qui ne lit plus
+`sessionZone` par jour) ; `plan-tab.tsx` ne les passe donc plus à ce composant (les garde pour
+`PlanWeekCalendar`, dans `renderExpanded`, où ils restent nécessaires).
+
+**"Trajectoire" (eFTP actuel vs trajectoire requise vers l'objectif) — explicitement DÉCLINÉE,
+documentée plutôt que silencieusement ignorée** : la référence montre un graphique SVG comparant
+l'eFTP mesuré à une droite "requise" vers un objectif numérique (ex. "FTP 265 → 300 W"). Aucun champ
+structuré n'existe dans le modèle de données pour ça — `CoachGoal.targetOutcome`
+(`coach-memory-types.ts`) est du texte libre ("améliorer mon FTP pour la saison", "finir un
+cyclosportive"...), jamais un nombre cible parsable (watts, temps, etc.). Construire ce graphique
+exigerait soit de deviner un nombre depuis du texte libre (le même pari déjà explicitement refusé
+pour `isReimportedStrengthActivityType`/le test FTP automatique, voir "Revue externe UX/engine —
+pièce 2/3" plus haut : un faux négatif/positif coûterait plus cher qu'un graphique absent), soit
+d'ajouter un nouveau champ structuré "objectif numérique" aux objectifs du coach — une vraie
+extension du modèle de données/de l'écran Mémoire coach, hors scope d'une restructuration VISUELLE.
+Non construit ici, consciemment, pour la même raison déjà invoquée pour la "Météo de la prochaine
+sortie" plus haut dans cette même restructuration (étape 3) : honnête plutôt qu'une donnée
+inventée.
+
+Tests (`training-plan-types.test.ts`, 12 nouveaux : `buildPhaseSegments`/`phaseSegmentLabel` ×8 —
+regroupement par run, rupture sur changement de phase, marquage de la semaine en cours, isolement
+d'une semaine de test FTP même au milieu d'un run identique, liste vide, libellé plein multi-
+semaines, abréviation R/B pour une sliver d'une semaine, libellé "Test" quel que soit la phase
+sous-jacente ; `weekAdherencePercent` ×4 — `null` sans entrée, `null` sur division par zéro,
+pourcentage arrondi normal, plafond à 100) — 969/969 au total, tsc/eslint/build clean. **Non
+vérifié à l'écran** (même limite `favicon.ico` que le reste de cette restructuration) — la barre de
+phases (segments colorés, triangle, libellés abrégés) et les lignes `.wk` (grille responsive,
+barre d'adhérence, fond teinté semaine courante) sont invérifiables visuellement dans ce sandbox ;
+à confirmer par l'utilisateur au premier rendu réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

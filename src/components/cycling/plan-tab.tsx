@@ -24,6 +24,7 @@ import { checkLoadProgressionWithoutDeload } from '@/domain/cycling/validation/p
 import { SourceCitation } from '@/components/coach/source-citation'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { PlanOverviewGrid } from './plan-overview-grid'
+import { PlanPhaseBar } from './plan-phase-bar'
 import { PlanWeekCalendar } from './plan-week-calendar'
 import { PlanAdherenceChart } from './plan-adherence-chart'
 import { buildPlanAttentionItems } from './plan-attention-types'
@@ -367,14 +368,19 @@ export function PlanTab() {
         </CardContent>
       </Card>
 
-      <PlanOverviewGrid
-        weeks={activePlan.weeks}
-        selectedWeekNumber={selectedWeekNumber}
-        onSelectWeek={setSelectedWeekNumber}
-        getCompletion={(w, session, index) => getSessionCompletion(w, session, index)}
-        activities={activities}
-        athleteFtp={athleteFtp}
-        renderExpanded={(w) => (
+      <Card className="lc-card">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Phases</CardTitle>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <PlanPhaseBar weeks={activePlan.weeks} currentWeekNumber={week?.weekNumber ?? null} />
+          <PlanOverviewGrid
+            weeks={activePlan.weeks}
+            selectedWeekNumber={selectedWeekNumber}
+            onSelectWeek={setSelectedWeekNumber}
+            getCompletion={(w, session, index) => getSessionCompletion(w, session, index)}
+            todayIso={today}
+            renderExpanded={(w) => (
           <div className="rounded-xl border border-border bg-card/40 p-3 space-y-3">
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div className="min-w-0">
@@ -420,8 +426,10 @@ export function PlanTab() {
               onAddExerciseSet={(index, exerciseIndex) => addStrengthExerciseSet(w.weekNumber, index, exerciseIndex)}
             />
           </div>
-        )}
-      />
+            )}
+          />
+        </CardContent>
+      </Card>
 
       {activePlan.weeks.some((w) => w.startDate <= today && (w.sampleSessions?.length ?? 0) > 0) && (
         <Card className="lc-card">

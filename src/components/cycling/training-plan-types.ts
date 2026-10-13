@@ -762,6 +762,21 @@ export function computeWeeklyAdherence(
   })
 }
 
+/**
+ * % réalisé/prévu d'UNE semaine (restructuration lifecycle-ui-reference.
+ * html — la ligne `.wk` de la carte "Phases" affiche une seule barre par
+ * semaine, pas le graphique multi-semaines de PlanAdherenceChart). `null`
+ * — jamais un 0% trompeur — quand `computeWeeklyAdherence` n'a rien à
+ * comparer pour cette semaine (pas encore commencée, ou sampleSessions
+ * jamais générées). Capé à 100 : un dépassement réel (séance plus longue
+ * que prévu) reste visible dans le texte, jamais dans la largeur de la
+ * barre.
+ */
+export function weekAdherencePercent(adherence: WeeklyAdherence | undefined): number | null {
+  if (!adherence || adherence.plannedMinutes <= 0) return null
+  return Math.min(100, Math.round((adherence.completedMinutes / adherence.plannedMinutes) * 100))
+}
+
 // ── Plan glissant sur 7 jours — chantier "repenser planification/séances/
 // feedback" (pièce A), version légère ───────────────────────────────────
 //
@@ -1118,4 +1133,71 @@ export function flagFtpTestWeek(weeks: PlanWeek[]): PlanWeek[] {
       notes: w.notes ? `${w.notes} ${FTP_TEST_RECOMMENDATION_NOTE}` : FTP_TEST_RECOMMENDATION_NOTE,
     }
   })
+}
+
+// ── Barre de phases (restructuration lifecycle-ui-reference.html, voir
+// CLAUDE.md "Refonte UI/IA... Work Package D") ──────────────────────────
+//
+// La référence montre une seule barre colorée pour tout le plan : des
+// segments larges proportionnellement au nombre de semaines qu'ils
+// couvrent (flex:N), un par RUN de semaines consécutives de même phase —
+// jamais une pastille par semaine individuelle (déjà couvert ailleurs,
+// voir plan-overview-grid.tsx/WeekRow). Une semaine marquée
+// `recommendedFtpTest` (flagFtpTestWeek ci-dessus) casse toujours le run
+// en cours et forme son propre segment "Test", même si sa vraie phase
+// (base/build) serait identique à ses voisines — le test FTP est une
+// semaine à part entière dans la narration du plan, jamais fondue dans
+// sa phase sous-jacente.
+
+export interface PlanPhaseSegment {
+  phase: PlanPhase
+  isTest: boolean
+  weekCount: number
+  startWeekNumber: number
+  endWeekNumber: number
+  /** Vrai si la semaine en cours (currentWeekNumber) tombe dans ce segment. */
+  isCurrent: boolean
+}
+
+export function buildPhaseSegments(weeks: PlanWeek[], currentWeekNumber: number | null): PlanPhaseSegment[] {
+  const segments: PlanPhaseSegment[] = []
+  for (const w of weeks) {
+    const isTest = w.recommendedFtpTest === true
+    const isCurrentWeek = currentWeekNumber === w.weekNumber
+    const last = segments.at(-1)
+    if (last && !isTest && !last.isTest && last.phase === w.phase) {
+      last.weekCount += 1
+      last.endWeekNumber = w.weekNumber
+      if (isCurrentWeek) last.isCurrent = true
+    } else {
+      segments.push({
+        phase: w.phase,
+        isTest,
+        weekCount: 1,
+        startWeekNumber: w.weekNumber,
+        endWeekNumber: w.weekNumber,
+        isCurrent: isCurrentWeek,
+      })
+    }
+  }
+  return segments
+}
+
+/**
+ * Un segment d'une seule semaine est souvent trop étroit (flex:1 parmi
+ * des segments de 2-3 semaines) pour afficher le libellé complet de
+ * PHASE_LABELS sans déborder — Récupération/Développement abrégés en
+ * "R"/"B" dans ce seul cas, exactement l'abréviation déjà observée dans
+ * la référence pour une sliver d'une semaine. Base/Pic/Affûtage restent
+ * déjà assez courts pour ne jamais avoir besoin d'abréviation.
+ */
+const SINGLE_WEEK_PHASE_ABBREVIATION: Partial<Record<PlanPhase, string>> = {
+  recovery: 'R',
+  build: 'B',
+}
+
+export function phaseSegmentLabel(segment: PlanPhaseSegment): string {
+  if (segment.isTest) return 'Test'
+  const abbreviation = segment.weekCount === 1 ? SINGLE_WEEK_PHASE_ABBREVIATION[segment.phase] : undefined
+  return abbreviation ?? PHASE_LABELS[segment.phase]
 }

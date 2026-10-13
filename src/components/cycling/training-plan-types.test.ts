@@ -29,6 +29,9 @@ import {
   pastPlanSessions,
   stripWeekdayMentions,
   flagFtpTestWeek,
+  buildPhaseSegments,
+  phaseSegmentLabel,
+  weekAdherencePercent,
   type PlanWeekContent,
   type PlanWeek,
   type PlanWeekAdjustment,
@@ -38,6 +41,7 @@ import {
   type SessionCompletionStatus,
   type WeekdayAvailabilityMinutes,
   type RollingWeekInput,
+  type WeeklyAdherence,
 } from './training-plan-types'
 
 describe('clampWeeklyMinutes', () => {
@@ -1099,5 +1103,94 @@ describe('flagFtpTestWeek', () => {
     const weeks = flagFtpTestWeek(weeksOf(['base', 'base', 'build', 'build', 'recovery', 'build', 'peak', 'taper']))
     expect(weeks.filter((w) => w.recommendedFtpTest).length).toBe(1)
     expect(weeks[0].recommendedFtpTest).toBe(true)
+  })
+})
+
+describe('buildPhaseSegments / phaseSegmentLabel', () => {
+  function weeksOf(phases: PlanWeekContent['phase'][]): PlanWeek[] {
+    const skeleton = buildPlanWeekSkeleton('2026-08-28', phases.length)
+    const content: PlanWeekContent[] = phases.map((phase) => ({ phase, focus: 'x', targetWeeklyMinutes: 300 }))
+    return mergePlanWeeks(skeleton, content)
+  }
+
+  it('groups consecutive weeks of the same phase into one segment sized by week count', () => {
+    const segments = buildPhaseSegments(weeksOf(['base', 'base', 'base', 'recovery', 'build', 'build', 'build']), null)
+    expect(segments).toEqual([
+      { phase: 'base', isTest: false, weekCount: 3, startWeekNumber: 1, endWeekNumber: 3, isCurrent: false },
+      { phase: 'recovery', isTest: false, weekCount: 1, startWeekNumber: 4, endWeekNumber: 4, isCurrent: false },
+      { phase: 'build', isTest: false, weekCount: 3, startWeekNumber: 5, endWeekNumber: 7, isCurrent: false },
+    ])
+  })
+
+  it('breaks the run at a phase change even when the phases repeat later', () => {
+    const segments = buildPhaseSegments(weeksOf(['build', 'recovery', 'build']), null)
+    expect(segments.map((s) => s.phase)).toEqual(['build', 'recovery', 'build'])
+    expect(segments.every((s) => s.weekCount === 1)).toBe(true)
+  })
+
+  it('marks the segment containing the current week number as current', () => {
+    const segments = buildPhaseSegments(weeksOf(['base', 'base', 'build']), 2)
+    expect(segments[0].isCurrent).toBe(true)
+    expect(segments[1].isCurrent).toBe(false)
+  })
+
+  it('always isolates a week flagged recommendedFtpTest into its own segment, even mid-run of the same phase', () => {
+    const weeks = weeksOf(['build', 'build', 'build'])
+    weeks[1] = { ...weeks[1], recommendedFtpTest: true }
+    const segments = buildPhaseSegments(weeks, null)
+    expect(segments).toEqual([
+      { phase: 'build', isTest: false, weekCount: 1, startWeekNumber: 1, endWeekNumber: 1, isCurrent: false },
+      { phase: 'build', isTest: true, weekCount: 1, startWeekNumber: 2, endWeekNumber: 2, isCurrent: false },
+      { phase: 'build', isTest: false, weekCount: 1, startWeekNumber: 3, endWeekNumber: 3, isCurrent: false },
+    ])
+  })
+
+  it('returns an empty list for an empty plan', () => {
+    expect(buildPhaseSegments([], null)).toEqual([])
+  })
+
+  it('labels a multi-week segment with the full phase label', () => {
+    const segments = buildPhaseSegments(weeksOf(['build', 'build']), null)
+    expect(phaseSegmentLabel(segments[0])).toBe('Développement')
+  })
+
+  it('abbreviates a single-week recovery/build segment, but never base/peak/taper', () => {
+    const [recovery] = buildPhaseSegments(weeksOf(['recovery']), null)
+    const [build] = buildPhaseSegments(weeksOf(['build']), null)
+    const [base] = buildPhaseSegments(weeksOf(['base']), null)
+    const [peak] = buildPhaseSegments(weeksOf(['peak']), null)
+    expect(phaseSegmentLabel(recovery)).toBe('R')
+    expect(phaseSegmentLabel(build)).toBe('B')
+    expect(phaseSegmentLabel(base)).toBe('Base')
+    expect(phaseSegmentLabel(peak)).toBe('Pic')
+  })
+
+  it('labels a test segment "Test" regardless of its underlying phase', () => {
+    const weeks = weeksOf(['base'])
+    weeks[0] = { ...weeks[0], recommendedFtpTest: true }
+    const [segment] = buildPhaseSegments(weeks, null)
+    expect(phaseSegmentLabel(segment)).toBe('Test')
+  })
+})
+
+describe('weekAdherencePercent', () => {
+  function adherenceOf(plannedMinutes: number, completedMinutes: number): WeeklyAdherence {
+    return { weekNumber: 1, startDate: '2026-08-28', plannedMinutes, completedMinutes, sessionsPlanned: 3, sessionsDone: 2, sessionsMissed: 0 }
+  }
+
+  it('returns null when there is nothing to compare (no adherence entry for this week)', () => {
+    expect(weekAdherencePercent(undefined)).toBeNull()
+  })
+
+  it('returns null rather than a division by zero when nothing was planned', () => {
+    expect(weekAdherencePercent(adherenceOf(0, 0))).toBeNull()
+  })
+
+  it('computes a plain rounded percentage for a normal week', () => {
+    expect(weekAdherencePercent(adherenceOf(300, 249))).toBe(83)
+  })
+
+  it('caps the percentage at 100 rather than showing a visual overshoot', () => {
+    expect(weekAdherencePercent(adherenceOf(300, 420))).toBe(100)
   })
 })
