@@ -29,7 +29,7 @@ export default function PrivacyPolicyPage() {
       <header className="border-b border-border/40 px-6 py-4">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5">
-            <LifeCycleMark className="w-8 h-8 rounded-[10px]" />
+            <LifeCycleMark className="w-8 h-8 rounded-lg" />
             <span className="text-lg font-bold tracking-tight">LifeCycle <span className="font-light opacity-40">Pro</span></span>
           </Link>
           <Link href="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">

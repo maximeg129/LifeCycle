@@ -98,14 +98,14 @@ export default function LoginPage() {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
       {/* Logo */}
       <Link href="/" className="mb-10 flex flex-col items-center gap-2.5 group">
-        <LifeCycleMark className="w-14 h-14 shadow-lg shadow-primary/25 transition-transform group-hover:scale-105 rounded-[16px]" />
+        <LifeCycleMark className="w-14 h-14 shadow-lg shadow-primary/25 transition-transform group-hover:scale-105 rounded-2xl" />
         <span className="text-xl font-semibold tracking-tight">LifeCycle</span>
       </Link>
 
       <div className="w-full max-w-[400px] bg-card rounded-2xl p-8 shadow-[0_4px_32px_rgba(0,0,0,0.08)] border border-border/50">
         {/* Tab switcher */}
         <div className="flex bg-muted p-1 rounded-xl mb-8">
-          <Link href="/login" className="flex-1 text-center py-2 text-[13px] font-semibold rounded-[10px] bg-card shadow-sm text-foreground">
+          <Link href="/login" className="flex-1 text-center py-2 text-[13px] font-semibold rounded-lg bg-card shadow-sm text-foreground">
             Connexion
           </Link>
           <Link href="/register" className="flex-1 text-center py-2 text-[13px] font-medium text-muted-foreground hover:text-foreground transition-colors">

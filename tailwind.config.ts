@@ -47,8 +47,11 @@ export default {
           foreground: 'hsl(var(--destructive-foreground))',
         },
         border: 'hsl(var(--border))',
+        'border-strong': 'hsl(var(--border-strong))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
+        'brand-strong': 'hsl(var(--brand-strong))',
+        subtle: 'hsl(var(--subtle))',
         chart: {
           '1': 'hsl(var(--chart-1))',
           '2': 'hsl(var(--chart-2))',
@@ -96,11 +99,18 @@ export default {
           ring: 'hsl(var(--sidebar-ring))',
         },
       },
-      borderRadius: {
-        lg: 'var(--radius)',
-        md: 'calc(var(--radius) - 2px)',
-        sm: 'calc(var(--radius) - 4px)',
-      },
+      // Pas de borderRadius custom — refonte UI/IA, restructuration
+      // complète (LifeCycle_Pro_UI_Spec.md §2/§8, "Only radii 8/12/16/pill
+      // are used") : cet override (lg=var(--radius)=12px, md=10px,
+      // sm=8px) désaccordait l'app de sa propre convention déjà écrite en
+      // commentaire dans globals.css ("rounded-lg (8px)... rounded-xl
+      // (12px)... rounded-2xl (16px)") — l'échelle Tailwind PAR DÉFAUT
+      // (sm=2px, md=6px, lg=8px, xl=12px, 2xl=16px, 3xl=24px) correspond
+      // déjà exactement à r-sm/r-md/r-lg du brief une fois cet override
+      // supprimé, sans renommer une seule classe `rounded-*` dans toute la
+      // base. Voir CLAUDE.md pour l'audit des primitives shadcn
+      // (button.tsx/input.tsx) qui, elles, câblaient `rounded-md` en dur
+      // et ont dû être corrigées séparément pour retomber sur r-sm (8px).
       keyframes: {
         'accordion-down': {
           from: {

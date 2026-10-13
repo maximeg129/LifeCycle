@@ -9,7 +9,13 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-lg border bg-card text-card-foreground shadow-sm",
+      // rounded-2xl (16px, pas le rounded-lg shadcn par défaut) —
+      // restructuration complète (lifecycle-ui-reference.html) : ".card"
+      // y est à r-lg=16px partout, sans distinction de tier. Même valeur
+      // que .lc-card (globals.css) — un seul réglage ici corrige en une
+      // fois les ~90 cartes `bg-card/40 border-border` de l'app qui
+      // s'appuyaient sur ce défaut sans le surcharger elles-mêmes.
+      "rounded-2xl border bg-card text-card-foreground shadow-sm",
       className
     )}
     {...props}

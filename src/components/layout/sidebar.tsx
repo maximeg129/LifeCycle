@@ -86,7 +86,7 @@ export function AppNavigation() {
         {/* Logo */}
         <div className="px-6 pt-8 pb-6">
           <Link href="/" className="flex items-center gap-3 group">
-            <LifeCycleMark className="w-9 h-9 shadow-md shadow-primary/25 group-hover:scale-105 transition-transform rounded-[10px]" />
+            <LifeCycleMark className="w-9 h-9 shadow-md shadow-primary/25 group-hover:scale-105 transition-transform rounded-lg" />
             <div className="flex flex-col leading-none">
               <span className="text-[15px] font-semibold tracking-tight">LifeCycle</span>
               <span className="text-[10px] font-medium text-muted-foreground tracking-widest uppercase mt-0.5">Pro</span>
@@ -98,7 +98,7 @@ export function AppNavigation() {
         <div className="px-3 pb-3">
           <button
             onClick={() => window.dispatchEvent(new Event('open-command-palette'))}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-[10px] bg-muted/60 text-muted-foreground hover:bg-muted transition-colors text-left"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg bg-muted/60 text-muted-foreground hover:bg-muted transition-colors text-left"
           >
             <Search className="w-4 h-4 shrink-0" />
             <span className="text-[13px] flex-1">{t('search')}</span>
@@ -116,7 +116,7 @@ export function AppNavigation() {
             return (
               <Link key={item.href} href={item.href}>
                 <div className={cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-[10px] transition-all duration-150 group",
+                  "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 group",
                   isActive
                     ? "bg-primary/10 text-primary font-semibold"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -133,7 +133,7 @@ export function AppNavigation() {
         <div className="px-3 pb-6 pt-3 border-t border-border/60 space-y-0.5">
           <Link href="/settings">
             <div className={cn(
-              "flex items-center gap-3 px-3 py-2.5 rounded-[10px] transition-all duration-150 group",
+              "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 group",
               pathname === '/settings'
                 ? "bg-primary/10 text-primary font-semibold"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -144,7 +144,7 @@ export function AppNavigation() {
           </Link>
           <button
             onClick={handleSignOut}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[10px] text-muted-foreground hover:bg-destructive/8 hover:text-destructive transition-all duration-150 group"
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-muted-foreground hover:bg-destructive/8 hover:text-destructive transition-all duration-150 group"
           >
             <LogOut className="w-[18px] h-[18px] shrink-0" />
             <span className="text-[13.5px] font-medium">{t('logout')}</span>
@@ -167,21 +167,21 @@ export function AppNavigation() {
             <Button
               variant="ghost"
               size="icon"
-              className="w-9 h-9 rounded-[10px] hover:bg-muted"
+              className="w-9 h-9 rounded-lg hover:bg-muted"
               onClick={() => window.dispatchEvent(new Event('open-command-palette'))}
             >
               <Search className="w-[18px] h-[18px]" />
             </Button>
             <Sheet>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="w-9 h-9 rounded-[10px] hover:bg-muted">
+                <Button variant="ghost" size="icon" className="w-9 h-9 rounded-lg hover:bg-muted">
                   <Menu className="w-5 h-5" />
                 </Button>
               </SheetTrigger>
               <SheetContent side="left" className="bg-background w-64 p-0 border-r border-border/60">
                 <div className="px-6 pt-8 pb-6 border-b border-border/60">
                   <div className="flex items-center gap-3">
-                    <LifeCycleMark className="w-9 h-9 shadow-md shadow-primary/25 rounded-[10px]" />
+                    <LifeCycleMark className="w-9 h-9 shadow-md shadow-primary/25 rounded-lg" />
                     <div>
                       <span className="text-[15px] font-semibold tracking-tight block">LifeCycle</span>
                       <span className="text-[10px] text-muted-foreground uppercase tracking-widest">Pro</span>
@@ -194,7 +194,7 @@ export function AppNavigation() {
                     return (
                       <Link key={item.href} href={item.href}>
                         <div className={cn(
-                          "flex items-center gap-3 px-3 py-3 rounded-[10px] transition-all",
+                          "flex items-center gap-3 px-3 py-3 rounded-lg transition-all",
                           isActive ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
                         )}>
                           <item.icon className="w-5 h-5 shrink-0" />
@@ -211,7 +211,7 @@ export function AppNavigation() {
                 <div className="px-3 pt-3 pb-6 mt-3 border-t border-border/60 space-y-0.5">
                   <Link href="/settings">
                     <div className={cn(
-                      "flex items-center gap-3 px-3 py-3 rounded-[10px] transition-all",
+                      "flex items-center gap-3 px-3 py-3 rounded-lg transition-all",
                       pathname === '/settings' ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
                     )}>
                       <Settings className="w-5 h-5 shrink-0" />
@@ -220,7 +220,7 @@ export function AppNavigation() {
                   </Link>
                   <button
                     onClick={handleSignOut}
-                    className="w-full flex items-center gap-3 px-3 py-3 rounded-[10px] text-muted-foreground hover:bg-destructive/8 hover:text-destructive transition-all"
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-lg text-muted-foreground hover:bg-destructive/8 hover:text-destructive transition-all"
                   >
                     <LogOut className="w-5 h-5 shrink-0" />
                     <span className="text-[14px] font-medium">{t('logout')}</span>
@@ -249,7 +249,7 @@ export function AppNavigation() {
               return (
                 <Link key={item.href} href={item.href} className="flex flex-col items-center gap-1 min-w-[48px] py-1">
                   <div className={cn(
-                    "relative w-9 h-9 flex items-center justify-center rounded-[10px] transition-all duration-200",
+                    "relative w-9 h-9 flex items-center justify-center rounded-lg transition-all duration-200",
                     isActive ? "bg-primary/12 text-primary" : "text-muted-foreground"
                   )}>
                     <item.icon className="w-[20px] h-[20px]" />
