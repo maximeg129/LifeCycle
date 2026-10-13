@@ -4163,6 +4163,47 @@ Tests : aucun nouveau — 949/949 inchangés, tsc/eslint/build clean. **Non vér
 limite que la pièce 1) — risque jugé plus faible qu'un changement de radius/couleur (un texte 1-2px
 plus grand déborde rarement un conteneur déjà prévu pour du texte), mais toujours invérifiable ici.
 
+### Pièce 3 — AppShell : état actif du rail, bottom nav à 3 items, bouton Stella pill/icône
+
+**État actif de la nav (rail desktop + Sheet mobile)** — la référence rend l'item actif en
+`background:var(--surface);box-shadow:inset 0 0 0 1px var(--border)` (une carte blanche avec un
+fin contour), l'icône seule colorée brand ; `sidebar.tsx` rendait jusqu'ici l'actif en
+`bg-primary/10 text-primary` (un lavis lime sur TOUT le libellé) — remplacé par `bg-card
+text-foreground shadow-[inset_0_0_0_1px_hsl(var(--border))]`, icône restant seule colorée
+`text-primary` (déjà le cas pour les 3 items de nav principaux ; ajouté pour "Réglages", qui n'avait
+jusqu'ici aucune couleur d'icône active — un oubli antérieur, pas une divergence de la référence).
+
+**Bottom nav mobile réduit à 3 items** — la référence n'a QUE Aujourd'hui/Plan/Activités dans son
+`.bottomnav` ; "Réglages" y vivait en 4ᵉ item dans cette app depuis la refonte précédente. Retiré —
+reste joignable via le menu ☰ (Sheet, inchangé, déjà "Réglages" + "Déconnexion"), exactement comme
+la référence (qui ne met pas non plus Réglages dans son bottomnav, seulement dans le rail desktop).
+
+**Bouton Stella — un seul élément, repositionné/réduit en CSS plutôt que deux boutons séparés** —
+avant ce correctif, deux `<button>` distincts existaient (un cercle 64px empilé dans la rangée du
+bottom nav mobile, un cercle 56px flottant indépendant sur desktop). La référence utilise LE MÊME
+`.fab` aux deux formats, seulement repositionné/rétréci sous 820px (`bottom:84px;right:16px`) avec
+son libellé "Stella" caché (`.fab b{display:none}`) plutôt que deux variantes visuellement
+différentes. Unifié en un seul `<button>` (`fixed`, classes responsives `bottom-[84px] right-4
+px-3 md:bottom-6 md:right-6 md:px-4`), pill 44px de haut (`h-11`), `bg-foreground text-background`
+(même inversion de couleur que la référence : `.fab{background:var(--text);color:var(--bg)}`),
+icône `text-primary` (stroke brand), libellé "Stella" uniquement visible à partir de `md:`
+(`hidden md:inline`) — jamais deux boutons à maintenir en synchro.
+
+**Icônes de nav alignées sur les tracés SVG exacts de la référence** — `CalendarRange` (Plan) →
+`Calendar` : le tracé SVG de la référence pour "Plan" (`rect` + 2 ticks + ligne horizontale) est
+exactement l'icône `Calendar` de lucide-react, sans les marques de plage que `CalendarRange` ajoute.
+`Sun` (Aujourd'hui) et `Activity` (Activités) correspondaient déjà exactement.
+
+**Hors scope, documenté plutôt que construit par erreur d'omission** — la référence montre un item
+de rail séparé "Profil & coach" (icône silhouette), distinct de "Réglages" — aucune page dédiée
+n'existe pour ce contenu dans cette app (Profil reste une section de `/settings`, pas sa propre
+destination) ; créer cette page serait une vraie décision d'architecture de l'information, pas une
+restyle, donc non construite ici sans décision explicite.
+
+Tests : aucun nouveau (JSX/classes uniquement) — 949/949 inchangés, tsc/eslint/build clean. **Non
+vérifié à l'écran** — à confirmer par l'utilisateur au premier rendu réel, notamment le
+repositionnement du bouton Stella en mobile et le contour `inset` de l'item de nav actif.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

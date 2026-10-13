@@ -7,7 +7,7 @@ import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
   Sun,
-  CalendarRange,
+  Calendar,
   Activity,
   Settings,
   Menu,
@@ -62,7 +62,7 @@ import { useIsMobile } from '@/hooks/use-mobile'
 // pas utilisable.
 const navItems = [
   { key: 'today' as const, href: '/cycling', icon: Sun },
-  { key: 'plan' as const, href: '/plan', icon: CalendarRange },
+  { key: 'plan' as const, href: '/plan', icon: Calendar },
   { key: 'activities' as const, href: '/coach', icon: Activity },
 ]
 
@@ -115,10 +115,16 @@ export function AppNavigation() {
             const isActive = pathname === item.href
             return (
               <Link key={item.href} href={item.href}>
+                {/* Actif : fond --surface (bg-card) + ring intérieur --border,
+                    pas un lavis lime — restructuration complète
+                    (lifecycle-ui-reference.html, ".nav[aria-current]") :
+                    ".nav[aria-current]{background:var(--surface);...;
+                    box-shadow:inset 0 0 0 1px var(--border)}". Seule l'icône
+                    reste colorée brand (déjà le cas). */}
                 <div className={cn(
                   "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 group",
                   isActive
-                    ? "bg-primary/10 text-primary font-semibold"
+                    ? "bg-card text-foreground font-semibold shadow-[inset_0_0_0_1px_hsl(var(--border))]"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}>
                   <item.icon className={cn("w-[18px] h-[18px] shrink-0", isActive ? "text-primary" : "group-hover:text-foreground")} />
@@ -129,16 +135,20 @@ export function AppNavigation() {
           })}
         </nav>
 
-        {/* Bottom */}
+        {/* Bottom — Réglages + Déconnexion (voir leur propre commentaire :
+            lifecycle-ui-reference.html montre aussi un item "Profil &
+            coach" séparé, non construit ici — aucune page dédiée n'existe
+            encore pour ce contenu, Profil restant une section de /settings,
+            voir CLAUDE.md). */}
         <div className="px-3 pb-6 pt-3 border-t border-border/60 space-y-0.5">
           <Link href="/settings">
             <div className={cn(
               "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-150 group",
               pathname === '/settings'
-                ? "bg-primary/10 text-primary font-semibold"
+                ? "bg-card text-foreground font-semibold shadow-[inset_0_0_0_1px_hsl(var(--border))]"
                 : "text-muted-foreground hover:bg-muted hover:text-foreground"
             )}>
-              <Settings className="w-[18px] h-[18px] shrink-0 group-hover:rotate-45 transition-transform duration-500" />
+              <Settings className={cn("w-[18px] h-[18px] shrink-0 group-hover:rotate-45 transition-transform duration-500", pathname === '/settings' && "text-primary")} />
               <span className="text-[13.5px] font-medium">{t('settings')}</span>
             </div>
           </Link>
@@ -160,7 +170,7 @@ export function AppNavigation() {
         {/* Top bar */}
         <header className="fixed top-0 left-0 right-0 h-14 bg-background/85 backdrop-blur-2xl border-b border-border/50 z-40 px-5 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <LifeCycleMark className="w-7 h-7 shadow-sm shadow-primary/20 rounded-[8px]" />
+            <LifeCycleMark className="w-7 h-7 shadow-sm shadow-primary/20 rounded-lg" />
             <span className="text-[15px] font-semibold tracking-tight">LifeCycle</span>
           </div>
           <div className="flex items-center gap-1">
@@ -193,11 +203,12 @@ export function AppNavigation() {
                     const isActive = pathname === item.href
                     return (
                       <Link key={item.href} href={item.href}>
+                        {/* Même traitement actif que le rail desktop — voir son commentaire. */}
                         <div className={cn(
                           "flex items-center gap-3 px-3 py-3 rounded-lg transition-all",
-                          isActive ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
+                          isActive ? "bg-card text-foreground font-semibold shadow-[inset_0_0_0_1px_hsl(var(--border))]" : "text-muted-foreground"
                         )}>
-                          <item.icon className="w-5 h-5 shrink-0" />
+                          <item.icon className={cn("w-5 h-5 shrink-0", isActive && "text-primary")} />
                           <span className="text-[14px] font-medium flex-1">{t(item.key)}</span>
                         </div>
                       </Link>
@@ -212,9 +223,9 @@ export function AppNavigation() {
                   <Link href="/settings">
                     <div className={cn(
                       "flex items-center gap-3 px-3 py-3 rounded-lg transition-all",
-                      pathname === '/settings' ? "bg-primary/10 text-primary font-semibold" : "text-muted-foreground"
+                      pathname === '/settings' ? "bg-card text-foreground font-semibold shadow-[inset_0_0_0_1px_hsl(var(--border))]" : "text-muted-foreground"
                     )}>
-                      <Settings className="w-5 h-5 shrink-0" />
+                      <Settings className={cn("w-5 h-5 shrink-0", pathname === '/settings' && "text-primary")} />
                       <span className="text-[14px] font-medium">{t('settings')}</span>
                     </div>
                   </Link>
@@ -234,17 +245,17 @@ export function AppNavigation() {
           </div>
         </header>
 
-        {/* Bottom nav — floating pill, 3 destinations (Aujourd'hui/Plan/
-            Activités, voir navItems plus haut) + Réglages. Avec une
-            séparée circulaire Stella à côté, à la Whoop coach button
-            (retour utilisateur sur une capture de référence) — l'overlay
-            flottant, pas un onglet de nav, voir plus bas. */}
-        <div className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-3 pt-1 flex items-center gap-2.5 safe-area-bottom pointer-events-none">
-          <nav className="flex-1 h-16 rounded-full bg-background/90 backdrop-blur-2xl border border-border/60 shadow-lg shadow-black/5 flex items-center justify-around px-1 pointer-events-auto">
-            {[
-              ...navItems.map((item) => ({ ...item, label: t(item.key) })),
-              { href: '/settings', icon: Settings, label: t('settings') },
-            ].map((item) => {
+        {/* Bottom nav — floating pill, 3 destinations seulement
+            (Aujourd'hui/Plan/Activités) — restructuration complète
+            (lifecycle-ui-reference.html, ".bottomnav" n'a que ces 3
+            boutons) : Réglages, qui y vivait en 4ᵉ item, en est retiré —
+            reste joignable via le menu ☰ (Sheet, voir plus haut), comme
+            dans la référence (aucun Réglages dans son bottomnav non plus).
+            Stella (bouton séparé, voir plus bas) n'est plus empilé dans
+            cette rangée. */}
+        <nav className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-3 pt-1 safe-area-bottom">
+          <div className="h-16 rounded-full bg-background/90 backdrop-blur-2xl border border-border/60 shadow-lg shadow-black/5 flex items-center justify-around px-1">
+            {navItems.map((item) => {
               const isActive = pathname === item.href
               return (
                 <Link key={item.href} href={item.href} className="flex flex-col items-center gap-1 min-w-[48px] py-1">
@@ -258,35 +269,31 @@ export function AppNavigation() {
                     "text-xs font-medium tracking-tight",
                     isActive ? "text-primary" : "text-muted-foreground"
                   )}>
-                    {item.label}
+                    {t(item.key)}
                   </span>
                 </Link>
               )
             })}
-          </nav>
-
-          <button
-            type="button"
-            onClick={() => setStellaOpen(true)}
-            aria-label="Stella"
-            className="pointer-events-auto shrink-0 w-16 h-16 rounded-full flex items-center justify-center shadow-lg shadow-primary/30 transition-transform active:scale-95 bg-foreground text-primary"
-          >
-            <Sparkles className="w-6 h-6" />
-          </button>
-        </div>
+          </div>
+        </nav>
       </div>
 
-      {/* Desktop — même bouton flottant, en bas à droite du contenu (la
-          sidebar fixe occupe déjà la colonne de gauche). Absent avant ce
-          correctif : Stella n'était joignable sur desktop que via l'onglet
-          Coach dédié, qui n'existe plus (voir plus haut). */}
+      {/* Stella — bouton flottant, pill foncée + libellé sur desktop,
+          icône seule repositionnée au-dessus du bottom nav sur mobile —
+          restructuration complète (lifecycle-ui-reference.html, ".fab") :
+          ".fab{height:44px;...;background:var(--text);color:var(--bg)}
+          .fab svg{stroke:var(--brand)}" + sous 820px "bottom:84px;
+          right:16px;padding:0 12px... .fab b{display:none}" (le libellé
+          disparaît, pas la forme : un seul bouton, pas deux variantes
+          visuellement différentes comme avant ce correctif). */}
       <button
         type="button"
         onClick={() => setStellaOpen(true)}
         aria-label="Stella"
-        className="hidden md:flex fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full items-center justify-center shadow-lg shadow-primary/30 transition-transform hover:scale-105 active:scale-95 bg-foreground text-primary"
+        className="fixed z-40 h-11 rounded-full flex items-center justify-center gap-2 shadow-lg shadow-black/20 transition-transform hover:scale-105 active:scale-95 bg-foreground text-background bottom-[84px] right-4 px-3 md:bottom-6 md:right-6 md:px-4"
       >
-        <Sparkles className="w-6 h-6" />
+        <Sparkles className="w-[18px] h-[18px] text-primary shrink-0" />
+        <span className="hidden md:inline text-sm font-semibold">Stella</span>
       </button>
 
       {/* Panneau Stella — refonte UI/IA (LifeCycle_Pro_UX_Engine_Review.md
