@@ -4640,6 +4640,74 @@ premier rendu réel. Les parties "en vert" (carte séance hero-grid) et "en roug
 incluant aujourd'hui) du retour utilisateur étaient déjà couvertes par la Pièce 10 — aucune action
 supplémentaire identifiée pour elles dans cette pièce.
 
+### Pièce 12 — Aujourd'hui : en-tête fusionné, contexte dédoublonné, "À noter" déplacé en bas
+
+Retour utilisateur, deux nouvelles captures d'écran (une de la référence recadrée, une de l'app
+réelle en prod) : "regarde encore la premier capture est ce que je veux; ajuste accordingly tu vois
+sur le screenshot de l'app actuel il y a encore beaucoup de differences." Diff lu capture contre
+capture plutôt que deviné, trois écarts concrets et bâtissables identifiés (un quatrième,
+"Météo de la prochaine sortie", explicitement écarté — voir plus bas) :
+
+**1. Bug réel trouvé en diffant : un badge affichait un dump brut plutôt qu'un repère compact** —
+la capture prod montre, entre le bandeau RPE et la séance du jour, un bloc de texte qui ressemble à
+une fuite de debug : "Semaine 7 du plan. Reprise progressive modérée : 1 VO2max court (4x4 min...)"
+puis "Récup 6.9h · HRV 48.715027ms · FC repos 55bpm · Readiness 48/100" — un HRV à 6 décimales
+n'est écrit nulle part ailleurs dans l'app sous cette forme. Root cause, lue dans
+`daily-workout-tab.tsx` : c'était bien le badge `<Badge>Semaine {planWeek.weekNumber} du plan ·
+{planWeek.focus}</Badge>` déjà existant — `focus` est un champ texte libre généré par l'IA, qui peut
+être une phrase entière plutôt qu'un court libellé, faisant ressembler ce badge à un paragraphe de
+debug plutôt qu'à un repère de contexte compact ; et le badge `<Badge>Récup {recovery.hrv}ms...</Badge>`
+juste à côté n'arrondissait jamais `recovery.hrv`/`recovery.sleepHours` (pas de `Math.round`),
+affichant la décimale brute reçue d'Intervals.icu. Les deux badges retirés entièrement plutôt que
+seulement corrigés en arrondi : leur contenu est de toute façon ENTIÈREMENT redondant avec deux
+sources déjà affichées ailleurs sur le même écran — la ligne d'en-tête "Semaine N/T · Phase · Jj
+avant l'objectif" (point 2 ci-dessous) pour la première, et les cellules Récupération/Sommeil/
+HRV·FC repos de `ReadinessStrip` (juste au-dessus) pour la seconde — jamais la référence ne montre
+ces badges. `recovery` devient alors un destructure mort dans `DailyWorkoutTab()`, retiré.
+
+**2. En-tête fusionné sur une seule rangée** — la référence montre "Bonjour Maxime" et "Semaine
+7/12 · Build · 47j avant le test FTP ›" sur la MÊME ligne (salutation à gauche, lien plan à droite) ;
+l'app affichait ces deux éléments sur deux lignes séparées (`TodayGreeting` dans `cycling/page.tsx`,
+le lien plan dans `training-plan-tab.tsx`) — exactement le compromis documenté dans la Pièce 10 comme
+"un risque de duplication de lecture Firestore jugé pire qu'un alignement pixel-parfait". Résolu
+SANS dupliquer de lecture : `<TodayGreeting />` déménage DANS `training-plan-tab.tsx` (qui a déjà sa
+propre instance de `useTrainingPlan()` pour calculer cette ligne), dans un conteneur flex commun
+(`justify-between`, salutation à gauche/lien à droite) — aucun nouveau hook, juste un déplacement de
+composant. `cycling/page.tsx` ne rend donc plus `<TodayGreeting />` lui-même. Le header est
+construit AVANT le early-return `isLoadingPlan` (`const header = (...)`, rendu dans les deux
+branches) pour que la salutation reste visible immédiatement, sans attendre le premier chargement du
+plan.
+
+**3. "À noter" (RPE manquants) déplacé en bas de l'écran** — la référence montre `PendingFeedbackBanner`
+APRÈS "Cette semaine" (en bas de page, à côté d'une carte météo non construite — voir plus bas) ;
+l'app le montrait juste après l'en-tête, AVANT la séance du jour. Simple réordonnancement JSX dans
+`training-plan-tab.tsx` — `<PendingFeedbackBanner />` déplacé après `<PlanNextSessionsList>`.
+
+**Écarté consciemment : carte "Météo de la prochaine sortie"** — la référence montre une deuxième
+carte, à côté de "À noter", avec la prévision météo de la prochaine sortie planifiée (température/
+vent/pluie/tenue suggérée) + un lien "Changer l'heure ou le lieu". Cette fonctionnalité N'EXISTE PAS
+actuellement — la construire exigerait de retrouver la prochaine sortie planifiée, fetcher une
+prévision météo réelle pour cette date/lieu, et suggérer une tenue — une vraie nouvelle feature, pas
+un ajustement de mise en page. Construire ça maintenant irait aussi à l'encontre d'une décision
+utilisateur déjà prise et documentée dans ce même fichier ("Coach Aujourd'hui : retour au flux
+séquentiel" — "j'enlèverais d'ailleurs le côté météo que j'aimerais simplement garder ad hoc" — la
+météo avait justement été DÉ-EMPHASISÉE sur cet écran). Non construite ici, consciemment, plutôt que
+réintroduite silencieusement sous couvert d'un alignement visuel.
+
+**Écarté consciemment : la barre d'onglets "Aujourd'hui / Plan / Détail activité" + le sélecteur de
+thème "Clair/Sombre/Auto" visibles en haut de la référence** — ce sont les commandes internes du
+fichier HTML de référence lui-même (un mockup statique multi-écrans dans un seul fichier, qui a
+besoin de sa propre navigation pour basculer entre ses captures), pas du chrome applicatif à
+reproduire : l'app a déjà sa propre navigation à 3 destinations (sidebar desktop/bottom nav mobile,
+voir Pièce 3 de cette même restructuration) et son propre bouton de thème (`/settings`,
+`useTheme()`). Dupliquer une barre d'onglets en plus de la sidebar créerait une deuxième navigation
+concurrente, jamais demandée explicitement.
+
+Aucune nouvelle logique pure — 985/985 tests inchangés, tsc/eslint/build clean. **Non vérifié à
+l'écran** (même limite `favicon.ico` que le reste de cette restructuration) — le nouvel en-tête
+fusionné et la nouvelle position de "À noter" sont invérifiables visuellement dans ce sandbox ; à
+confirmer par l'utilisateur au premier rendu réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

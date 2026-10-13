@@ -205,7 +205,6 @@ export function DailyWorkoutTab() {
     storedIndoorRequested,
     sentToIntervals,
     planWeek,
-    recovery,
     isLoadingStored,
     isGenerating,
     isSending,
@@ -531,25 +530,17 @@ export function DailyWorkoutTab() {
         <IntervalsOnboardingNotice message="Intervals.icu non connecté — vous pouvez générer une proposition, mais pas l'envoyer sur votre calendrier." />
       )}
 
-      {/* Contexte toujours visible (semaine du plan/récupération) + toggle
-          Vélo/Salle — sorti de la carte "Proposition du jour" (qui
+      {/* Toggle Vélo/Salle — sorti de la carte "Proposition du jour" (qui
           n'existe plus comme bloc permanent, voir plus bas) pour rester
-          accessible quel que soit l'état affiché en dessous. */}
-      <div className="flex flex-wrap items-center gap-2">
-        {planWeek && (
-          <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
-            Semaine {planWeek.weekNumber} du plan · {planWeek.focus}
-          </Badge>
-        )}
-        {recovery && (recovery.sleepHours != null || recovery.hrv != null || recovery.restingHR != null || recovery.readiness != null) && (
-          <Badge variant="outline" className="w-fit gap-1.5 font-normal text-xs">
-            Récup {recovery.sleepHours != null ? `${recovery.sleepHours}h` : ''}
-            {recovery.hrv != null ? ` · HRV ${recovery.hrv}ms` : ''}
-            {recovery.restingHR != null ? ` · FC repos ${recovery.restingHR}bpm` : ''}
-            {recovery.readiness != null ? ` · Readiness ${recovery.readiness}/100` : ''}
-          </Badge>
-        )}
-      </div>
+          accessible quel que soit l'état affiché en dessous. Les badges
+          "Semaine N du plan · {focus}"/"Récup ..." qui vivaient ici ont été
+          retirés (restructuration, retour utilisateur captures d'écran) :
+          purement redondants avec le header "Semaine N/T · Phase..." (voir
+          training-plan-tab.tsx) et les cellules de ReadinessStrip
+          (Récupération/Sommeil/HRV·FC repos juste au-dessus) — `focus` est
+          un texte libre généré par l'IA qui peut faire une phrase entière,
+          ce qui faisait ressembler ce badge à un dump de debug plutôt qu'à
+          un repère de contexte compact. */}
       <div className="space-y-1.5">
         <Label className="text-xs text-muted-foreground">Aujourd&apos;hui</Label>
         <div className="flex gap-0.5 rounded-full bg-muted p-0.5 w-fit">

@@ -9,12 +9,14 @@
 // instance de useTrainingPlan() — ce composant ne lit que useUser(), un
 // contexte déjà partagé/léger, pour ne pas dupliquer tous les hooks lourds
 // que useTrainingPlan() agrège (budget/gouverneur/mémoire coach...) juste
-// pour afficher un prénom). La ligne "Semaine N/T · Phase · Jj avant
-// l'objectif · Voir le plan ›" reste là où elle vit déjà (training-plan-
-// tab.tsx, sa propre instance du hook) plutôt que fusionnée sur la même
-// ligne que ce composant — même contenu/fonction, juste pas la même rangée
-// visuelle que la référence : un risque de duplication de lecture Firestore
-// jugé pire qu'un alignement pixel-parfait.
+// pour afficher un prénom). Rendu DEPUIS training-plan-tab.tsx (pas
+// cycling/page.tsx) — retour utilisateur, nouvelle comparaison capture
+// d'écran vs référence : la ligne "Semaine N/T · Phase · Jj avant
+// l'objectif · Voir le plan ›" doit vivre sur la MÊME rangée que cette
+// salutation, pas en dessous. training-plan-tab.tsx a déjà sa propre
+// instance de useTrainingPlan() pour cette ligne — les deux cohabitent dans
+// un même conteneur flex là-bas plutôt que de dupliquer une lecture
+// Firestore ici juste pour l'alignement.
 
 import { useUser } from '@/firebase'
 import { format } from 'date-fns'

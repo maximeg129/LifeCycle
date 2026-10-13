@@ -15,11 +15,13 @@
 // Restructuration (lifecycle-ui-reference.html, retour utilisateur captures
 // d'écran "en jaune la section doit se limiter seulement a ces indicateurs
 // ... en rouge le plan pour le semaine (simplifié)") : cette page ne garde
-// plus que la salutation, le panneau ReadinessStrip (via PerformanceBento)
-// et la séance du jour/7 prochains jours (TrainingPlanTab) — la grille
-// "Entraînement" (Riegel/CTL/ATL/FTP/Puissance critique) a été retirée de
-// PerformanceBento, et le budget kJ/gouverneur/PMC ont déménagé vers /plan
-// (voir plan-tab.tsx), confirmés par AskUserQuestion avant ce retrait.
+// plus que la salutation (TodayGreeting, rendue DANS TrainingPlanTab — voir
+// son commentaire de tête — côte à côte avec le header "Semaine N/T..."),
+// le panneau ReadinessStrip (via PerformanceBento) et la séance du jour/7
+// prochains jours (TrainingPlanTab) — la grille "Entraînement" (Riegel/CTL/
+// ATL/FTP/Puissance critique) a été retirée de PerformanceBento, et le
+// budget kJ/gouverneur/PMC ont déménagé vers /plan (voir plan-tab.tsx),
+// confirmés par AskUserQuestion avant ce retrait.
 
 import React from 'react'
 import { AppNavigation } from '@/components/layout/sidebar'
@@ -30,7 +32,6 @@ import { useAthlete } from '@/hooks/use-intervals'
 import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
 import { PerformanceBento } from '@/components/cycling/performance-bento'
 import { TrainingPlanTab } from '@/components/cycling/training-plan-tab'
-import { TodayGreeting } from '@/components/cycling/today-greeting'
 
 // ── Loading skeleton ─────────────────────────────────────────────────
 
@@ -65,12 +66,6 @@ export default function CyclingHub() {
           habituel) remplace la clearance mobile que PageHeader apportait
           via son propre mt-16, pour ne pas passer sous le header fixe. */}
       <main className="px-4 pt-20 pb-4 md:p-8 max-w-7xl mx-auto space-y-8">
-        {/* Retour utilisateur, capture d'écran jointe : eyebrow date +
-            "Bonjour {Prénom}" en tête de l'écran — voir today-greeting.tsx
-            (volontairement indépendant du reste de la page, aucune donnée
-            de plan). */}
-        <TodayGreeting />
-
         {!isConfigured && !athlete.isLoading ? (
           <NotConfiguredBanner />
         ) : (
