@@ -10,6 +10,7 @@ import { currentPlanWeek, computePlanProgress, PHASE_LABELS } from './training-p
 import { PlanNextSessionsList } from './plan-next-sessions-list'
 import { DailyWorkoutTab } from './daily-workout-tab'
 import { PendingFeedbackBanner } from '@/components/coach/pending-feedback-banner'
+import { TodayGreeting } from './today-greeting'
 
 // ── Contexte plan sur Aujourd'hui (malgré le nom du fichier/de la
 // fonction, conservés pour ne pas re-churner tous les imports/commentaires
@@ -19,16 +20,19 @@ import { PendingFeedbackBanner } from '@/components/coach/pending-feedback-banne
 // complète du plan (progression, "Pourquoi ce plan ?", vigilance, grille
 // 12 semaines, prévu/réalisé, journal des recalibrations) a déménagé vers
 // sa propre page top-level (/plan, voir plan-tab.tsx) — ce composant ne
-// garde plus que ce que le brief UI appelle le "Plan header" : une seule
-// ligne ("Semaine 7/12 · Build · 47 j avant le test FTP · Voir le plan ›")
-// plus la séance du jour elle-même (PendingFeedbackBanner/DailyWorkoutTab,
-// réutilisés tels quels) et les 7 prochains jours (PlanNextSessionsList) —
-// inclut désormais le jour "Aujourd'hui" lui-même dans la bande (voir le
-// commentaire de tête de plan-next-sessions-list.tsx, "make the Aujourd'hui
-// page as the attached" : la référence montre la tuile du jour surlignée
-// dans la bande, à côté de la grande carte "séance du jour" juste
-// au-dessus — redondant mais intentionnel). Rendu directement sur /cycling
-// (voir ce fichier), qui devient ainsi "Aujourd'hui" au sens de la nouvelle IA.
+// garde plus que ce que le brief UI appelle le "Plan header" : TodayGreeting
+// ("Bonjour {Prénom}") + une seule ligne à droite ("Semaine 7/12 · Build ·
+// 47 j avant le test FTP · Voir le plan ›", sur la MÊME rangée — restructuration
+// lifecycle-ui-reference.html, retour utilisateur captures d'écran), plus la
+// séance du jour elle-même (DailyWorkoutTab) et les 7 prochains jours
+// (PlanNextSessionsList) — inclut désormais le jour "Aujourd'hui" lui-même
+// dans la bande (voir le commentaire de tête de plan-next-sessions-list.tsx,
+// "make the Aujourd'hui page as the attached" : la référence montre la tuile
+// du jour surlignée dans la bande, à côté de la grande carte "séance du
+// jour" juste au-dessus — redondant mais intentionnel), puis "À noter"
+// (PendingFeedbackBanner) tout en bas — même position que dans la référence.
+// Rendu directement sur /cycling (voir ce fichier), qui devient ainsi
+// "Aujourd'hui" au sens de la nouvelle IA.
 export function TrainingPlanTab() {
   const {
     activePlan, isLoadingPlan,
@@ -58,14 +62,21 @@ export function TrainingPlanTab() {
     generateWeekSessions(week)
   }, [week, generatingSessionsForWeek, generateWeekSessions])
 
-  if (isLoadingPlan) return <Skeleton className="h-48 w-full rounded-2xl" />
-
-  return (
-    <div className="space-y-6">
+  // En-tête "Bonjour {Prénom}" + "Semaine N/T · Phase · Jj avant l'objectif
+  // ›" sur la MÊME rangée (restructuration lifecycle-ui-reference.html,
+  // retour utilisateur captures d'écran) — TodayGreeting déménagé ici
+  // depuis cycling/page.tsx (qui ne fait plus que l'appeler) pour vivre à
+  // côté de ce lien sans ouvrir une deuxième instance de useTrainingPlan()
+  // juste pour aligner les deux visuellement. Rendu AVANT le early-return
+  // isLoadingPlan pour que la salutation reste visible immédiatement, sans
+  // attendre le premier chargement du plan.
+  const header = (
+    <div className="flex items-start justify-between gap-4 flex-wrap">
+      <TodayGreeting />
       {activePlan && (
         <Link
           href="/plan"
-          className="flex items-center justify-between gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors group"
+          className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors group shrink-0"
         >
           <span className="truncate">
             Semaine {week?.weekNumber ?? '—'}/{activePlan.weeks.length}
@@ -77,8 +88,22 @@ export function TrainingPlanTab() {
           </span>
         </Link>
       )}
+    </div>
+  )
 
-      <PendingFeedbackBanner />
+  if (isLoadingPlan) {
+    return (
+      <div className="space-y-6">
+        {header}
+        <Skeleton className="h-48 w-full rounded-2xl" />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {header}
+
       <DailyWorkoutTab />
 
       {activePlan && (
@@ -100,6 +125,11 @@ export function TrainingPlanTab() {
           athleteFtp={athleteFtp}
         />
       )}
+
+      {/* "À noter" (RPE manquants) — déplacé en bas de l'écran (restructuration
+          lifecycle-ui-reference.html) : la référence le montre après "Cette
+          semaine", pas entre la salutation et la séance du jour. */}
+      <PendingFeedbackBanner />
     </div>
   )
 }
