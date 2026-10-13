@@ -65,7 +65,7 @@ async function notifyAnalysisReady(idToken: string, title: string): Promise<void
       body: JSON.stringify({
         title: 'Analyse de séance prête',
         body: title,
-        url: '/coach?tab=journal',
+        url: '/coach?tab=rides',
       }),
     })
   } catch {

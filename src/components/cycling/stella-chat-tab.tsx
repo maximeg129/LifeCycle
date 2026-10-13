@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -10,6 +11,36 @@ import { cn } from '@/lib/utils'
 import { useCoachChat } from './use-coach-chat'
 import { isSendableChatMessage } from './coach-chat-types'
 import { EmptyState } from '@/components/ui/empty-state'
+
+// Rendu markdown des réponses de Stella (review externe UX/engine §2 —
+// "Stella renders markdown" dans la checklist d'acceptation) : le texte
+// généré par `coachChat` peut déjà porter du gras/listes/titres en
+// Markdown brut (comme tout autre flow texte libre de l'app), jamais
+// rendu jusqu'ici — affiché tel quel avec les astérisques visibles.
+// Pas de plugin @tailwindcss/typography dans ce projet (voir
+// tailwind.config.ts) — mapping minimal élément par élément plutôt que
+// d'ajouter une dépendance pour une poignée de balises. Message de
+// l'athlète (role 'user') reste en texte brut `whitespace-pre-wrap` —
+// il tape du texte, jamais du Markdown à interpréter.
+const MARKDOWN_COMPONENTS = {
+  p: ({ children }: { children?: React.ReactNode }) => <p className="mb-2 last:mb-0">{children}</p>,
+  strong: ({ children }: { children?: React.ReactNode }) => <strong className="font-bold">{children}</strong>,
+  em: ({ children }: { children?: React.ReactNode }) => <em className="italic">{children}</em>,
+  ul: ({ children }: { children?: React.ReactNode }) => <ul className="list-disc pl-4 mb-2 last:mb-0 space-y-0.5">{children}</ul>,
+  ol: ({ children }: { children?: React.ReactNode }) => <ol className="list-decimal pl-4 mb-2 last:mb-0 space-y-0.5">{children}</ol>,
+  li: ({ children }: { children?: React.ReactNode }) => <li>{children}</li>,
+  a: ({ href, children }: { href?: string; children?: React.ReactNode }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer" className="underline font-medium">
+      {children}
+    </a>
+  ),
+  code: ({ children }: { children?: React.ReactNode }) => (
+    <code className="bg-background/50 rounded px-1 py-0.5 font-data text-[0.85em]">{children}</code>
+  ),
+  h1: ({ children }: { children?: React.ReactNode }) => <p className="font-bold mb-1">{children}</p>,
+  h2: ({ children }: { children?: React.ReactNode }) => <p className="font-bold mb-1">{children}</p>,
+  h3: ({ children }: { children?: React.ReactNode }) => <p className="font-bold mb-1">{children}</p>,
+}
 
 const SUGGESTIONS = [
   'Qu\'est-ce que je fais aujourd\'hui ?',
@@ -90,11 +121,15 @@ export function StellaChatTab() {
                   <div key={i} className={cn('flex', m.role === 'user' ? 'justify-end' : 'justify-start')}>
                     <div
                       className={cn(
-                        'max-w-[80%] rounded-2xl px-4 py-2.5 text-sm whitespace-pre-wrap',
-                        m.role === 'user' ? 'bg-primary text-primary-foreground' : 'bg-secondary text-foreground'
+                        'max-w-[80%] rounded-2xl px-4 py-2.5 text-sm',
+                        m.role === 'user' ? 'bg-primary text-primary-foreground whitespace-pre-wrap' : 'bg-secondary text-foreground'
                       )}
                     >
-                      {m.content}
+                      {m.role === 'assistant' ? (
+                        <ReactMarkdown components={MARKDOWN_COMPONENTS}>{m.content}</ReactMarkdown>
+                      ) : (
+                        m.content
+                      )}
                     </div>
                   </div>
                 ))}

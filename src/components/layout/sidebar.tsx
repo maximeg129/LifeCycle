@@ -6,8 +6,9 @@ import dynamic from 'next/dynamic'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
-  Bike,
-  BrainCircuit,
+  Sun,
+  CalendarRange,
+  Activity,
   Settings,
   Menu,
   LogOut,
@@ -35,36 +36,34 @@ import { useRouter } from 'next/navigation'
 import { CommandPalette } from '@/components/search/command-palette'
 import { APP_VERSION, formatVersionLabel } from '@/lib/version'
 import { LifeCycleMark } from './lifecycle-mark'
+import { useIsMobile } from '@/hooks/use-mobile'
 
 // Vie & Santé et Finances ont été retirées de la nav principale : leurs
 // métriques les plus utiles (sommeil/HRV/readiness) vivent maintenant dans
-// Cyclisme > Vue d'ensemble, et les deux pages restent pleinement
-// fonctionnelles (objectifs, analyse IA, budgets...) — juste accessibles via
-// la carte "Autres modules" de Réglages plutôt que la nav principale.
+// Aujourd'hui (ex-Cyclisme) > Vue d'ensemble, et les deux pages restent
+// pleinement fonctionnelles (objectifs, analyse IA, budgets...) — juste
+// accessibles via la carte "Autres modules" de Réglages plutôt que la nav
+// principale. Garage/Nutrition/Maison, sortis de la nav à leur tour pour
+// les mêmes raisons (retour utilisateur, inspiré de Frive/Join), suivent le
+// même traitement.
 //
-// "Météo AI" a ensuite été fusionnée dans un nouveau hub "Coach", qui
-// regroupe tout ce qui concerne planifier/faire/relire une sortie et la
-// relation coach (Proposition du jour, Sorties, Météo & Tenue, Plan, Stella,
-// Mémoire coach) — planifier une sortie avec la bonne tenue et planifier une
-// séance sont le même geste, ça n'avait pas de sens que ce soit deux
-// destinations de nav différentes. Voir CLAUDE.md.
-//
-// ⚠️ Garage/Nutrition/Maison sortis de la nav principale à leur tour — retour
-// utilisateur (inspiré de Frive/Join, apps mono-usage cyclisme à la nav très
-// sobre) : "retirer Garage/Nutrition/Maison de la nav principale... ne
-// garder que Cyclisme/Coach". Renverse la décision documentée plus haut dans
-// CLAUDE.md ("Garage... doit vivre indépendamment du coaching/data") — mais
-// c'était un choix conscient de l'utilisateur, confirmé via AskUserQuestion,
-// pas un oubli. Les trois pages restent entièrement fonctionnelles, juste
-// déplacées vers la carte "Autres modules" de /settings (même patron que
-// Vie & Santé/Finances) plutôt que retirées.
-// `key` indexe le namespace Nav (messages/{locale}.json) — le libellé
-// affiché est résolu dans le composant via useTranslations('Nav'), jamais
-// stocké ici : ce tableau reste un module-scope constant (hors composant),
-// où le hook de traduction n'est pas utilisable.
+// ⚠️ Nav à 3 destinations (refonte UI/IA, LifeCycle_Pro_UX_Engine_
+// Review.md §3.1, "Adopt it" — AskUserQuestion) — renverse consciemment la
+// nav à 2 items (Cyclisme/Coach) qui précédait : **Aujourd'hui** (/cycling,
+// coup d'œil quotidien — fusionne ce qui vivait sur Cyclisme ET sur l'ex-
+// onglet Coach "Aujourd'hui", voir cycling/page.tsx), **Plan** (/plan,
+// gestion du plan périodisé — nouvelle page top-level, voir plan-tab.tsx,
+// sortie de son ancien Sheet), **Activités** (/coach, Journal + détail +
+// graphes — l'URL reste /coach, voir le commentaire de tête de ce fichier
+// côté coach/page.tsx). `key` indexe le namespace Nav (messages/
+// {locale}.json) — le libellé affiché est résolu dans le composant via
+// useTranslations('Nav'), jamais stocké ici : ce tableau reste un
+// module-scope constant (hors composant), où le hook de traduction n'est
+// pas utilisable.
 const navItems = [
-  { key: 'cycling' as const, href: '/cycling', icon: Bike },
-  { key: 'coach' as const, href: '/coach', icon: BrainCircuit },
+  { key: 'today' as const, href: '/cycling', icon: Sun },
+  { key: 'plan' as const, href: '/plan', icon: CalendarRange },
+  { key: 'activities' as const, href: '/coach', icon: Activity },
 ]
 
 export function AppNavigation() {
@@ -73,6 +72,7 @@ export function AppNavigation() {
   const router = useRouter()
   const t = useTranslations('Nav')
   const [stellaOpen, setStellaOpen] = useState(false)
+  const isMobile = useIsMobile()
 
   const handleSignOut = async () => {
     await signOut(auth)
@@ -234,21 +234,15 @@ export function AppNavigation() {
           </div>
         </header>
 
-        {/* Bottom nav — floating pill, réduite à Cyclisme/Coach/Réglages
-            (retour utilisateur : "ne garder que Cyclisme/Coach en nav
-            principale", inspiré de la nav très sobre de Frive/Join — apps
-            mono-usage cyclisme). Garage/Nutrition/Maison restent joignables
-            via la carte "Autres modules" de Réglages. Avec une séparée
-            circulaire Stella à côté, à la Whoop coach button (retour
-            utilisateur sur une capture de référence). Stella already lives
-            inside Coach as a sub-onglet — this is a fast path to it, not a
-            replacement, so nothing changes on desktop where the tab is
-            already one click away. */}
+        {/* Bottom nav — floating pill, 3 destinations (Aujourd'hui/Plan/
+            Activités, voir navItems plus haut) + Réglages. Avec une
+            séparée circulaire Stella à côté, à la Whoop coach button
+            (retour utilisateur sur une capture de référence) — l'overlay
+            flottant, pas un onglet de nav, voir plus bas. */}
         <div className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-3 pt-1 flex items-center gap-2.5 safe-area-bottom pointer-events-none">
           <nav className="flex-1 h-16 rounded-full bg-background/90 backdrop-blur-2xl border border-border/60 shadow-lg shadow-black/5 flex items-center justify-around px-1 pointer-events-auto">
             {[
-              { ...navItems.find(i => i.href === '/cycling')!, label: t('cycling') },
-              { ...navItems.find(i => i.href === '/coach')!, label: t('coach') },
+              ...navItems.map((item) => ({ ...item, label: t(item.key) })),
               { href: '/settings', icon: Settings, label: t('settings') },
             ].map((item) => {
               const isActive = pathname === item.href
@@ -295,14 +289,32 @@ export function AppNavigation() {
         <Sparkles className="w-6 h-6" />
       </button>
 
+      {/* Panneau Stella — refonte UI/IA (LifeCycle_Pro_UX_Engine_Review.md
+          §3.1/3.2, "persistent side panel desktop / bottom sheet mobile") :
+          avant ce correctif, Stella s'ouvrait toujours en Sheet "bottom"
+          (hérité du mobile), y compris sur desktop où un panneau latéral
+          est l'attendu du brief. `useIsMobile()` (même seuil 768px que le
+          reste de la nav — voir sidebar.tsx) choisit le côté : "right" sur
+          desktop (large, 420px, plein hauteur, à la UI classique
+          chat-dans-un-panneau) et "bottom" sur mobile (inchangé). Un seul
+          `Sheet` monté à la fois plutôt que deux instances cachées en CSS —
+          évite deux overlays/pièges de focus Radix superposés pour le même
+          état. */}
       <Sheet open={stellaOpen} onOpenChange={setStellaOpen}>
-        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-3xl sm:max-w-lg sm:mx-auto">
-          <SheetHeader className="text-left">
+        <SheetContent
+          side={isMobile ? 'bottom' : 'right'}
+          className={cn(
+            isMobile
+              ? 'max-h-[85vh] overflow-y-auto rounded-t-3xl sm:max-w-lg sm:mx-auto'
+              : 'w-full sm:max-w-[420px] p-0 flex flex-col'
+          )}
+        >
+          <SheetHeader className={cn('text-left', !isMobile && 'px-4 pt-4')}>
             <SheetTitle className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-primary" /> Stella
             </SheetTitle>
           </SheetHeader>
-          <div className="pt-3">
+          <div className={cn(isMobile ? 'pt-3' : 'flex-1 overflow-y-auto px-4 pb-4')}>
             <StellaChatTab />
           </div>
         </SheetContent>

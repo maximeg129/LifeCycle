@@ -1,7 +1,8 @@
 {
   "Nav": {
-    "cycling": "Cycling",
-    "coach": "Coach",
+    "today": "Today",
+    "plan": "Plan",
+    "activities": "Activities",
     "garage": "Garage",
     "nutrition": "Nutrition",
     "home": "Home",

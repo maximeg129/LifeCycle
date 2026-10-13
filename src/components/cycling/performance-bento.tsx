@@ -35,7 +35,6 @@ import { tsbRingPercent, tsbRingColor, readinessRingColor, sleepRingPercent, sle
 import { useLifestyleData } from '@/components/lifestyle/use-lifestyle-data'
 import { LogMetricDialog } from '@/components/lifestyle/log-metric-dialog'
 import { previousValue, vitalTrend, formatSleepDuration, type VitalTrend } from '@/components/lifestyle/lifestyle-types'
-import { TodaysSessionCard } from './todays-session-card'
 
 function safeRound(value: number | null | undefined): string {
   if (value == null || isNaN(value)) return '—'
@@ -236,12 +235,6 @@ export function PerformanceBento({ athlete }: { athlete: IntervalsAthlete }) {
             />
           </div>
 
-          <div className="h-px bg-primary/15 my-4" />
-
-          {/* Retour utilisateur : "mettre sous les indicateurs clef du
-              jour la séance « prévue » au plan du jour" — voir
-              todays-session-card.tsx pour le détail du raisonnement. */}
-          <TodaysSessionCard />
         </div>
       </div>
 
