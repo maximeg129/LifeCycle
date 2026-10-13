@@ -4568,6 +4568,78 @@ jour `weekNotGenerated` ignoré) — 985/985 au total, tsc/eslint/build clean. *
 `1fr_200px` de la carte muscu et la bande incluant aujourd'hui sont invérifiables visuellement dans
 ce sandbox ; à confirmer par l'utilisateur au premier rendu réel.
 
+### Pièce 11 — Aujourd'hui simplifiée : retrait de la grille Indicateurs, budget/gouverneur/PMC déménagés vers Plan
+
+Retour utilisateur, deux nouvelles captures d'écran jointes — l'une recadrée de la référence, l'autre
+explicitement désignée par l'utilisateur comme **"celui avec les graphes est le site en prod"** (donc
+la vraie page Aujourd'hui en prod, pas la référence) : "ok il manque pas mal de structure, regarde
+les screenshots ci joint... en jaune la section doit se limiter seulement a ces indicateurs et dans
+ce format de presentation, en vert l'activité du jour wrap sur une premier partier et dans la
+deuxieme partie le temps et les capacités de partage; en rouge le plan pour le semaine (simplifié)".
+
+**Diagnostic** — la capture "prod" révélait qu'Aujourd'hui affichait, SOUS la carte ReadinessStrip
+(déjà alignée sur la référence, voir Pièces 4/10), une grille séparée "Entraînement" (Riegel/Fitness
+CTL/Fatigue ATL/FTP/Puissance critique, `MetricTile`×5 dans `performance-bento.tsx`) — absente de la
+référence, qui ne montre QUE le panneau à 5 cellules "en jaune". Plus bas, la page affichait encore
+"Budget de la semaine"/"Gouverneur de charge interne"/"Courbe de Performance (12 semaines)"/"Charge
+hebdomadaire (TSS)" — également absents de la référence. Les deux retraits touchent une
+fonctionnalité construite et documentée à travers plusieurs audits antérieurs de ce même fichier
+("Indicateurs Cyclisme — audit propriétaire", "Fueling vs Workload"...) qui insistaient explicitement
+sur la visibilité de ces métriques — donc, par discipline "jamais supprimé sans demander" déjà en
+place dans ce projet, `AskUserQuestion` avant tout retrait plutôt qu'une interprétation unilatérale
+des zones colorées du screenshot :
+- *"La grille Indicateurs séparée... que doit-il en advenir ?"* → **"La retirer d'Aujourd'hui
+  (recommandé)"** — CTL/ATL restent visibles via la légende de la cellule "Forme (TSB)" de
+  ReadinessStrip (`formeTrendCaption`, déjà en place depuis la Pièce 4) ; Riegel/FTP/Puissance
+  critique n'ont alors plus de point d'entrée direct depuis Aujourd'hui (leurs pages détail
+  `/cycling/metric/[id]` existent toujours, simplement plus liées depuis ici) — compromis
+  explicitement nommé dans la question, accepté quand même.
+- *"Budget kJ/Gouverneur/PMC/TSS... doivent-ils rester sur la page... ou en sortir aussi ?"* →
+  **"Les faire sortir d'Aujourd'hui entièrement."**
+
+**`performance-bento.tsx`** — réduit à la seule `<ReadinessStrip .../>` : la grille `MetricTile`
+"Entraînement" (et son hint "Renseignez vos records de puissance...", et `LogMetricDialog`) retirés
+avec tout le calcul devenu mort DANS CE FICHIER (`enduranceIndex`, `criticalPowerModel`,
+`powerRecords`, `isAutoSynced`, le composant `MetricTile`/`safeRound` local) — `usePowerCurve`/
+`fitEnduranceCurve`/`fitCriticalPower`/`LogMetricDialog` restent des modules partagés utilisés
+ailleurs (pages détail `/cycling/metric/riegel`/`criticalPower`, `PowerCurveCard`...), donc non
+touchés, seuls leurs imports dans CE fichier disparaissent.
+
+**`cycling/page.tsx`** — la `<section>` `KJBudgetWidget`/`GovernorWidget` et l'appel `<PmcTab .../>`
+retirés, avec leurs dépendances devenues mortes sur cette page : `useGovernor()`, `useFitnessChart()`
+(et les consts `fitnessOldest`/`newest`/`subDays`), l'import dynamique de `PmcTab`. La page ne garde
+plus que `TodayGreeting` → `PerformanceBento` (ReadinessStrip seul) → `TrainingPlanTab` (séance du
+jour + 7 prochains jours, inchangé).
+
+**`plan-tab.tsx`** — budget/gouverneur/PMC réapparaissent ici (`/plan`), dans un bloc `metricsSection`
+partagé entre les DEUX branches de rendu du composant (plan actif, et "aucun plan actif"/formulaire
+"Nouveau plan") : ni le budget kJ ni le gouverneur ni la PMC ne dépendent d'un plan actif (ils
+tournaient déjà sans cette condition sur `/cycling` avant ce déménagement), donc les masquer tant
+qu'aucun plan n'existe aurait été une régression, pas juste un déplacement. Nouvelles instances de
+`useAthlete()`/`useFitnessChart()`/`useGovernor()` — lectures depuis le contexte Intervals.icu déjà
+partagé (`useIntervalsContext()`, vérifié dans `use-intervals.tsx` : `useAthlete`/`useFitnessChart`
+ne font qu'un `useMemo` sur des données déjà fetchées une fois par le provider), donc aucun nouveau
+fetch réseau — même patron que les doubles instances de `useTrainingPlan()` déjà en place entre
+`training-plan-tab.tsx` et ce fichier. `PmcTab`/`KJBudgetWidget`/`GovernorWidget` importés
+statiquement (pas un second `next/dynamic` imbriqué) : `PlanTab` lui-même est déjà chargé en lazy
+depuis `/app/plan/page.tsx` (`next/dynamic`), donc Recharts (la dépendance que `PmcTab` tire) se
+retrouve déjà code-splitté dans le même chunk que le reste de l'écran de gestion du plan — exactement
+le même bénéfice de code-splitting qu'avant (jamais payé au premier rendu d'Aujourd'hui), juste
+déplacé d'un point de split à un autre. Chaque widget gère déjà sa propre dégradation "non connecté"/
+"donnée insuffisante" en interne (`NotConfiguredBanner` dans `PmcTab`, `MetricCard isAvailable` dans
+`KJBudgetWidget`, `STATUS_META.insufficient_data` dans `GovernorWidget`) — aucune condition
+supplémentaire nécessaire ici, confirmé en relisant chacun des trois avant de les déplacer sans
+filet.
+
+Aucune nouvelle logique pure, aucun test touché — 985/985 inchangés, tsc/eslint/build clean (`/cycling`
+redescend en taille de bundle, `/plan` récupère exactement ce que `/cycling` perd — confirmé dans la
+sortie de `next build`). **Non vérifié à l'écran** (même limite `favicon.ico` que le reste de cette
+restructuration) — la disparition de la grille Indicateurs et l'apparition de budget/gouverneur/PMC
+sur `/plan` sont invérifiables visuellement dans ce sandbox ; à confirmer par l'utilisateur au
+premier rendu réel. Les parties "en vert" (carte séance hero-grid) et "en rouge" (WeekStrip simplifié
+incluant aujourd'hui) du retour utilisateur étaient déjà couvertes par la Pièce 10 — aucune action
+supplémentaire identifiée pour elles dans cette pièce.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

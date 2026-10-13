@@ -10,12 +10,14 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Sparkles, Loader2, Target, Archive, ChevronDown, History, RefreshCw, ShieldAlert, TrendingUp, ShieldQuestion, CalendarClock } from 'lucide-react'
-import { format } from 'date-fns'
+import { format, subDays } from 'date-fns'
 import { fr } from 'date-fns/locale'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
+import { useAthlete, useFitnessChart } from '@/hooks/use-intervals'
 import { useTrainingPlan } from './use-training-plan'
 import { useTrainingPreferences } from './use-training-preferences'
+import { useGovernor } from './use-governor'
 import { currentPlanWeek, computePlanProgress, PHASE_LABELS, PHASE_BADGE_CLASS } from './training-plan-types'
 import { RingGauge } from './ring-gauge'
 import { upcomingGoals } from './coach-memory-types'
@@ -27,10 +29,20 @@ import { PlanOverviewGrid } from './plan-overview-grid'
 import { PlanPhaseBar } from './plan-phase-bar'
 import { PlanWeekCalendar } from './plan-week-calendar'
 import { PlanAdherenceChart } from './plan-adherence-chart'
+import { KJBudgetWidget } from './kj-budget-widget'
+import { GovernorWidget } from './governor-widget'
+import { PmcTab } from './pmc-tab'
 import { buildPlanAttentionItems } from './plan-attention-types'
 import { PlanAttentionBadge } from './plan-attention-badge'
 import { IntervalsOnboardingNotice } from './intervals-onboarding-notice'
 import { PlanAvailabilityDialog, DEFAULT_WEEKLY_AVAILABILITY, formatDayMinutes } from './plan-availability-dialog'
+
+// kJ budget/gouverneur/PMC ont besoin de 12 semaines d'historique de
+// fitness (même fenêtre que l'ancienne instance sur /cycling, voir
+// CLAUDE.md "Restructuration complète... Indicateurs Cyclisme") — calculée
+// une fois au chargement du module, pas à chaque rendu.
+const PMC_NEWEST = format(new Date(), 'yyyy-MM-dd')
+const PMC_OLDEST = format(subDays(new Date(), 84), 'yyyy-MM-dd')
 
 // ── Plan — écran de gestion complet (/plan) ─────────────────────────────
 //
@@ -57,6 +69,17 @@ export function PlanTab() {
   } = useTrainingPlan()
   const today = format(new Date(), 'yyyy-MM-dd')
   const upcoming = upcomingGoals(goals, today)
+
+  // Budget kJ / gouverneur de charge interne / PMC — déménagés ici depuis
+  // Aujourd'hui (/cycling), voir CLAUDE.md "Restructuration complète...
+  // retour utilisateur captures d'écran : en rouge le plan pour le semaine
+  // (simplifié)". Lectures depuis le contexte Intervals.icu déjà partagé
+  // (aucun nouveau fetch réseau) — même patron que les autres doubles
+  // instances de hooks déjà en place entre training-plan-tab.tsx et ce
+  // fichier (useTrainingPlan()).
+  const athlete = useAthlete()
+  const fitness = useFitnessChart(PMC_OLDEST, PMC_NEWEST)
+  const governor = useGovernor()
 
   const trainingPrefs = useTrainingPreferences()
   const [selectedGoalId, setSelectedGoalId] = useState<string>('')
@@ -258,6 +281,20 @@ export function PlanTab() {
     />
   )
 
+  // Budget kJ / gouverneur / PMC — ni l'un ni l'autre ne dépend d'un plan
+  // actif (ils tournaient déjà sans condition de plan sur /cycling avant
+  // ce déménagement), donc rendus dans les DEUX branches ci-dessous (plan
+  // actif ou formulaire "Nouveau plan"/aucun plan).
+  const metricsSection = (
+    <>
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <KJBudgetWidget governorStatus={governor.status} />
+        <GovernorWidget />
+      </section>
+      <PmcTab isConfigured={athlete.isConfigured} athleteLoading={athlete.isLoading} fitness={fitness} />
+    </>
+  )
+
   if (!activePlan || showNewPlanForm) {
     return (
       <div className="space-y-6">
@@ -278,6 +315,7 @@ export function PlanTab() {
             description="Générez un plan pour donner un cap sur plusieurs semaines à la proposition du jour."
           />
         )}
+        {metricsSection}
       </div>
     )
   }
@@ -531,6 +569,8 @@ export function PlanTab() {
           </CardContent>
         </Card>
       )}
+
+      {metricsSection}
     </div>
   )
 }
