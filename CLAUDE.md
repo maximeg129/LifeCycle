@@ -4360,6 +4360,43 @@ phases (segments colorés, triangle, libellés abrégés) et les lignes `.wk` (g
 barre d'adhérence, fond teinté semaine courante) sont invérifiables visuellement dans ce sandbox ;
 à confirmer par l'utilisateur au premier rendu réel.
 
+### Pièce 7 — Aujourd'hui : `.hero-grid` pour la carte "séance du jour" (vélo)
+
+Dernier écart visuel notable sur Aujourd'hui : la référence affiche sa carte "séance" en deux
+colonnes (`.hero-grid` — contenu à gauche, `.stack gap16` à droite : stat box "Durée"/"Séries" +
+bouton primaire pleine largeur "Démarrer la séance" + rangée secondaire + bouton ghost), alors que
+la carte "séance du jour" de cette app (`daily-workout-tab.tsx`, l'état `showPlanCard` — vélo prévu
+par le plan, affichée en premier au chargement) empilait son profil graphique puis une rangée de
+boutons en wrap pleine largeur sous un simple texte "X min".
+
+**Restylée pour cette seule carte** (la plus visible/fréquente de l'écran) : `CardContent` passe à
+une grille `md:grid-cols-[1fr_200px]` — `WorkoutProfileChart` à gauche (inchangé), colonne droite
+`flex flex-col gap-3` avec une stat box "Durée" (`rounded-xl bg-muted/40`, mono), le bouton
+"Envoyer sur Intervals.icu" (inchangé, pleine largeur) puis les deux actions secondaires
+("Alternative"/"Muscu", libellés raccourcis pour tenir dans la colonne de 200px — le texte complet
+restait en `title`/`aria-label` implicite via le contenu du bouton, toujours lisible) côte à côte.
+Comportement identique (mêmes handlers, mêmes conditions de disabled) — uniquement la mise en page.
+`Clock` (icône du texte "X min" retiré, la durée vit maintenant dans la stat box) devenu inutilisé,
+retiré de l'import.
+
+**Portée volontairement limitée à cette carte, consciemment** — `StrengthSessionCard` (le pendant
+musculation, partagé par 3 call sites : court-circuit automatique d'une séance muscu du plan,
+toggle Vélo/Salle, "Proposer une séance de muscu") n'a PAS été restylée en `.hero-grid` : sa liste
+d'exercices porte déjà des contrôles interactifs que la référence n'a pas (bouton `+1 série` par
+exercice, dialog "Ajouter un exercice" intercalé avant les actions de démarrage) — la retravailler
+en 2 colonnes strictes aurait exigé de redistribuer des éléments dont le regroupement actuel (liste
++ édition + actions, dans cet ordre) a déjà été spécifiquement validé par l'utilisateur à travers
+plusieurs chantiers ("Musculation : ajouter un exercice/une série manuellement", voir plus haut) —
+un risque de régression sur 3 points d'entrée différents pour un gain visuel marginal (le composant
+emprunte déjà le même vocabulaire `.lc-card ring-2 ring-primary/50`/badges/titre que la référence).
+Les autres états de l'écran (suggestion `draft`, formulaire alternatif) restent également hors
+scope, pour la même raison déjà documentée à l'étape 3 de cette restructuration (risque de
+régression sur un flux validé par de multiples `AskUserQuestion`, invérifiable visuellement ici).
+
+Tests : aucun nouveau (JSX uniquement, aucun handler/condition modifié) — 969/969 inchangés,
+tsc/eslint/build clean. **Non vérifié à l'écran** — à confirmer par l'utilisateur au premier rendu
+réel, en particulier le gabarit `1fr_200px` sur desktop et son empilement sur mobile.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

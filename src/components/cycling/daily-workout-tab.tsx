@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Sparkles, Loader2, Send, CheckCircle2, Clock, MapPin, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle, Plus } from 'lucide-react'
+import { Sparkles, Loader2, Send, CheckCircle2, MapPin, CloudRain, ShieldCheck, Home, TreePine, Apple, Dumbbell, PlayCircle, Target, ChevronDown, FileText, Bike, Shuffle, Plus } from 'lucide-react'
 import { useDailyWorkout } from './use-daily-workout'
 import { buildRideDateTime } from './daily-workout-types'
 import type { DailyWorkoutRecommendationOutput } from '@/ai/flows/daily-workout-recommendation-flow'
@@ -795,6 +795,11 @@ export function DailyWorkoutTab() {
         // couvrait déjà les deux usages (generate() attache plannedSession
         // par défaut — soumettre le formulaire sans rien changer EST
         // "ajuster la séance") — un seul bouton, portant l'icône Shuffle.
+        // Restructuration lifecycle-ui-reference.html : `.hero-grid` (contenu
+        // à gauche, colonne `.stack gap16` à droite — stat box "Durée" +
+        // bouton primaire pleine largeur + rangée secondaire) remplace
+        // l'ancienne rangée de boutons wrap pleine largeur sous le profil.
+        // Contenu/comportement inchangés — seule la mise en page change.
         <Card className="lc-card ring-2 ring-primary/50">
           <CardHeader className="space-y-2">
             <div className="flex items-center gap-2 flex-wrap">
@@ -808,29 +813,34 @@ export function DailyWorkoutTab() {
             </CardTitle>
             <CardDescription>{todaysPlanSession.session.rationale}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <WorkoutProfileChart structuredWorkout={todaysPlanSession.session.structuredWorkout} height={48} />
-            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
-              <Clock className="w-3.5 h-3.5" /> {todaysPlanSession.session.durationMinutes} min
-            </p>
-            <div className="flex items-center gap-2 flex-wrap pt-2 border-t border-border">
-              <Button
-                onClick={handleSendPlanSession}
-                disabled={isSendingPlanSession || !canSendToIntervals}
-                className="gap-2"
-                title={canSendToIntervals ? undefined : 'Renseignez vos identifiants Intervals.icu dans Réglages'}
-              >
-                {isSendingPlanSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                {planSessionSent ? 'Ré-envoyer sur Intervals.icu' : 'Envoyer sur Intervals.icu'}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setShowAlternativeForm(true)} className="gap-1.5">
-                <Shuffle className="w-3.5 h-3.5" />
-                Proposer une séance alternative
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleProposeStrength} disabled={isGeneratingStrength} className="gap-1.5">
-                {isGeneratingStrength ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Dumbbell className="w-3.5 h-3.5" />}
-                Proposer une séance de muscu
-              </Button>
+          <CardContent>
+            <div className="grid gap-4 md:grid-cols-[1fr_200px]">
+              <WorkoutProfileChart structuredWorkout={todaysPlanSession.session.structuredWorkout} height={48} />
+              <div className="flex flex-col gap-3">
+                <div className="rounded-xl bg-muted/40 p-3 text-center">
+                  <p className="text-xs text-subtle">Durée</p>
+                  <p className="font-data text-xl font-bold">{todaysPlanSession.session.durationMinutes}′</p>
+                </div>
+                <Button
+                  onClick={handleSendPlanSession}
+                  disabled={isSendingPlanSession || !canSendToIntervals}
+                  className="gap-2 justify-center"
+                  title={canSendToIntervals ? undefined : 'Renseignez vos identifiants Intervals.icu dans Réglages'}
+                >
+                  {isSendingPlanSession ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  {planSessionSent ? 'Ré-envoyer' : 'Envoyer sur Intervals.icu'}
+                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setShowAlternativeForm(true)} className="flex-1 justify-center gap-1.5">
+                    <Shuffle className="w-3.5 h-3.5" />
+                    Alternative
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={handleProposeStrength} disabled={isGeneratingStrength} className="flex-1 justify-center gap-1.5">
+                    {isGeneratingStrength ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Dumbbell className="w-3.5 h-3.5" />}
+                    Muscu
+                  </Button>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
