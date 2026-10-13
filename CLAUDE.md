@@ -4397,6 +4397,46 @@ Tests : aucun nouveau (JSX uniquement, aucun handler/condition modifié) — 969
 tsc/eslint/build clean. **Non vérifié à l'écran** — à confirmer par l'utilisateur au premier rendu
 réel, en particulier le gabarit `1fr_200px` sur desktop et son empilement sur mobile.
 
+### Pièce 8 — Migration des couleurs de zone vers les tokens `--z1`-`--z7` (checklist §8)
+
+Retour utilisateur, suite directe des pièces 6/7 : "Tackle the zone-color token migration... next."
+Dépendance explicitement différée à l'étape 3 de cette même restructuration ("pas de migration des
+couleurs de zone... dépendance bloquante réelle trouvée en auditant") — reprise ici une fois le
+reste de l'écran Aujourd'hui/Plan stabilisé.
+
+**Diagnostic** — `ZONE_COLORS` (`plan-calendar-types.ts`) et les tokens `--z1`-`--z7`
+(`globals.css`, posés à l'étape 1 de cette restructuration) vivaient comme **deux palettes hex
+proches mais numériquement différentes** (`#3b82f6` côté `ZONE_COLORS` vs `#3E8EDE` côté token
+`--z2`, par exemple) — exactement le motif "two sources that can diverge" que la revue externe
+UX/engine dénonce comme principe général (§0) et que la checklist d'acceptation du brief (§8)
+nomme explicitement : "Zone colours are identical in profiles, legends and the phase bar." Avant ce
+correctif, `PlanPhaseBar` (Pièce 6, ce même chantier) consommait déjà `hsl(var(--z1))`..`hsl(var(--z5))`
+directement pour la barre de phases, tandis que `WorkoutProfileChart`/`plan-week-calendar.tsx`/
+`plan-next-sessions-list.tsx` (profils de séance, légendes, bande de jours) consommaient
+`ZONE_COLORS` — deux représentations de la même échelle de 7 couleurs, sans garantie qu'elles
+restent synchronisées.
+
+**Pas une migration vers `hsl(var(--zN))` partout** — `plan-week-calendar.tsx`/`plan-next-sessions-
+list.tsx` composent `` `${zone.color}26` `` (syntaxe CSS `#rrggbbaa`, une version translucide de la
+couleur de zone pour le fond d'une tuile) : cette technique exige un hex littéral à 6 chiffres,
+`hsl(var(--z4))26` n'étant pas une couleur CSS valide. Remplacer `zone.color` par une fonction CSS
+aurait cassé cette technique sur un chemin invérifiable visuellement dans ce sandbox. **Correctif
+choisi : aligner les valeurs hex de `ZONE_COLORS` sur celles, déjà littérales, documentées en
+commentaire à côté de `--z1`-`--z7` dans `globals.css`** — les deux restent deux constantes
+séparées (l'une consommée en CSS var, l'autre en hex JS), mais numériquement identiques désormais,
+donc plus aucun risque de dérive visuelle entre un profil de séance et la barre de phases. Vérifié
+dans `globals.css` que `--z1`-`--z7` ne sont JAMAIS redéfinis sous `.dark` — une couleur de zone
+Coggan reste donc la même quel que soit le thème, ce qui rend ce hex figé sûr (il ne peut jamais
+diverger du thème sombre, qu'il n'a de toute façon jamais eu besoin de refléter).
+
+Changement de valeurs de constante uniquement (`ZONE_COLORS`, `plan-calendar-types.ts`) — aucune
+signature/logique touchée, `plan-calendar-types.test.ts` n'avait déjà aucune assertion sur les
+valeurs hex exactes (seulement des regex `^#[0-9a-f]{6}$` insensibles à la casse) donc aucun test à
+modifier. 969/969 tests inchangés, tsc/eslint/build clean. **Non vérifié à l'écran** (changement de
+teinte fin — les nouvelles valeurs restent dans la même famille de couleur que les anciennes, ex.
+bleu→bleu, jaune→jaune — donc risque visuel jugé faible, mais toujours invérifiable dans ce
+sandbox) — à confirmer par l'utilisateur au premier rendu réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
