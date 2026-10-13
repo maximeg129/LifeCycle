@@ -104,7 +104,7 @@ export function averageIntensityPct(steps: WorkoutProfileStep[]): number | null 
 
 /**
  * Une couleur réelle par zone Coggan (jamais une classe Tailwind — voir le
- * même piège documenté dans ring-metrics.ts/tsb-zones.ts pour une forme SVG
+ * même piège documenté dans tsb-zones.ts pour une forme SVG
  * peinte via `fill`, ici utilisée aussi bien en CSS `background-color`
  * qu'en `fill` selon le contexte de rendu). Dégradé bleu→vert→jaune→
  * orange→rouge→violet, du plus facile au plus dur — même logique de
