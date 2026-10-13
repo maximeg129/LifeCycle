@@ -4244,6 +4244,45 @@ fonctions de légende) — 957/957 au total, tsc/eslint/build clean. **Non véri
 badge de verdict (icône dans un cercle coloré) et les 4 légendes de tendance sont invérifiables
 visuellement dans ce sandbox ; à confirmer par l'utilisateur au premier rendu réel.
 
+### Pièce 5 — WeekStrip : retour aux tuiles compactes (reverse la liste verticale)
+
+La référence montre "Cette semaine" comme une bande de 7 tuiles compactes (`.day`, 128px, mini
+profil/barre de type, bordure brand + pastille pour aujourd'hui, bordure en pointillés pour un
+jour de repos) — PAS la liste verticale avec détail complet déroulé que `plan-next-sessions-list.tsx`
+construisait depuis "Plan v2" (voir CLAUDE.md, l'utilisateur était explicitement revenu des tuiles
+vers une liste à cette époque, sous un brief antérieur). Ce chantier renverse ce choix — le mandat
+de cette restructuration ("comme proposé dans le html") prime sur une décision prise sous une
+version différente du brief.
+
+**Zéro nouveau patron inventé — adapté d'un composant déjà construit et déjà shippé** :
+`plan-week-calendar.tsx` (l'écran de gestion du Plan, derrière le `Sheet` "Plan") implémente DÉJÀ
+exactement cette tuile compacte + `Sheet` de détail au tap, juste scopé à UNE semaine sélectionnée
+(`week.sampleSessions`). `plan-next-sessions-list.tsx` (le WeekStrip d'Aujourd'hui) reprend le MÊME
+balisage/les mêmes classes de tuile (coloration par zone Coggan, icône ✓/✗ de statut, mini
+`WorkoutProfileChart`, bordure dashed pour un jour non composé) — adapté pour la fenêtre glissante
+multi-semaines (`sessionsForNext7Days`, qui peut mélanger des séances de DEUX semaines du plan
+différentes pour une même fenêtre de 7 jours, contrairement à `PlanWeekCalendar` qui n'en connaît
+qu'une) plutôt que dupliqué en divergeant. Garantit que les deux bandes de tuiles de l'app (le
+WeekStrip d'Aujourd'hui et la bande du Plan) se comportent et se ressemblent EXACTEMENT pareil.
+
+**Fonctionnalités conservées sans changement** — fenêtre glissante ancrée sur aujourd'hui, séances
+passées révélées via "Voir les séances passées" (Collapsible, toujours une liste inline — la
+référence n'a pas d'équivalent pour ce besoin spécifique à l'app, pas de raison de lui imposer des
+tuiles) ; `activities`/`athleteFtp` (déjà exposés par `useTrainingPlan()`, aucun nouveau fetch)
+threadés dans `training-plan-tab.tsx` pour calculer la couleur de zone de chaque tuile, exactement
+comme `plan-tab.tsx` le fait déjà pour la bande du Plan.
+
+**Segment "pas encore composé"** — un seul bouton "Proposer les séances" sous la bande (pas un par
+jour), pour le AU PLUS un segment non généré que la fenêtre de 7 jours peut couvrir
+(`groupRollingDaysByWeek`, déjà en place) ; chaque jour de ce segment affiche une tuile en
+pointillés "Pas encore composé" dans la bande elle-même, distincte de "Repos" (semaine composée,
+vraiment aucune séance ce jour-là) — jamais confondues, même discipline que la version liste.
+
+Tests : aucun nouveau (JSX/adaptation d'un patron déjà testé visuellement ailleurs, aucune nouvelle
+logique pure) — 957/957 inchangés, tsc/eslint/build clean. **Non vérifié à l'écran** — risque jugé
+plus faible que les pièces précédentes (le même patron de tuile tourne déjà en production pour
+`PlanWeekCalendar`, seule la source de données change) ; à confirmer par l'utilisateur.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
