@@ -4789,6 +4789,50 @@ vérifié à l'écran** (même limite `favicon.ico` que le reste de cette restru
 restylé, la table Intervalles et la carte "Analyse du coach" consolidée sont invérifiables
 visuellement dans ce sandbox ; à confirmer par l'utilisateur au premier rendu réel.
 
+### Pièce 14 — Activités : panneau inline "dernière activité" avec flèches précédent/suivant
+
+Retour utilisateur, capture d'écran de la page Activités à l'appui : "I was expecting this page to
+change, in a way where i would have the analysis of the last ride and a toggle to the different
+activities." La pièce 13 (ci-dessus) n'avait restylé que le `Dialog` ouvert au clic sur une ligne —
+l'utilisateur attendait que la page Activités ELLE-MÊME s'ouvre sur l'analyse de la dernière sortie,
+pas seulement une liste qu'il faut cliquer pour voir chaque analyse.
+
+**Décision de layout, tranchée par l'utilisateur (`AskUserQuestion`, 2 options)** : **panneau inline
+au-dessus de la liste** (plutôt qu'un remplacement complet de la liste par une vue maître-détail) —
+un nouveau `.lc-card` montre l'analyse complète de la dernière activité, avec des flèches ‹/›
+pour parcourir les activités récentes ; la liste du Journal reste en dessous, inchangée (chaque ligne
+garde son propre déclencheur vers le `Dialog`, pour un coup d'œil rapide sans perdre sa place dans
+la liste).
+
+**`RideAnalysisPanel`** (`ride-analysis-dialog.tsx`) — reçoit `rides: IntervalsActivity[]` (déjà
+triées du plus récent au plus ancien par l'appelant), state local `index` (0 = la dernière, la
+sélection par défaut). **Zéro deuxième logique de calcul** : extraction de `useRideAnalysisView()`
+(hook interne au fichier, regroupe tout ce que `RideAnalysisDialog` calculait déjà — header eyebrow/
+titre/RPE, `KpiGrid`, fenêtres cibles, légende "Cible...") et `RideAnalysisBody()` (le gros bloc JSX
+chart/durabilité/découplage/table Intervalles/carte "Analyse du coach") — les deux désormais
+partagés entre `RideAnalysisDialog` et `RideAnalysisPanel`, un seul point de calcul/rendu pour les
+deux surfaces plutôt qu'une copie qui pourrait diverger. `RideAnalysisDialog` ne change pas de
+comportement (toujours un `Dialog`, voir Pièce 13) — seulement sa propre implémentation interne,
+désormais un fin wrapper autour de ces deux éléments partagés.
+
+**`defaultRideLabel()`** (exportée) — même repli nom-réel-ou-date-formatée que `rides-journal-tab.tsx`
+utilisait déjà pour chaque ligne, réutilisé tel quel pour le panneau plutôt que dupliqué une
+deuxième fois.
+
+**`rides-journal-tab.tsx`** — `sortedRides` (`useMemo`, tri par `start_date_local` décroissant,
+indépendant de `journalEntries` qui fusionne vélo+muscu pour la LISTE) alimente `<RideAnalysisPanel>`,
+rendu avant le `<Card>` du Journal (masqué si `sortedRides.length === 0` — pas de panneau vide avant
+le premier chargement). Scopé aux activités Intervals.icu uniquement (pas les séances muscu
+loguées, qui ont leur propre analyse — `StrengthAnalysisDialog`, sans équivalent panneau ici, hors
+scope de cette demande).
+
+Tests : aucun nouveau (extraction JSX/hook, aucune nouvelle logique pure — `useRideAnalysisView`/
+`RideAnalysisBody` sont des recombinaisons de code déjà testé indirectement via le reste du pipeline)
+— 991/991 inchangés, tsc/eslint/build clean. **Non vérifié à l'écran** (même limite `favicon.ico`
+que le reste de cette restructuration) — le panneau inline, ses flèches précédent/suivant et le
+partage visuel avec le dialogue sont invérifiables visuellement dans ce sandbox ; à confirmer par
+l'utilisateur au premier rendu réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :
