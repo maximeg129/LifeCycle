@@ -29,7 +29,7 @@ import { Bike, ChevronRight, Timer, Flame, Dumbbell, CheckCircle2, Footprints } 
 import { useActivities, useFitnessChart } from '@/hooks/use-intervals'
 import { NotConfiguredBanner } from '@/components/cycling/not-configured-banner'
 import { QuickFeedbackButton } from '@/components/cycling/quick-feedback-widget'
-import { RideAnalysisDialog, RideAnalysisTrigger } from './ride-analysis-dialog'
+import { RideAnalysisDialog, RideAnalysisTrigger, RideAnalysisPanel } from './ride-analysis-dialog'
 import { useStrengthLogs } from '@/components/cycling/use-strength-logs'
 import { useStrengthLogExport } from '@/components/cycling/use-strength-log-export'
 import { useStravaLogExport } from '@/components/cycling/use-strava-log-export'
@@ -109,6 +109,14 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
     return [...rideEntries, ...strengthEntries].sort((a, b) => b.date.localeCompare(a.date))
   }, [activities.data, strengthLogs.logs])
 
+  // Panneau "dernière activité" (retour utilisateur : "analysis of the last
+  // ride and a toggle to the different activities") — trié du plus récent
+  // au plus ancien pour que l'index 0 soit toujours la dernière activité.
+  const sortedRides = useMemo(
+    () => [...activities.data].sort((a, b) => (b.start_date_local ?? '').localeCompare(a.start_date_local ?? '')),
+    [activities.data]
+  )
+
   // Refonte UI/IA §3.4 — segmented control, voir le commentaire sur
   // JournalFilter plus haut pour pourquoi "Vélo/Musculation/Courses" plutôt
   // que "Plan/Hors plan".
@@ -134,7 +142,9 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
   ]
 
   return (
-    <Card className="bg-card/40 border-border">
+    <div className="space-y-4">
+      {sortedRides.length > 0 && <RideAnalysisPanel rides={sortedRides} />}
+      <Card className="bg-card/40 border-border">
       <CardHeader className="space-y-3">
         <div className="flex items-center justify-between">
           <CardTitle>Journal d&apos;activités</CardTitle>
@@ -358,6 +368,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
           onOpenChange={(open) => { if (!open) setAnalyzingStrengthLog(null) }}
         />
       )}
-    </Card>
+      </Card>
+    </div>
   )
 }
