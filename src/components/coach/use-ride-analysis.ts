@@ -80,6 +80,8 @@ interface PlannedWorkoutLike {
   title: string
   durationMinutes: number
   structuredWorkout: string
+  /** Numéro de semaine du plan dont cette séance est issue — pour l'eyebrow "PLAN Sn" de l'écran Activité détail (restructuration lifecycle-ui-reference.html). Absent si la proposition a été générée librement (pas de plan actif ce jour-là) ou si aucune des deux sources ci-dessous ne porte cette info. */
+  planWeekNumber?: number
 }
 
 function toZoneInput(zones: (PowerZoneBucket | HrZoneBucket)[] | null, totalSeconds: number) {
@@ -133,9 +135,15 @@ async function findPlannedWorkoutForDate(
   try {
     const proposalSnap = await getDoc(doc(db, `users/${uid}/workoutProposals/${activityDate}`))
     if (proposalSnap.exists()) {
-      const proposal = (proposalSnap.data() as { proposal?: PlannedWorkoutLike }).proposal
+      const proposalData = proposalSnap.data() as { proposal?: PlannedWorkoutLike; planSessionRef?: { weekNumber: number } }
+      const proposal = proposalData.proposal
       if (proposal?.structuredWorkout) {
-        return { title: proposal.title, durationMinutes: proposal.durationMinutes, structuredWorkout: proposal.structuredWorkout }
+        return {
+          title: proposal.title,
+          durationMinutes: proposal.durationMinutes,
+          structuredWorkout: proposal.structuredWorkout,
+          planWeekNumber: proposalData.planSessionRef?.weekNumber,
+        }
       }
     }
   } catch {
@@ -148,7 +156,7 @@ async function findPlannedWorkoutForDate(
     const week = weeks.find((w) => activityDate >= w.startDate && activityDate <= w.endDate)
     const session = week?.sampleSessions?.find((s) => s.date === activityDate && s.sessionKind !== 'strength')
     if (session?.structuredWorkout) {
-      return { title: session.title, durationMinutes: session.durationMinutes, structuredWorkout: session.structuredWorkout }
+      return { title: session.title, durationMinutes: session.durationMinutes, structuredWorkout: session.structuredWorkout, planWeekNumber: week?.weekNumber }
     }
   } catch {
     // Best-effort, même raisonnement que ci-dessus.
@@ -290,7 +298,7 @@ export function useRideAnalysis(activityId: string | null) {
       // proposition non générée) — pas une erreur, juste rien à comparer.
       const plannedWorkout = await findPlannedWorkoutForDate(db, user.uid, activityDate)
       const plannedSteps = plannedWorkout ? parseStructuredWorkoutProfile(plannedWorkout.structuredWorkout) : []
-      const intervalAdherence = plannedWorkout ? computeIntervalAdherence(watts, plannedSteps, ftp) : null
+      const intervalAdherence = plannedWorkout ? computeIntervalAdherence(watts, plannedSteps, ftp, heartrate) : null
 
       const coachContext = buildCoachContext({
         today,

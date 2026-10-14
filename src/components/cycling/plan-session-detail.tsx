@@ -290,6 +290,7 @@ export function PlanSessionDetail({ session, index, week, completion, today, isS
         <RideAnalysisDialog
           activityId={completion.activityId}
           rideLabel={session.title}
+          date={session.date}
           open={analysisOpen}
           onOpenChange={setAnalysisOpen}
         />

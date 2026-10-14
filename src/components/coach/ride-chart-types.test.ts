@@ -93,9 +93,9 @@ describe('buildIntervalTargetWindows', () => {
 
   it('accumulates start/end offsets in order from each step duration', () => {
     const steps: IntervalAdherenceStep[] = [
-      { index: 0, targetDurationSeconds: 300, targetPctLow: 60, targetPctHigh: 70, actualAvgWatts: 180, actualPctFtp: 65, verdict: 'within' },
-      { index: 1, targetDurationSeconds: 240, targetPctLow: 100, targetPctHigh: 110, actualAvgWatts: 280, actualPctFtp: 105, verdict: 'within' },
-      { index: 2, targetDurationSeconds: 600, targetPctLow: 55, targetPctHigh: 65, actualAvgWatts: 150, actualPctFtp: 54, verdict: 'below' },
+      { index: 0, targetDurationSeconds: 300, targetPctLow: 60, targetPctHigh: 70, targetWattsLow: 180, targetWattsHigh: 210, actualAvgWatts: 180, actualPctFtp: 65, actualMaxHr: null, verdict: 'within' },
+      { index: 1, targetDurationSeconds: 240, targetPctLow: 100, targetPctHigh: 110, targetWattsLow: 300, targetWattsHigh: 330, actualAvgWatts: 280, actualPctFtp: 105, actualMaxHr: null, verdict: 'within' },
+      { index: 2, targetDurationSeconds: 600, targetPctLow: 55, targetPctHigh: 65, targetWattsLow: 165, targetWattsHigh: 195, actualAvgWatts: 150, actualPctFtp: 54, actualMaxHr: null, verdict: 'below' },
     ]
     const windows = buildIntervalTargetWindows(steps)
     expect(windows).toEqual([

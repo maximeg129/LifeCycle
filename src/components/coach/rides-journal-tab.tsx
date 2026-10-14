@@ -346,6 +346,7 @@ export function RidesJournalTab({ isConfigured, athleteLoading }: { isConfigured
           activityId={analyzingRide.id}
           rideLabel={analyzingRide.label}
           ride={analyzingRide.ride}
+          date={analyzingRide.ride.start_date_local?.slice(0, 10)}
           open={!!analyzingRide}
           onOpenChange={(open) => { if (!open) setAnalyzingRide(null) }}
         />

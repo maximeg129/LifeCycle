@@ -22,6 +22,14 @@
 // flux) s'écarte de plus de `DURATION_MISMATCH_TOLERANCE` de la durée
 // prévue totale — `null` (aucun encart, aucune ligne de prompt) plutôt qu'un
 // découpage qui mentirait sur quel effort a produit quels watts.
+//
+// Restructuration lifecycle-ui-reference.html, écran "Activité (detail)" :
+// la table "Intervalles" veut une colonne FC max par étape et un écart
+// "vs cible" en watts — `heartrate` (optionnel, même découpage par offsets
+// que `watts`) et `targetWattsLow`/`targetWattsHigh` (dérivés du FTP
+// pendant qu'il est encore en scope, jamais reconstruits depuis un %FTP
+// déjà arrondi) sont calculés une seule fois ici, au même titre que le
+// reste des champs du step — jamais une deuxième logique de découpage.
 
 import type { WorkoutProfileStep } from '@/components/cycling/plan-calendar-types'
 
@@ -35,10 +43,23 @@ export interface IntervalAdherenceStep {
   targetDurationSeconds: number
   targetPctLow: number
   targetPctHigh: number
+  /** Bornes cible en watts réels, dérivées du FTP connu AU MOMENT du calcul — pour afficher un écart "vs cible" en watts (restructuration lifecycle-ui-reference.html, écran Activité détail) sans reconstruire le FTP depuis un %FTP déjà arrondi. */
+  targetWattsLow: number
+  targetWattsHigh: number
   actualAvgWatts: number
   /** Puissance réelle moyenne de la tranche, en %FTP — comparée à [targetPctLow, targetPctHigh]. */
   actualPctFtp: number
+  /** FC max réelle de la tranche (même découpage approximatif, même limite que actualAvgWatts) — `null` si aucun flux FC n'était disponible pour cette sortie. */
+  actualMaxHr: number | null
   verdict: IntervalAdherenceVerdict
+}
+
+/** Libellé de la colonne "vs cible" de l'écran Activité détail — "dans la cible" pour une étape within, sinon l'écart en watts vs la borne cible franchie (jamais une valeur devinée : l'écart se lit directement sur les watts cible déjà dérivés du FTP, voir targetWattsLow/High ci-dessus). */
+export function adherenceDeltaLabel(step: IntervalAdherenceStep): string {
+  if (step.verdict === 'within') return 'dans la cible'
+  const targetWatts = step.verdict === 'below' ? step.targetWattsLow : step.targetWattsHigh
+  const delta = step.actualAvgWatts - targetWatts
+  return `${delta > 0 ? '+' : ''}${delta} W`
 }
 
 export interface IntervalAdherenceResult {
@@ -62,7 +83,8 @@ export interface IntervalAdherenceResult {
 export function computeIntervalAdherence(
   watts: number[] | undefined,
   plannedSteps: WorkoutProfileStep[],
-  ftp: number | null | undefined
+  ftp: number | null | undefined,
+  heartrate?: number[]
 ): IntervalAdherenceResult | null {
   if (!watts || watts.length === 0) return null
   if (!ftp || ftp <= 0) return null
@@ -83,7 +105,9 @@ export function computeIntervalAdherence(
   let cursor = 0
 
   plannedSteps.forEach((planned, index) => {
-    const slice = watts.slice(cursor, cursor + planned.durationSeconds)
+    const start = cursor
+    const slice = watts.slice(start, start + planned.durationSeconds)
+    const hrSlice = heartrate?.slice(start, start + planned.durationSeconds)
     cursor += planned.durationSeconds
     if (slice.length === 0) return
 
@@ -103,8 +127,11 @@ export function computeIntervalAdherence(
       targetDurationSeconds: planned.durationSeconds,
       targetPctLow,
       targetPctHigh,
+      targetWattsLow: Math.round((targetPctLow / 100) * ftp),
+      targetWattsHigh: Math.round((targetPctHigh / 100) * ftp),
       actualAvgWatts: Math.round(actualAvgWatts),
       actualPctFtp: Math.round(actualPctFtp),
+      actualMaxHr: hrSlice && hrSlice.length > 0 ? Math.round(Math.max(...hrSlice)) : null,
       verdict,
     })
   })
