@@ -4708,6 +4708,87 @@ l'écran** (même limite `favicon.ico` que le reste de cette restructuration) �
 fusionné et la nouvelle position de "À noter" sont invérifiables visuellement dans ce sandbox ; à
 confirmer par l'utilisateur au premier rendu réel.
 
+### Pièce 13 — Activité (detail) : en-tête restylé, table "Intervalles" (FC max), "Analyse du coach" consolidée
+
+Retour utilisateur, capture d'écran jointe d'une maquette "Activité (detail)" : "Can you build the
+activity view like this." Contrairement aux pièces précédentes (qui restylaient un écran déjà
+proche de la référence), `RideAnalysisDialog` n'avait encore jamais été relu contre cette maquette
+depuis le début du chantier — plusieurs écarts structurels, pas seulement cosmétiques.
+
+**Reste un `Dialog`, pas une route** — convention déjà explicitement actée dans ce même fichier
+("Étape 5 — Activités" : "convention déjà établie dans toute l'app, jamais remise en cause ici") et
+non remise en cause par cette pièce : le lien "‹ Activités" de la référence devient un bouton qui
+appelle simplement `onOpenChange(false)` (ferme le dialogue), pas une navigation de page. `hideDefault
+Close` (déjà existant sur `DialogContent`, voir `recipe-detail-dialog.tsx`) remplace le X par défaut
+par ce lien, dans un en-tête en flux normal — même patron que la refonte du dialogue recette.
+
+**En-tête restructuré** — eyebrow "JOUR D MOIS · PLAN Sn" + titre/badges sur la même ligne (RPE en
+pastille neutre, "Réalisée" en pastille primary-tintée — même vocabulaire que le badge "Réalisée" de
+`PlanSessionDetail`, jamais un vert littéral inventé pour l'occasion). Nouveau prop `date?: string`
+(yyyy-MM-dd) : l'eyebrow ne peut pas toujours dériver la date depuis `ride?.start_date_local`, car
+l'appel depuis `daily-workout-tab.tsx` (carte "Séance réalisée") ne passe jamais de `ride` complet
+(juste un `activityId`) — chaque appelant passe donc sa propre date déjà connue (`rides-journal-
+tab.tsx` : `ride.start_date_local` ; `plan-session-detail.tsx` : `session.date` ; `daily-workout-
+tab.tsx` : aujourd'hui, par construction). "PLAN Sn" nécessitait une donnée qui n'existait encore
+nulle part dans le pipeline : `PlannedWorkoutLike.planWeekNumber` (nouveau champ optionnel,
+`use-ride-analysis.ts`) — peuplé depuis `planSessionRef.weekNumber` (déjà stocké sur
+`workoutProposals/{date}`, voir "Proposition du jour ajuste le plan" plus haut) pour la branche
+proposition, ou directement `week.weekNumber` pour la branche plan actif — jamais une deuxième
+lecture, les deux étaient déjà en main dans `findPlannedWorkoutForDate`. Le titre devient
+`plannedWorkout?.title || rideLabel` (le titre de la séance prévue plutôt que le headline IA,
+qui migre vers la carte "Analyse du coach" ci-dessous) ; `rideLabel` reste affiché en sous-titre
+discret quand il diffère du titre (ex. le vrai nom de l'activité sur Intervals.icu).
+
+**Table "Intervalles" (remplace la liste verticale "Respect des intervalles")** — colonnes `# /
+Durée / Puissance / vs cible / FC max`, précédée d'une légende "Cible X–Y W (A–B % FTP)" (bornes de
+la première étape — suppose un script à intensité uniforme, le cas courant d'un bloc d'intervalles
+répétés ; l'écart par ligne reste exact même sur un script hétérogène). Deux champs manquaient pour
+cette table, ajoutés à `IntervalAdherenceStep` (`interval-adherence-types.ts`) au même point de
+calcul que le reste du step — jamais une deuxième logique de découpage :
+- **`targetWattsLow`/`targetWattsHigh`** — bornes cible en watts réels, dérivées du FTP PENDANT
+  qu'il est encore en scope dans `computeIntervalAdherence` (jamais reconstruites depuis un %FTP déjà
+  arrondi, ce qui introduirait une erreur d'arrondi en cascade). Permettent `adherenceDeltaLabel()`
+  (nouvelle fonction pure/testée) : "dans la cible" pour une étape `within`, sinon l'écart signé en
+  watts vs la borne franchie (ex. "-9 W") — exactement la colonne "vs cible" de la référence.
+- **`actualMaxHr`** — FC max réelle de la même tranche, `null` sans flux FC disponible pour cette
+  sortie. `computeIntervalAdherence()` accepte désormais un paramètre optionnel `heartrate` (même
+  tableau déjà fetché pour le découplage cardiaque, voir plus haut — jamais un deuxième fetch),
+  découpé avec le MÊME cumul d'offsets que `watts` plutôt qu'une deuxième fenêtre.
+- **Couleur de la colonne "vs cible" : déviation consciente de la maquette.** La référence semble
+  utiliser une seule teinte orange pour toute la colonne, y compris les lignes "dans la cible" ;
+  `ADHERENCE_COLOR` (déjà existant dans ce fichier, vert pour `within`/orange pour `below`/`above`)
+  est conservé tel quel plutôt qu'aplati à une couleur unique — reste plus informatif qu'une couleur
+  uniforme, et c'est une convention déjà en place dans ce composant avant cette pièce.
+
+**"Analyse du coach" — consolidation en une seule carte narrative** — la référence montre UNE carte
+(icône étoile) avec une phrase d'accroche en gras + explication, puis "Prochaine fois :" en gras +
+recommandation, puis un lien "Sources" — pas 4 blocs séparés (bandeau `effortContext`, liste
+"Points forts", liste "À travailler", bloc "Pour la suite") comme avant cette pièce. **Aucun champ de
+sortie IA retiré** (le schéma `rideAnalysis` n'a pas changé) — seulement regroupés dans une seule
+carte `bg-primary/5` : `headline` (gras) + `summary` en tête de paragraphe, `effortContext` en texte
+secondaire juste après, `strengths`/`improvementAreas` en liste compacte à puces colorées (au lieu de
+deux blocs à grand en-tête), `recommendation` sous "Prochaine fois :" en gras, puis un lien "Sources"
+en bas à droite. **`SourceCitation` généralisé** (`showLabel?: boolean`, nouveau prop, défaut `false`
+— comportement inchangé pour tous les appels existants) pour afficher le libellé en texte à côté de
+l'icône (jusqu'ici icône seule partout) : `<SourceCitation ruleIds={['ride-analysis-7-one-sentence-
+synthesis']} label="Sources" showLabel />` — la règle qui gouverne justement le format synthèse-en-
+une-phrase de cette carte, la seule citation directement applicable à ce contenu précis (aucune des
+autres règles `ride-analysis-*` n'est spécifique au texte narratif plutôt qu'à un encart chiffré).
+
+**Durabilité/Découplage cardiaque : conservés, pas dans la référence mais pas retirés sans
+qu'on le demande** — restent entre le graphique Puissance & FC et la table Intervalles, même
+position qu'avant cette pièce. La maquette ne les montre pas, mais ce sont de vraies fonctionnalités
+déjà livrées (voir "Analyse de sortie : encarts Durabilité + Découplage" plus haut) — "construire
+comme la maquette" a été lu comme "ajouter/restyler ce qu'elle montre", pas "retirer ce qu'elle ne
+montre pas".
+
+Tests (`interval-adherence-types.test.ts`, 5 nouveaux : bornes watts dérivées du FTP, FC max calculée
+depuis un flux réel, `null` sans flux FC, les 3 cas d'`adherenceDeltaLabel` ; `ride-chart-types.test.ts`
+mis à jour pour les nouveaux champs requis du type) — 991/991 au total, tsc/eslint/build clean. **Non
+vérifié à l'écran** (même limite `favicon.ico` que le reste de cette restructuration) — l'en-tête
+restylé, la table Intervalles et la carte "Analyse du coach" consolidée sont invérifiables
+visuellement dans ce sandbox ; à confirmer par l'utilisateur au premier rendu réel.
+
 ## Modèle de Données Firestore
 
 Toutes les données utilisateur sont sous `users/{uid}/` :

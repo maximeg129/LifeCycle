@@ -5,27 +5,42 @@
 // itself an <a> (whole-row link out to Intervals.icu — see
 // rides-journal-tab.tsx), so the trigger stops propagation/default exactly
 // like QuickFeedbackButton's Popover trigger does for the same reason.
+//
+// Restructuration lifecycle-ui-reference.html, écran "Activité (detail)" —
+// garde la convention déjà établie de l'app (reste un Dialog, jamais une
+// route séparée, voir CLAUDE.md "Refonte UI/IA... étape 5") mais restyle
+// l'en-tête (lien "‹ Activités" + eyebrow jour/date/plan + titre+badges sur
+// la même ligne) et remplace la liste verticale "Respect des intervalles"
+// par une vraie table "Intervalles" (colonnes #/Durée/Puissance/vs cible/FC
+// max). Les encarts Durabilité/Découplage — absents de la référence mais
+// une vraie fonctionnalité déjà livrée, jamais retirée sans qu'on le
+// demande — restent entre le graphique et la table. Le texte IA (headline/
+// summary/effortContext/strengths/improvementAreas/recommendation) est
+// désormais consolidé dans UNE seule carte "Analyse du coach" (plutôt que
+// 4 blocs séparés) pour matcher le format narratif de la référence —
+// aucun champ de sortie IA retiré, seulement regroupé.
 
 import { useMemo } from 'react'
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { format, parseISO } from 'date-fns'
+import { fr } from 'date-fns/locale'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { KpiGrid, type KpiGridItem } from '@/components/ui/kpi-grid'
-import { Sparkles, Loader2, TrendingUp, Zap, Target, BatteryMedium, HeartPulse, ListChecks, CheckCircle2, ArrowDown, ArrowUp, LineChart } from 'lucide-react'
+import { Sparkles, Loader2, TrendingUp, Zap, BatteryMedium, HeartPulse, ListChecks, CheckCircle2, LineChart, ChevronLeft, Star } from 'lucide-react'
 import { useRideAnalysis } from './use-ride-analysis'
 import { summarizeDurabilityForDisplay } from './ride-analysis-types'
+import { adherenceDeltaLabel } from './interval-adherence-types'
 import type { IntervalAdherenceVerdict } from './interval-adherence-types'
 import { buildIntervalTargetWindows } from './ride-chart-types'
 import { RidePowerHrChart } from './ride-power-hr-chart'
 import { formatDuration, formatDistance } from './activity-format'
-import type { IntervalsActivity } from '@/lib/intervals-api'
+import { SourceCitation } from './source-citation'
+import { formatTimer } from '@/components/cycling/strength-log-types'
+import { bestRpe, type IntervalsActivity } from '@/lib/intervals-api'
 import { cn } from '@/lib/utils'
 
-/** Icône + couleur par verdict — même vocabulaire "dans la cible / en dessous / au-dessus" que le prompt IA (ride-analysis-flow.ts), pour que le texte et l'encart chiffré ne puissent jamais se contredire visuellement. */
-const ADHERENCE_ICON: Record<IntervalAdherenceVerdict, typeof CheckCircle2> = {
-  within: CheckCircle2,
-  below: ArrowDown,
-  above: ArrowUp,
-}
+/** Couleur de la colonne "vs cible" — within=favorable (vert), below/above=écart à corriger (orange). Déviation consciente de la référence (qui semble utiliser une seule teinte orange sur toute la colonne) : cette convention vert/orange existe déjà dans ce fichier et reste plus informative qu'une couleur uniforme. */
 const ADHERENCE_COLOR: Record<IntervalAdherenceVerdict, string> = {
   within: 'text-green-600',
   below: 'text-orange-600',
@@ -37,30 +52,35 @@ interface Props {
   rideLabel: string
   open: boolean
   onOpenChange: (open: boolean) => void
-  /**
-   * La ligne déjà chargée par le Journal (useActivities(), voir
-   * rides-journal-tab.tsx) — optionnel : le déclenchement depuis
-   * "Aujourd'hui" (daily-workout-tab.tsx) n'a que l'id, jamais la ligne
-   * complète, et ce composant n'en a pas besoin pour fonctionner (juste
-   * pour afficher le KpiGrid, voir plus bas). Jamais un nouveau fetch
-   * ajouté ici pour la compléter — refonte UI/IA §3.4, "KpiGrid: Durée,
-   * Distance, NP, IF, TSS, FC moy".
-   */
   ride?: IntervalsActivity
+  /** Date (yyyy-MM-dd) de l'activité, pour l'eyebrow jour/date — distincte de `ride?.start_date_local` car tout appelant ne passe pas `ride` (ex. la carte "Séance réalisée" de daily-workout-tab.tsx, qui sait déjà qu'il s'agit d'aujourd'hui sans avoir chargé l'activité entière). */
+  date?: string
 }
 
 const KPI_NUMBER_FORMAT = (v: number | null | undefined, digits = 0) => (v != null && !isNaN(v) ? v.toFixed(digits) : '—')
 
-export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange, ride }: Props) {
+export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange, ride, date }: Props) {
   const { analysis, durability, decoupling, plannedWorkout, intervalAdherence, chartSeries, isLoadingStored, isGenerating, canAnalyze, generate } = useRideAnalysis(open ? activityId : null)
   const durabilitySummary = summarizeDurabilityForDisplay(durability)
-  // RidePowerHrChart — fenêtres cibles ombrées, reconstruites depuis
-  // intervalAdherence.steps (voir buildIntervalTargetWindows) ; absent si
-  // aucune comparaison prévu/réalisé n'a pu être calculée pour cette sortie.
   const targetWindows = useMemo(
     () => (intervalAdherence ? buildIntervalTargetWindows(intervalAdherence.steps) : undefined),
     [intervalAdherence]
   )
+  // Cible unique affichée en légende au-dessus de la table — suppose un
+  // script à intensité uniforme (le cas courant d'un bloc d'intervalles
+  // répétés comme "3×4min VO2max") ; l'écart par ligne (adherenceDeltaLabel)
+  // reste exact même si les étapes ont des cibles différentes.
+  const targetCaption = useMemo(() => {
+    const first = intervalAdherence?.steps[0]
+    if (!first) return null
+    return `Cible ${first.targetWattsLow}–${first.targetWattsHigh} W (${first.targetPctLow}–${first.targetPctHigh} % FTP)`
+  }, [intervalAdherence])
+
+  const activityDateIso = date ?? ride?.start_date_local?.slice(0, 10) ?? null
+  const eyebrowDate = activityDateIso ? format(parseISO(activityDateIso), 'EEEE d MMMM', { locale: fr }).toUpperCase() : null
+  const eyebrow = [eyebrowDate, plannedWorkout?.planWeekNumber != null ? `PLAN S${plannedWorkout.planWeekNumber}` : null].filter(Boolean).join(' · ')
+  const title = plannedWorkout?.title || rideLabel
+  const rpe = ride ? bestRpe(ride) : null
 
   const kpiItems: KpiGridItem[] | null = ride
     ? [
@@ -75,15 +95,32 @@ export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-3xl" onClick={(e) => e.stopPropagation()}>
-        <DialogHeader>
-          <DialogTitle>{analysis?.headline || 'Analyse de la sortie'}</DialogTitle>
-        </DialogHeader>
-        <p className="text-xs text-muted-foreground -mt-2">{rideLabel}</p>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto rounded-3xl space-y-5" hideDefaultClose onClick={(e) => e.stopPropagation()}>
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors -ml-1"
+          >
+            <ChevronLeft className="w-4 h-4" /> Activités
+          </button>
+          <div>
+            {eyebrow && <p className="text-xs font-semibold uppercase tracking-wider text-subtle">{eyebrow}</p>}
+            <div className="flex items-start justify-between gap-2 flex-wrap mt-0.5">
+              <DialogTitle asChild>
+                <h2 className="text-lg font-bold leading-tight">{title}</h2>
+              </DialogTitle>
+              <div className="flex items-center gap-1.5 shrink-0">
+                {rpe != null && <Badge variant="secondary" className="text-xs">RPE {rpe}</Badge>}
+                <Badge className="text-xs gap-1 bg-primary/15 text-primary border-primary/30 hover:bg-primary/15">
+                  <CheckCircle2 className="w-3 h-3" /> Réalisée
+                </Badge>
+              </div>
+            </div>
+            {title !== rideLabel && <p className="text-xs text-muted-foreground mt-0.5">{rideLabel}</p>}
+          </div>
+        </div>
 
-        {/* KpiGrid (refonte UI/IA §3.4) — toujours visible dès que la ligne
-            est en main, indépendamment de l'analyse IA (générée ou pas) :
-            ce sont des chiffres déjà réels, pas une sortie du modèle. */}
         {kpiItems && <KpiGrid items={kpiItems} />}
 
         {!canAnalyze ? (
@@ -107,20 +144,6 @@ export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange, 
           </div>
         ) : (
           <div className="space-y-5">
-            <p className="text-sm leading-relaxed">{analysis.summary}</p>
-
-            <div className="p-4 rounded-2xl bg-primary/5 border border-primary/20 flex items-start gap-3">
-              <Target className="w-4 h-4 text-primary shrink-0 mt-0.5" />
-              <p className="text-sm">{analysis.effortContext}</p>
-            </div>
-
-            {/* Restructuration lifecycle-ui-reference.html, écran
-                "Activité (detail)" : ligne puissance/FC + fenêtres cibles
-                ombrées — RidePowerHrChart, voir ride-chart-types.ts.
-                `chartSeries` est `null` sur une analyse générée avant ce
-                correctif (jamais recalculé rétroactivement) ou sans flux
-                seconde par seconde exploitable (sortie Strava non lisible
-                par Intervals.icu, voir streamsError plus haut). */}
             {chartSeries && (
               <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
                 <h5 className="font-bold text-xs flex items-center gap-1.5">
@@ -130,12 +153,6 @@ export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange, 
               </div>
             )}
 
-            {/* Retour utilisateur, audit des indicateurs Cyclisme : "mettre
-                tous les indicateurs que nous avons définis" — durability.ts
-                et decoupling.ts étaient déjà calculés pour le prompt IA
-                ci-dessus (voir use-ride-analysis.ts) mais jamais affichés
-                comme chiffre autonome. Deux encarts chiffrés, en plus du
-                texte IA déjà généré — pas de remplacement, un complément. */}
             {durabilitySummary && (
               <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
                 <h5 className="font-bold text-xs flex items-center gap-1.5">
@@ -178,65 +195,78 @@ export function RideAnalysisDialog({ activityId, rideLabel, open, onOpenChange, 
               </div>
             )}
 
-            {/* Réalisé vs prévu — retour utilisateur : "est-ce que les
-                intervalles sont bien respectés ?". Même patron que les deux
-                encarts ci-dessus (chiffre réel, en complément du texte IA
-                qui commente déjà ces mêmes données — jamais un
-                remplacement). Découpage séquentiel (interval-adherence-
-                types.ts), pas des tours vérifiés par Intervals.icu — d'où
-                le rappel de méthode sous le titre plutôt qu'une affirmation
-                nue. */}
             {plannedWorkout && intervalAdherence && (
               <div className="p-4 rounded-2xl bg-muted/40 border border-border space-y-2">
                 <h5 className="font-bold text-xs flex items-center gap-1.5">
-                  <ListChecks className="w-3.5 h-3.5 text-primary" /> Respect des intervalles
+                  <ListChecks className="w-3.5 h-3.5 text-primary" /> Intervalles
                 </h5>
                 <p className="text-xs text-muted-foreground">
-                  Vs "{plannedWorkout.title}" — {intervalAdherence.withinCount}/{intervalAdherence.steps.length} étape{intervalAdherence.steps.length > 1 ? 's' : ''} dans la cible
+                  {targetCaption && <span className="font-medium text-foreground">{targetCaption}</span>}
+                  {targetCaption ? ' — ' : ''}
+                  {intervalAdherence.withinCount}/{intervalAdherence.steps.length} étape{intervalAdherence.steps.length > 1 ? 's' : ''} dans la cible
                   (découpage approximatif du flux réel selon le script prévu, pas des tours vérifiés).
                 </p>
-                <div className="space-y-1">
-                  {intervalAdherence.steps.map((s) => {
-                    const Icon = ADHERENCE_ICON[s.verdict]
-                    return (
-                      <div key={s.index} className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground flex items-center gap-1.5">
-                          <Icon className={cn('w-3.5 h-3.5 shrink-0', ADHERENCE_COLOR[s.verdict])} />
-                          Étape {s.index + 1} — cible {s.targetPctLow}{s.targetPctHigh !== s.targetPctLow ? `-${s.targetPctHigh}` : ''}%FTP
-                        </span>
-                        <span className="font-data">{s.actualPctFtp}%FTP ({s.actualAvgWatts}W)</span>
-                      </div>
-                    )
-                  })}
-                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-xs text-muted-foreground border-b border-border">
+                      <th className="text-left font-medium py-1 pr-2">#</th>
+                      <th className="text-left font-medium py-1 pr-2">Durée</th>
+                      <th className="text-left font-medium py-1 pr-2">Puissance</th>
+                      <th className="text-left font-medium py-1 pr-2">vs cible</th>
+                      <th className="text-right font-medium py-1">FC max</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {intervalAdherence.steps.map((s) => (
+                      <tr key={s.index} className="border-b border-border/60 last:border-0">
+                        <td className="py-1.5 pr-2 font-data text-xs text-muted-foreground">{s.index + 1}</td>
+                        <td className="py-1.5 pr-2 font-data text-xs">{formatTimer(s.targetDurationSeconds)}</td>
+                        <td className="py-1.5 pr-2 font-data text-xs">{s.actualAvgWatts} W</td>
+                        <td className={cn('py-1.5 pr-2 text-xs font-medium', ADHERENCE_COLOR[s.verdict])}>{adherenceDeltaLabel(s)}</td>
+                        <td className="py-1.5 text-right font-data text-xs">{s.actualMaxHr ?? '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
 
-            {analysis.strengths.length > 0 && (
-              <div className="space-y-1.5">
-                <h5 className="font-bold text-xs flex items-center gap-1.5 text-green-600">
-                  <TrendingUp className="w-3.5 h-3.5" /> Points forts
-                </h5>
-                <ul className="text-xs space-y-1 text-muted-foreground list-disc pl-4">
-                  {analysis.strengths.map((s, i) => <li key={i}>{s}</li>)}
+            <div className="p-4 rounded-2xl bg-primary/5 border border-primary/20 space-y-2.5">
+              <h5 className="font-bold text-xs flex items-center gap-1.5 text-primary">
+                <Star className="w-3.5 h-3.5" /> Analyse du coach
+              </h5>
+              <p className="text-sm leading-relaxed">
+                {analysis.headline && <span className="font-bold">{analysis.headline} </span>}
+                {analysis.summary}
+              </p>
+              {analysis.effortContext && (
+                <p className="text-sm text-muted-foreground leading-relaxed">{analysis.effortContext}</p>
+              )}
+              {(analysis.strengths.length > 0 || analysis.improvementAreas.length > 0) && (
+                <ul className="text-sm space-y-1">
+                  {analysis.strengths.map((s, i) => (
+                    <li key={`s-${i}`} className="flex items-start gap-1.5">
+                      <TrendingUp className="w-3.5 h-3.5 text-green-600 shrink-0 mt-0.5" /> {s}
+                    </li>
+                  ))}
+                  {analysis.improvementAreas.map((s, i) => (
+                    <li key={`i-${i}`} className="flex items-start gap-1.5">
+                      <Zap className="w-3.5 h-3.5 text-orange-600 shrink-0 mt-0.5" /> {s}
+                    </li>
+                  ))}
                 </ul>
+              )}
+              <p className="text-sm leading-relaxed">
+                <span className="font-bold">Prochaine fois : </span>{analysis.recommendation}
+              </p>
+              <div className="flex justify-end">
+                <SourceCitation
+                  ruleIds={['ride-analysis-7-one-sentence-synthesis']}
+                  label="Sources"
+                  showLabel
+                  className="text-muted-foreground/70"
+                />
               </div>
-            )}
-
-            {analysis.improvementAreas.length > 0 && (
-              <div className="space-y-1.5">
-                <h5 className="font-bold text-xs flex items-center gap-1.5 text-orange-600">
-                  <Zap className="w-3.5 h-3.5" /> À travailler
-                </h5>
-                <ul className="text-xs space-y-1 text-muted-foreground list-disc pl-4">
-                  {analysis.improvementAreas.map((s, i) => <li key={i}>{s}</li>)}
-                </ul>
-              </div>
-            )}
-
-            <div className="p-4 rounded-2xl bg-muted/40 border border-border">
-              <p className="text-xs font-semibold mb-1">Pour la suite</p>
-              <p className="text-sm">{analysis.recommendation}</p>
             </div>
 
             <Button variant="outline" size="sm" onClick={generate} disabled={isGenerating} className="rounded-full gap-2">

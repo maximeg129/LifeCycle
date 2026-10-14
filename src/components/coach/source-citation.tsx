@@ -31,13 +31,15 @@ interface SourceCitationProps {
   className?: string
   /** Libellé accessible du bouton — par défaut générique, à préciser pour un contexte donné (ex. "Source du HRV"). */
   label?: string
+  /** Affiche `label` en texte à côté de l'icône, dans le même bouton déclencheur — pour un contexte où une icône seule (le comportement par défaut, partout ailleurs dans l'app) ne suffit pas, ex. le lien "Sources" de l'écran Activité détail (restructuration lifecycle-ui-reference.html). Défaut false — comportement inchangé pour tous les appels existants. */
+  showLabel?: boolean
 }
 
 function findRule(id: string): CoachRule | undefined {
   return RULES.find((r) => r.id === id)
 }
 
-export function SourceCitation({ ruleIds, className, label = 'Voir la source' }: SourceCitationProps) {
+export function SourceCitation({ ruleIds, className, label = 'Voir la source', showLabel = false }: SourceCitationProps) {
   const rules = ruleIds.map(findRule).filter((r): r is CoachRule => r != null)
   if (rules.length === 0) return null
 
@@ -48,11 +50,12 @@ export function SourceCitation({ ruleIds, className, label = 'Voir la source' }:
           type="button"
           aria-label={label}
           className={cn(
-            'inline-flex items-center justify-center rounded-full text-muted-foreground/50 hover:text-foreground transition-colors',
+            'inline-flex items-center gap-1 justify-center rounded-full text-muted-foreground/50 hover:text-foreground transition-colors',
             className
           )}
         >
           <Info className="w-3.5 h-3.5" />
+          {showLabel && <span className="text-xs">{label}</span>}
         </button>
       </PopoverTrigger>
       <PopoverContent className="w-80 text-sm space-y-3" align="start">

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeIntervalAdherence } from './interval-adherence-types'
+import { computeIntervalAdherence, adherenceDeltaLabel, type IntervalAdherenceStep } from './interval-adherence-types'
 import type { WorkoutProfileStep } from '@/components/cycling/plan-calendar-types'
 
 const FTP = 200
@@ -61,5 +61,54 @@ describe('computeIntervalAdherence', () => {
     expect(computeIntervalAdherence(stream, plannedSteps, null)).toBeNull()
     expect(computeIntervalAdherence(stream, plannedSteps, 0)).toBeNull()
     expect(computeIntervalAdherence(stream, [], FTP)).toBeNull()
+  })
+
+  it('derives target watts bounds from the FTP known at compute time', () => {
+    const stream = watts({ seconds: 60, w: 120 }, { seconds: 60, w: 200 }, { seconds: 60, w: 100 })
+    const result = computeIntervalAdherence(stream, plannedSteps, FTP)
+    // Interval step target 95-105% of a 200W FTP.
+    expect(result!.steps[1]).toMatchObject({ targetWattsLow: 190, targetWattsHigh: 210 })
+  })
+
+  it('computes the real max heart rate within each interval slice when a heartrate stream is provided', () => {
+    const stream = watts({ seconds: 60, w: 120 }, { seconds: 60, w: 200 }, { seconds: 60, w: 100 })
+    const hr = [
+      ...Array(60).fill(110),
+      ...Array(59).fill(160).concat(175), // peak right at the end of the interval slice
+      ...Array(60).fill(120),
+    ]
+    const result = computeIntervalAdherence(stream, plannedSteps, FTP, hr)
+    expect(result!.steps[1].actualMaxHr).toBe(175)
+  })
+
+  it('leaves actualMaxHr null when no heartrate stream is given', () => {
+    const stream = watts({ seconds: 60, w: 120 }, { seconds: 60, w: 200 }, { seconds: 60, w: 100 })
+    const result = computeIntervalAdherence(stream, plannedSteps, FTP)
+    expect(result!.steps.every((s) => s.actualMaxHr === null)).toBe(true)
+  })
+})
+
+describe('adherenceDeltaLabel', () => {
+  const base: Omit<IntervalAdherenceStep, 'verdict' | 'actualAvgWatts'> = {
+    index: 0,
+    targetDurationSeconds: 240,
+    targetPctLow: 110,
+    targetPctHigh: 120,
+    targetWattsLow: 290,
+    targetWattsHigh: 318,
+    actualPctFtp: 112,
+    actualMaxHr: 171,
+  }
+
+  it('reads "dans la cible" for a within-target step', () => {
+    expect(adherenceDeltaLabel({ ...base, verdict: 'within', actualAvgWatts: 305 })).toBe('dans la cible')
+  })
+
+  it('reads a negative watt delta vs the low bound for an undershoot', () => {
+    expect(adherenceDeltaLabel({ ...base, verdict: 'below', actualAvgWatts: 281 })).toBe('-9 W')
+  })
+
+  it('reads a positive watt delta vs the high bound for an overshoot', () => {
+    expect(adherenceDeltaLabel({ ...base, verdict: 'above', actualAvgWatts: 330 })).toBe('+12 W')
   })
 })

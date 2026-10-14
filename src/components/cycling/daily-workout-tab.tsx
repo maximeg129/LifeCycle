@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
+import { format } from 'date-fns'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -522,6 +523,7 @@ export function DailyWorkoutTab() {
         <RideAnalysisDialog
           activityId={todaysActivityId}
           rideLabel={todaysPlanSession?.session.title ?? draft?.title ?? 'Séance du jour'}
+          date={format(new Date(), 'yyyy-MM-dd')}
           open={analysisOpen}
           onOpenChange={setAnalysisOpen}
         />
